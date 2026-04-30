@@ -1,0 +1,88 @@
+# 常见 Python + PyQt6 .gitignore
+*.json
+
+*.zip
+*.tar.gz
+
+.env
+.env.*
+_*.md
+temp/
+temp_*
+debug/
+
+.pycat/
+.vscode/
+.playwright-mcp/
+
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+*.pyd
+
+# Distribution / packaging
+.Python
+build/
+dist/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+pip-wheel-metadata/
+
+# PyInstaller
+*.spec
+build/
+dist/
+release/
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.ENV/
+env.bak/
+venv.bak/
+
+# Editor/IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Pytest / coverage / tox
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Qt / PyQt generated files (optional: ignore if you generate UI/resources at build)
+ui_*.py
+*_rc.py
+*.qmake.stash
+*.pro.user*
+Makefile.Release
+Makefile.Debug
+
+# Misc
+*.bak
+*.swp
+*~ 

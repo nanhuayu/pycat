@@ -1,0 +1,10 @@
+PyQt6>=6.5.0
+httpx>=0.25.0
+Pillow>=10.0.0
+tiktoken>=0.5.0
+python-dotenv>=1.0.0
+markdown>=3.5.0
+mcp
+pathspec
+websockets>=11.0.0
+qrcode>=7.4.0

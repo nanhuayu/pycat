@@ -1,0 +1,572 @@
+/* PyCat Base Styles - Geometry Only (no colors) */
+
+* {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+/* ============ Common Controls ============ */
+QPushButton {
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+QToolButton {
+    border-radius: 4px;
+    padding: 2px;
+    min-width: 24px;
+    min-height: 24px;
+    font-size: 13px;
+}
+
+QToolButton#msg_edit_btn,
+QToolButton#msg_copy_btn,
+QToolButton#msg_delete_btn {
+    padding: 1px;
+    min-width: 24px;
+    min-height: 24px;
+    font-size: 12px;
+}
+
+QToolButton#toolbar_btn {
+    padding: 0px;
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    font-size: 12px;
+    border-radius: 8px;
+}
+
+QComboBox {
+    border-radius: 4px;
+    padding: 4px 30px 4px 10px;
+    min-height: 24px;
+    font-size: 13px;
+}
+
+QComboBox::drop-down {
+    border: none;
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 22px;
+    margin: 2px 3px 2px 0;
+    border-radius: 6px;
+}
+
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+}
+
+QComboBox::down-arrow:on {
+    top: 1px;
+}
+
+QListView#combo_popup_view,
+QAbstractItemView#combo_popup_view {
+    border-radius: 8px;
+    outline: none;
+    padding: 4px;
+}
+
+QListView#combo_popup_view::item,
+QAbstractItemView#combo_popup_view::item {
+    min-height: 24px;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+QLineEdit, QTextEdit, QPlainTextEdit {
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+QSpinBox, QDoubleSpinBox {
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 13px;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    width: 18px;
+    border: none;
+}
+
+QListWidget {
+    border-radius: 6px;
+}
+
+QListWidget::item {
+    padding: 6px;
+    border-radius: 4px;
+}
+
+QCheckBox {
+    spacing: 6px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+}
+
+QGroupBox {
+    border-radius: 6px;
+    margin-top: 10px;
+    padding: 10px;
+    padding-top: 16px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 4px;
+}
+
+QTableWidget {
+    border-radius: 6px;
+}
+
+QTextBrowser {
+    border: none;
+    padding: 0;
+}
+
+/* ============ Settings Dialog ============ */
+#settings_sidebar {
+    padding: 0;
+}
+
+QListWidget#settings_nav {
+    border-radius: 6px;
+}
+
+QListWidget#settings_nav::item {
+    padding: 4px 12px;
+    border-radius: 6px;
+}
+
+QWidget#settings_page_header {
+    padding: 0 0 2px 0;
+}
+
+QLabel#settings_page_title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#settings_page_description {
+    font-size: 12px;
+}
+
+/* Slightly denser group boxes inside settings content */
+#settings_content QGroupBox {
+    margin-top: 6px;
+    padding: 2px;
+    padding-top: 14px;
+}
+
+/* ============ Menu ============ */
+QMenuBar {
+    padding: 2px;
+}
+
+QMenuBar::item {
+    padding: 4px 8px;
+    border-radius: 0;
+}
+
+QMenu {
+    padding: 0;
+    border-radius: 0;
+}
+
+QMenu::item {
+    padding: 6px 24px;
+    border-radius: 0;
+    margin: 0;
+}
+
+QMenu::separator {
+    height: 10px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+/* ============ Scrollbar ============ */
+QScrollBar:vertical {
+    width: 8px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    border-radius: 4px;
+    min-height: 30px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    height: 8px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    border-radius: 4px;
+    min-width: 30px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+/* ============ Tab ============ */
+QTabWidget::pane {
+    border-radius: 6px;
+    padding: 6px;
+}
+
+QTabBar::tab {
+    padding: 6px 14px;
+    margin-right: 2px;
+}
+
+/* ============ Tooltip ============ */
+QToolTip {
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+/* ============ Splitter ============ */
+QSplitter::handle:horizontal {
+    width: 6px;
+}
+
+QSplitter::handle:vertical {
+    height: 6px;
+}
+
+/* ============ App Specific ============ */
+
+/* Sidebar */
+#sidebar_header {
+    padding: 6px;
+}
+
+#search_input {
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+}
+
+#new_chat_btn {
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+QPushButton#import_btn {
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+}
+
+#conversation_list::item {
+    border-radius: 4px;
+    padding: 7px 8px;
+    margin: 1px 2px;
+}
+
+/* Message */
+MessageWidget {
+    border-radius: 6px;
+}
+
+#streaming_container {
+    border-radius: 6px;
+}
+
+QLabel#message_role {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QTextBrowser#message_content {
+    font-size: 13px;
+    border: none;
+}
+
+QLabel#message_badge {
+    font-size: 11px;
+    padding: 1px 5px;
+    border-radius: 6px;
+}
+
+/* Chat Header */
+QLabel#model_indicator {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+QLabel#runtime_indicator {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0 6px;
+    border-radius: 6px;
+    max-height: 20px;
+}
+
+QLabel#context_indicator {
+    font-size: 11px;
+    padding: 0 8px;
+    border-radius: 6px;
+    max-height: 20px;
+}
+
+QPushButton#work_dir_btn {
+    border-radius: 8px;
+    padding: 4px 10px 4px 8px;
+    font-size: 12px;
+    text-align: left;
+    min-height: 28px;
+}
+
+QFrame#chat_nav_group {
+    border-radius: 8px;
+    padding: 2px;
+}
+
+QWidget#chat_empty_state {
+    background: transparent;
+}
+
+QFrame#chat_empty_card {
+    border-radius: 16px;
+}
+
+QLabel#chat_empty_hero_icon {
+    min-height: 30px;
+}
+
+QLabel#chat_empty_title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+QLabel#chat_empty_description {
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+QFrame#chat_empty_tip_card {
+    border-radius: 12px;
+}
+
+QLabel#chat_empty_tip_title {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel#chat_empty_tip_description,
+QLabel#chat_empty_hint {
+    font-size: 10px;
+}
+
+/* Input Area */
+#input_container, InputArea {
+    padding: 6px;
+}
+
+#input_wrapper {
+    border-radius: 6px;
+    padding: 6px;
+}
+
+QTextEdit#message_input {
+    font-size: 13px;
+    padding: 2px;
+}
+
+QPushButton#send_btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    min-width: 0;
+    min-height: 22px;
+}
+
+/* Image Preview */
+QFrame#image_preview_item {
+    border-radius: 4px;
+}
+
+QLabel#image_thumb {
+    font-size: 10px;
+}
+
+QPushButton#image_remove_btn {
+    border-radius: 4px;
+    font-size: 9px;
+    padding: 0;
+}
+
+/* Stats Panel */
+QScrollArea#stats_scroll {
+    border: none;
+}
+
+QWidget#stats_scroll_content {
+    background: transparent;
+}
+
+QLabel#stats_title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QLineEdit#new_task_edit {
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    min-height: 22px;
+}
+
+QFrame#task_card {
+    border-radius: 6px;
+}
+
+QFrame#runtime_strip {
+    border-radius: 6px;
+}
+
+QFrame#collapse_section {
+    border-radius: 8px;
+}
+
+QFrame#collapse_header {
+    border-radius: 8px;
+}
+
+QToolButton#collapse_toggle {
+    border: none;
+    padding: 0;
+    min-width: 18px;
+    min-height: 18px;
+}
+
+QLabel#collapse_title {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QLabel#collapse_summary {
+    font-size: 10px;
+}
+
+QWidget#collapse_body {
+    padding-top: 0;
+}
+
+QScrollArea#settings_page_scroll,
+QScrollArea#conversation_settings_scroll {
+    border: none;
+}
+
+QLabel#runtime_title {
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QLabel#runtime_detail {
+    font-size: 11px;
+}
+
+QLabel#task_text {
+    font-size: 11px;
+}
+
+QLabel#stats_subtitle {
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+QLabel#stats_model {
+    border-radius: 6px;
+    padding: 4px 6px;
+    font-size: 11px;
+}
+
+QLabel#stat_label {
+    font-size: 11px;
+}
+
+QLabel#stat_value {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QFrame#stat_card {
+    border-radius: 6px;
+}
+
+/* Thinking */
+QPushButton#thinking_toggle {
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    text-align: left;
+}
+
+QTextBrowser#thinking_content {
+    padding: 6px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+}
+
+/* Image Thumbnail */
+QLabel#image_thumbnail[state="placeholder"] {
+    font-size: 18px;
+}
+
+/* Message Editor */
+QFrame#image_edit_item {
+    border-radius: 4px;
+}
+
+QPushButton#image_edit_delete_btn {
+    border-radius: 3px;
+    padding: 2px;
+    font-size: 10px;
+}
+
+QLabel#editor_role_label {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QTextEdit#editor_content {
+    padding: 8px;
+    font-size: 13px;
+}
+
+/* Labels */
+QLabel[muted="true"] {
+    font-size: 11px;
+}
+
+QLabel[heading="true"] {
+    font-size: 15px;
+    font-weight: 600;
+}
