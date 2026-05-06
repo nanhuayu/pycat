@@ -33,7 +33,7 @@ class MemoryService:
     TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
     FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
     INDEX_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-    SOURCE_OPTIONS = ("session", "workspace")
+    SOURCE_OPTIONS = ("session", "workspace", "global")
 
     @staticmethod
     def handle_updates(state: SessionState, updates: Dict[str, Any], current_seq: int) -> List[str]:
@@ -70,6 +70,7 @@ class MemoryService:
 
         include_session = "session" in selected_sources
         include_workspace = "workspace" in selected_sources
+        include_global = "global" in selected_sources
 
         if include_session:
             for key, value in (state.memory or {}).items():
@@ -112,6 +113,23 @@ class MemoryService:
 
         if include_workspace:
             for item in cls.load_workspace_memory(work_dir):
+                text = f"{item.key} {item.value}"
+                score = cls._score(text, query_tokens) + 1
+                if score <= 1 and not query_tokens:
+                    score = 1
+                if score > 0:
+                    snippets.append(
+                        MemorySnippet(
+                            key=item.key,
+                            value=cls._trim(item.value, 520),
+                            score=score,
+                            source=item.source,
+                            mtime=item.mtime,
+                        )
+                    )
+
+        if include_global:
+            for item in cls.load_global_memory():
                 text = f"{item.key} {item.value}"
                 score = cls._score(text, query_tokens) + 1
                 if score <= 1 and not query_tokens:
@@ -278,6 +296,78 @@ class MemoryService:
         if not root.exists() or not root.is_dir():
             return None
         memory_dir = root / ".pycat" / "memory"
+        if not memory_dir.exists() or not memory_dir.is_dir():
+            return None
+        return memory_dir
+
+    # ------------------------------------------------------------------
+    # Global memory (~/.PyCat/memory)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def load_global_memory(
+        cls,
+        *,
+        limit: int = 20,
+        max_file_chars: int = 12_000,
+    ) -> list[MemorySnippet]:
+        """Load Markdown memory notes from ``~/.PyCat/memory``.
+
+        Global memory survives across all workspaces. Only markdown/text notes
+        are scanned, and the SOUL.md entrypoint is read first when available.
+        """
+        root = cls._global_memory_dir()
+        if root is None:
+            return []
+
+        indexed = cls._load_workspace_memory_index(
+            root,
+            limit=max(0, int(limit or 0)),
+            max_file_chars=max_file_chars,
+        )
+        if indexed:
+            return [
+                MemorySnippet(
+                    key=s.key,
+                    value=s.value,
+                    score=s.score,
+                    source=s.source.replace("workspace", "global"),
+                    mtime=s.mtime,
+                )
+                for s in indexed[: max(0, int(limit or 0))]
+            ]
+
+        try:
+            candidates = [
+                path
+                for path in root.iterdir()
+                if path.is_file() and path.suffix.lower() in {".md", ".markdown", ".txt"}
+            ]
+        except Exception:
+            return []
+
+        try:
+            candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+        except Exception:
+            candidates.sort(key=lambda path: path.name.lower())
+
+        snippets: list[MemorySnippet] = []
+        for path in candidates[: max(0, int(limit or 0))]:
+            snippet = cls._load_workspace_memory_file(
+                path,
+                max_file_chars=max_file_chars,
+                source="global",
+            )
+            if snippet is not None:
+                snippets.append(snippet)
+        return snippets
+
+    @classmethod
+    def _global_memory_dir(cls) -> Path | None:
+        try:
+            memory_dir = Path.home() / ".PyCat" / "memory"
+        except Exception:
+            return None
         if not memory_dir.exists() or not memory_dir.is_dir():
             return None
         return memory_dir

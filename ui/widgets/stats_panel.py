@@ -117,11 +117,11 @@ class StatsPanel(QWidget):
         add_row = QHBoxLayout()
         add_row.setSpacing(6)
 
-        self.new_task_edit = QLineEdit()
-        self.new_task_edit.setObjectName("new_task_edit")
-        self.new_task_edit.setPlaceholderText("新增任务…")
-        self.new_task_edit.returnPressed.connect(self._emit_create_task)
-        add_row.addWidget(self.new_task_edit, 1)
+        self.task_input_edit = QLineEdit()
+        self.task_input_edit.setObjectName("task_input_edit")
+        self.task_input_edit.setPlaceholderText("新增任务…")
+        self.task_input_edit.returnPressed.connect(self._emit_create_task)
+        add_row.addWidget(self.task_input_edit, 1)
 
         self.add_task_btn = QToolButton()
         self.add_task_btn.setObjectName("add_task_btn")
@@ -212,16 +212,16 @@ class StatsPanel(QWidget):
         self._set_task_controls_enabled(False)
 
     def _set_task_controls_enabled(self, enabled: bool) -> None:
-        self.new_task_edit.setEnabled(bool(enabled))
+        self.task_input_edit.setEnabled(bool(enabled))
         self.add_task_btn.setEnabled(bool(enabled))
 
     def _emit_create_task(self) -> None:
         if not self._conversation:
             return
-        text = (self.new_task_edit.text() or "").strip()
+        text = (self.task_input_edit.text() or "").strip()
         if not text:
             return
-        self.new_task_edit.setText("")
+        self.task_input_edit.setText("")
         self.task_create_requested.emit(text)
 
     def _render_tasks(self, conversation: Optional[Conversation]) -> None:

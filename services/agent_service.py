@@ -55,6 +55,15 @@ class AgentService:
         wd = work_dir or getattr(conversation, "work_dir", None) or None
         mm = ModeManager(wd)
 
+        global_permissions = None
+        try:
+            from core.config.schema import ToolPermissionConfig
+            raw_permissions = app_settings.get("permissions")
+            if raw_permissions and isinstance(raw_permissions, dict):
+                global_permissions = ToolPermissionConfig.from_dict(raw_permissions)
+        except Exception as e:
+            logger.debug("Failed to load global tool permissions: %s", e)
+
         return build_run_policy(
             mode_slug=slug,
             enable_thinking=bool(enable_thinking),
@@ -62,6 +71,7 @@ class AgentService:
             enable_mcp=enable_mcp,
             mode_manager=mm,
             retry_config=retry_config,
+            global_permissions=global_permissions,
         )
 
     @staticmethod

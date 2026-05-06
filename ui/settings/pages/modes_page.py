@@ -15,7 +15,6 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QTextEdit,
     QMessageBox,
-    QTabWidget,
     QGroupBox,
     QFormLayout,
     QLineEdit,
@@ -128,7 +127,7 @@ class ModesPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        layout.addWidget(build_page_header("模式", "管理核心工作模式：Chat、Agent、Plan、Explore；低频高级配置保留在 JSON 中。"))
+        layout.addWidget(build_page_header("模式", "管理核心工作模式：Chat、Agent、Plan、Explore。"))
 
         path = get_user_modes_json_path()
         self.path_label = QLabel(f"全局配置文件：{path}")
@@ -147,23 +146,26 @@ class ModesPage(QWidget):
         btn_reload.clicked.connect(self.reload_from_disk)
         row.addWidget(btn_reload)
 
-        btn_save = QPushButton("保存到 modes.json")
+        btn_save = QPushButton("保存")
         btn_save.setProperty("primary", True)
         btn_save.clicked.connect(self._save_clicked)
         row.addWidget(btn_save)
 
+        btn_load_json = QPushButton("载入")
+        btn_load_json.setIcon(Icons.get(Icons.IMPORT, scale_factor=1.0))
+        btn_load_json.setToolTip("从全局 modes.json 重新载入")
+        btn_load_json.clicked.connect(self.reload_from_disk)
+        row.addWidget(btn_load_json)
+
         row.addStretch()
         layout.addLayout(row)
-
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName("settings_modes_tabs")
-        layout.addWidget(self.tabs, 1)
 
         # ---- Visual tab
         visual = QWidget()
         visual_layout = QVBoxLayout(visual)
         visual_layout.setContentsMargins(0, 0, 0, 0)
         visual_layout.setSpacing(8)
+        layout.addWidget(visual, 1)
 
         header_row = QHBoxLayout()
         header_row.setSpacing(8)
@@ -261,34 +263,10 @@ class ModesPage(QWidget):
 
         visual_layout.addLayout(right_layout, 1)
 
-        self.tabs.addTab(visual, "核心模式")
-
-        # ---- JSON tab
-        json_tab = QWidget()
-        json_layout = QVBoxLayout(json_tab)
-        json_layout.setContentsMargins(0, 0, 0, 0)
-        json_layout.setSpacing(8)
-
-        json_buttons = QHBoxLayout()
-        btn_from_visual = QPushButton("从可视化生成")
-        btn_from_visual.clicked.connect(self._sync_json_from_visual)
-        json_buttons.addWidget(btn_from_visual)
-
-        btn_apply_json = QPushButton("解析并应用")
-        btn_apply_json.clicked.connect(self._apply_json_to_visual)
-        json_buttons.addWidget(btn_apply_json)
-
-        json_buttons.addStretch()
-        json_layout.addLayout(json_buttons)
-
         self.json_edit = QTextEdit()
         self.json_edit.setObjectName("settings_modes_json")
         self.json_edit.setAcceptRichText(False)
-        self.json_edit.setPlaceholderText("高级编辑全局 modes.json（{modes:[...]}）")
-        self.json_edit.setMinimumHeight(300)
-        json_layout.addWidget(self.json_edit, 1)
-
-        self.tabs.addTab(json_tab, "高级 JSON")
+        self.json_edit.setVisible(False)
 
     # ---------------- Data ----------------
     def _open_config_dir(self) -> None:
@@ -499,13 +477,8 @@ class ModesPage(QWidget):
         return True
 
     def save_to_disk(self) -> bool:
-        if self.tabs.currentIndex() == 1:
-            # JSON tab: respect manual edits.
-            raw = (self.json_edit.toPlainText() or "").strip()
-        else:
-            # Visual tab: regenerate JSON from current form state.
-            self._sync_json_from_visual()
-            raw = (self.json_edit.toPlainText() or "").strip()
+        self._sync_json_from_visual()
+        raw = (self.json_edit.toPlainText() or "").strip()
 
         if not self.validate(raw):
             return False

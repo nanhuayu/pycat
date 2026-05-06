@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 from typing import Any, Dict, List, Optional
 
@@ -70,7 +71,10 @@ def _conversation_show_thinking(conversation: Conversation | None) -> bool | Non
 
 
 def _assistant_has_reasoning(msg: Message) -> bool:
-    return bool(str(getattr(msg, "thinking", "") or "").strip())
+    if bool(str(getattr(msg, "thinking", "") or "").strip()):
+        return True
+    metadata = getattr(msg, "metadata", {}) or {}
+    return isinstance(metadata, dict) and bool(metadata.get("thinking_present"))
 
 
 def _is_runtime_error_message(msg: Message) -> bool:
@@ -111,6 +115,52 @@ def _tool_call_names(tool_calls: Any) -> list[str]:
     return names
 
 
+def _tool_call_summary_lines(tool_calls: Any) -> list[str]:
+    lines: list[str] = []
+    for tool_call in tool_calls or []:
+        if not isinstance(tool_call, dict):
+            continue
+        func = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
+        name = str(func.get("name") or "unknown_tool").strip() or "unknown_tool"
+        summary = str(tool_call.get("result_summary") or "").strip()
+        result = str(tool_call.get("result") or "").strip()
+        if not summary and result:
+            summary = result.splitlines()[0].strip()[:220]
+        if summary:
+            lines.append(f"- {name}: {summary}")
+        else:
+            lines.append(f"- {name}")
+    return lines
+
+
+def _tool_call_ids(tool_calls: Any) -> set[str]:
+    ids: set[str] = set()
+    for tool_call in tool_calls or []:
+        if not isinstance(tool_call, dict):
+            continue
+        tc_id = str(tool_call.get("id") or "").strip()
+        if tc_id:
+            ids.add(tc_id)
+    return ids
+
+
+def _matching_tool_result_lines(messages: list[Message], tool_call_ids: set[str]) -> list[str]:
+    if not tool_call_ids:
+        return []
+    lines: list[str] = []
+    for msg in messages:
+        if getattr(msg, "role", "") != "tool":
+            continue
+        if str(getattr(msg, "tool_call_id", "") or "").strip() not in tool_call_ids:
+            continue
+        metadata = getattr(msg, "metadata", {}) or {}
+        name = str(metadata.get("name") or getattr(msg, "tool_call_id", "") or "tool").strip()
+        summary = str(getattr(msg, "summary", "") or getattr(msg, "content", "") or "").strip()
+        first_line = summary.splitlines()[0].strip() if summary else "-"
+        lines.append(f"- {name}: {first_line[:220]}")
+    return lines
+
+
 def _recover_assistant_as_user(msg: Message) -> Message | None:
     sections: list[str] = []
 
@@ -128,6 +178,15 @@ def _recover_assistant_as_user(msg: Message) -> Message | None:
         sections.append(
             "[Recovered assistant tool request: previous tool-call step omitted from reasoning replay]\n"
             f"Requested tools:\n{bullet_lines}{more}"
+        )
+
+    tool_summaries = _tool_call_summary_lines(getattr(msg, "tool_calls", None))
+    if tool_summaries:
+        joined = "\n".join(tool_summaries[:8])
+        more = "\n- ..." if len(tool_summaries) > 8 else ""
+        sections.append(
+            "[Recovered tool outputs for the omitted tool-call step]\n"
+            f"{joined}{more}"
         )
 
     if not sections:
@@ -153,6 +212,29 @@ def _recover_orphan_tool_as_user(msg: Message) -> Message:
     )
 
 
+def _tool_call_has_result(tool_call: Any) -> bool:
+    if not isinstance(tool_call, dict):
+        return False
+    if tool_call.get("result") is not None:
+        return True
+    if tool_call.get("result_summary"):
+        return True
+    return bool(tool_call.get("result_images"))
+
+
+def _filter_tool_calls_without_result(msg: Message) -> Message | None:
+    if not msg.tool_calls:
+        return msg
+    kept = [tc for tc in msg.tool_calls if _tool_call_has_result(tc)]
+    if not kept:
+        return _recover_assistant_as_user(msg)
+    if len(kept) == len(msg.tool_calls):
+        return msg
+    clone = Message.from_dict(msg.to_dict())
+    clone.tool_calls = kept
+    return clone
+
+
 def _sanitize_reasoning_history(
     messages: List[Message],
     provider: Provider,
@@ -163,12 +245,25 @@ def _sanitize_reasoning_history(
         return messages
 
     sanitized: List[Message] = []
+    recovered_tool_ids: set[str] = set()
     for msg in messages:
+        if msg.role == "tool" and str(getattr(msg, "tool_call_id", "") or "").strip() in recovered_tool_ids:
+            continue
+
         if msg.role == "assistant" and not _assistant_has_reasoning(msg):
             if _is_runtime_error_message(msg):
                 continue
             recovered = _recover_assistant_as_user(msg)
             if recovered is not None:
+                tool_ids = _tool_call_ids(getattr(msg, "tool_calls", None))
+                tool_result_lines = _matching_tool_result_lines(messages, tool_ids)
+                if tool_result_lines:
+                    recovered.content = (
+                        str(recovered.content or "").rstrip()
+                        + "\n\n[Recovered tool outputs for the omitted tool-call step]\n"
+                        + "\n".join(tool_result_lines[:8])
+                    )
+                    recovered_tool_ids.update(tool_ids)
                 sanitized.append(recovered)
             continue
 
@@ -285,9 +380,9 @@ def build_api_messages(
                     "tool_calls": [tc["clean"] for tc in tool_calls_with_results],
                 }
 
-                if msg.thinking:
+                if _assistant_has_reasoning(msg):
                     key = msg.metadata.get("thinking_key") or "reasoning_content"
-                    assistant_payload[key] = msg.thinking
+                    assistant_payload[key] = msg.thinking or ""
 
                 api_messages.append(assistant_payload)
                 for tc in tool_calls_with_results:
@@ -300,9 +395,9 @@ def build_api_messages(
                     )
                 continue
 
-        if msg.role == "assistant" and msg.thinking:
+        if msg.role == "assistant" and _assistant_has_reasoning(msg):
             key = msg.metadata.get("thinking_key") or "reasoning_content"
-            message_payload[key] = msg.thinking
+            message_payload[key] = msg.thinking or ""
 
         api_messages.append(message_payload)
 
@@ -424,6 +519,136 @@ def _openai_messages_to_anthropic(api_messages: List[Dict[str, Any]]) -> tuple[s
     return "\n\n".join(part for part in system_parts if part.strip()).strip(), messages
 
 
+def _responses_text_from_content(content: Any) -> str:
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                if item:
+                    parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str) and text:
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    if content is None:
+        return ""
+    return str(content)
+
+
+def _responses_content_blocks(content: Any, *, role: str) -> Any:
+    if not isinstance(content, list):
+        return str(content or "")
+
+    blocks: list[dict[str, Any]] = []
+    for item in content:
+        if isinstance(item, str):
+            if item:
+                blocks.append({"type": "input_text", "text": item})
+            continue
+        if not isinstance(item, dict):
+            continue
+        item_type = str(item.get("type") or "").strip()
+        if item_type == "text":
+            blocks.append({"type": "input_text", "text": str(item.get("text") or "")})
+        elif item_type == "image_url" and role == "user":
+            image_url = item.get("image_url") if isinstance(item.get("image_url"), dict) else {}
+            url = str(image_url.get("url") or "").strip()
+            if url:
+                blocks.append({"type": "input_image", "image_url": url})
+
+    if not blocks:
+        return _responses_text_from_content(content)
+    if role != "user" and not any(block.get("type") == "input_image" for block in blocks):
+        return "\n".join(str(block.get("text") or "") for block in blocks if block.get("type") == "input_text").strip()
+    return blocks
+
+
+def _openai_tools_to_responses(tools: Optional[List[Dict[str, Any]]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for tool in tools or []:
+        fn = tool.get("function") if isinstance(tool, dict) else None
+        if not isinstance(fn, dict):
+            continue
+        name = str(fn.get("name") or "").strip()
+        if not name:
+            continue
+        parameters = fn.get("parameters") if isinstance(fn.get("parameters"), dict) else {"type": "object", "properties": {}}
+        out.append(
+            {
+                "type": "function",
+                "name": name,
+                "description": str(fn.get("description") or ""),
+                "parameters": parameters,
+            }
+        )
+    return out
+
+
+def _openai_messages_to_responses_input(api_messages: List[Dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    instructions_parts: list[str] = []
+    input_items: list[dict[str, Any]] = []
+
+    for msg in api_messages:
+        role = str(msg.get("role") or "").strip()
+        content = msg.get("content", "")
+        if role == "system":
+            text = _responses_text_from_content(content)
+            if text:
+                instructions_parts.append(text)
+            continue
+
+        if role == "tool":
+            call_id = str(msg.get("tool_call_id") or "").strip()
+            if call_id:
+                input_items.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": _responses_text_from_content(content),
+                    }
+                )
+            continue
+
+        if role == "assistant":
+            text = _responses_text_from_content(content)
+            if text:
+                input_items.append({"role": "assistant", "content": text})
+
+            tool_calls = msg.get("tool_calls")
+            if isinstance(tool_calls, list):
+                for call in tool_calls:
+                    if not isinstance(call, dict):
+                        continue
+                    fn = call.get("function") if isinstance(call.get("function"), dict) else {}
+                    name = str(fn.get("name") or "").strip()
+                    if not name:
+                        continue
+                    raw_args = fn.get("arguments")
+                    if isinstance(raw_args, dict):
+                        arguments = json.dumps(raw_args, ensure_ascii=False, separators=(",", ":"))
+                    else:
+                        arguments = str(raw_args or "{}")
+                    input_items.append(
+                        {
+                            "type": "function_call",
+                            "call_id": str(call.get("id") or ""),
+                            "name": name,
+                            "arguments": arguments,
+                        }
+                    )
+            continue
+
+        input_items.append(
+            {
+                "role": "user" if role not in {"user", "developer"} else role,
+                "content": _responses_content_blocks(content, role="user"),
+            }
+        )
+
+    return "\n\n".join(part for part in instructions_parts if part.strip()).strip(), input_items
+
+
 def build_request_body(
     provider: Provider,
     conversation: Conversation,
@@ -495,6 +720,28 @@ def build_request_body(
         _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
         return body
 
+    if provider.is_openai_responses:
+        instructions, responses_input = _openai_messages_to_responses_input(payload_messages)
+        body = {
+            "model": request_cfg.resolved_model(provider),
+            "input": responses_input,
+            "stream": stream_enabled,
+        }
+        if instructions:
+            body["instructions"] = instructions
+        if max_tokens > 0:
+            body["max_output_tokens"] = max_tokens
+        responses_tools = _openai_tools_to_responses(tools)
+        if responses_tools:
+            body["tools"] = responses_tools
+            body.setdefault("tool_choice", "auto")
+        if isinstance(temperature, (int, float)):
+            body["temperature"] = float(temperature)
+        if isinstance(top_p, (int, float)):
+            body["top_p"] = float(top_p)
+        _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
+        return body
+
     body = {
         "model": request_cfg.resolved_model(provider),
         "messages": payload_messages,
@@ -520,7 +767,7 @@ def build_request_body(
 def _merge_request_extras(body: Dict[str, Any], *, request_cfg: LLMConfig, provider: Provider) -> None:
     extras = getattr(request_cfg, "extras", None)
     if isinstance(extras, dict) and extras:
-        protected = {"model", "messages"}
+        protected = {"model", "messages", "input", "instructions"}
         for k, v in extras.items():
             if k in protected or k in body:
                 continue
@@ -529,7 +776,7 @@ def _merge_request_extras(body: Dict[str, Any], *, request_cfg: LLMConfig, provi
     # Provider-level extras are merged (without overriding core keys).
     provider_extras = getattr(provider, "request_format", None)
     if isinstance(provider_extras, dict) and provider_extras:
-        protected = {"model", "messages"}
+        protected = {"model", "messages", "input", "instructions"}
         for k, v in provider_extras.items():
             if k in protected or k in body:
                 continue

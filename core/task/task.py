@@ -16,8 +16,6 @@ from __future__ import annotations
 import copy
 from dataclasses import replace
 import logging
-from pathlib import Path
-import re
 import threading
 from typing import Any, Callable, Optional
 
@@ -27,6 +25,7 @@ from models.provider import Provider
 from core.llm.client import LLMClient
 from core.tools.manager import ToolManager
 from core.tools.base import ToolResult
+from core.tools.result_pipeline import ToolResultPipeline, ResultHandle
 from core.config import load_app_config, AppConfig
 from core.state.services.task_service import TaskService
 from core.state.services.task_planning_service import TaskPlanningService
@@ -64,18 +63,27 @@ _NUDGE_TEXT = (
     "[AUTO-CONTINUE] You responded without using any tools. "
     "If you have not completed the task, please continue using the available tools. "
     "If the task is complete, call the `attempt_completion` tool to present your result. "
+    "If the user asked for a document, report, timeline, or artifact, create/update it first and include the path in `attempt_completion`. "
+    "If a tool result says it was stored in a full-result file, do not repeatedly slice the same source; use `read_file`, "
+    "call `capability__summarize_text` for one file or one long text, or delegate multi-file/cross-source analysis with `subagent__read_analyze`. "
     "Do not simply describe what you would do — take action."
+)
+
+_FINALIZE_TEXT = (
+    "[FINALIZE NOW] This is the final available turn for this task loop. "
+    "Stop collecting more evidence unless absolutely required. Consolidate the facts already gathered, "
+    "create or update any requested report/document/artifact, and then call `attempt_completion` with the final answer and file paths. "
+    "Do not start a new broad search or repeat previous tool calls."
 )
 
 _REPETITION_WARNING = (
     "[WARNING] You have called the same tool with identical arguments multiple times consecutively. "
     "This is not making progress. Please try a different approach, use different arguments, "
+    "summarize a single long source with `capability__summarize_text`, delegate complex evidence with `subagent__custom` or `subagent__read_analyze`, "
     "or call `attempt_completion` if done."
 )
 
 _STATE_BOOTSTRAP_MODES = frozenset({"agent", "code", "debug", "plan", "orchestrator"})
-_TOOL_RESULT_SPILLOVER_CHARS = 12000
-_TOOL_RESULT_PREVIEW_CHARS = 2400
 
 
 class Task:
@@ -97,6 +105,7 @@ class Task:
         self._tool_executor = ToolExecutor(tool_manager)
         self._pre_turn_hooks: list[Callable] = []
         self._post_turn_hooks: list[Callable] = []
+        self._result_pipeline: ToolResultPipeline | None = None
 
     def add_pre_turn_hook(self, hook: Callable) -> None:
         """Register a hook called before each LLM turn. Signature: (conversation, turn, policy) -> None"""
@@ -124,7 +133,7 @@ class Task:
         cancel_event: Optional[threading.Event] = None,
         debug_log_path: Optional[str] = None,
     ) -> TaskResult:
-        turns_limit = max(1, int(policy.max_turns or 20))
+        turns_limit = max(1, int(policy.max_turns or 200))
         final_assistant: Optional[Message] = None
         turn_context = TurnContext(turn=0)
         repetition_detector = ToolRepetitionDetector()
@@ -162,6 +171,12 @@ class Task:
                 return TaskResult(status=TaskStatus.FAILED, final_message=final_assistant, error=outcome.error)
             return TaskResult(status=TaskStatus.COMPLETED, final_message=outcome.final_message or final_assistant)
 
+        fallback = self._build_max_turns_message(conversation=conversation, final_assistant=final_assistant)
+        if fallback is not None:
+            emitter.emit(TaskEventKind.STEP, turn=turns_limit, data=fallback)
+            emitter.emit(TaskEventKind.COMPLETE, turn=turns_limit, data=fallback)
+            conversation.add_message(fallback)
+            return TaskResult(status=TaskStatus.COMPLETED, final_message=fallback)
         return TaskResult(status=TaskStatus.COMPLETED, final_message=final_assistant)
 
     async def _run_turn(
@@ -257,6 +272,7 @@ class Task:
             on_event=on_event,
             on_token=on_token,
             on_thinking=on_thinking,
+            turns_limit=turns_limit,
         )
 
     async def _request_assistant_message(
@@ -349,6 +365,7 @@ class Task:
         on_event,
         on_token,
         on_thinking,
+        turns_limit: int,
     ) -> TurnOutcome:
         total_tools = len(assistant_msg.tool_calls or [])
         for tool_call in assistant_msg.tool_calls or []:
@@ -496,8 +513,61 @@ class Task:
                 )
 
         turn_context.state = TaskTurnState.TURN_COMPLETE
-        turn_context.runtime_messages = []
+        if self._should_finalize_next_turn(policy=policy, turn_context=turn_context, turns_limit=turns_limit):
+            turn_context.runtime_messages = [Message(role="user", content=_FINALIZE_TEXT)]
+        else:
+            turn_context.runtime_messages = []
         return TurnOutcome(kind=TurnOutcomeKind.CONTINUE, context=turn_context, final_message=assistant_msg)
+
+    def _should_finalize_next_turn(
+        self,
+        *,
+        policy: RunPolicy,
+        turn_context: TurnContext,
+        turns_limit: int,
+    ) -> bool:
+        mode_slug = str(getattr(policy, "mode", "") or "").strip().lower()
+        if mode_slug not in _AUTO_CONTINUE_MODES:
+            return False
+        return int(turn_context.turn or 0) >= max(1, int(turns_limit or 1) - 1)
+
+    def _build_max_turns_message(
+        self,
+        *,
+        conversation: Conversation,
+        final_assistant: Optional[Message],
+    ) -> Optional[Message]:
+        if final_assistant is not None and str(getattr(final_assistant, "content", "") or "").strip():
+            return final_assistant
+
+        latest_tool_summary = ""
+        try:
+            for msg in reversed(getattr(conversation, "messages", []) or []):
+                if getattr(msg, "role", "") != "tool":
+                    continue
+                latest_tool_summary = str(getattr(msg, "summary", "") or getattr(msg, "content", "") or "").strip()
+                if latest_tool_summary:
+                    break
+        except Exception:
+            latest_tool_summary = ""
+
+        content = (
+            "任务循环已达到最大轮数，未收到 `attempt_completion`。"
+            "请根据当前已收集的信息继续发起一次请求，或提高最大轮数后重试。"
+        )
+        if latest_tool_summary:
+            content += f"\n\n最后一次工具结果摘要：{latest_tool_summary[:500]}"
+
+        final_msg = Message(role="assistant", content=content)
+        final_msg.summary = content[:240]
+        try:
+            final_msg.metadata["completion"] = False
+            final_msg.metadata["max_turns_reached"] = True
+            final_msg.seq_id = conversation.next_seq_id()
+        except Exception as exc:
+            logger.debug("Failed to annotate max-turns message: %s", exc)
+        self._attach_state_snapshot(conversation, final_msg)
+        return final_msg
 
     def _build_tool_message(
         self,
@@ -509,13 +579,20 @@ class Task:
         summary: Optional[str] = None,
     ) -> Message:
         result_text = self._tool_result_to_string(result)
-        display_text, spillover = self._maybe_spill_tool_result(
-            conversation=conversation,
+
+        # Lazy-init pipeline per conversation work_dir
+        if self._result_pipeline is None:
+            work_dir = str(getattr(conversation, "work_dir", "") or ".")
+            self._result_pipeline = ToolResultPipeline(work_dir)
+
+        handle = self._result_pipeline.process(
             tool_name=tool_name,
+            raw_text=result_text,
             tool_call_id=tool_call_id,
-            result_text=result_text,
+            seq_id=int(conversation.current_seq_id() or 0) + 1,
         )
-        tool_msg = Message(role="tool", content=str(display_text), tool_call_id=tool_call_id)
+
+        tool_msg = Message(role="tool", content=handle.display, tool_call_id=tool_call_id)
         try:
             tool_msg.seq_id = conversation.next_seq_id()
         except Exception as e:
@@ -528,54 +605,31 @@ class Task:
         try:
             tool_msg.metadata = tool_msg.metadata or {}
             tool_msg.metadata["name"] = tool_name
-            if spillover:
-                tool_msg.metadata["tool_result_file"] = spillover.get("path", "")
-                tool_msg.metadata["tool_result_chars"] = spillover.get("chars", 0)
+            if handle.full_path:
+                tool_msg.metadata["tool_result_file"] = handle.full_path
+                tool_msg.metadata["tool_result_chars"] = handle.total_chars
                 tool_msg.metadata["tool_result_truncated"] = True
+            if handle.hint:
+                tool_msg.metadata["tool_result_hint"] = handle.hint
+            if handle.is_processed:
+                tool_msg.metadata["tool_result_strategy"] = handle.strategy
         except Exception as e:
             logger.debug("Failed to set tool metadata: %s", e)
 
         try:
-            tool_msg.summary = summary or self._summarize_tool_result(tool_name, display_text)
+            tool_msg.summary = summary or self._summarize_tool_result(tool_name, handle.display)
         except Exception as e:
             logger.debug("Failed to summarize tool result for %s: %s", tool_name, e)
 
         self._attach_state_snapshot(conversation, tool_msg)
         return tool_msg
 
-    def _maybe_spill_tool_result(
-        self,
-        *,
-        conversation: Conversation,
-        tool_name: str,
-        tool_call_id: Optional[str],
-        result_text: str,
-    ) -> tuple[str, dict[str, Any] | None]:
-        text = str(result_text or "")
-        if len(text) <= _TOOL_RESULT_SPILLOVER_CHARS:
-            return text, None
-
-        work_dir = Path(str(getattr(conversation, "work_dir", "") or ".")).resolve()
-        target_dir = work_dir / ".pycat" / "tool-results"
-        try:
-            target_dir.mkdir(parents=True, exist_ok=True)
-            safe_tool = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(tool_name or "tool")).strip("_") or "tool"
-            seq = int(conversation.current_seq_id() or 0) + 1
-            call_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(tool_call_id or "call")).strip("_")[:40] or "call"
-            target_path = (target_dir / f"{seq:06d}_{safe_tool}_{call_id}.txt").resolve()
-            if target_dir not in target_path.parents:
-                return text[:_TOOL_RESULT_PREVIEW_CHARS], None
-            target_path.write_text(text, encoding="utf-8", errors="replace")
-            preview = text[:_TOOL_RESULT_PREVIEW_CHARS].rstrip()
-            display = (
-                f"{preview}\n\n"
-                f"... [full tool result stored at {target_path}; {len(text)} chars. "
-                "Use read_file if the complete output is needed.]"
-            )
-            return display, {"path": str(target_path), "chars": len(text)}
-        except Exception as exc:
-            logger.debug("Failed to spill large tool result for %s: %s", tool_name, exc)
-            return text, None
+    @staticmethod
+    def _is_max_turns_failure_message(message: str, metadata: dict[str, Any] | None = None) -> bool:
+        if metadata and metadata.get("max_turns_reached"):
+            return True
+        text = str(message or "")
+        return "任务循环已达到最大轮数" in text or "未收到 `attempt_completion`" in text
 
     def _complete_session_tasks(self, context: Any, completion_text: str, conversation: Conversation) -> None:
         try:
@@ -671,13 +725,13 @@ class Task:
         if tool_name == "manage_document":
             return lines[0][:220]
 
-        if tool_name == "load_skill":
+        if tool_name == "skill__load":
             for line in lines:
                 if line.startswith("Skill:"):
                     return f"Loaded {line.split(':', 1)[1].strip()}."
             return "Skill loaded."
 
-        if tool_name == "read_skill_resource":
+        if tool_name == "skill__read_resource":
             return lines[0][:220]
 
         if tool_name == "attempt_completion":
@@ -695,6 +749,7 @@ class Task:
         from core.config.schema import RetryConfig
         from core.modes.manager import ModeManager
         from core.task.builder import build_run_policy
+        from core.config.io import load_app_config
 
         mode_manager = ModeManager(getattr(conversation, "work_dir", None) or None)
         retry_cfg = RetryConfig(
@@ -702,10 +757,16 @@ class Task:
             base_delay=float(getattr(current_policy.retry, "base_delay", 1.0) or 1.0),
             backoff_factor=float(getattr(current_policy.retry, "backoff_factor", 2.0) or 2.0),
         )
+        global_permissions = None
+        try:
+            global_permissions = load_app_config().permissions
+        except Exception:
+            pass
         next_policy = build_run_policy(
             mode_slug=str(next_mode or "chat") or "chat",
             mode_manager=mode_manager,
             retry_config=retry_cfg,
+            global_permissions=global_permissions,
         )
         return replace(
             next_policy,
@@ -839,23 +900,91 @@ class Task:
 
         try:
             from core.task.builder import build_run_policy
+            from core.config.io import load_app_config
+            from models.provider import provider_matches_name, split_model_ref
 
-            child_policy = build_run_policy(mode_slug=mode_slug)
+            global_permissions = None
+            try:
+                global_permissions = load_app_config().permissions
+            except Exception:
+                pass
+            child_policy = build_run_policy(mode_slug=mode_slug, global_permissions=global_permissions)
+            updates: dict[str, Any] = {"source": "sub_task"}
+            model_ref = str(subtask_req.get("model_ref") or "").strip()
+            if model_ref:
+                provider_name, model_name = split_model_ref(model_ref)
+                if provider_name and not provider_matches_name(provider, provider_name):
+                    logger.debug(
+                        "Ignoring subtask provider override '%s' because active provider is '%s'",
+                        provider_name,
+                        getattr(provider, "name", ""),
+                    )
+                if model_name:
+                    updates["model"] = model_name
+            try:
+                max_turns = int(subtask_req.get("max_turns") or 0)
+                if max_turns > 0:
+                    updates["max_turns"] = max_turns
+            except Exception:
+                pass
+            tool_groups = {
+                str(group or "").strip()
+                for group in (subtask_req.get("tool_groups") or [])
+                if str(group or "").strip()
+            }
+            if tool_groups:
+                tool_groups.add("modes")
+                updates["tool_groups"] = tool_groups
+                # Subagent tool visibility is expressed via tool_groups;
+                # explicit per-tool policies are built only when needed.
+            if subtask_req.get("auto_spillover"):
+                updates["auto_compress_enabled"] = False
+            if updates:
+                child_policy = replace(child_policy, **updates)
 
             child_conv = Conversation(
                 title=f"Sub-task: {mode_slug}",
                 messages=[Message(role="user", content=message)],
                 mode=mode_slug,
             )
+            runtime_instructions = str(
+                subtask_req.get("instructions")
+                or subtask_req.get("system_prompt_override")
+                or ""
+            ).strip()
+            if runtime_instructions:
+                try:
+                    child_cfg = child_conv.get_llm_config().with_updates(
+                        system_prompt_override=runtime_instructions
+                    )
+                    child_conv.set_llm_config(child_cfg)
+                except Exception as e:
+                    logger.debug("Failed to apply subtask runtime instructions: %s", e)
             # Inherit work_dir from parent
             try:
                 child_conv.work_dir = getattr(conversation, "work_dir", ".") or "."
             except Exception as e:
                 logger.debug("Failed to inherit work_dir for subtask: %s", e)
+            # Inherit a minimal, sanitized snapshot of parent state.
+            # Subagents do NOT receive the full todo list or mutable documents
+            # to prevent accidental cross-contamination.
             try:
-                child_conv._state_dict = copy.deepcopy(getattr(conversation, "_state_dict", {}) or {})
+                parent_state = conversation.get_state()
+                child_conv._state_dict = {}
+                child_state = child_conv.get_state()
+                # Copy only safe, read-only context
+                child_state.memory["_disable_auto_spillover_subagent"] = True
+                child_state.memory["active_mode"] = mode_slug
+                work_dir = str(getattr(conversation, "work_dir", ".") or ".").strip()
+                if work_dir:
+                    child_state.memory["work_dir"] = work_dir
+                # Optionally pass a subset of parent memory keys that are safe
+                for safe_key in ("project_type", "language", "framework"):
+                    if safe_key in parent_state.memory:
+                        child_state.memory[safe_key] = parent_state.memory[safe_key]
+                child_conv.set_state(child_state)
             except Exception as e:
-                logger.debug("Failed to inherit session state for subtask: %s", e)
+                logger.debug("Failed to set up minimal subtask state: %s", e)
 
             child_task = Task(client=self._client, tool_manager=self._tool_manager)
             result = await child_task.run(
@@ -874,11 +1003,15 @@ class Task:
 
             if result.status == TaskStatus.COMPLETED and result.final_message:
                 metadata = getattr(result.final_message, "metadata", {}) or {}
+                max_turns_failure = self._is_max_turns_failure_message(
+                    result.final_message.content or "",
+                    metadata,
+                )
                 return SubTaskOutcome(
-                    status=result.status,
+                    status=TaskStatus.FAILED if max_turns_failure else result.status,
                     message=result.final_message.content or "Sub-task completed (no output).",
                     completion_command=str(metadata.get("completion_command") or "").strip(),
-                    completed=bool(metadata.get("completion")),
+                    completed=bool(metadata.get("completion")) and not max_turns_failure,
                 )
             if result.status == TaskStatus.FAILED:
                 return SubTaskOutcome(

@@ -35,7 +35,7 @@ def _decode_subprocess_output(data: object) -> str:
 class PythonExecTool(BaseTool):
     @property
     def name(self) -> str:
-        return "builtin_python_exec"
+        return "python_exec"
 
     @property
     def description(self) -> str:

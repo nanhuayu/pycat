@@ -9,7 +9,7 @@ class WriteToFileTool(BaseTool):
     
     @property
     def name(self) -> str:
-        return "write_to_file"
+        return "write_file"
 
     @property
     def description(self) -> str:
@@ -167,7 +167,7 @@ class EditFileTool(BaseTool):
             return ToolResult(f"File not found: {path_str}", is_error=True)
         
         if not is_patch_mode and not old_str:
-             return ToolResult("Missing 'old_str' for existing file. Use 'builtin_filesystem_write' to overwrite, or provide 'diff' for patch mode.", is_error=True)
+             return ToolResult("Missing 'old_str' for existing file. Use 'write_file' to overwrite, or provide 'diff' for patch mode.", is_error=True)
 
         # Approval
         action_desc = "Apply patch to" if is_patch_mode else "Edit file"
@@ -313,7 +313,7 @@ class EditFileTool(BaseTool):
 class DeleteFileTool(BaseTool):
     @property
     def name(self) -> str:
-        return "builtin_filesystem_delete"
+        return "delete_file"
 
     @property
     def description(self) -> str:

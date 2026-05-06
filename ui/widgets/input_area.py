@@ -110,8 +110,8 @@ class InputArea(QWidget):
         
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 6)
-        layout.setSpacing(3)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
 
         self.attachment_strip = AttachmentPreviewStrip()
         self.attachment_strip.remove_requested.connect(self._remove_attachment)
@@ -123,8 +123,8 @@ class InputArea(QWidget):
         input_wrapper.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         wrapper_layout = QVBoxLayout(input_wrapper)
-        wrapper_layout.setContentsMargins(4, 4, 4, 4)
-        wrapper_layout.setSpacing(3)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.setSpacing(4)
         
         # Text input
         self.text_input = MessageTextEdit()

@@ -67,6 +67,7 @@ class ChannelRuntimeContext:
         platform_label: str,
         reply_normalizer: Any | None = None,
         binding_updates: dict[str, Any] | None = None,
+        reply_sender: Any | None = None,
     ) -> tuple[Conversation, str] | None:
         return self._runtime.process_bound_channel_message(
             channel,
@@ -79,6 +80,7 @@ class ChannelRuntimeContext:
             platform_label=platform_label,
             reply_normalizer=reply_normalizer,
             binding_updates=binding_updates,
+            reply_sender=reply_sender,
         )
 
     def update_channel_runtime_state(

@@ -34,7 +34,7 @@ def _ensure_skill_load_allowed(skill_name: str, context: ToolContext, mgr: Skill
 class LoadSkillTool(BaseTool):
     @property
     def name(self) -> str:
-        return "load_skill"
+        return "skill__load"
 
     @property
     def description(self) -> str:
@@ -114,13 +114,13 @@ class LoadSkillTool(BaseTool):
 class ReadSkillResourceTool(BaseTool):
     @property
     def name(self) -> str:
-        return "read_skill_resource"
+        return "skill__read_resource"
 
     @property
     def description(self) -> str:
         return (
             "Read a supporting file referenced by a skill, such as a file under references/, templates/, or scripts/. "
-            "Use this after load_skill when you need more detailed instructions or templates."
+            "Use this after skill__load when you need more detailed instructions or templates."
         )
 
     @property

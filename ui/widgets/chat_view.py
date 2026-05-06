@@ -41,7 +41,8 @@ class ChatView(QWidget):
         self._inline_question_cancel_callback: Callable[[], None] | None = None
         self._nav_update_timer: QTimer | None = None
         self._suppress_model_signal = False
-        self._stream = StreamingOverlay(scroll_area=None)  # scroll_area set after _setup_ui
+        self._stream = StreamingOverlay(scroll_area=None, should_auto_scroll=self._should_follow_output)  # scroll_area set after _setup_ui
+        self._follow_output = True
         
         self._setup_ui()
         self._stream._scroll_area = self.scroll_area
@@ -125,7 +126,11 @@ class ChatView(QWidget):
         # Align list padding with header bar margins for a cleaner vertical rhythm.
         self.messages_layout.setContentsMargins(10, 10, 10, 10)
         self.messages_layout.setSpacing(6)
-        self.messages_layout.addStretch()
+        self.messages_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._bottom_spacer = QWidget()
+        self._bottom_spacer.setFixedHeight(8)
+        self._bottom_spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.messages_layout.addWidget(self._bottom_spacer)
         
         self.scroll_area.setWidget(self.messages_container)
 
@@ -151,6 +156,7 @@ class ChatView(QWidget):
         self._nav_update_timer.setSingleShot(True)
         self._nav_update_timer.timeout.connect(self._update_nav_state)
         self.scroll_area.verticalScrollBar().valueChanged.connect(self._schedule_nav_update)
+        self.scroll_area.verticalScrollBar().valueChanged.connect(self._update_follow_output)
 
         self._update_nav_state()
         self._update_empty_state()
@@ -307,6 +313,7 @@ class ChatView(QWidget):
 
         title_label = QLabel(title)
         title_label.setObjectName("chat_empty_tip_title")
+        title_label.setWordWrap(True)
         layout.addWidget(title_label)
 
         desc_label = QLabel(description)
@@ -418,7 +425,7 @@ class ChatView(QWidget):
                     widget.refresh_tool_calls()
                     
                     # Only auto-scroll if we updated the very last message
-                    if i == len(self._message_widgets) - 1:
+                    if i == len(self._message_widgets) - 1 and self._should_follow_output():
                         QTimer.singleShot(50, self._scroll_to_bottom)
                     return
 
@@ -427,10 +434,11 @@ class ChatView(QWidget):
         widget.edit_requested.connect(self.edit_message.emit)
         widget.delete_requested.connect(self.delete_message.emit)
         
-        self.messages_layout.insertWidget(self.messages_layout.count() - 1, widget)
+        self._insert_above_bottom_spacer(widget)
         self._message_widgets.append(widget)
         self._update_empty_state()
-        QTimer.singleShot(50, self._scroll_to_bottom)
+        if self._should_follow_output():
+            QTimer.singleShot(50, self._scroll_to_bottom)
         self._schedule_nav_update()
 
     def show_inline_question(
@@ -463,9 +471,10 @@ class ChatView(QWidget):
 
         self._inline_question_card = card
         self._inline_question_cancel_callback = on_cancel
-        self.messages_layout.insertWidget(self.messages_layout.count() - 1, card)
+        self._insert_above_bottom_spacer(card)
         self._update_empty_state()
-        QTimer.singleShot(50, self._scroll_to_bottom)
+        if self._should_follow_output():
+            QTimer.singleShot(50, self._scroll_to_bottom)
         self._schedule_nav_update()
 
     def clear_inline_question(self, *, notify: bool = False) -> None:
@@ -489,7 +498,8 @@ class ChatView(QWidget):
         self._update_empty_state()
     
     def start_streaming_response(self, model: str = ""):
-        self._stream.start(model=model, parent_layout=self.messages_layout)
+        self._follow_output = self._is_near_bottom()
+        self._stream.start(model=model, parent_layout=self.messages_layout, insert_index=self._bottom_insert_index())
         self._update_empty_state()
     
     def append_streaming_content(self, content: str):
@@ -544,6 +554,33 @@ class ChatView(QWidget):
         if not self._nav_update_timer:
             return
         self._nav_update_timer.start(30)
+
+    def _update_follow_output(self, _value: int | None = None) -> None:
+        self._follow_output = self._is_near_bottom()
+
+    def _is_near_bottom(self, threshold: int = 96) -> bool:
+        try:
+            scrollbar = self.scroll_area.verticalScrollBar()
+            return (scrollbar.maximum() - scrollbar.value()) <= int(threshold)
+        except Exception:
+            return True
+
+    def _should_follow_output(self) -> bool:
+        if not self._stream.active:
+            return self._is_near_bottom()
+        return bool(self._follow_output or self._is_near_bottom())
+
+    def _bottom_insert_index(self) -> int:
+        try:
+            index = self.messages_layout.indexOf(self._bottom_spacer)
+            if index >= 0:
+                return index
+        except Exception:
+            pass
+        return max(0, self.messages_layout.count())
+
+    def _insert_above_bottom_spacer(self, widget: QWidget) -> None:
+        self.messages_layout.insertWidget(self._bottom_insert_index(), widget, 0, Qt.AlignmentFlag.AlignTop)
 
     def _navigable_widgets(self) -> List[MessageWidget]:
         return [w for w in self._message_widgets if w is not None]
@@ -632,10 +669,12 @@ class ChatView(QWidget):
     def _scroll_to_bottom(self):
         scrollbar = self.scroll_area.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
+        self._follow_output = True
 
     def _scroll_to_top(self):
         scrollbar = self.scroll_area.verticalScrollBar()
         scrollbar.setValue(scrollbar.minimum())
+        self._follow_output = False
 
     @staticmethod
     def _runtime_event_label(kind: str) -> str:

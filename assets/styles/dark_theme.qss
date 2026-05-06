@@ -223,6 +223,36 @@ QLabel#message_badge {
     background-color: rgba(255, 255, 255, 0.1);
 }
 
+QToolButton#tool_call_header[kind="tool"] {
+    background-color: #222222;
+    border: 1px solid #3a3a3a;
+    color: #a0a0a0;
+}
+
+QToolButton#tool_call_header[kind="tool"]:hover {
+    background-color: #2a2a2a;
+}
+
+QToolButton#tool_call_header[kind="capability"] {
+    background-color: rgba(16, 185, 129, 0.16);
+    border: 1px solid rgba(52, 211, 153, 0.36);
+    color: #6ee7b7;
+}
+
+QToolButton#tool_call_header[kind="capability"]:hover {
+    background-color: rgba(16, 185, 129, 0.24);
+}
+
+QToolButton#tool_call_header[kind="subagent"] {
+    background-color: rgba(99, 102, 241, 0.18);
+    border: 1px solid rgba(129, 140, 248, 0.42);
+    color: #c7d2fe;
+}
+
+QToolButton#tool_call_header[kind="subagent"]:hover {
+    background-color: rgba(99, 102, 241, 0.28);
+}
+
 QTextBrowser#message_content {
     background: transparent;
     color: #f0f0f0;
@@ -293,16 +323,16 @@ QToolButton#toolbar_btn:checked {
 }
 
 #input_wrapper {
-    background-color: #2a2a2a;
-    border: 1px solid #3a3a3a;
+    background-color: transparent;
+    border: none;
 }
 
 #input_wrapper:focus-within {
-    border-color: #6366f1;
+    border: none;
 }
 
 QTextEdit#message_input {
-    background-color: transparent;
+    background-color: #2a2a2a;
     color: #e0e0e0;
 }
 
@@ -453,13 +483,15 @@ QLabel#stat_value {
 }
 
 /* ============ Thinking ============ */
-QPushButton#thinking_toggle {
+QPushButton#thinking_toggle,
+QToolButton#thinking_toggle {
     background-color: #222222;
     border: 1px solid #3a3a3a;
     color: #a0a0a0;
 }
 
-QPushButton#thinking_toggle:hover {
+QPushButton#thinking_toggle:hover,
+QToolButton#thinking_toggle:hover {
     background-color: #2a2a2a;
 }
 

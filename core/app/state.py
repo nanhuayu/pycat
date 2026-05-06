@@ -12,6 +12,9 @@ class ConversationSelection:
     provider_name: str = ""
     api_type: str = ""
     model: str = ""
+    primary_model_ref: str = ""
+    secondary_model_ref: str = ""
+    fallback_model_ref: str = ""
     mode_slug: str = "chat"
     work_dir: str = ""
     show_thinking: bool = True
@@ -26,6 +29,9 @@ class ConversationSettingsUpdate:
     provider_name: str = ""
     api_type: str = ""
     model: str = ""
+    primary_model_ref: str = ""
+    secondary_model_ref: str = ""
+    fallback_model_ref: str = ""
     mode_slug: str = "chat"
     system_prompt: str = ""
     max_context_messages: int | None = None
@@ -36,6 +42,8 @@ class ConversationSettingsUpdate:
     show_thinking: bool = True
     enable_mcp: bool = False
     enable_search: bool = False
+    # Per-tool policy overrides for this conversation (merged with global defaults).
+    tool_policies: dict[str, Any] = field(default_factory=dict)
     memory_sources: tuple[str, ...] = ("session", "workspace")
     allowed_channel_sources: tuple[str, ...] = field(default_factory=tuple)
     trusted_channel_sources: tuple[str, ...] = field(default_factory=tuple)

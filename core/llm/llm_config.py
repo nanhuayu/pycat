@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, TYPE_CHECKING
 
-from models.provider import OPENAI_COMPATIBLE, SUPPORTED_API_TYPES
+from models.provider import DEFAULT_API_TYPE, normalize_api_type
 
 if TYPE_CHECKING:
     from models.provider import Provider
@@ -20,11 +20,10 @@ _LEGACY_LLM_SETTING_KEYS = frozenset({
 })
 
 
-def _coerce_api_type(value: Any, default: str = OPENAI_COMPATIBLE) -> str:
-    text = str(value or "").strip().lower()
-    if text in SUPPORTED_API_TYPES:
-        return text
-    return str(default or OPENAI_COMPATIBLE)
+def _coerce_api_type(value: Any, default: str = DEFAULT_API_TYPE) -> str:
+    if default == "" and (value is None or str(value or "").strip() == ""):
+        return ""
+    return normalize_api_type(value, default=default)
 
 
 def _coerce_int(value: Any) -> int | None:
@@ -74,7 +73,7 @@ class LLMConfig:
     schema_version: int = LLM_CONFIG_SCHEMA_VERSION
     provider_id: str = ""
     provider_name: str = ""
-    api_type: str = OPENAI_COMPATIBLE
+    api_type: str = DEFAULT_API_TYPE
     model: str = ""
     temperature: float | None = None
     top_p: float | None = None
@@ -110,7 +109,7 @@ class LLMConfig:
             schema_version=max(1, schema_version),
             provider_id=str(payload.get("provider_id") or "").strip(),
             provider_name=str(payload.get("provider_name") or "").strip(),
-            api_type=_coerce_api_type(payload.get("api_type"), default=OPENAI_COMPATIBLE),
+            api_type=_coerce_api_type(payload.get("api_type"), default=DEFAULT_API_TYPE),
             model=str(payload.get("model") or "").strip(),
             temperature=_coerce_float(payload.get("temperature")),
             top_p=_coerce_float(payload.get("top_p")),
@@ -183,11 +182,12 @@ class LLMConfig:
         return ""
 
     def resolved_api_type(self, provider: "Provider | None" = None) -> str:
-        if self.api_type in SUPPORTED_API_TYPES:
-            return self.api_type
+        api_type = _coerce_api_type(self.api_type, default="")
+        if api_type:
+            return api_type
         if provider is not None:
-            return _coerce_api_type(getattr(provider, "api_type", OPENAI_COMPATIBLE))
-        return OPENAI_COMPATIBLE
+            return _coerce_api_type(getattr(provider, "api_type", DEFAULT_API_TYPE))
+        return DEFAULT_API_TYPE
 
     def resolved_stream(self, default: bool = True) -> bool:
         if isinstance(self.stream, bool):

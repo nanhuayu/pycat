@@ -5,8 +5,9 @@ Pure core helper (no Qt) — reusable by CLI/TUI.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
+from core.config.schema import ToolPermissionConfig, ToolPolicy
 from core.task.types import RetryPolicy, RunPolicy
 from core.modes.features import clamp_feature_flags, get_mode_feature_policy
 from core.modes.manager import ModeManager, resolve_mode_config
@@ -22,8 +23,10 @@ def build_run_policy(
     enable_thinking: Optional[bool] = None,
     enable_search: Optional[bool] = None,
     enable_mcp: Optional[bool] = None,
+    tool_policies: Optional[Dict[str, ToolPolicy]] = None,
     mode_manager: Optional[ModeManager] = None,
     retry_config: Optional[RetryConfig] = None,
+    global_permissions: Optional["ToolPermissionConfig"] = None,
 ) -> RunPolicy:
     """Build a RunPolicy from mode + feature toggles.
 
@@ -35,11 +38,10 @@ def build_run_policy(
 
     mode_cfg = resolve_mode_config(slug, mode_manager=mode_manager)
 
-    max_turns = int(getattr(mode_cfg, "max_turns", None) or 20)
+    max_turns = int(getattr(mode_cfg, "max_turns", None) or 200)
     context_window_limit = int(getattr(mode_cfg, "context_window_limit", None) or 100_000)
     auto_compress_enabled = getattr(mode_cfg, "auto_compress_enabled", None)
-    tool_allowlist = set(getattr(mode_cfg, "tool_allowlist", ()) or ()) or None
-    tool_denylist = set(getattr(mode_cfg, "tool_denylist", ()) or ()) or None
+    tool_groups = set(getattr(mode_cfg, "tool_groups", ()) or ()) or None
 
     # Derive defaults from mode feature policy when caller passes None.
     try:
@@ -75,6 +77,18 @@ def build_run_policy(
         enable_search = bool(enable_search)
         enable_mcp = bool(enable_mcp)
 
+    # Build per-tool policies: global overrides -> conversation overrides -> feature flags.
+    built_policies: Dict[str, ToolPolicy] = {}
+    if global_permissions is not None:
+        built_policies.update(dict(global_permissions.tools or {}))
+    built_policies.update(dict(tool_policies or {}))
+    if enable_search:
+        built_policies.setdefault("web_search", ToolPolicy(enabled=True, auto_approve=False))
+    if enable_mcp:
+        # MCP tools use the ``mcp__*`` prefix; enabling MCP means they are
+        # visible by default (individual tools can still be overridden).
+        pass  # MCP visibility is controlled at fetch time via include_mcp flag
+
     retry = RetryPolicy()
     if retry_config is not None:
         retry = RetryPolicy(
@@ -88,10 +102,8 @@ def build_run_policy(
         max_turns=int(max_turns),
         context_window_limit=int(context_window_limit),
         enable_thinking=bool(enable_thinking),
-        enable_search=bool(enable_search),
-        enable_mcp=bool(enable_mcp),
-        tool_allowlist=tool_allowlist,
-        tool_denylist=tool_denylist,
+        tool_policies=built_policies,
+        tool_groups=tool_groups,
         retry=retry,
         auto_compress_enabled=auto_compress_enabled,
     )

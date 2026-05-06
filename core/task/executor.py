@@ -147,8 +147,12 @@ class LLMExecutor:
             on_token=on_token,
             on_thinking=on_thinking,
             enable_thinking=bool(policy.enable_thinking),
-            enable_search=bool(policy.enable_search),
-            enable_mcp=bool(policy.enable_mcp),
+            enable_search=True,
+            enable_mcp=True,
+            tool_policies={
+                name: {"enabled": p.enabled, "auto_approve": p.auto_approve}
+                for name, p in (policy.tool_policies or {}).items()
+            } if policy.tool_policies else None,
             debug_log_path=debug_log_path,
             cancel_event=cancel_event,
             prepared_messages=prepared_messages,
@@ -217,12 +221,21 @@ class LLMExecutor:
             logger.debug("Failed to resolve mode groups for tool loading: %s", e)
             allowed_groups = None
 
+        policy_groups = getattr(policy, "tool_groups", None)
+        if policy_groups:
+            policy_group_set = {str(group or "").strip() for group in policy_groups if str(group or "").strip()}
+            if allowed_groups:
+                allowed_groups = set(allowed_groups).intersection(policy_group_set)
+            else:
+                allowed_groups = policy_group_set
+
         try:
             return await self._client.tool_manager.get_all_tools(
-                include_search=bool(policy.enable_search),
-                include_mcp=bool(policy.enable_mcp),
+                include_search=True,
+                include_mcp=True,
                 prepared_queries=[prepared_query] if prepared_query else None,
                 allowed_groups=allowed_groups,
+                tool_policies=policy.tool_policies,
             )
         except Exception as e:
             logger.warning("Failed to load request tools: %s", e)

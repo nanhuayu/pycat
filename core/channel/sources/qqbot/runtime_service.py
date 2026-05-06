@@ -56,6 +56,10 @@ class QQBotRuntimeSource:
         )
         context_token = channel_value(message, "context_token") or channel_value(message, "message_id")
         target_type = channel_value(message, "target_type")
+
+        def _send_reply(content: str, _source_message: Message | None = None) -> None:
+            self.send_reply(channel, receive_id=reply_user, content=content, context_token=context_token, target_type=target_type)
+
         processed = context.process_bound_channel_message(
             channel,
             message,
@@ -67,15 +71,10 @@ class QQBotRuntimeSource:
             platform_label="QQ Bot",
             reply_normalizer=self._client.normalize_reply_text,
             binding_updates={"target_type": target_type} if target_type else None,
+            reply_sender=_send_reply,
         )
         if processed is None:
             return
-        _, reply_text = processed
-
-        try:
-            self.send_reply(channel, receive_id=reply_user, content=reply_text, context_token=context_token, target_type=target_type)
-        except Exception as exc:
-            logger.warning("Failed to send QQ Bot reply for channel %s: %s", getattr(channel, "id", ""), exc)
 
     def send_reply(
         self,

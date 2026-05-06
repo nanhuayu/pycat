@@ -143,6 +143,7 @@ class ContextCondenser:
             app_cfg = load_app_config()
             context_cfg = getattr(app_cfg, "context", None)
         except Exception:
+            app_cfg = None
             context_cfg = None
 
         include_tool_details = bool(
@@ -158,8 +159,16 @@ class ContextCondenser:
         prompt = f"## Previous Summary\n{state.summary}\n\n## New Conversation Delta\n{transcript}\n"
         from models.provider import normalize_provider_name, split_model_ref
 
+        compress_capability = None
+        try:
+            capabilities = getattr(app_cfg, "capabilities", None)
+            compress_capability = capabilities.capability("context_compress") if capabilities is not None else None
+        except Exception:
+            compress_capability = None
+
         configured_summary_model = (
-            (conversation.settings or {}).get("summary_model")
+            (getattr(compress_capability, "model_ref", "") or "").strip()
+            or (conversation.settings or {}).get("summary_model")
             or (getattr(context_cfg, "summary_model", "") or "").strip()
             or conversation.model
             or provider.default_model
@@ -173,7 +182,8 @@ class ContextCondenser:
             )
         summary_model = summary_model_name or str(configured_summary_model or "").strip()
         summary_system = (
-            (conversation.settings or {}).get("summary_system_prompt")
+            (getattr(compress_capability, "system_prompt", "") or "").strip()
+            or (conversation.settings or {}).get("summary_system_prompt")
             or (getattr(context_cfg, "summary_system_prompt", "") or "").strip()
             or SUMMARY_SYSTEM_PROMPT
         )

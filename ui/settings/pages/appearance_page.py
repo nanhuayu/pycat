@@ -23,7 +23,7 @@ class AppearancePage(QWidget):
     def __init__(
         self,
         *,
-        theme: str = "dark",
+        theme: str = "light",
         show_stats: bool = True,
         show_thinking: bool = True,
         log_stream: bool = False,
@@ -72,9 +72,9 @@ class AppearancePage(QWidget):
         theme_layout = QFormLayout(theme_group)
         self.theme_combo = QComboBox()
         configure_combo_popup(self.theme_combo)
-        self.theme_combo.addItems(["深色", "浅色"])
-        t = (theme or "dark").lower()
-        self.theme_combo.setCurrentIndex(1 if t == "light" else 0)
+        self.theme_combo.addItems(["浅色", "深色"])
+        t = (theme or "light").lower()
+        self.theme_combo.setCurrentIndex(1 if t == "dark" else 0)
         theme_layout.addRow("界面主题:", self.theme_combo)
         layout.addWidget(theme_group)
 
@@ -111,7 +111,7 @@ class AppearancePage(QWidget):
         return {
             "proxy_url": (self.proxy_edit.text() or "").strip(),
             "llm_timeout_seconds": float(self.timeout_spin.value()),
-            "theme": "light" if self.theme_combo.currentIndex() == 1 else "dark",
+            "theme": "dark" if self.theme_combo.currentIndex() == 1 else "light",
             "show_stats": bool(self.stats_check.isChecked()),
             "show_thinking": bool(self.thinking_check.isChecked()),
             "log_stream": bool(self.log_stream_check.isChecked()),

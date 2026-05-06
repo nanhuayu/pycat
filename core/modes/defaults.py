@@ -28,7 +28,8 @@ _AGENT_AUTONOMY_SUFFIX = (
     "- Maintain a short working plan with `manage_document(name=\"plan\")` for multi-step work.\n"
     "- If a current plan already exists, treat it as the execution source of truth instead of improvising a new workflow.\n"
     "- Store durable facts and confirmed decisions in memory instead of repeating them in chat.\n"
-    "- If another mode is a better fit, call `switch_mode` or delegate via `new_task` instead of staying stuck in the wrong mode."
+    "- If another mode is a better fit, call `switch_mode` or delegate focused work via `subagent__custom`. "
+    "Use `subagent__read_analyze` for multi-file long-document analysis, `subagent__search` for research, and `capability__summarize_text` for one file or one long text."
 )
 
 _PLANNING_AUTONOMY_SUFFIX = (
@@ -38,7 +39,7 @@ _PLANNING_AUTONOMY_SUFFIX = (
     "- The plan document is the primary deliverable in this mode; refine it before concluding.\n"
     "- Do not implement code changes in plan mode unless the user explicitly asks to leave planning and switch modes.\n"
     "- Keep todo state current with `manage_state`.\n"
-    "- If another mode is better suited, call `switch_mode`; if work should proceed independently, use `new_task`.\n"
+    "- If another mode is better suited, call `switch_mode`; if focused work should proceed independently, use `subagent__custom`, `subagent__read_analyze`, or `subagent__search`.\n"
     "- When the planning or orchestration task is complete, call `attempt_completion` with a concise result."
 )
 
@@ -142,15 +143,15 @@ DEFAULT_MODES: list[ModeConfig] = [
         name="Orchestrator",
         role_definition=(
             "You are a strategic workflow orchestrator who coordinates complex tasks "
-            "by delegating them into sub-tasks using the new_task tool."
+            "by delegating focused work to default subagent tools."
             + _PLANNING_AUTONOMY_SUFFIX
         ),
         when_to_use="需要拆解复杂任务并委派给不同子 Agent。",
         description="多 Agent 协同编排",
         groups=("read", "search", "modes"),
         custom_instructions=(
-            "Break complex tasks into sub-tasks using the new_task tool. "
-            "Each sub-task should specify a mode and a clear instruction."
+            "Break complex tasks into focused child runs with subagent__custom, subagent__read_analyze, or subagent__search. "
+            "Use capability__summarize_text for a single long source and consolidate all returned reports before completing."
         ),
         source="builtin",
     ),

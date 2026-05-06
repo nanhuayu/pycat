@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QPushButton, QListWidget, QListWidgetItem,
     QCheckBox, QMessageBox, QWidget, QFormLayout, QTextEdit, QGroupBox
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSize, Qt
 from typing import List, Optional
 import json
 
@@ -209,8 +209,27 @@ class McpSettingsWidget(QWidget):
         self.detail_env = QTextEdit()
         self.detail_env.setReadOnly(True)
         self.detail_env.setPlaceholderText("当前服务没有环境变量")
-        self.detail_env.setMaximumHeight(160)
+        self.detail_env.setMaximumHeight(100)
         detail_layout.addWidget(self.detail_env)
+
+        # --- Cached tools (read-only hint; per-tool enable/auto-approve lives in Agent page) ---
+        tools_group = QGroupBox("已缓存工具")
+        tools_layout = QVBoxLayout(tools_group)
+        tools_layout.setContentsMargins(8, 8, 8, 8)
+        tools_layout.setSpacing(6)
+
+        self.tools_hint = QLabel("选择服务后显示已缓存的工具列表。若为空，请先运行一次以自动发现工具。")
+        self.tools_hint.setWordWrap(True)
+        self.tools_hint.setProperty("muted", True)
+        tools_layout.addWidget(self.tools_hint)
+
+        self.tools_container = QWidget()
+        self.tools_container_layout = QVBoxLayout(self.tools_container)
+        self.tools_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.tools_container_layout.setSpacing(4)
+        tools_layout.addWidget(self.tools_container)
+
+        detail_layout.addWidget(tools_group)
 
         detail_hint = QLabel("双击列表可直接编辑。建议为每个服务使用稳定名称，便于在问题排查和日志中识别。")
         detail_hint.setWordWrap(True)
@@ -237,6 +256,7 @@ class McpSettingsWidget(QWidget):
             item = QListWidgetItem(f"{s.name} · {status_text} · {s.command}")
             item.setIcon(status_icon)
             item.setToolTip(self._server_tooltip(s))
+            item.setSizeHint(QSize(0, 40))
             item.setData(Qt.ItemDataRole.UserRole, s)
             self.list_widget.addItem(item)
 
@@ -307,6 +327,7 @@ class McpSettingsWidget(QWidget):
             self.detail_meta.setText("")
             self.detail_args.setText("")
             self.detail_env.clear()
+            self._clear_tool_checks()
             return
 
         self.detail_title.setText(server.name or "未命名服务")
@@ -318,6 +339,30 @@ class McpSettingsWidget(QWidget):
         self.detail_args.setText(f"参数：{args_text}")
         env_text = "\n".join(f"{k}={v}" for k, v in (server.env or {}).items())
         self.detail_env.setPlainText(env_text)
+
+        self._refresh_tool_checks(server)
+
+    def _clear_tool_checks(self) -> None:
+        while self.tools_container_layout.count():
+            item = self.tools_container_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.tools_hint.setText("选择服务后显示已缓存的工具列表。若为空，请先运行一次以自动发现工具。")
+        self.tools_hint.setVisible(True)
+
+    def _refresh_tool_checks(self, server: McpServerConfig) -> None:
+        self._clear_tool_checks()
+        tools = list(server.cached_tools or [])
+        if not tools:
+            self.tools_hint.setText("该服务暂无已缓存的工具列表。请先运行一次以自动发现工具。")
+            self.tools_hint.setVisible(True)
+            return
+
+        self.tools_hint.setVisible(False)
+        for tool_name in tools:
+            label = QLabel(f"  • {tool_name}")
+            label.setProperty("muted", True)
+            self.tools_container_layout.addWidget(label)
 
     @staticmethod
     def _server_tooltip(server: McpServerConfig) -> str:

@@ -68,6 +68,7 @@ class LLMClient:
         enable_thinking: bool = True,
         enable_search: bool = False,
         enable_mcp: bool = False,
+        tool_policies: Optional[dict[str, Any]] = None,
         debug_log_path: Optional[str] = None,
         cancel_event: Optional[threading.Event] = None,
         prepared_messages: Optional[list[Message]] = None,
@@ -111,6 +112,7 @@ class LLMClient:
                     include_search=enable_search,
                     include_mcp=enable_mcp,
                     prepared_queries=[prepared_query] if prepared_query else None,
+                    tool_policies=tool_policies,
                 )
 
             if prepared_messages is not None:
@@ -129,6 +131,7 @@ class LLMClient:
                 tools=tools,
                 app_config=app_config,
             )
+            response_format = "responses" if getattr(provider, "is_openai_responses", False) else "chat"
 
             if debug_log_path:
                 try:
@@ -151,6 +154,7 @@ class LLMClient:
                         resp,
                         thinking_parser=thinking_parser,
                         enable_thinking=enable_thinking,
+                        response_format=response_format,
                         on_token=on_token,
                         start_time=start_time,
                     )
@@ -168,6 +172,7 @@ class LLMClient:
                         response,
                         thinking_parser=thinking_parser,
                         enable_thinking=enable_thinking,
+                        response_format=response_format,
                         on_token=on_token,
                         on_thinking=on_thinking,
                         cancel_event=cancel_event,

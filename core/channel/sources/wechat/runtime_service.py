@@ -188,6 +188,15 @@ class WeChatRuntimeSource:
         )
         context_token = channel_value(message, "context_token")
         thread_id = channel_value(message, "thread_id") or user_id
+
+        def _send_reply(content: str, _source_message: Message | None = None) -> None:
+            self.send_reply(
+                channel,
+                touser=reply_user,
+                content=content,
+                context_token=context_token,
+            )
+
         processed = context.process_bound_channel_message(
             channel,
             message,
@@ -198,20 +207,10 @@ class WeChatRuntimeSource:
             context_token=context_token,
             platform_label="WeChat",
             reply_normalizer=normalize_wechat_reply_text,
+            reply_sender=_send_reply,
         )
         if processed is None:
             return
-        _, reply_text = processed
-
-        try:
-            self.send_reply(
-                channel,
-                touser=reply_user,
-                content=reply_text,
-                context_token=context_token,
-            )
-        except Exception as exc:
-            logger.warning("Failed to send WeChat reply for channel %s: %s", getattr(channel, "id", ""), exc)
 
     def send_reply(self, channel: ChannelConfig, *, touser: str, content: str, context_token: str = "") -> None:
         config = dict(getattr(channel, "config", {}) or {})

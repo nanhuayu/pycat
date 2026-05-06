@@ -3,6 +3,143 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping
 
+from core.capabilities import CapabilitiesConfig, default_capabilities_config
+
+
+# ---------------------------------------------------------------------------
+# Tool permission primitives
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ToolPolicy:
+    """Per-tool permission policy.
+
+    Controls whether a specific tool is visible to the model and whether
+    its execution requires user confirmation.
+    """
+
+    enabled: bool = True
+    auto_approve: bool = False
+
+    @staticmethod
+    def from_dict(data: Mapping[str, Any] | None) -> "ToolPolicy":
+        d = _as_dict(dict(data) if data is not None else {})
+        return ToolPolicy(
+            enabled=_as_bool(d.get("enabled"), True),
+            auto_approve=_as_bool(d.get("auto_approve"), False),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "enabled": bool(self.enabled),
+            "auto_approve": bool(self.auto_approve),
+        }
+
+
+@dataclass(frozen=True)
+class ToolPermissionConfig:
+    """Global tool-permission configuration.
+
+    Category defaults provide the fallback for any tool without an explicit
+    per-tool override in ``tools``.  The resolution order is:
+        1. per-tool override in ``tools``
+        2. category default from ``category_defaults``
+        3. safe fallback (enabled=True, auto_approve=False)
+
+    Read-category tools default to ``auto_approve=True``; all other
+    categories default to ``auto_approve=False``.
+    """
+
+    category_defaults: Dict[str, ToolPolicy] = field(
+        default_factory=lambda: {
+            "read": ToolPolicy(enabled=True, auto_approve=True),
+            "edit": ToolPolicy(enabled=True, auto_approve=False),
+            "command": ToolPolicy(enabled=True, auto_approve=False),
+            "delegate": ToolPolicy(enabled=True, auto_approve=False),
+            "misc": ToolPolicy(enabled=True, auto_approve=False),
+        }
+    )
+
+    # Per-tool overrides: {tool_name: ToolPolicy}
+    tools: Dict[str, ToolPolicy] = field(default_factory=dict)
+
+    @staticmethod
+    def from_dict(data: Mapping[str, Any] | None) -> "ToolPermissionConfig":
+        d = _as_dict(dict(data) if data is not None else {})
+
+        # Per-tool overrides
+        raw_tools = _as_dict(d.get("tools"))
+        tools: Dict[str, ToolPolicy] = {}
+        for name, policy_data in raw_tools.items():
+            if not name or name.startswith("$"):
+                continue
+            tools[name] = ToolPolicy.from_dict(policy_data)
+
+        # Category defaults — migrate legacy flat keys if present
+        defaults: Dict[str, ToolPolicy] = {
+            "read": ToolPolicy(enabled=True, auto_approve=True),
+            "edit": ToolPolicy(enabled=True, auto_approve=False),
+            "command": ToolPolicy(enabled=True, auto_approve=False),
+            "delegate": ToolPolicy(enabled=True, auto_approve=False),
+            "misc": ToolPolicy(enabled=True, auto_approve=False),
+        }
+        raw_cat = d.get("category_defaults")
+        if isinstance(raw_cat, dict):
+            for key, val in raw_cat.items():
+                if isinstance(val, dict):
+                    defaults[key] = ToolPolicy.from_dict(val)
+        else:
+            # Legacy fallback: read from old flat booleans
+            defaults["read"] = ToolPolicy(
+                enabled=True,
+                auto_approve=_as_bool(d.get("read_auto_approve"), True),
+            )
+            defaults["edit"] = ToolPolicy(
+                enabled=True,
+                auto_approve=_as_bool(d.get("edit_auto_approve"), False),
+            )
+            defaults["command"] = ToolPolicy(
+                enabled=True,
+                auto_approve=_as_bool(d.get("command_auto_approve"), False),
+            )
+
+        return ToolPermissionConfig(
+            category_defaults=defaults,
+            tools=tools,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "category_defaults": {
+                k: v.to_dict() for k, v in (self.category_defaults or {}).items()
+            },
+            "tools": {name: policy.to_dict() for name, policy in (self.tools or {}).items()},
+        }
+
+    def resolve(self, tool_name: str, category: str = "misc") -> ToolPolicy:
+        """Return the effective policy for a tool.
+
+        Resolution order:
+        1. Explicit per-tool override in ``self.tools``.
+        2. Category-level default in ``self.category_defaults``.
+        3. Safe fallback (enabled=True, auto_approve=False).
+        """
+        override = (self.tools or {}).get(tool_name)
+        if override is not None:
+            return override
+
+        cat_default = (self.category_defaults or {}).get(category)
+        if cat_default is not None:
+            return cat_default
+
+        return ToolPolicy(enabled=True, auto_approve=False)
+
+    def is_enabled(self, tool_name: str, category: str = "misc") -> bool:
+        return bool(self.resolve(tool_name, category).enabled)
+
+    def is_auto_approved(self, tool_name: str, category: str = "misc") -> bool:
+        return bool(self.resolve(tool_name, category).auto_approve)
+
 
 def _as_dict(v: Any) -> Dict[str, Any]:
     return v if isinstance(v, dict) else {}
@@ -210,27 +347,26 @@ class RetryConfig:
 
 
 @dataclass(frozen=True)
-class PermissionsConfig:
-    auto_approve_read: bool = True
-    auto_approve_edit: bool = False
-    auto_approve_command: bool = False
+class AgentRuntimeConfig:
+    """Global defaults for agent loop execution."""
+
+    max_turns: int = 20
 
     @staticmethod
-    def from_dict(data: Mapping[str, Any] | None) -> "PermissionsConfig":
+    def from_dict(data: Mapping[str, Any] | None) -> "AgentRuntimeConfig":
         d = _as_dict(dict(data) if data is not None else {})
-        # Keep compatibility with legacy flat keys on root.
-        return PermissionsConfig(
-            auto_approve_read=_as_bool(d.get("auto_approve_read"), True),
-            auto_approve_edit=_as_bool(d.get("auto_approve_edit"), False),
-            auto_approve_command=_as_bool(d.get("auto_approve_command"), False),
+        raw = d.get("max_turns") if "max_turns" in d else d.get("maxTurns")
+        return AgentRuntimeConfig(
+            max_turns=_clamp_int(_as_int(raw, 200), 1, 1000),
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "auto_approve_read": bool(self.auto_approve_read),
-            "auto_approve_edit": bool(self.auto_approve_edit),
-            "auto_approve_command": bool(self.auto_approve_command),
-        }
+        return {"max_turns": int(self.max_turns)}
+
+
+# PermissionsConfig is replaced by ToolPermissionConfig.
+# Keep a thin alias so existing imports don't break during the migration.
+PermissionsConfig = ToolPermissionConfig
 
 
 @dataclass(frozen=True)
@@ -382,7 +518,7 @@ class ShellConfig:
 @dataclass(frozen=True)
 class AppConfig:
     # UI
-    theme: str = "dark"
+    theme: str = "light"
     show_stats: bool = True
     show_thinking: bool = True
     log_stream: bool = False
@@ -392,12 +528,14 @@ class AppConfig:
     chat_splitter_sizes: List[int] = field(default_factory=list)
 
     # Feature configs
+    agent: AgentRuntimeConfig = field(default_factory=AgentRuntimeConfig)
     permissions: PermissionsConfig = field(default_factory=PermissionsConfig)
     retry: RetryConfig = field(default_factory=RetryConfig)
     context: ContextConfig = field(default_factory=ContextConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     prompt_optimizer: PromptOptimizerConfig = field(default_factory=PromptOptimizerConfig)
     prompt_optimizer_model: str = ""
+    capabilities: CapabilitiesConfig = field(default_factory=default_capabilities_config)
     default_chat_model: str = ""
     channels: List[ChannelConfig] = field(default_factory=list)
     shell: ShellConfig = field(default_factory=ShellConfig)
@@ -416,15 +554,28 @@ class AppConfig:
                     continue
             return out
 
-        # Compatibility: permissions were previously stored flat on root.
-        permissions_src = {
-            "auto_approve_read": d.get("auto_approve_read"),
-            "auto_approve_edit": d.get("auto_approve_edit"),
-            "auto_approve_command": d.get("auto_approve_command"),
-        }
+        # Permissions may be stored nested under "permissions" or flat on root (legacy).
+        permissions_src = _as_dict(d.get("permissions"))
+        if not permissions_src:
+            permissions_src = {
+                "category_defaults": {
+                    "read": {
+                        "enabled": True,
+                        "auto_approve": _as_bool(d.get("auto_approve_read"), True),
+                    },
+                    "edit": {
+                        "enabled": True,
+                        "auto_approve": _as_bool(d.get("auto_approve_edit"), False),
+                    },
+                    "command": {
+                        "enabled": True,
+                        "auto_approve": _as_bool(d.get("auto_approve_command"), False),
+                    },
+                }
+            }
 
         return AppConfig(
-            theme=_as_str(d.get("theme"), "dark").strip() or "dark",
+            theme=_as_str(d.get("theme"), "light").strip() or "light",
             show_stats=_as_bool(d.get("show_stats"), True),
             show_thinking=_as_bool(d.get("show_thinking"), True),
             log_stream=_as_bool(d.get("log_stream"), False),
@@ -432,12 +583,16 @@ class AppConfig:
             llm_timeout_seconds=max(30.0, min(3600.0, _as_float(d.get("llm_timeout_seconds"), 600.0))),
             splitter_sizes=_sizes(d.get("splitter_sizes")),
             chat_splitter_sizes=_sizes(d.get("chat_splitter_sizes")),
-            permissions=PermissionsConfig.from_dict(permissions_src),
+            agent=AgentRuntimeConfig.from_dict(_as_dict(d.get("agent"))),
+            permissions=ToolPermissionConfig.from_dict(permissions_src),
             retry=RetryConfig.from_dict(_as_dict(d.get("retry"))),
             context=ContextConfig.from_dict(_as_dict(d.get("context"))),
             prompts=PromptsConfig.from_dict(_as_dict(d.get("prompts"))),
             prompt_optimizer=PromptOptimizerConfig.from_dict(_as_dict(d.get("prompt_optimizer"))),
             prompt_optimizer_model=_as_str(d.get("prompt_optimizer_model"), "").strip(),
+            capabilities=CapabilitiesConfig.from_dict(_as_dict(d.get("capabilities")))
+            if isinstance(d.get("capabilities"), dict)
+            else default_capabilities_config(),
             default_chat_model=_as_str(d.get("default_chat_model"), "").strip(),
             channels=[
                 ChannelConfig.from_dict(item)
@@ -460,19 +615,19 @@ class AppConfig:
             "llm_timeout_seconds": float(self.llm_timeout_seconds),
             "splitter_sizes": [int(x) for x in (self.splitter_sizes or [])],
             "chat_splitter_sizes": [int(x) for x in (self.chat_splitter_sizes or [])],
+            "agent": self.agent.to_dict(),
             "retry": self.retry.to_dict(),
             "permissions": self.permissions.to_dict(),
             "context": self.context.to_dict(),
             "prompts": self.prompts.to_dict(),
             "prompt_optimizer": self.prompt_optimizer.to_dict(),
             "prompt_optimizer_model": (self.prompt_optimizer_model or "").strip(),
+            "capabilities": self.capabilities.to_dict(),
             "default_chat_model": (self.default_chat_model or "").strip(),
             "channels": [channel.to_dict() for channel in (self.channels or [])],
             "shell": self.shell.to_dict(),
             "shell_backend": self.shell.backend,
         }
-        # Keep legacy flat permission keys for current UI consumers.
-        data.update(self.permissions.to_dict())
         return data
 
 

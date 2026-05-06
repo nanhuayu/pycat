@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QMessageBox
 
+from core.config import load_app_config
 from models.provider import provider_matches_name, split_model_ref
 
 if TYPE_CHECKING:
@@ -120,8 +121,24 @@ class PromptOptimizationPresenter:
             return
 
         settings = dict(host.current_conversation.settings or {})
+        prompt_capability = None
+        try:
+            capabilities = getattr(getattr(host, "container", None), "app_config", None)
+            if capabilities is not None:
+                prompt_capability = getattr(capabilities, "capabilities", None).capability("prompt_optimize")
+        except Exception as e:
+            logger.debug("Failed to read prompt optimizer capability from container: %s", e)
+            prompt_capability = None
+        if prompt_capability is None:
+            try:
+                prompt_capability = getattr(load_app_config(refresh=True), "capabilities", None).capability("prompt_optimize")
+            except Exception as e:
+                logger.debug("Failed to read prompt optimizer capability from settings service: %s", e)
+                prompt_capability = None
+
         configured_opt_model = (
-            (settings.get('prompt_optimizer_model') or '').strip()
+            (getattr(prompt_capability, "model_ref", "") or "").strip()
+            or (settings.get('prompt_optimizer_model') or '').strip()
             or (host.app_settings.get('prompt_optimizer_model') or '').strip()
             or base_model
         )
@@ -132,7 +149,11 @@ class PromptOptimizationPresenter:
                     provider = candidate
                     break
         opt_model = opt_model_name or configured_opt_model or base_model
-        opt_sys = (settings.get('prompt_optimizer_system_prompt') or '').strip() or None
+        opt_sys = (
+            (getattr(prompt_capability, "system_prompt", "") or "").strip()
+            or (settings.get('prompt_optimizer_system_prompt') or '').strip()
+            or None
+        )
 
         if not opt_sys:
             try:

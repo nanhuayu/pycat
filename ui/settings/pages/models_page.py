@@ -15,10 +15,10 @@ from PyQt6.QtWidgets import (
     QGroupBox,
 )
 
-from models.provider import Provider
+from models.provider import Provider, api_type_label
 from services.provider_catalog_service import ProviderCatalogService
 from services.provider_service import ProviderService
-from ui.dialogs.provider_dialog import ProviderDialog
+from ui.dialogs.provider_config_dialog import ProviderConfigDialog
 from ui.settings.page_header import build_page_header
 from ui.widgets.model_ref_selector import ModelRefCombo, build_model_ref_options
 from ui.utils.icon_manager import Icons
@@ -32,20 +32,17 @@ class ProviderListItem(QListWidgetItem):
 
     @staticmethod
     def _api_type_label(provider: Provider) -> str:
-        if getattr(provider, "is_anthropic_native", False):
-            return "Anthropic 原生"
-        return "OpenAI 兼容"
+        return api_type_label(getattr(provider, "api_type", ""))
 
     def update_display(self) -> None:
         status_icon = Icons.get_success(Icons.CIRCLE_CHECK) if getattr(self.provider, "enabled", True) else Icons.get_muted(Icons.CIRCLE_INFO)
         api_type = self._api_type_label(self.provider)
         default_model = str(getattr(self.provider, "default_model", "") or "").strip()
         model_count = len(getattr(self.provider, "models", []) or [])
-        default_label = default_model if default_model else "未设主模型"
         self.setIcon(status_icon)
         self.setText(f"  {self.provider.name} · {api_type} · {model_count} 个模型")
         self.setToolTip(
-            f"接口: {api_type}\n主模型: {default_model or '未设置'}\nAPI: {self.provider.api_base}\n模型数: {len(self.provider.models)}"
+            f"双击配置模型服务商\n接口: {api_type}\n默认模型: {default_model or '未设置'}\nAPI: {self.provider.api_base}\n模型数: {len(self.provider.models)}"
         )
         self.setSizeHint(QSize(0, 40))
 
@@ -78,7 +75,7 @@ class ModelsPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        layout.addWidget(build_page_header("模型", "集中管理服务商、主模型，以及新建对话默认使用的模型池。"))
+        layout.addWidget(build_page_header("模型", "管理服务商连接与模型能力；会话级主/副/备用模型在对话设置中选择。"))
 
         pool_group = QGroupBox("新建对话默认模型")
         pool_layout = QVBoxLayout(pool_group)
@@ -101,7 +98,7 @@ class ModelsPage(QWidget):
         self.provider_list = QListWidget()
         self.provider_list.setObjectName("settings_list")
         self.provider_list.setSpacing(2)
-        self.provider_list.setMinimumHeight(300)
+        self.provider_list.setMinimumHeight(280)
         self.provider_list.itemDoubleClicked.connect(lambda _item: self._edit_provider())
         layout.addWidget(self.provider_list, 1)
 
@@ -113,18 +110,6 @@ class ModelsPage(QWidget):
         btn_add.setText("添加")
         btn_add.clicked.connect(self._add_provider)
         actions.addWidget(btn_add)
-
-        btn_default = QPushButton()
-        btn_default.setIcon(Icons.get(Icons.DOWNLOAD, scale_factor=1.0))
-        btn_default.setText("导入")
-        btn_default.clicked.connect(self._add_default_providers)
-        actions.addWidget(btn_default)
-
-        btn_edit = QPushButton()
-        btn_edit.setIcon(Icons.get(Icons.EDIT, scale_factor=1.0))
-        btn_edit.setText("编辑")
-        btn_edit.clicked.connect(self._edit_provider)
-        actions.addWidget(btn_edit)
 
         btn_up = QPushButton()
         btn_up.setIcon(Icons.get(Icons.ARROW_UP, scale_factor=1.0))
@@ -148,7 +133,7 @@ class ModelsPage(QWidget):
         actions.addStretch()
         layout.addLayout(actions)
 
-        hint = QLabel("双击服务商可编辑；上方模型池会同步聚合所有已配置模型，供其他设置页搜索选择。")
+        hint = QLabel("双击服务商即可配置 API、模型列表与模型能力；上方模型池会同步聚合所有已配置模型，供能力和会话设置选择。")
         hint.setProperty("muted", True)
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -172,7 +157,7 @@ class ModelsPage(QWidget):
             pass
 
     def _add_provider(self) -> None:
-        dialog = ProviderDialog(parent=self, provider_service=self.provider_service)
+        dialog = ProviderConfigDialog(parent=self, provider_service=self.provider_service)
         if dialog.exec():
             p = dialog.get_provider()
             self.providers = self.provider_catalog_service.upsert(self.providers, p)
@@ -183,7 +168,7 @@ class ModelsPage(QWidget):
         item = self.provider_list.currentItem()
         if not isinstance(item, ProviderListItem):
             return
-        dialog = ProviderDialog(item.provider, provider_service=self.provider_service, parent=self)
+        dialog = ProviderConfigDialog(item.provider, provider_service=self.provider_service, parent=self)
         if dialog.exec():
             updated = dialog.get_provider()
             self.providers = self.provider_catalog_service.upsert(self.providers, updated)
@@ -212,13 +197,6 @@ class ModelsPage(QWidget):
             self.providers = self.provider_catalog_service.move(self.providers, provider_id, delta)
             self._refresh_provider_list()
             self.provider_list.setCurrentRow(new_row)
-            self.providers_changed.emit()
-
-    def _add_default_providers(self) -> None:
-        self.providers, added_any = self.provider_catalog_service.merge_defaults(self.providers)
-
-        if added_any:
-            self._refresh_provider_list()
             self.providers_changed.emit()
 
     def get_providers(self) -> List[Provider]:

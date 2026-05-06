@@ -31,7 +31,8 @@ DEFAULT_AGENT_TOOL_GUIDELINES = (
     "- Use `execute_command` for short bounded commands. Use `shell_start` plus `shell_status`, `shell_logs`, `shell_wait`, or `shell_kill` for long-running commands.\n"
     "- Use `manage_state` to track progress and `manage_document` to keep plan/memory notes current.\n"
     "- `attempt_completion` is a built-in tool for finishing work; do not treat it as a skill or document name.\n"
-    "- If another mode is a better fit, use `switch_mode`; if work should continue independently, use `new_task`."
+    "- If another mode is a better fit, use `switch_mode`; if focused work should continue independently, use `subagent__custom`.\n"
+    "- Use `capability__summarize_text` for one file or one long text, `subagent__read_analyze` for multi-file/cross-source analysis, and `subagent__search` for research."
 )
 
 
@@ -90,7 +91,7 @@ def build_mode_workflow_guidance(mode_slug: str) -> str:
             "Maintain the current todo list with `manage_state` when scope changes or steps complete.",
             "Keep a short working plan in `manage_document(name=\"plan\")` for multi-step execution.",
             "Store durable facts such as important paths, commands, or decisions in memory instead of repeating them in chat.",
-            "Use `switch_mode` if the request clearly belongs to another mode, or `new_task` if a separate delegated run is better.",
+            "Use `switch_mode` if the request clearly belongs to another mode, or `subagent__custom` if a separate delegated run is better.",
             "Use `attempt_completion` only when the task is actually complete and you can summarize the result clearly.",
         ],
         "code": [
@@ -116,7 +117,7 @@ def build_mode_workflow_guidance(mode_slug: str) -> str:
         "orchestrator": [
             "Use the plan document to track delegation strategy and aggregate results from sub-tasks.",
             "Use the todo list for the current frontier of unfinished delegated work.",
-            "Use `new_task` for independent sub-work and `switch_mode` when the current conversation should continue in another mode.",
+            "Use `subagent__custom`, `subagent__read_analyze`, or `subagent__search` for independent sub-work and `switch_mode` when the current conversation should continue in another mode.",
             "Call `attempt_completion` only after delegated work has been consolidated.",
         ],
     }
@@ -411,8 +412,8 @@ def build_system_prompt(
             runtime_lines.append(f"missing_tools: {', '.join(execution.missing_tools)}")
         if resource_paths:
             runtime_lines.append(f"resource_paths: {', '.join(resource_paths[:20])}")
-        runtime_lines.append("rule: Before taking action for an explicitly invoked skill, call `load_skill` to read its SKILL.md entrypoint.")
-        runtime_lines.append("rule: If the loaded skill references supporting files, call `read_skill_resource` only for the specific files you need.")
+        runtime_lines.append("rule: Before taking action for an explicitly invoked skill, call `skill__load` to read its SKILL.md entrypoint.")
+        runtime_lines.append("rule: If the loaded skill references supporting files, call `skill__read_resource` only for the specific files you need.")
         if execution.executable:
             runtime_lines.append("rule: Use only concrete tool names that appear in <available_tools> or concrete_tools. Skill names are not tool names.")
         else:

@@ -253,31 +253,35 @@ class ConversationService:
         conversation.set_llm_config(llm_config)
 
         self.set_mode(conversation, update.mode_slug)
-        self.set_settings(
-            conversation,
-            {
-                "system_prompt": str(update.system_prompt or "").strip() or None,
-                "max_context_messages": int(update.max_context_messages)
-                if isinstance(update.max_context_messages, int) and int(update.max_context_messages) > 0
-                else None,
-                "show_thinking": bool(update.show_thinking),
-                "enable_mcp": bool(update.enable_mcp),
-                "enable_search": bool(update.enable_search),
-                "memory_sources": [str(item).strip() for item in (update.memory_sources or ()) if str(item).strip()],
-                "allowed_channel_sources": [
-                    str(item).strip() for item in (update.allowed_channel_sources or ()) if str(item).strip()
-                ],
-                "trusted_channel_sources": [
-                    str(item).strip() for item in (update.trusted_channel_sources or ()) if str(item).strip()
-                ],
-                "channel_notice_policy": str(update.channel_notice_policy or "notice").strip().lower() or "notice",
-                "summary_model": None,
-                "summary_include_tool_details": None,
-                "summary_system_prompt": None,
-                "prompt_optimizer_model": None,
-                "prompt_optimizer_system_prompt": None,
-            },
-        )
+        settings_payload: dict[str, Any] = {
+            "system_prompt": str(update.system_prompt or "").strip() or None,
+            "max_context_messages": int(update.max_context_messages)
+            if isinstance(update.max_context_messages, int) and int(update.max_context_messages) > 0
+            else None,
+            "max_turns": None,
+            "show_thinking": bool(update.show_thinking),
+            "enable_mcp": bool(update.enable_mcp),
+            "enable_search": bool(update.enable_search),
+            "primary_model_ref": str(update.primary_model_ref or "").strip() or None,
+            "secondary_model_ref": str(update.secondary_model_ref or "").strip() or None,
+            "fallback_model_ref": str(update.fallback_model_ref or "").strip() or None,
+            "memory_sources": [str(item).strip() for item in (update.memory_sources or ()) if str(item).strip()],
+            "allowed_channel_sources": [
+                str(item).strip() for item in (update.allowed_channel_sources or ()) if str(item).strip()
+            ],
+            "trusted_channel_sources": [
+                str(item).strip() for item in (update.trusted_channel_sources or ()) if str(item).strip()
+            ],
+            "channel_notice_policy": str(update.channel_notice_policy or "notice").strip().lower() or "notice",
+            "summary_model": None,
+            "summary_include_tool_details": None,
+            "summary_system_prompt": None,
+            "prompt_optimizer_model": None,
+            "prompt_optimizer_system_prompt": None,
+        }
+        if update.tool_policies:
+            settings_payload["tool_policies"] = dict(update.tool_policies)
+        self.set_settings(conversation, settings_payload)
         return conversation
 
     def build_model_ref(

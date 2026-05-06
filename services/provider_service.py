@@ -4,7 +4,14 @@ Provider service for managing LLM providers
 
 import httpx
 from typing import List, Optional
-from models.provider import ANTHROPIC_NATIVE, OPENAI_COMPATIBLE, Provider, normalize_provider_name
+from models.provider import (
+    ANTHROPIC_NATIVE,
+    OPENAI_COMPATIBLE,
+    OPENAI_RESPONSES,
+    OLLAMA_CHAT,
+    Provider,
+    normalize_provider_name,
+)
 
 
 class ProviderService:
@@ -25,7 +32,12 @@ class ProviderService:
                 data = response.json()
                 
                 models = []
-                if provider.is_anthropic_native and isinstance(data, dict) and "data" in data:
+                if provider.is_ollama_chat and isinstance(data, dict) and isinstance(data.get("models"), list):
+                    for model in data["models"]:
+                        model_id = model.get("name", "") if isinstance(model, dict) else ""
+                        if model_id:
+                            models.append(model_id)
+                elif provider.is_anthropic_native and isinstance(data, dict) and "data" in data:
                     for model in data["data"]:
                         model_id = model.get("id", "")
                         if model_id:
@@ -72,7 +84,7 @@ class ProviderService:
             return False, "Provider name is required"
         if not provider.api_base.strip():
             return False, "API base URL is required"
-        if not provider.api_key.strip():
+        if provider.requires_api_key and not provider.api_key.strip():
             return False, "API key is required"
         if not provider.api_base.startswith(('http://', 'https://')):
             return False, "API base URL must start with http:// or https://"
@@ -92,6 +104,15 @@ class ProviderService:
                 supports_thinking=False
             ),
             Provider(
+                name="openai-responses",
+                api_type=OPENAI_RESPONSES,
+                api_base="https://api.openai.com/v1",
+                models=["gpt-5.1", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini"],
+                default_model="gpt-5-mini",
+                supports_vision=True,
+                supports_thinking=True,
+            ),
+            Provider(
                 name="anthropic",
                 api_type=ANTHROPIC_NATIVE,
                 api_base="https://api.anthropic.com/v1",
@@ -103,8 +124,8 @@ class ProviderService:
             ),
             Provider(
                 name="ollama",
-                api_type=OPENAI_COMPATIBLE,
-                api_base="http://localhost:11434/v1",
+                api_type=OLLAMA_CHAT,
+                api_base="http://localhost:11434",
                 models=[],
                 supports_vision=True,
                 supports_thinking=False

@@ -60,6 +60,8 @@ class ComposerToolbar(QWidget):
         layout.addWidget(self.mode_combo)
 
         self.thinking_toggle = self._make_icon_toggle(Icons.BRAIN, "显示思考过程")
+        self.thinking_toggle.setToolTip("显示思考过程（可在设置中调整，默认弱化显示）")
+        self.thinking_toggle.setVisible(False)
         layout.addWidget(self.thinking_toggle)
 
         self.mcp_toggle = self._make_icon_toggle(Icons.PLUG, "启用 MCP 工具")
@@ -72,7 +74,7 @@ class ComposerToolbar(QWidget):
         self.conv_settings_btn.clicked.connect(self.conversation_settings_requested.emit)
         layout.addWidget(self.conv_settings_btn)
 
-        self.provider_settings_btn = self._make_icon_button(Icons.WRENCH, "配置服务商 (API/Key/模型列表)")
+        self.provider_settings_btn = self._make_icon_button(Icons.MODEL, "配置模型服务商 (API/Key/模型能力)")
         self.provider_settings_btn.clicked.connect(self.provider_settings_requested.emit)
         layout.addWidget(self.provider_settings_btn)
 

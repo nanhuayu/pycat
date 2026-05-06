@@ -24,9 +24,10 @@ from core.config import AppConfig, load_app_config
 from core.modes.manager import ModeManager
 from core.prompts.system_builder import resolve_base_system_prompt_text
 from models.conversation import Conversation
-from models.provider import Provider
+from models.provider import Provider, build_model_ref, normalize_provider_name, split_model_ref
 from ui.utils.combo_box import configure_combo_popup
 from ui.utils.form_builder import FormSection
+from ui.widgets.model_ref_selector import ModelRefCombo
 
 
 logger = logging.getLogger(__name__)
@@ -118,10 +119,35 @@ class ConversationSettingsDialog(QDialog):
         body.addWidget(section.group)
 
     def _build_model_section(self, body: QVBoxLayout, conversation: Conversation) -> None:
-        section = FormSection("模型设置")
-        self.provider_combo = section.add_combo("服务商", object_name="conv_provider")
-        self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
-        self.model_combo = section.add_combo("模型", editable=True, object_name="conv_model")
+        section = FormSection("会话模型")
+        settings = conversation.settings or {}
+
+        self.primary_model_combo = ModelRefCombo(
+            self._providers,
+            current_model_ref=self._current_primary_model_ref(conversation),
+            allow_empty=False,
+            empty_label="选择主模型",
+        )
+        self.primary_model_combo.setObjectName("conv_primary_model")
+        section.form.addRow("主模型", self.primary_model_combo)
+
+        self.secondary_model_combo = ModelRefCombo(
+            self._providers,
+            current_model_ref=str(settings.get("secondary_model_ref") or ""),
+            allow_empty=True,
+            empty_label="不设置副模型",
+        )
+        self.secondary_model_combo.setObjectName("conv_secondary_model")
+        section.form.addRow("副模型", self.secondary_model_combo)
+
+        self.fallback_model_combo = ModelRefCombo(
+            self._providers,
+            current_model_ref=str(settings.get("fallback_model_ref") or ""),
+            allow_empty=True,
+            empty_label="不设置备用模型",
+        )
+        self.fallback_model_combo.setObjectName("conv_fallback_model")
+        section.form.addRow("备用模型", self.fallback_model_combo)
 
         self.mode_combo = QComboBox()
         self.mode_combo.setObjectName("conv_mode")
@@ -150,20 +176,10 @@ class ConversationSettingsDialog(QDialog):
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         section.form.addRow("模式", self.mode_combo)
 
-        self.provider_hint = QLabel("")
+        self.provider_hint = QLabel("主/副/备用是当前对话的运行角色；模型设置页只维护服务商连接与模型能力。")
         self.provider_hint.setWordWrap(True)
         self.provider_hint.setProperty("muted", True)
         section.form.addRow("", self.provider_hint)
-
-        for provider in self._providers:
-            self.provider_combo.addItem(provider.name, provider.id)
-        for i, provider in enumerate(self._providers):
-            if provider.id == conversation.provider_id:
-                self.provider_combo.setCurrentIndex(i)
-                break
-        if conversation.model:
-            self.model_combo.setCurrentText(conversation.model)
-        self._on_provider_changed(self.provider_combo.currentIndex())
         body.addWidget(section.group)
 
     def _build_sampling_section(self, body: QVBoxLayout, settings: dict) -> None:
@@ -229,17 +245,42 @@ class ConversationSettingsDialog(QDialog):
         body.addWidget(group)
 
     def build_update(self) -> ConversationSettingsUpdate:
-        provider_id = self.provider_combo.currentData() or ""
-        model = self.model_combo.currentText().strip()
+        primary_model_ref = self.primary_model_combo.model_ref().strip()
+        provider = self._resolve_provider_from_model_ref(primary_model_ref)
+        provider_token, model = split_model_ref(primary_model_ref)
+        if provider is not None:
+            provider_id = str(getattr(provider, "id", "") or "").strip()
+            provider_name = str(getattr(provider, "name", "") or "").strip()
+            api_type = str(getattr(provider, "api_type", "") or "").strip().lower()
+        else:
+            provider_id = ""
+            provider_name = provider_token
+            api_type = ""
+            if not provider_name:
+                existing = self._resolve_provider_by_id(str(getattr(self._conversation, "provider_id", "") or ""))
+                if existing is not None:
+                    provider_id = str(getattr(existing, "id", "") or "").strip()
+                    provider_name = str(getattr(existing, "name", "") or "").strip()
+                    api_type = str(getattr(existing, "api_type", "") or "").strip().lower()
+
+        normalized_primary_ref = build_model_ref(provider_name, model) if provider_name and model else primary_model_ref
         mode_slug = self.mode_combo.currentData() if hasattr(self, "mode_combo") else "chat"
         system_prompt_text = (self.system_prompt_edit.toPlainText() or "").strip()
         max_context_messages = int(self.context_limit.value())
+        # Convert legacy feature flags into per-tool policies
+        tool_policies: dict[str, dict[str, bool]] = {}
+        if bool(self.enable_search.isChecked()):
+            tool_policies["web_search"] = {"enabled": True, "auto_approve": False}
+
         return ConversationSettingsUpdate(
             title=(self.title_edit.text() or "").strip(),
             provider_id=str(provider_id or "").strip(),
-            provider_name=self._resolve_provider_name(str(provider_id or "").strip()),
-            api_type=self._resolve_provider_api_type(str(provider_id or "").strip()),
+            provider_name=str(provider_name or "").strip(),
+            api_type=str(api_type or "").strip().lower(),
             model=str(model or "").strip(),
+            primary_model_ref=normalized_primary_ref,
+            secondary_model_ref=self.secondary_model_combo.model_ref().strip(),
+            fallback_model_ref=self.fallback_model_combo.model_ref().strip(),
             mode_slug=str(mode_slug or "chat").strip() or "chat",
             system_prompt=system_prompt_text if system_prompt_text and system_prompt_text != self._system_prompt_base_text else "",
             max_context_messages=max_context_messages if max_context_messages > 0 else None,
@@ -250,6 +291,7 @@ class ConversationSettingsDialog(QDialog):
             show_thinking=bool(self.show_thinking.isChecked()),
             enable_mcp=bool(self.enable_mcp.isChecked()),
             enable_search=bool(self.enable_search.isChecked()),
+            tool_policies=tool_policies,
             memory_sources=self._selected_memory_sources(),
             allowed_channel_sources=self._selected_allowed_channel_sources(),
             trusted_channel_sources=self._selected_trusted_channel_sources(),
@@ -271,6 +313,10 @@ class ConversationSettingsDialog(QDialog):
         self.memory_workspace_check = QCheckBox("使用工作区记忆（.pycat/memory / MEMORY.md）")
         self.memory_workspace_check.setChecked("workspace" in selected_sources)
         layout.addWidget(self.memory_workspace_check)
+
+        self.memory_global_check = QCheckBox("使用全局记忆（~/.PyCat/memory / SOUL.md）")
+        self.memory_global_check.setChecked("global" in selected_sources)
+        layout.addWidget(self.memory_global_check)
 
         hint = QLabel("记忆来源按会话单独控制：关闭后不会删除已有记忆，只是不再注入到当前对话上下文。")
         hint.setWordWrap(True)
@@ -394,40 +440,31 @@ class ConversationSettingsDialog(QDialog):
         if "show_thinking" not in settings:
             self.show_thinking.setChecked(default_thinking if slug != "chat" else self._default_show_thinking)
 
-    def _on_provider_changed(self, index: int) -> None:
-        current_model = self.model_combo.currentText().strip() if hasattr(self, "model_combo") else ""
-        self.model_combo.clear()
+    def _current_primary_model_ref(self, conversation: Conversation) -> str:
+        settings = conversation.settings or {}
+        explicit = str(settings.get("primary_model_ref") or "").strip()
+        if explicit:
+            return explicit
+        llm_config = conversation.get_llm_config()
+        provider_name = self._resolve_provider_name(
+            str(llm_config.provider_id or getattr(conversation, "provider_id", "") or "").strip()
+        ) or str(llm_config.provider_name or getattr(conversation, "provider_name", "") or "").strip()
+        model = str(llm_config.model or getattr(conversation, "model", "") or "").strip()
+        return build_model_ref(provider_name, model)
 
-        if 0 <= index < len(self._providers):
-            provider = self._providers[index]
-            for model in provider.models:
-                self.model_combo.addItem(model)
-
-            if current_model:
-                self.model_combo.setCurrentText(current_model)
-            elif provider.default_model:
-                model_index = self.model_combo.findText(provider.default_model)
-                if model_index >= 0:
-                    self.model_combo.setCurrentIndex(model_index)
-                else:
-                    self.model_combo.setCurrentText(provider.default_model)
-
-            api_label = "Anthropic 原生" if getattr(provider, "is_anthropic_native", False) else "OpenAI 兼容"
-            default_model = str(getattr(provider, "default_model", "") or "").strip() or "未设置默认模型"
-            self.provider_hint.setText(
-                f"接口：{api_label} · 默认模型：{default_model} · 模型数：{len(getattr(provider, 'models', []) or [])}"
-            )
-            return
-
-        self.provider_hint.setText("当前未选择服务商。")
-
-    def _resolve_provider_name(self, provider_id: str) -> str:
+    def _resolve_provider_by_id(self, provider_id: str) -> Provider | None:
         normalized_id = str(provider_id or "").strip()
         if not normalized_id:
-            return ""
+            return None
         for provider in self._providers:
             if getattr(provider, "id", "") == normalized_id:
-                return str(getattr(provider, "name", "") or "").strip()
+                return provider
+        return None
+
+    def _resolve_provider_name(self, provider_id: str) -> str:
+        provider = self._resolve_provider_by_id(provider_id)
+        if provider is not None:
+            return str(getattr(provider, "name", "") or "").strip()
         return ""
 
     def _resolve_provider_api_type(self, provider_id: str) -> str:
@@ -438,6 +475,16 @@ class ConversationSettingsDialog(QDialog):
             if getattr(provider, "id", "") == normalized_id:
                 return str(getattr(provider, "api_type", "") or "").strip().lower()
         return ""
+
+    def _resolve_provider_from_model_ref(self, model_ref: str) -> Provider | None:
+        provider_token, _model = split_model_ref(model_ref)
+        if not provider_token:
+            return None
+        normalized = normalize_provider_name(provider_token)
+        for provider in self._providers:
+            if normalize_provider_name(getattr(provider, "name", "")) == normalized:
+                return provider
+        return None
 
     def _enabled_channel_configs(self) -> list:
         channels = []
@@ -472,7 +519,7 @@ class ConversationSettingsDialog(QDialog):
         return tuple(normalized)
 
     def _resolve_memory_sources_from_settings(self, settings: dict) -> tuple[str, ...]:
-        normalized = self._normalize_sources(settings.get("memory_sources"), allowed=("session", "workspace"))
+        normalized = self._normalize_sources(settings.get("memory_sources"), allowed=("session", "workspace", "global"))
         return normalized or ("session", "workspace")
 
     def _resolve_allowed_channel_sources_from_settings(self, settings: dict) -> tuple[str, ...]:
@@ -493,6 +540,8 @@ class ConversationSettingsDialog(QDialog):
             sources.append("session")
         if getattr(self, "memory_workspace_check", None) and self.memory_workspace_check.isChecked():
             sources.append("workspace")
+        if getattr(self, "memory_global_check", None) and self.memory_global_check.isChecked():
+            sources.append("global")
         return tuple(sources)
 
     def _selected_allowed_channel_sources(self) -> tuple[str, ...]:

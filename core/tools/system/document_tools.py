@@ -34,7 +34,7 @@ class ManageDocumentTool(BaseTool):
 
     @property
     def category(self) -> str:
-        return "misc"
+        return "read"
 
     @property
     def input_schema(self) -> Dict[str, Any]:

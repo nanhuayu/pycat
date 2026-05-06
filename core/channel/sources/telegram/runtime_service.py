@@ -62,6 +62,16 @@ class TelegramRuntimeSource:
             "message_thread_id": message_thread_id,
             "chat_type": channel_value(message, "chat_type"),
         }
+
+        def _send_reply(content: str, _source_message: Message | None = None) -> None:
+            self.send_reply(
+                channel,
+                receive_id=reply_user,
+                content=content,
+                context_token=context_token,
+                message_thread_id=message_thread_id,
+            )
+
         processed = context.process_bound_channel_message(
             channel,
             message,
@@ -73,21 +83,10 @@ class TelegramRuntimeSource:
             platform_label="Telegram",
             reply_normalizer=self._client.normalize_reply_text,
             binding_updates=binding_updates,
+            reply_sender=_send_reply,
         )
         if processed is None:
             return
-        _, reply_text = processed
-
-        try:
-            self.send_reply(
-                channel,
-                receive_id=reply_user,
-                content=reply_text,
-                context_token=context_token,
-                message_thread_id=message_thread_id,
-            )
-        except Exception as exc:
-            logger.warning("Failed to send Telegram reply for channel %s: %s", getattr(channel, "id", ""), exc)
 
     def send_reply(
         self,

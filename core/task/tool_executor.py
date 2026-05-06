@@ -53,27 +53,24 @@ class ToolExecutor:
     def is_tool_allowed(self, tool_name: str, policy: RunPolicy) -> bool:
         """Check if tool is allowed by policy.
 
-        Returns:
-            True if tool is allowed
+        Resolution order:
+        1. Explicit per-tool policy in ``policy.tool_policies``.
+        2. Group-level filter via ``policy.tool_groups``.
+        3. Default: allowed.
         """
         try:
-            allowlist = policy.tool_allowlist
-            if allowlist is not None and tool_name not in allowlist:
-                return False
-            denylist = policy.tool_denylist
-            if denylist is not None and tool_name in denylist:
-                return False
             tool = self._tool_manager.registry.get_tool(tool_name)
-            if tool_name == "builtin_web_search":
-                return bool(policy.enable_search)
-            if tool is None:
-                return False
 
-            group = str(getattr(tool, "group", "") or "")
-            if group == "search":
-                return bool(policy.enable_search)
-            if group == "mcp":
-                return bool(policy.enable_mcp)
+            # 1. Per-tool policy
+            per_tool = (policy.tool_policies or {}).get(tool_name)
+            if per_tool is not None:
+                return bool(per_tool.enabled)
+
+            # 2. Group filter
+            if policy.tool_groups is not None and tool is not None:
+                group = str(getattr(tool, "group", "") or "")
+                if group not in policy.tool_groups:
+                    return False
 
             return True
         except Exception:
@@ -149,9 +146,10 @@ class ToolExecutor:
             Tool execution result
         """
         if not allowed:
+            tool_policy = (policy.tool_policies or {}).get(tool_name)
             return ToolResult(
                 f"Tool '{tool_name}' is disabled by current mode/settings. "
-                f"(enable_search={bool(policy.enable_search)}, enable_mcp={bool(policy.enable_mcp)})"
+                f"(tool_policy={tool_policy.to_dict() if tool_policy else 'default'})"
             )
 
         try:

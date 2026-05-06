@@ -75,10 +75,46 @@ async def iter_sse_data_lines(
     cancel_event: Optional[object] = None,
     log_fp: Optional[TextIO] = None,
 ) -> AsyncIterator[str]:
-    """Iterate `data: ...` lines from an OpenAI-compatible SSE stream."""
+    """Iterate JSON payloads from an SSE stream.
+
+    Supports both OpenAI Chat Completions style frames (``data: {...}``) and
+    Responses API frames (``event: ...`` + ``data: {...}``). If an event name is
+    present and the JSON payload has no ``type`` field, the event name is added
+    as ``type`` so downstream parsers can use one code path.
+    """
 
     buffer = ""
+    event_lines: list[str] = []
+    data_lines: list[str] = []
     decoder = codecs.getincrementaldecoder("utf-8")(errors='replace')
+
+    def _emit_event_payload() -> str | None:
+        nonlocal event_lines, data_lines
+        if not data_lines:
+            event_lines = []
+            data_lines = []
+            return None
+        data = "\n".join(data_lines).strip()
+        event_type = "\n".join(event_lines).strip()
+        event_lines = []
+        data_lines = []
+        if not data or data == "[DONE]":
+            return None
+        if event_type and data.startswith("{"):
+            payload = parse_json_safely(data)
+            if isinstance(payload, dict) and "type" not in payload:
+                payload["type"] = event_type
+                return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        return data
+
+    def _write_log(payload: str) -> None:
+        if not log_fp:
+            return
+        try:
+            log_fp.write(payload + "\n")
+            log_fp.flush()
+        except Exception as exc:
+            logger.debug("Failed to write SSE debug chunk: %s", exc)
 
     async for chunk in response.aiter_bytes():
         try:
@@ -95,25 +131,34 @@ async def iter_sse_data_lines(
 
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
-            line = line.strip()
-            if not line:
+            line = line.rstrip("\r")
+            if not line.strip():
+                payload = _emit_event_payload()
+                if payload:
+                    _write_log(payload)
+                    yield payload
                 continue
 
-            if not line.startswith("data: "):
+            if line.startswith("event:"):
+                event_lines.append(line.split(":", 1)[1].strip())
                 continue
 
-            data = line[6:]
-            if data == "[DONE]":
+            if not line.startswith("data:"):
                 continue
 
-            if log_fp:
-                try:
-                    log_fp.write(data + "\n")
-                    log_fp.flush()
-                except Exception as exc:
-                    logger.debug("Failed to write SSE debug chunk: %s", exc)
+            data = line.split(":", 1)[1].lstrip()
+            data_lines.append(data)
 
-            yield data
+            if not event_lines:
+                payload = _emit_event_payload()
+                if payload:
+                    _write_log(payload)
+                    yield payload
+
+    payload = _emit_event_payload()
+    if payload:
+        _write_log(payload)
+        yield payload
 
 
 def parse_sse_json(data: str) -> Any:

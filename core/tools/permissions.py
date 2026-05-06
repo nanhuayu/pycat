@@ -2,42 +2,42 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Optional
 
+from core.config.schema import ToolPermissionConfig, ToolPolicy
 from core.tools.base import BaseTool, ToolContext
 
 
 @dataclass
 class ToolPermissionPolicy:
-    auto_approve_read: bool = True
-    auto_approve_edit: bool = False
-    auto_approve_command: bool = False
+    """Runtime permission policy backed by ToolPermissionConfig.
+
+    Supports per-tool overrides in addition to category defaults.
+    """
+
+    config: ToolPermissionConfig = field(default_factory=ToolPermissionConfig)
 
     @classmethod
     def from_config(cls, config: dict[str, Any] | None) -> "ToolPermissionPolicy":
-        data = config or {}
-        return cls(
-            auto_approve_read=bool(data.get("auto_approve_read", True)),
-            auto_approve_edit=bool(data.get("auto_approve_edit", False)),
-            auto_approve_command=bool(data.get("auto_approve_command", False)),
-        )
+        d = dict(config) if config is not None else {}
+        # Support both full app_settings dict and permissions sub-dict
+        if "permissions" in d:
+            d = d.get("permissions") or {}
+        return cls(config=ToolPermissionConfig.from_dict(d))
 
-    def to_dict(self) -> dict[str, bool]:
-        return {
-            "auto_approve_read": bool(self.auto_approve_read),
-            "auto_approve_edit": bool(self.auto_approve_edit),
-            "auto_approve_command": bool(self.auto_approve_command),
-        }
+    def to_dict(self) -> dict[str, Any]:
+        return self.config.to_dict()
 
-    def is_auto_approved(self, category: str) -> bool:
-        if category == "read":
-            return bool(self.auto_approve_read)
-        if category == "edit":
-            return bool(self.auto_approve_edit)
-        if category == "command":
-            return bool(self.auto_approve_command)
-        return False
+    def resolve(self, tool_name: str, category: str = "misc") -> ToolPolicy:
+        """Return the effective policy for a tool."""
+        return self.config.resolve(tool_name, category)
+
+    def is_auto_approved(self, tool_name: str, category: str = "misc") -> bool:
+        return self.config.is_auto_approved(tool_name, category)
+
+    def is_enabled(self, tool_name: str, category: str = "misc") -> bool:
+        return self.config.is_enabled(tool_name, category)
 
 
 class ToolPermissionResolver:
@@ -57,7 +57,7 @@ class ToolPermissionResolver:
         original_callback = context.approval_callback
 
         async def permission_aware_callback(message: str) -> bool:
-            if self._policy.is_auto_approved(tool.category):
+            if self._policy.is_auto_approved(tool.name, tool.category):
                 return True
             if not original_callback:
                 return False

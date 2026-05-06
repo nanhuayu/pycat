@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Optional, Set
+from typing import Any, Callable, Dict, Optional, Set
 
+from core.config.schema import ToolPolicy
 from models.conversation import Message
 
 
@@ -117,27 +118,35 @@ class RunPolicy:
     """Tiny, immutable policy object driving the task loop.
 
     All chat/agent/code/… differences are purely parameter-driven.
+    Tool visibility and auto-approval are controlled per-tool via
+    ``tool_policies`` (``{tool_name: ToolPolicy}``).
     """
 
     mode: str = "chat"
-    max_turns: int = 20
+    max_turns: int = 200
     context_window_limit: int = 100_000
 
     enable_thinking: bool = True
-    enable_search: bool = False
-    enable_mcp: bool = False
 
     # Model / generation overrides (None → use provider defaults).
     model: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
 
-    # If set, only these tools are callable.
-    tool_allowlist: Optional[Set[str]] = None
-    tool_denylist: Optional[Set[str]] = None
+    # Per-tool permission policies.
+    # If a tool is not present, it defaults to enabled=True with auto_approve
+    # driven by its category default.
+    tool_policies: Dict[str, ToolPolicy] = field(default_factory=dict)
+
+    # Optional group-level filter (applied after tool_policies).
+    tool_groups: Optional[Set[str]] = None
 
     # Retry policy for transient LLM errors.
     retry: RetryPolicy = field(default_factory=RetryPolicy)
 
     # None → always compress (unless app config disables).
     auto_compress_enabled: Optional[bool] = None
+
+    # Source of the task execution: desktop, channel, sub_task, system.
+    # Used by the permission layer to apply source-aware policies.
+    source: str = "desktop"

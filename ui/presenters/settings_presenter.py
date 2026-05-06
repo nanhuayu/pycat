@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QMessageBox
 
 from core.config.schema import ChannelConfig
 from models.provider import Provider
-from ui.dialogs.provider_dialog import ProviderDialog
+from ui.dialogs.provider_config_dialog import ProviderConfigDialog
 from ui.settings.settings_dialog import SettingsDialog
 
 if TYPE_CHECKING:
@@ -30,7 +30,7 @@ class SettingsPresenter:
             project_root = os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             )
-            theme = (self._window.app_settings.get('theme') or 'dark').lower()
+            theme = (self._window.app_settings.get('theme') or 'light').lower()
             theme_file = 'light_theme.qss' if theme == 'light' else 'dark_theme.qss'
             theme_path = os.path.join(project_root, 'assets', 'styles', theme_file)
             base_theme_path = os.path.join(project_root, 'assets', 'styles', 'base.qss')
@@ -111,7 +111,7 @@ class SettingsPresenter:
             provider_id,
         )
 
-        dialog = ProviderDialog(
+        dialog = ProviderConfigDialog(
             provider,
             provider_service=host.services.provider_service,
             parent=host,

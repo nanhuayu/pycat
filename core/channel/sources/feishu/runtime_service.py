@@ -55,6 +55,10 @@ class FeishuRuntimeSource:
             or user_id
         )
         thread_id = channel_value(message, "thread_id") or chat_id or user_id
+
+        def _send_reply(content: str, _source_message: Message | None = None) -> None:
+            self.send_reply(channel, receive_id=reply_user, content=content)
+
         processed = context.process_bound_channel_message(
             channel,
             message,
@@ -65,15 +69,10 @@ class FeishuRuntimeSource:
             context_token="",
             platform_label="Feishu",
             reply_normalizer=self._client.normalize_reply_text,
+            reply_sender=_send_reply,
         )
         if processed is None:
             return
-        _, reply_text = processed
-
-        try:
-            self.send_reply(channel, receive_id=reply_user, content=reply_text)
-        except Exception as exc:
-            logger.warning("Failed to send Feishu reply for channel %s: %s", getattr(channel, "id", ""), exc)
 
     def send_reply(self, channel: ChannelConfig, *, receive_id: str, content: str) -> None:
         self._client.send_text_message(channel, receive_id=receive_id, text=content, receive_id_type="chat_id")

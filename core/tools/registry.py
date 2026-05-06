@@ -1,4 +1,5 @@
 from typing import Dict, List, Any, Optional, Set
+from core.config.schema import ToolPolicy
 from core.tools.base import BaseTool, ToolContext, ToolResult
 from core.tools.permissions import ToolPermissionResolver
 
@@ -27,18 +28,26 @@ class ToolRegistry:
         self,
         *,
         allowed_groups: Optional[Set[str]] = None,
+        tool_policies: Optional[Dict[str, ToolPolicy]] = None,
     ) -> List[Dict[str, Any]]:
-        """Get OpenAI-compatible schemas, optionally filtered by group.
+        """Get OpenAI-compatible schemas with optional filtering.
 
         Parameters
         ----------
         allowed_groups
             If provided, only return tools whose ``group`` is in this set.
-            ``None`` means return all tools (no filtering).
+        tool_policies
+            If provided, tools with an explicit ``enabled=False`` policy are
+            omitted from the result.
         """
         schemas: List[Dict[str, Any]] = []
+        policies = tool_policies or {}
         for tool in self._tools.values():
             if allowed_groups is not None and tool.group not in allowed_groups:
+                continue
+            # Per-tool visibility filter
+            policy = policies.get(tool.name)
+            if policy is not None and not policy.enabled:
                 continue
             schemas.append(tool.to_openai_tool())
         return schemas
@@ -54,7 +63,7 @@ class ToolRegistry:
             return ToolResult(f"Tool '{tool_name}' not found", is_error=True)
 
         wrapped_context = self._permission_resolver.wrap_context(context, tool)
-        
+
         try:
             result = await tool.execute(arguments, wrapped_context)
             # Apply output truncation

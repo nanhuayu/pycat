@@ -6,6 +6,7 @@ materialization so MessagePresenter can focus on higher-level message actions.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Optional
 
 from models.conversation import Conversation, Message
@@ -321,49 +322,78 @@ class StreamingMessagePresenter:
         host = self._host
         from core.task.builder import build_run_policy
         from core.runtime.turn_policy import TurnPolicy
+        from core.config.schema import ToolPermissionConfig
+
+        global_permissions = None
+        try:
+            raw_permissions = (host.app_settings or {}).get("permissions")
+            if raw_permissions and isinstance(raw_permissions, dict):
+                global_permissions = ToolPermissionConfig.from_dict(raw_permissions)
+        except Exception as e:
+            logger.debug("Failed to load global tool permissions: %s", e)
 
         if skill_run:
             skill_name = str(skill_run.get("name") or "").strip().lower()
             work_dir = getattr(conversation, "work_dir", ".") or "."
             spec = host.services.skill_service.get_invocation_spec(skill_name, work_dir=work_dir)
             if spec is not None:
-                return TurnPolicy.from_run_policy(
-                    build_run_policy(
-                        mode_slug=spec.mode,
-                        enable_thinking=bool(enable_thinking),
-                        enable_search=spec.enable_search,
-                        enable_mcp=spec.enable_mcp,
-                        mode_manager=host.input_area.get_mode_manager(),
-                        retry_config=retry_cfg,
+                return self._apply_agent_runtime_overrides(
+                    TurnPolicy.from_run_policy(
+                        build_run_policy(
+                            mode_slug=spec.mode,
+                            enable_thinking=bool(enable_thinking),
+                            enable_search=spec.enable_search,
+                            enable_mcp=spec.enable_mcp,
+                            mode_manager=host.input_area.get_mode_manager(),
+                            retry_config=retry_cfg,
+                            global_permissions=global_permissions,
+                        ),
+                        conversation=conversation,
                     ),
-                    conversation=conversation,
                 )
 
         try:
             mode_slug = host.input_area.get_selected_mode_slug()
             enable_search, enable_mcp = host.input_area.get_effective_tool_flags()
-            return TurnPolicy.from_run_policy(
-                build_run_policy(
-                    mode_slug=str(mode_slug or "chat"),
-                    enable_thinking=bool(enable_thinking),
-                    enable_search=bool(enable_search),
-                    enable_mcp=bool(enable_mcp),
-                    mode_manager=host.input_area.get_mode_manager(),
-                    retry_config=retry_cfg,
+            return self._apply_agent_runtime_overrides(
+                TurnPolicy.from_run_policy(
+                    build_run_policy(
+                        mode_slug=str(mode_slug or "chat"),
+                        enable_thinking=bool(enable_thinking),
+                        enable_search=bool(enable_search),
+                        enable_mcp=bool(enable_mcp),
+                        mode_manager=host.input_area.get_mode_manager(),
+                        retry_config=retry_cfg,
+                        global_permissions=global_permissions,
+                    ),
+                    conversation=conversation,
                 ),
-                conversation=conversation,
             )
         except Exception as e:
             logger.warning("Failed to build run policy from input state: %s", e)
             from core.task.types import RunPolicy
 
-            return TurnPolicy.from_run_policy(
-                RunPolicy(
-                    mode=str(getattr(conversation, "mode", "chat") or "chat"),
-                    enable_thinking=bool(enable_thinking),
+            return self._apply_agent_runtime_overrides(
+                TurnPolicy.from_run_policy(
+                    RunPolicy(
+                        mode=str(getattr(conversation, "mode", "chat") or "chat"),
+                        enable_thinking=bool(enable_thinking),
+                    ),
+                    conversation=conversation,
                 ),
-                conversation=conversation,
             )
+
+    def _apply_agent_runtime_overrides(self, policy):
+        settings = getattr(self._host, "app_settings", {}) or {}
+        agent_settings = settings.get("agent") if isinstance(settings, dict) else None
+        raw = agent_settings.get("max_turns") if isinstance(agent_settings, dict) else None
+        try:
+            max_turns = int(raw) if raw not in (None, "") else 0
+        except Exception:
+            max_turns = 0
+        if max_turns <= 0:
+            return policy
+        return replace(policy, max_turns=max_turns)
 
     @staticmethod
     def _get_latest_skill_run_metadata(

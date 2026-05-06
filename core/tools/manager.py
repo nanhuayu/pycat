@@ -42,10 +42,17 @@ from core.tools.system.shell_exec import (
 )
 from core.tools.system.patch import PatchTool
 from core.tools.system.state_mgr import StateMgrTool
-from core.tools.system.multi_agent import NewTaskTool, AttemptCompletionTool, SwitchModeTool
+from core.tools.system.multi_agent import (
+    SubagentReadAnalyzeTool,
+    SubagentSearchTool,
+    SubagentCustomTool,
+    AttemptCompletionTool,
+    SwitchModeTool,
+)
 from core.tools.system.document_tools import ManageDocumentTool
 from core.tools.system.ask_questions import AskQuestionsTool
 from core.tools.system.skills import LoadSkillTool, ReadSkillResourceTool
+from core.tools.system.capability_tools import CAPABILITY_TOOL_PREFIX, build_capability_tools
 
 logger = logging.getLogger(__name__)
 
@@ -111,10 +118,23 @@ class ToolManager:
             AskQuestionsTool(),
             ManageDocumentTool(),
             LoadSkillTool(), ReadSkillResourceTool(),
-            NewTaskTool(), AttemptCompletionTool(), SwitchModeTool(),
+            SubagentReadAnalyzeTool(), SubagentSearchTool(), SubagentCustomTool(),
+            AttemptCompletionTool(), SwitchModeTool(),
         ]
         for tool in tools:
             self.registry.register(tool)
+        # Register one independent tool per enabled capability (e.g. capability__translate)
+        self._refresh_capability_tools()
+
+    def _refresh_capability_tools(self) -> None:
+        """Register dynamic capability tools with the ``capability__`` prefix."""
+        self.registry.unregister_prefix(CAPABILITY_TOOL_PREFIX)
+        for tool in build_capability_tools():
+            self.registry.register(tool)
+
+    def refresh_capability_tools(self) -> None:
+        """Re-register capability tools after configuration changes."""
+        self._refresh_capability_tools()
 
     def update_permissions(self, config: Dict[str, Any]):
         """Update permission settings in Registry."""
@@ -126,18 +146,24 @@ class ToolManager:
         include_mcp: bool = False,
         prepared_queries: Optional[List[str]] = None,
         allowed_groups: Optional[set[str]] = None,
+        tool_policies: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Refreshes tools in the registry (if needed) and returns schemas.
+
+        Parameters
+        ----------
+        tool_policies
+            Per-tool permission policies. Tools with ``enabled=False`` are
+            filtered out from the returned schemas.
         """
+        from core.config.schema import ToolPolicy
+
+        # Capability tools come from settings and may change while the app is running.
+        self._refresh_capability_tools()
+
         # 1. Search Tool
-        # Search tool logic is a bit dynamic (prepared_queries).
-        # We might need to re-register it if queries change?
-        # Or just register a generic one and let args handle it.
-        # For compatibility with existing SearchService logic, let's just wrap it.
         if include_search and self.search_service.is_available():
-            # Create a dynamic instance or update existing
-            # For simplicity, we register a new instance
             search_tool = WebSearchTool(self.search_service, prepared_queries)
             self.registry.register(search_tool)
 
@@ -145,15 +171,20 @@ class ToolManager:
         if include_mcp and MCP_AVAILABLE:
             await self._run_on_mcp_loop(self._refresh_mcp_tools_impl())
 
-        # 3. Return schemas from Registry
-        # Filter based on what was requested?
-        # The Registry holds ALL tools.
-        # If the caller only wanted some, we might need filtering.
-        # But usually we want all available tools.
-        # If 'include_mcp' is False, we should filter out MCP tools?
-        # Yes, for performance/context size.
-        
-        all_schemas = self.registry.get_all_tool_schemas(allowed_groups=allowed_groups)
+        # Normalize tool_policies to ToolPolicy instances
+        normalized_policies: Dict[str, ToolPolicy] = {}
+        if tool_policies:
+            for name, pdata in tool_policies.items():
+                if isinstance(pdata, ToolPolicy):
+                    normalized_policies[name] = pdata
+                elif isinstance(pdata, dict):
+                    normalized_policies[name] = ToolPolicy.from_dict(pdata)
+
+        # 3. Return schemas from Registry with all filters applied
+        all_schemas = self.registry.get_all_tool_schemas(
+            allowed_groups=allowed_groups,
+            tool_policies=normalized_policies,
+        )
 
         filtered_schemas: List[Dict[str, Any]] = []
         for schema in all_schemas:
@@ -196,6 +227,12 @@ class ToolManager:
                 else:
                     schemas = await self._list_server_tools(config)
                     self._mcp_schema_cache[config.name] = (signature, schemas)
+
+                # Cache discovered tool names back to server config
+                discovered_names = [str(s.get("name", "")) for s in schemas if s.get("name")]
+                if discovered_names != list(config.cached_tools or []):
+                    config.cached_tools = discovered_names
+                    self.storage.save_mcp_servers(self.servers)
 
                 for schema in schemas:
                     proxy = McpProxyTool(self, config, schema["name"], schema)

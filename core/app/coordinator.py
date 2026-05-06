@@ -336,7 +336,7 @@ class AppCoordinator:
         settings = getattr(conversation, "settings", {}) or {}
         normalized = self._normalize_string_tuple(
             settings.get("memory_sources"),
-            allowed=self._default_memory_sources(),
+            allowed=("session", "workspace", "global"),
         )
         return normalized or self._default_memory_sources()
 

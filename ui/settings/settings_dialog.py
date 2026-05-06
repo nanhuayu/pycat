@@ -118,6 +118,7 @@ class SettingsDialog(QDialog):
         self._general_patch: dict = {}
         self._models_patch: dict = {}
         self._auto_approve_patch: dict = {}
+        self._agent_patch: dict = {}
         self._context_patch: dict = {}
         self._prompt_patch: dict = {}
         self._channels_patch: dict = {}
@@ -141,7 +142,7 @@ class SettingsDialog(QDialog):
 
         sidebar = QFrame()
         sidebar.setObjectName("settings_sidebar")
-        sidebar.setFixedWidth(224)
+        sidebar.setFixedWidth(192)
 
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(12, 12, 12, 12)
@@ -183,7 +184,13 @@ class SettingsDialog(QDialog):
             provider_service=self.provider_service,
             provider_catalog_service=self.provider_catalog_service,
         )
-        self.agent_page = AgentPermissionsPage(self._app_config.permissions, retry=self._app_config.retry)
+        self.agent_page = AgentPermissionsPage(
+            self._app_config.permissions,
+            retry=self._app_config.retry,
+            agent=self._app_config.agent,
+            storage_service=self.storage,
+            capabilities=getattr(self._app_config, "capabilities", None),
+        )
         self.channels_page = ChannelsPage(self._app_config.channels, channel_runtime=self.channel_runtime)
         self.terminal_page = TerminalPage(self._app_config.shell)
         self.mcp_page = McpPage(storage_service=self.storage)
@@ -202,6 +209,7 @@ class SettingsDialog(QDialog):
             self._app_config.prompt_optimizer,
             providers=self.providers,
             prompt_optimizer_model=str(getattr(self._app_config, "prompt_optimizer_model", "") or ""),
+            capabilities=getattr(self._app_config, "capabilities", None),
         )
         # Modes are global user config; ModesPage ignores work_dir.
         self.modes_page = ModesPage(self.work_dir)
@@ -294,6 +302,11 @@ class SettingsDialog(QDialog):
             self._retry_patch = {}
 
         try:
+            self._agent_patch = self.agent_page.collect_agent().to_dict()
+        except Exception:
+            self._agent_patch = {}
+
+        try:
             ctx = self.context_page.collect()
             self._context_patch = {"context": ctx.to_dict()}
         except Exception:
@@ -306,6 +319,7 @@ class SettingsDialog(QDialog):
                 "prompts": prompts.to_dict(),
                 "prompt_optimizer": opt.to_dict(),
                 "prompt_optimizer_model": self.prompts_page.collect_prompt_optimizer_model(),
+                "capabilities": self.prompts_page.collect_capabilities().to_dict(),
             }
         except Exception:
             self._prompt_patch = {}
@@ -338,6 +352,7 @@ class SettingsDialog(QDialog):
         }
         settings_patch.update(self.get_auto_approve_settings())
         settings_patch.update(self.get_model_settings())
+        settings_patch["agent"] = self.get_agent_settings()
 
         retry_patch = self.get_retry_settings()
         if retry_patch:
@@ -382,6 +397,9 @@ class SettingsDialog(QDialog):
 
     def get_retry_settings(self) -> dict:
         return dict(self._retry_patch if hasattr(self, '_retry_patch') else {})
+
+    def get_agent_settings(self) -> dict:
+        return dict(self._agent_patch if hasattr(self, '_agent_patch') else {})
 
     def get_context_settings(self) -> dict:
         return dict(self._context_patch or {})

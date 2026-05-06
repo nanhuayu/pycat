@@ -149,6 +149,8 @@ class WeChatChannelAdapter(DeclarativeChannelAdapter):
                     "qr_expires_at": "",
                     "connected_account": "",
                     "status_detail": "",
+                    "channel_reply_policy": "assistant_messages",
+                    "send_thinking_to_channel": False,
                 },
                 fields=(
                     ChannelFieldDefinition("app_id", "App ID", "wx-app-id", required=True, show_for_modes=("official-webhook",)),
@@ -242,6 +244,8 @@ class QQBotChannelAdapter(DeclarativeChannelAdapter):
                     "send_endpoint": "",
                     "webhook_token": "",
                     "sandbox": False,
+                    "channel_reply_policy": "assistant_messages",
+                    "send_thinking_to_channel": False,
                 },
                 fields=(
                     ChannelFieldDefinition("app_id", "App ID", "QQ Bot App ID", required=True),
@@ -274,6 +278,8 @@ class FeishuChannelAdapter(DeclarativeChannelAdapter):
                     "chat_id": "",
                     "open_base_url": "https://open.feishu.cn",
                     "status_detail": "",
+                    "channel_reply_policy": "assistant_messages",
+                    "send_thinking_to_channel": False,
                 },
                 fields=(
                     ChannelFieldDefinition("app_id", "App ID", "cli_xxx", required=True),
@@ -308,6 +314,8 @@ class TelegramChannelAdapter(DeclarativeChannelAdapter):
                     "proxy_url": "",
                     "poll_timeout": "25",
                     "allowed_updates": "",
+                    "channel_reply_policy": "assistant_messages",
+                    "send_thinking_to_channel": False,
                 },
                 fields=(
                     ChannelFieldDefinition("bot_token", "Bot Token", "123456:ABC-DEF", required=True, secret=True),

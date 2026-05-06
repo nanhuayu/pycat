@@ -243,6 +243,7 @@ class Icons:
     TOOLS = "screwdriver-wrench"
     WRENCH = "wrench"
     SLIDERS = "sliders"
+    MODEL = "microchip"
 
     # === 聊天 / 对话 ===
     CHAT = "comments"

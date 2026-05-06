@@ -15,6 +15,7 @@ from core.config.schema import (
     PromptsConfig,
     PromptOptimizerConfig,
     CompressionPolicyConfig,
+    AgentRuntimeConfig,
     PermissionsConfig,
     ShellConfig,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "PromptsConfig",
     "PromptOptimizerConfig",
     "CompressionPolicyConfig",
+    "AgentRuntimeConfig",
     "PermissionsConfig",
     "ShellConfig",
 

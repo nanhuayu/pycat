@@ -255,6 +255,7 @@ class ChannelRuntimeService:
         platform_label: str,
         reply_normalizer: Callable[[str], str] | None = None,
         binding_updates: dict[str, Any] | None = None,
+        reply_sender: Callable[[str, Message | None], None] | None = None,
     ) -> tuple[Conversation, str] | None:
         return self._process_bound_channel_message(
             channel,
@@ -267,6 +268,7 @@ class ChannelRuntimeService:
             platform_label=platform_label,
             reply_normalizer=reply_normalizer,
             binding_updates=binding_updates,
+            reply_sender=reply_sender,
         )
 
     def update_channel_runtime_state(
@@ -535,6 +537,7 @@ class ChannelRuntimeService:
         platform_label: str,
         reply_normalizer: Callable[[str], str] | None = None,
         binding_updates: dict[str, Any] | None = None,
+        reply_sender: Callable[[str, Message | None], None] | None = None,
     ) -> tuple[Conversation, str] | None:
         inbound_text = str(getattr(message, "content", "") or "").strip()
         resolved_binding_key = str(binding_key or thread_id or reply_user or user_id or "").strip()
@@ -582,6 +585,75 @@ class ChannelRuntimeService:
 
         reply_text = ""
         final_message: Message | None = None
+        sent_reply_count = 0
+        sent_step_keys: set[str] = set()
+        reply_policy = self._channel_reply_policy(channel)
+        can_send_replies = callable(reply_sender) and reply_policy not in {"none", "silent", "off"}
+        send_step_replies = can_send_replies and reply_policy in {"assistant_messages", "assistant_steps", "steps", "all", ""}
+        send_thinking = send_step_replies and self._channel_send_thinking(channel)
+
+        def _mark_channel_owned(step_message: Message | None) -> None:
+            if step_message is None:
+                return
+            try:
+                metadata = dict(getattr(step_message, "metadata", {}) or {})
+                metadata["channel_runtime_owned"] = True
+                metadata["channel_id"] = str(getattr(channel, "id", "") or "")
+                step_message.metadata = metadata
+            except Exception as exc:
+                logger.debug("Failed to mark channel runtime owned message: %s", exc)
+
+        def _dispatch_channel_reply(content: str, *, source_message: Message | None = None) -> bool:
+            nonlocal sent_reply_count
+            if not can_send_replies or not callable(reply_sender):
+                return False
+            text = str(content or "").strip()
+            if not text:
+                return False
+            try:
+                reply_sender(text, source_message)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to send %s channel reply for channel %s: %s",
+                    platform_label,
+                    getattr(channel, "id", ""),
+                    exc,
+                )
+                return False
+            sent_reply_count += 1
+            return True
+
+        def _dispatch_assistant_step(step_message: Message) -> None:
+            if str(getattr(step_message, "role", "") or "").strip().lower() != "assistant":
+                return
+
+            _mark_channel_owned(step_message)
+            step_key = (
+                str(getattr(step_message, "id", "") or "").strip()
+                or str(getattr(step_message, "seq_id", "") or "").strip()
+                or f"object:{id(step_message)}"
+            )
+            if step_key in sent_step_keys:
+                return
+            sent_step_keys.add(step_key)
+
+            if send_thinking:
+                thinking_text = str(getattr(step_message, "thinking", "") or "").strip()
+                if thinking_text:
+                    wrapped_thinking = f"<think>\n{thinking_text}\n</think>"
+                    normalized_thinking = self._normalize_channel_step_reply_text(
+                        wrapped_thinking,
+                        normalizer=reply_normalizer,
+                    )
+                    _dispatch_channel_reply(normalized_thinking, source_message=step_message)
+
+            normalized_content = self._normalize_channel_step_reply_text(
+                getattr(step_message, "content", ""),
+                normalizer=reply_normalizer,
+            )
+            if normalized_content:
+                _dispatch_channel_reply(normalized_content, source_message=step_message)
+
         try:
             provider = self._resolve_provider(conversation)
             if provider is None:
@@ -594,20 +666,20 @@ class ChannelRuntimeService:
                 policy=policy,
                 channel=channel,
                 request_id=request_id,
+                assistant_step_callback=_dispatch_assistant_step if send_step_replies else None,
             )
 
             if result.status == TaskStatus.COMPLETED:
                 final_message = result.final_message
-                if final_message is not None:
-                    metadata = dict(getattr(final_message, "metadata", {}) or {})
-                    metadata["channel_runtime_owned"] = True
-                    final_message.metadata = metadata
+                _mark_channel_owned(final_message)
                 if final_message is not None and not self._conversation_has_message(conversation, final_message):
                     conversation.add_message(final_message)
                 reply_text = self._normalize_channel_reply_text(
                     getattr(final_message, "content", "") if final_message is not None else "",
                     normalizer=reply_normalizer,
                 )
+                if sent_reply_count == 0:
+                    _dispatch_channel_reply(reply_text, source_message=final_message)
             elif result.status == TaskStatus.CANCELLED:
                 reply_text = self._normalize_channel_reply_text("消息已收到，但处理过程被取消。", normalizer=reply_normalizer)
                 self._emit_event(
@@ -620,6 +692,7 @@ class ChannelRuntimeService:
                         payload={"error": reply_text},
                     )
                 )
+                _dispatch_channel_reply(reply_text, source_message=None)
             else:
                 reply_text = self._normalize_channel_reply_text(
                     result.error or "消息已收到，但生成回复时失败。",
@@ -642,6 +715,7 @@ class ChannelRuntimeService:
                         payload={"error": reply_text},
                     )
                 )
+                _dispatch_channel_reply(reply_text, source_message=None)
         except Exception as exc:
             logger.exception("%s channel execution failed: %s", platform_label, exc)
             reply_text = self._normalize_channel_reply_text(
@@ -665,6 +739,7 @@ class ChannelRuntimeService:
                     payload={"error": reply_text},
                 )
             )
+            _dispatch_channel_reply(reply_text, source_message=None)
         finally:
             self._conv_service.save(conversation)
 
@@ -711,6 +786,54 @@ class ChannelRuntimeService:
                 return text
         fallback = raw.replace("\r\n", "\n").strip()
         return fallback or "已收到消息，但暂时没有可发送的文本回复。"
+
+    @staticmethod
+    def _normalize_channel_step_reply_text(content: Any, *, normalizer: Callable[[str], str] | None = None) -> str:
+        raw = str(content or "").replace("\r\n", "\n").strip()
+        if not raw:
+            return ""
+        if callable(normalizer):
+            text = str(normalizer(raw) or "").strip()
+            if text:
+                return text
+        return raw
+
+    @staticmethod
+    def _channel_reply_policy(channel: ChannelConfig) -> str:
+        config = dict(getattr(channel, "config", {}) or {})
+        raw = (
+            config.get("channel_reply_policy")
+            or config.get("reply_policy")
+            or config.get("outbound_reply_policy")
+            or "assistant_messages"
+        )
+        normalized = str(raw or "assistant_messages").strip().lower().replace("-", "_")
+        aliases = {
+            "assistant": "assistant_messages",
+            "assistant_message": "assistant_messages",
+            "assistant_steps": "assistant_messages",
+            "steps": "assistant_messages",
+            "step": "assistant_messages",
+            "final_message": "final",
+            "final_only": "final",
+            "none": "none",
+            "off": "none",
+            "silent": "none",
+        }
+        return aliases.get(normalized, normalized or "assistant_messages")
+
+    @staticmethod
+    def _channel_send_thinking(channel: ChannelConfig) -> bool:
+        config = dict(getattr(channel, "config", {}) or {})
+        for key in ("send_thinking_to_channel", "send_thinking", "channel_send_thinking", "reply_thinking"):
+            if key not in config:
+                continue
+            value = config.get(key)
+            if isinstance(value, bool):
+                return value
+            normalized = str(value or "").strip().lower()
+            return normalized in {"1", "true", "yes", "on", "enabled", "开启", "是"}
+        return False
 
     def _resolve_conversation(self, channel: ChannelConfig, user_id: str) -> tuple[Conversation, bool]:
         return self._resolve_channel_conversation(channel, binding_key=user_id, user_id=user_id)
@@ -787,12 +910,14 @@ class ChannelRuntimeService:
             binding_key=user_id,
             manual_session=manual_session,
         )
+        tool_policies: dict[str, dict[str, bool]] = {}
+        if allow_tools:
+            tool_policies["web_search"] = {"enabled": True, "auto_approve": False}
         self._conv_service.set_settings(
             conversation,
             {
                 "show_thinking": False,
-                "enable_mcp": allow_tools,
-                "enable_search": allow_tools,
+                "tool_policies": tool_policies,
                 "channel_binding": binding,
             },
         )
@@ -908,11 +1033,33 @@ class ChannelRuntimeService:
         mode_slug = str(getattr(conversation, "mode", "") or "").strip().lower()
         if not mode_slug:
             mode_slug = "agent" if bool(getattr(channel, "allow_tools", True)) else "channel"
+
+        # Load global tool permissions
+        global_permissions = None
+        try:
+            from core.config.schema import ToolPermissionConfig
+            app_settings = self._storage.load_settings()
+            raw_permissions = app_settings.get("permissions")
+            if raw_permissions and isinstance(raw_permissions, dict):
+                global_permissions = ToolPermissionConfig.from_dict(raw_permissions)
+        except Exception as exc:
+            logger.debug("Failed to load global tool permissions for turn policy: %s", exc)
+
+        raw_tool_policies = settings.get("tool_policies")
+        tool_policies = None
+        if isinstance(raw_tool_policies, dict):
+            from core.config.schema import ToolPolicy
+            tool_policies = {
+                name: ToolPolicy.from_dict(pdata)
+                for name, pdata in raw_tool_policies.items()
+                if isinstance(pdata, dict)
+            }
+
         policy = build_run_policy(
             mode_slug=mode_slug,
             enable_thinking=bool(settings.get("show_thinking", False)),
-            enable_search=bool(settings.get("enable_search", False)),
-            enable_mcp=bool(settings.get("enable_mcp", False)),
+            tool_policies=tool_policies,
+            global_permissions=global_permissions,
         )
         return TurnPolicy.from_run_policy(policy, conversation=conversation)
 
@@ -924,6 +1071,7 @@ class ChannelRuntimeService:
         policy: TurnPolicy,
         channel: ChannelConfig,
         request_id: str = "",
+        assistant_step_callback: Callable[[Message], None] | None = None,
     ):
         permission_mode = str(getattr(channel, "permission_mode", "") or "default").strip().lower() or "default"
         channel_id = str(getattr(channel, "id", "") or "").strip()
@@ -979,6 +1127,8 @@ class ChannelRuntimeService:
                 if event.kind == TurnEventKind.STEP:
                     self._conv_service.save(conversation)
                     _emit_turn_event("turn-step", payload=payload)
+                    if callable(assistant_step_callback):
+                        assistant_step_callback(data)
             elif isinstance(data, dict):
                 payload.update(data)
             elif data is not None:

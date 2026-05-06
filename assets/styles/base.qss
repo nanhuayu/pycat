@@ -22,10 +22,14 @@ QToolButton {
 QToolButton#msg_edit_btn,
 QToolButton#msg_copy_btn,
 QToolButton#msg_delete_btn {
-    padding: 1px;
-    min-width: 24px;
-    min-height: 24px;
-    font-size: 12px;
+    padding: 0px;
+    margin: 0px;
+    min-width: 22px;
+    max-width: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    icon-size: 14px;
+    border-radius: 6px;
 }
 
 QToolButton#toolbar_btn {
@@ -148,6 +152,18 @@ QListWidget#settings_nav {
 
 QListWidget#settings_nav::item {
     padding: 4px 12px;
+    border-radius: 6px;
+}
+
+QListWidget#settings_list {
+    border-radius: 8px;
+    padding: 2px;
+}
+
+QListWidget#settings_list::item {
+    min-height: 40px;
+    padding: 6px 10px;
+    margin: 1px 0;
     border-radius: 6px;
 }
 
@@ -314,6 +330,14 @@ QLabel#message_badge {
     border-radius: 6px;
 }
 
+QToolButton#tool_call_header {
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+    text-align: left;
+    min-height: 20px;
+}
+
 /* Chat Header */
 QLabel#model_indicator {
     font-size: 12px;
@@ -372,11 +396,14 @@ QLabel#chat_empty_description {
 
 QFrame#chat_empty_tip_card {
     border-radius: 12px;
+    min-width: 180px;
+    min-height: 94px;
 }
 
 QLabel#chat_empty_tip_title {
     font-size: 11px;
     font-weight: 600;
+    line-height: 1.35;
 }
 
 QLabel#chat_empty_tip_description,
@@ -386,11 +413,11 @@ QLabel#chat_empty_hint {
 
 /* Input Area */
 #input_container, InputArea {
-    padding: 6px;
+    padding: 0px;
 }
 
 #input_wrapper {
-    border-radius: 6px;
+    border-radius: 0px;
     padding: 6px;
 }
 
@@ -435,7 +462,7 @@ QLabel#stats_title {
     font-weight: 600;
 }
 
-QLineEdit#new_task_edit {
+QLineEdit#task_input_edit {
     border-radius: 6px;
     padding: 4px 8px;
     font-size: 12px;
@@ -522,7 +549,8 @@ QFrame#stat_card {
 }
 
 /* Thinking */
-QPushButton#thinking_toggle {
+QPushButton#thinking_toggle,
+QToolButton#thinking_toggle {
     border-radius: 6px;
     padding: 4px 8px;
     font-size: 12px;
@@ -530,7 +558,7 @@ QPushButton#thinking_toggle {
 }
 
 QTextBrowser#thinking_content {
-    padding: 6px;
+    padding: 0px;
     border-radius: 0 6px 6px 0;
     font-size: 12px;
 }

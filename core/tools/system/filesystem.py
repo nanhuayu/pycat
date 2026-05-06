@@ -11,7 +11,7 @@ from core.tools.base import BaseTool, ToolContext, ToolResult
 class LsTool(BaseTool):
     @property
     def name(self) -> str:
-        return "list_files"
+        return "list_directory"
 
     @property
     def description(self) -> str:
@@ -91,13 +91,23 @@ class LsTool(BaseTool):
 
 
 class ReadFileTool(BaseTool):
+    """Read a workspace file with automatic pagination for large text files."""
+
+    # When reading without explicit line range, cap at this many lines.
+    MAX_LINES_PER_READ = 2000
+
     @property
     def name(self) -> str:
         return "read_file"
 
     @property
     def description(self) -> str:
-        return "Read a workspace file. Text files support line ranges; image files can be returned as multimodal content blocks."
+        return (
+            "Read a workspace file. Text files support line ranges; image files can be returned as multimodal content blocks. "
+            f"When no line range is specified, output is capped at {self.MAX_LINES_PER_READ} lines. "
+            "If the file is larger, it will be truncated and you will receive a hint with the total line count "
+            "so you can call read_file again with start_line/end_line to read the rest."
+        )
 
     @property
     def category(self) -> str:
@@ -171,26 +181,42 @@ class ReadFileTool(BaseTool):
                 return ToolResult("File too large (>10MB). Use grep or read specific lines.", is_error=True)
 
             text = file_path.read_text(encoding="utf-8", errors="replace")
-            lines = text.splitlines(keepends=True) # Keep ends to preserve structure
+            lines = text.splitlines(keepends=True)  # Keep ends to preserve structure
             total_lines = len(lines)
-            
-            # Slice mode
+
+            # Slice mode (explicit range requested by LLM)
             if start_line is not None or end_line is not None:
                 start = int(start_line) if start_line is not None else 1
                 end = int(end_line) if end_line is not None else total_lines
-                
+
                 start = max(1, start)
                 end = min(total_lines, end)
-                
+
                 if start > end:
                     return ToolResult(f"Invalid range: start_line ({start}) > end_line ({end})", is_error=True)
-                
+
                 # Adjust to 0-based
-                sliced_lines = lines[start-1:end]
+                sliced_lines = lines[start - 1 : end]
                 content = "".join(sliced_lines)
-                
+
                 return ToolResult(f"Lines {start}-{end} of {total_lines}:\n{content}")
-            
+
+            # No range specified -> apply automatic pagination
+            if total_lines > self.MAX_LINES_PER_READ:
+                preview_lines = lines[: self.MAX_LINES_PER_READ]
+                preview = "".join(preview_lines)
+                next_start = self.MAX_LINES_PER_READ + 1
+                next_end = min(total_lines, self.MAX_LINES_PER_READ * 2)
+                hint = (
+                    f"To continue reading, call read_file with "
+                    f"start_line={next_start}, end_line={next_end}"
+                )
+                return ToolResult(
+                    f"Lines 1-{self.MAX_LINES_PER_READ} of {total_lines}:\n{preview}\n\n"
+                    f"... [truncated: {total_lines} total lines] ...\n\n"
+                    f"{hint}"
+                )
+
             return ToolResult(text)
         except Exception as e:
             return ToolResult(f"Read error: {e}", is_error=True)
@@ -199,7 +225,7 @@ class ReadFileTool(BaseTool):
 class GrepTool(BaseTool):
     @property
     def name(self) -> str:
-        return "search_files"
+        return "search_code"
 
     @property
     def description(self) -> str:

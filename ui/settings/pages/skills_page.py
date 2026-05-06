@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QListWidget, QListWidgetItem, QTextEdit, QPushButton, QGroupBox, QLineEdit,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSize, Qt
 
 from core.config import get_global_subdir
 from core.skills import SkillsManager
@@ -62,6 +62,7 @@ class SkillsPage(QWidget):
         left.setContentsMargins(10, 10, 10, 10)
         left.setSpacing(8)
         self.skill_list = QListWidget()
+        self.skill_list.setObjectName("settings_list")
         self.skill_list.setSpacing(2)
         self.skill_list.currentItemChanged.connect(self._on_selection_changed)
         left.addWidget(self.skill_list)
@@ -120,6 +121,7 @@ class SkillsPage(QWidget):
         self.count_label.setText(f"共 {len(self._skills)} 个技能，当前显示 {len(matched)} 个")
         for skill in matched:
             item = QListWidgetItem(skill.name)
+            item.setSizeHint(QSize(0, 40))
             item.setData(Qt.ItemDataRole.UserRole, skill.name)
             item.setToolTip(f"来源：{skill.source}\n说明：{skill.description or '-'}")
             self.skill_list.addItem(item)

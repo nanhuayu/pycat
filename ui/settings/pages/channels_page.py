@@ -50,7 +50,7 @@ class ChannelInstanceItem(QListWidgetItem):
             f"摘要：{summary}\n"
             f"校验：{validation}"
         )
-        self.setSizeHint(QSize(0, 38))
+        self.setSizeHint(QSize(0, 40))
 
 
 class ChannelsPage(QWidget):
@@ -124,6 +124,8 @@ class ChannelsPage(QWidget):
         right_panel.addLayout(actions)
 
         self.instance_list = QListWidget()
+        self.instance_list.setObjectName("settings_list")
+        self.instance_list.setSpacing(2)
         self.instance_list.setMinimumHeight(190)
         self.instance_list.currentRowChanged.connect(self._on_instance_changed)
         self.instance_list.itemDoubleClicked.connect(lambda _item: self._edit_channel())

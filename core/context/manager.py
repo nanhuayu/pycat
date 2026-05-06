@@ -103,14 +103,28 @@ class ContextManager:
             default_work_dir=default_work_dir,
         )
 
-        # 4. 构建系统消息（只保留稳定规则 / 工具 / 状态）
-        system_content = build_system_prompt(
-            conversation=conversation,
-            tools=tools,
-            provider=provider,
-            app_config=app_config,
-            default_work_dir=default_work_dir,
-        )
+        # 4. 构建系统消息（只保留稳定规则 / 工具 / 状态）。
+        # Request-level overrides (used by runtime sub-agents and one-off LLM
+        # requests) must also apply when messages are pre-assembled here.
+        system_override = ""
+        try:
+            system_override = str(
+                conversation.get_llm_config().system_prompt_override or ""
+            ).strip()
+        except Exception:
+            settings = getattr(conversation, "settings", {}) or {}
+            system_override = str(settings.get("system_prompt_override") or "").strip()
+
+        if system_override:
+            system_content = system_override
+        else:
+            system_content = build_system_prompt(
+                conversation=conversation,
+                tools=tools,
+                provider=provider,
+                app_config=app_config,
+                default_work_dir=default_work_dir,
+            )
 
         system_message = Message(
             role="system",

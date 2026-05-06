@@ -33,6 +33,14 @@ def build_model_ref_options(providers: Iterable[Provider]) -> list[ModelRefOptio
         model_names: list[str] = []
         if default_model:
             model_names.append(default_model)
+        try:
+            profiles = provider.get_model_profiles()
+        except Exception:
+            profiles = getattr(provider, "model_profiles", []) or []
+        for profile in profiles or []:
+            model_name = str(getattr(profile, "model_id", "") or "").strip()
+            if model_name:
+                model_names.append(model_name)
         for model in getattr(provider, "models", []) or []:
             model_name = str(model or "").strip()
             if model_name:
