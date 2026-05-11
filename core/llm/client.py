@@ -9,7 +9,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Optional, Callable
+from typing import Any, Optional, Callable
 import threading
 
 import httpx
@@ -66,9 +66,6 @@ class LLMClient:
         on_token: Optional[Callable[[str], None]] = None,
         on_thinking: Optional[Callable[[str], None]] = None,
         enable_thinking: bool = True,
-        enable_search: bool = False,
-        enable_mcp: bool = False,
-        tool_policies: Optional[dict[str, Any]] = None,
         debug_log_path: Optional[str] = None,
         cancel_event: Optional[threading.Event] = None,
         prepared_messages: Optional[list[Message]] = None,
@@ -93,27 +90,7 @@ class LLMClient:
             except Exception:
                 app_config = AppConfig()
 
-            # Gather tools if configured
-            prepared_query = ""
-            try:
-                for m in reversed(getattr(conversation, "messages", []) or []):
-                    if getattr(m, "role", "") == "user":
-                        prepared_query = (getattr(m, "content", "") or "").strip()
-                        if prepared_query:
-                            break
-            except Exception as exc:
-                logger.debug("Failed to derive prepared query from conversation: %s", exc)
-                prepared_query = ""
-
-            if prepared_tools is not None:
-                tools = prepared_tools
-            else:
-                tools = await self.tool_manager.get_all_tools(
-                    include_search=enable_search,
-                    include_mcp=enable_mcp,
-                    prepared_queries=[prepared_query] if prepared_query else None,
-                    tool_policies=tool_policies,
-                )
+            tools = prepared_tools or []
 
             if prepared_messages is not None:
                 base_messages = prepared_messages

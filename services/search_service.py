@@ -1,43 +1,61 @@
-"""
-Web Search Service
-Provides unified interface for multiple search providers (Tavily, Google, etc.)
-"""
-import httpx
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+"""Web Search Service
 
-from models.search_config import SearchConfig
+Refactored to use Provider pattern (inspired by Cherry Studio).
+Providers: tavily, duckduckgo, brave, searxng
+Removed: bing, google (high friction / unstable)
+"""
+from typing import List, Dict, Any, Optional
+import re
+
+from models.search_config import SearchConfig, SEARCH_PROVIDERS
+from services.search_providers.factory import SearchProviderFactory
+from services.search_providers.base import BaseSearchProvider
 
 
 class SearchService:
-    """Unified web search service"""
-    
-    PROVIDERS = {
-        "tavily": "Tavily AI",
-        "google": "Google (SerpAPI)",
-        "searxng": "SearXNG (Self-hosted)",
-    }
-    
+    """Unified web search service using Provider factory pattern."""
+
+    DEFAULT_MAX_RESULTS = 5
+    MIN_MAX_RESULTS = 1
+    MAX_MAX_RESULTS = 20
+
     def __init__(self, config: Optional[SearchConfig] = None):
         self.config = config or SearchConfig()
-    
+        self._provider: Optional[BaseSearchProvider] = None
+        self._refresh_provider()
+
+    def _refresh_provider(self):
+        """Create provider instance from current config."""
+        self._provider = SearchProviderFactory.create(
+            self.config.provider,
+            self.config.get_provider_config()
+        )
+
     def update_config(self, config: SearchConfig):
         self.config = config
-    
+        self._refresh_provider()
+
     def is_available(self) -> bool:
-        """Check if search is properly configured"""
+        """Check if search is properly configured and provider is valid."""
         if not self.config.enabled:
             return False
+        if not self._provider:
+            return False
+
+        # Provider-specific validation
         if self.config.provider == "searxng":
             return bool(self.config.api_base)
+        if self.config.provider == "duckduckgo":
+            return True  # Zero config
+        # tavily, brave: require api_key
         return bool(self.config.api_key)
-    
+
     def get_tool_schema(self, prepared_queries: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
         """Return OpenAI-compatible tool schema for web search.
 
-        Cherry Studio style:
-        - tool name: builtin_web_search
-        - argument: additionalContext (optional)
+        Tool contract:
+        - tool name: web_search
+        - argument: additional_context (optional)
         - prepared queries are embedded in description for the model to reference
         """
         if not self.is_available():
@@ -47,148 +65,88 @@ class SearchService:
         prepared_hint = ""
         if prepared_queries:
             prepared_hint = "\n\nThis tool has been configured with search parameters based on the conversation context:\n- Prepared queries: \"" + "\", \"".join(prepared_queries) + "\""
-        
+
         return {
             "type": "function",
             "function": {
-                "name": "builtin_web_search",
-                "description": "Web search tool for finding current information, news, and real-time data from the internet." + prepared_hint,
+                "name": "web_search",
+                "description": "Web search tool for finding current information, news, and real-time data from the internet. Use concise keyword queries; if results are irrelevant or empty, retry with a narrower query, source names, dates, or English/Chinese variants rather than repeating the same query." + prepared_hint,
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "additionalContext": {
+                        "query": {
                             "type": "string",
-                            "description": "Optional additional context, keywords, or specific focus to enhance or replace the search terms"
+                            "description": "Primary search query. Prefer 3-12 precise keywords, include dates/source names when useful."
+                        },
+                        "additional_context": {
+                            "type": "string",
+                            "description": "Optional query/context. Used when query is omitted."
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Maximum number of search results to return. Default: 5. Allowed range: 1-20."
                         }
                     },
                     "additionalProperties": False
                 }
             }
         }
-    
-    async def search(self, query: str) -> str:
-        """Execute search and return formatted results"""
-        if not self.is_available():
-            return "Search is not configured"
-        
+
+    @staticmethod
+    def normalize_query(query: str) -> str:
+        """Normalize user/model search text into a bounded provider query."""
+        text = str(query or "").strip()
+        text = re.sub(r"\s+", " ", text)
+        return text[:500]
+
+    def _resolve_max_results(self, value: Any = None) -> int:
+        """Resolve per-call result count override with safe bounds."""
+        if value is None or value == "":
+            value = getattr(self.config, "max_results", self.DEFAULT_MAX_RESULTS)
         try:
-            if self.config.provider == "tavily":
-                return await self._search_tavily(query)
-            elif self.config.provider == "google":
-                return await self._search_google(query)
-            elif self.config.provider == "searxng":
-                return await self._search_searxng(query)
-            else:
-                return f"Unknown search provider: {self.config.provider}"
+            resolved = int(value)
+        except (TypeError, ValueError):
+            resolved = getattr(self.config, "max_results", self.DEFAULT_MAX_RESULTS)
+        return max(self.MIN_MAX_RESULTS, min(int(resolved), self.MAX_MAX_RESULTS))
+
+    async def search(self, query: str, max_results: Optional[int] = None) -> str:
+        """Execute search and return formatted results."""
+        if not self.is_available():
+            return "Search is not configured or the selected provider is not available."
+
+        if self._provider is None:
+            return f"Unknown search provider: {self.config.provider}"
+
+        query = self.normalize_query(query)
+        if not query:
+            return "No search query provided."
+
+        try:
+            limit = self._resolve_max_results(max_results)
+            results = await self._provider.search(query, max_results=limit)
+            if not results:
+                return "No results found"
+
+            # Use provider-specific formatting if available (e.g., Tavily AI summary)
+            if hasattr(self._provider, "format_for_llm"):
+                return self._provider.format_for_llm(results, include_date=self.config.include_date)
+
+            return self._provider._format_results(results, include_date=self.config.include_date)
         except Exception as e:
             return f"Search error: {str(e)}"
-    
-    async def _search_tavily(self, query: str) -> str:
-        """Search using Tavily API"""
-        url = "https://api.tavily.com/search"
-        
-        payload = {
-            "api_key": self.config.api_key,
-            "query": query,
-            "max_results": self.config.max_results,
-            "include_answer": True,
-            "include_raw_content": False,
-        }
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-        
-        return self._format_tavily_results(data)
-    
-    def _format_tavily_results(self, data: Dict) -> str:
-        """Format Tavily response into readable text"""
-        lines = []
-        
-        # Include AI answer if available
-        if data.get("answer"):
-            lines.append(f"**Summary**: {data['answer']}\n")
-        
-        # Include search results
-        results = data.get("results", [])
-        if results:
-            lines.append("**Search Results:**\n")
-            for i, r in enumerate(results[:self.config.max_results], 1):
-                title = r.get("title", "")
-                url = r.get("url", "")
-                content = r.get("content", "")[:300]
-                if self.config.include_date and r.get("published_date"):
-                    lines.append(f"{i}. [{title}]({url}) - {r['published_date']}")
-                else:
-                    lines.append(f"{i}. [{title}]({url})")
-                lines.append(f"   {content}...\n")
-        
-        return "\n".join(lines) if lines else "No results found"
-    
-    async def _search_google(self, query: str) -> str:
-        """Search using Google (via SerpAPI)"""
-        url = "https://serpapi.com/search"
-        
-        params = {
-            "api_key": self.config.api_key,
-            "q": query,
-            "num": self.config.max_results,
-            "engine": "google",
-        }
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        
-        return self._format_google_results(data)
-    
-    def _format_google_results(self, data: Dict) -> str:
-        """Format Google/SerpAPI response"""
-        lines = []
-        
-        # Knowledge graph
-        if data.get("knowledge_graph"):
-            kg = data["knowledge_graph"]
-            if kg.get("description"):
-                lines.append(f"**{kg.get('title', 'Info')}**: {kg['description']}\n")
-        
-        # Organic results
-        results = data.get("organic_results", [])
-        if results:
-            lines.append("**Search Results:**\n")
-            for i, r in enumerate(results[:self.config.max_results], 1):
-                title = r.get("title", "")
-                link = r.get("link", "")
-                snippet = r.get("snippet", "")
-                lines.append(f"{i}. [{title}]({link})")
-                lines.append(f"   {snippet}\n")
-        
-        return "\n".join(lines) if lines else "No results found"
-    
-    async def _search_searxng(self, query: str) -> str:
-        """Search using self-hosted SearXNG"""
-        base = self.config.api_base.rstrip("/")
-        url = f"{base}/search"
-        
-        params = {
-            "q": query,
-            "format": "json",
-            "categories": "general",
-        }
-        
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-        
-        lines = ["**Search Results:**\n"]
-        for i, r in enumerate(data.get("results", [])[:self.config.max_results], 1):
-            title = r.get("title", "")
-            url = r.get("url", "")
-            content = r.get("content", "")[:300]
-            lines.append(f"{i}. [{title}]({url})")
-            lines.append(f"   {content}\n")
-        
-        return "\n".join(lines) if lines else "No results found"
+
+    async def check(self) -> tuple[bool, Optional[str]]:
+        """Check if the current provider is properly configured and reachable.
+
+        Returns (is_valid, error_message).
+        """
+        if not self.config.enabled:
+            return False, "Search is disabled"
+        if self._provider is None:
+            return False, f"Unknown provider: {self.config.provider}"
+        return await self._provider.check()
+
+    @staticmethod
+    def list_providers() -> List[Dict[str, Any]]:
+        """Return metadata of all available providers for UI."""
+        return SearchProviderFactory.list_providers()

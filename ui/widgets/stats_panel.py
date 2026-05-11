@@ -151,7 +151,7 @@ class StatsPanel(QWidget):
         self.memory_layout.setSpacing(6)
         self.memory_section.body_layout.addWidget(self.memory_container)
 
-        self.documents_section = CollapsibleSection("文档", summary="会话文档摘要", collapsed=True)
+        self.documents_section = CollapsibleSection("产物", summary="会话产物摘要", collapsed=True)
         layout.addWidget(self.documents_section)
 
         self.documents_container = QFrame()
@@ -206,7 +206,7 @@ class StatsPanel(QWidget):
 
         self._render_tasks(None)
         self._render_memory(None)
-        self._render_documents(None)
+        self._render_artifacts(None)
         self._render_channels(None)
         self.update_runtime_state(None)
         self._set_task_controls_enabled(False)
@@ -392,31 +392,31 @@ class StatsPanel(QWidget):
 
             self.memory_layout.addWidget(card)
 
-    def _render_documents(self, conversation: Optional[Conversation]) -> None:
+    def _render_artifacts(self, conversation: Optional[Conversation]) -> None:
         self._clear_layout(self.documents_layout)
 
         if not conversation:
-            self.documents_section.set_title("文档")
-            self.documents_section.set_summary("会话文档摘要")
+            self.documents_section.set_title("产物")
+            self.documents_section.set_summary("会话产物摘要")
             empty = QLabel("-")
             empty.setProperty("muted", True)
             self.documents_layout.addWidget(empty)
             return
 
         try:
-            documents = dict((conversation.get_state().documents or {}))
+            artifacts = dict((conversation.get_state().artifacts or {}))
         except Exception:
-            documents = {}
+            artifacts = {}
 
-        self.documents_section.set_title(f"文档 ({len(documents)})")
-        self.documents_section.set_summary("会话文档摘要" if documents else "暂无会话文档")
-        if not documents:
-            empty = QLabel("暂无会话文档")
+        self.documents_section.set_title(f"产物 ({len(artifacts)})")
+        self.documents_section.set_summary("会话产物摘要" if artifacts else "暂无会话产物")
+        if not artifacts:
+            empty = QLabel("暂无会话产物")
             empty.setProperty("muted", True)
             self.documents_layout.addWidget(empty)
             return
 
-        for name, doc in list(documents.items())[:4]:
+        for name, doc in list(artifacts.items())[:4]:
             card = QFrame()
             card.setObjectName("task_card")
             card_layout = QVBoxLayout(card)
@@ -521,7 +521,7 @@ class StatsPanel(QWidget):
         self._set_task_controls_enabled(bool(conversation))
         self._render_tasks(conversation)
         self._render_memory(conversation)
-        self._render_documents(conversation)
+        self._render_artifacts(conversation)
         self._render_channels(conversation)
         if not conversation:
             self._clear_stats()
@@ -530,10 +530,6 @@ class StatsPanel(QWidget):
         self.mode_card.set_value(str(getattr(conversation, "mode", "") or "chat"))
         settings = getattr(conversation, "settings", {}) or {}
         flags = []
-        if settings.get("enable_mcp"):
-            flags.append("MCP")
-        if settings.get("enable_search"):
-            flags.append("搜索")
         if settings.get("show_thinking", True):
             flags.append("思考")
         self.capabilities_card.set_value(" / ".join(flags) if flags else "对话")
@@ -660,7 +656,7 @@ class StatsPanel(QWidget):
         tool_name = str(event.get("tool_name") or event.get("name") or "").strip()
         role = str(event.get("role") or "").strip()
 
-        if kind == "step" and role == "tool":
+        if kind == "step" and role == "tool_result":
             return f"工具回写 · {tool_name or 'tool'}"
         if kind == "step" and role == "assistant":
             return "助手消息"

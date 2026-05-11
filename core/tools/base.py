@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, List, Union, Callable
 
+from core.tools.catalog import ToolDescriptor, normalize_tool_category
+
 class ToolResult:
     """Standardized result from a tool execution."""
     def __init__(self, content: Union[str, List[Dict[str, Any]]], is_error: bool = False):
@@ -73,7 +75,7 @@ class ToolContext:
                     if label:
                         recommended.append(label)
 
-            multi_select = bool(payload.get("multiSelect", False))
+            multi_select = bool(payload.get("multi_select", False))
             selected = recommended[:] if multi_select else recommended[:1]
             if not selected and labels:
                 selected = labels[:] if multi_select else labels[:1]
@@ -151,10 +153,8 @@ class BaseTool(ABC):
     """Abstract base class for all tools (System & MCP).
 
     Each tool declares:
-    - ``group``: which tool-group it belongs to (maps to mode.groups).
-      One of ``"read"``, ``"edit"``, ``"command"``, ``"search"``,
-      ``"browser"``, ``"mcp"``, ``"modes"``.
-    - ``category``: permission category (``"read"``/``"edit"``/``"command"``/``"misc"``).
+        - ``category``: tool selection and permission category, one of ``read``, ``search``,
+            ``edit``, ``execute``, ``manage``, ``delegate``, ``extension``, or ``mcp``.
     """
 
     # Max output chars before truncation (0 = no limit)
@@ -171,17 +171,26 @@ class BaseTool(ABC):
         pass
 
     @property
-    def group(self) -> str:
-        """Tool group for mode-based filtering.
-
-        Override in subclasses. Defaults to same as ``category``.
-        """
-        return self.category
+    def category(self) -> str:
+        """Canonical permission category."""
+        return "extension"
 
     @property
-    def category(self) -> str:
-        """Permission category: 'read', 'edit', 'command', 'misc'."""
-        return "misc"
+    def source(self) -> str:
+        """Catalog source: builtin, search, capability, mcp, etc."""
+        return "builtin"
+
+    @property
+    def display_name(self) -> str:
+        return self.name
+
+    def descriptor(self, *, available: bool = True) -> ToolDescriptor:
+        return ToolDescriptor.from_tool(
+            self,
+            source=self.source,
+            available=available,
+            display_name=self.display_name,
+        )
 
     @property
     @abstractmethod

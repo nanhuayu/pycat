@@ -60,7 +60,7 @@ def build_model_ref_options(providers: Iterable[Provider]) -> list[ModelRefOptio
             is_default = bool(default_model and model_name == default_model)
             options.append(
                 ModelRefOption(
-                    label=f"{provider_name} · {model_name}",
+                    label=value,
                     value=value,
                     provider_name=provider_name,
                     model_name=model_name,
@@ -144,7 +144,7 @@ class ModelRefCombo(QComboBox):
                 self.setCurrentIndex(i)
                 return
 
-        self.addItem(f"自定义 · {value}", value)
+        self.addItem(value, value)
         self.setCurrentIndex(self.count() - 1)
 
     def model_ref(self) -> str:

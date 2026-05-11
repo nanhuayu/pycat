@@ -24,8 +24,6 @@ class AgentService:
         app_settings: dict,
         mode_slug: str | None = None,
         enable_thinking: bool | None = None,
-        enable_search: bool | None = None,
-        enable_mcp: bool | None = None,
         work_dir: str | None = None,
     ):
         """Build a RunPolicy from conversation settings + app config.
@@ -34,6 +32,7 @@ class AgentService:
         """
         from core.task.builder import build_run_policy
         from core.modes.manager import ModeManager
+        from core.tools.catalog import ToolSelectionPolicy
 
         slug = mode_slug or str(getattr(conversation, "mode", "chat") or "chat")
 
@@ -55,23 +54,30 @@ class AgentService:
         wd = work_dir or getattr(conversation, "work_dir", None) or None
         mm = ModeManager(wd)
 
-        global_permissions = None
+        tool_permissions = None
         try:
             from core.config.schema import ToolPermissionConfig
             raw_permissions = app_settings.get("permissions")
             if raw_permissions and isinstance(raw_permissions, dict):
-                global_permissions = ToolPermissionConfig.from_dict(raw_permissions)
+                tool_permissions = ToolPermissionConfig.from_dict(raw_permissions)
         except Exception as e:
             logger.debug("Failed to load global tool permissions: %s", e)
+
+        tool_selection = None
+        try:
+            raw_tool_selection = (conversation.settings or {}).get("tool_selection")
+            if isinstance(raw_tool_selection, dict):
+                tool_selection = ToolSelectionPolicy.from_dict(raw_tool_selection)
+        except Exception as e:
+            logger.debug("Failed to load conversation tool selection: %s", e)
 
         return build_run_policy(
             mode_slug=slug,
             enable_thinking=bool(enable_thinking),
-            enable_search=enable_search,
-            enable_mcp=enable_mcp,
+            tool_selection=tool_selection,
             mode_manager=mm,
             retry_config=retry_config,
-            global_permissions=global_permissions,
+            tool_permissions=tool_permissions,
         )
 
     @staticmethod

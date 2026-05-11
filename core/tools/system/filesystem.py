@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core.attachments import encode_image_file_to_data_url
+from core.content.attachments import encode_image_file_to_data_url
 from core.tools.base import BaseTool, ToolContext, ToolResult
 
 class LsTool(BaseTool):
@@ -28,7 +28,7 @@ class LsTool(BaseTool):
             "properties": {
                 "path": {"type": "string", "description": "Workspace-relative path. Default: '.'"},
                 "recursive": {"type": "boolean", "description": "List recursively. Default: false"},
-                "maxEntries": {"type": "number", "description": "Limit returned entries. Default: 200"},
+                "max_entries": {"type": "number", "description": "Limit returned entries. Default: 200"},
             },
             "additionalProperties": False,
         }
@@ -36,7 +36,7 @@ class LsTool(BaseTool):
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         path_str = arguments.get("path", ".")
         recursive = bool(arguments.get("recursive", False))
-        max_entries = int(arguments.get("maxEntries", 200) or 200)
+        max_entries = int(arguments.get("max_entries", 200) or 200)
         max_entries = max(1, min(max_entries, 2000))
 
         try:
@@ -119,8 +119,8 @@ class ReadFileTool(BaseTool):
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Workspace-relative file path"},
-                "start_line": {"type": "number", "description": "Optional start line (1-based, inclusive)"},
-                "end_line": {"type": "number", "description": "Optional end line (1-based, inclusive)"},
+                "start_line": {"type": "integer", "description": "Optional start line (1-based, inclusive)"},
+                "end_line": {"type": "integer", "description": "Optional end line (1-based, inclusive)"},
                 "mode": {"type": "string", "description": "Optional read mode: auto, text, or image. Default: auto"},
             },
             "required": ["path"],
@@ -225,15 +225,16 @@ class ReadFileTool(BaseTool):
 class GrepTool(BaseTool):
     @property
     def name(self) -> str:
-        return "search_code"
+        return "search_content"
 
     @property
     def description(self) -> str:
-        return "Search for a regex in text files under a workspace directory."
+        return "Search for text or regex matches in workspace text files."
 
     @property
     def category(self) -> str:
-        return "read"
+        return "search"
+
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -241,23 +242,25 @@ class GrepTool(BaseTool):
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Workspace-relative directory. Default: '.'"},
-                "pattern": {"type": "string", "description": "Regex pattern"},
-                "include": {"type": "string", "description": "Optional glob include pattern, e.g. '**/*.py'"},
-                "maxMatches": {"type": "number", "description": "Max matches (default: 50)"},
+                "query": {"type": "string", "description": "Text or regex query to search for"},
+                "regex": {"type": "boolean", "description": "Treat query as a regex. Default: true"},
+                "include_pattern": {"type": "string", "description": "Optional glob include pattern, e.g. '**/*.py'"},
+                "max_results": {"type": "number", "description": "Max matches (default: 50)"},
             },
-            "required": ["pattern"],
+            "required": ["query"],
             "additionalProperties": False,
         }
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         root_str = arguments.get("path", ".")
-        pattern = arguments.get("pattern", "")
-        include = arguments.get("include")
-        max_matches = int(arguments.get("maxMatches", 50) or 50)
+        query = str(arguments.get("query", "") or "")
+        regex = bool(arguments.get("regex", True))
+        include = arguments.get("include_pattern")
+        max_matches = int(arguments.get("max_results", 50) or 50)
         max_matches = max(1, min(max_matches, 500))
 
-        if not pattern:
-            return ToolResult("Missing 'pattern'", is_error=True)
+        if not query:
+            return ToolResult("Missing 'query'", is_error=True)
 
         try:
             root_path = context.resolve_path(root_str)
@@ -267,11 +270,11 @@ class GrepTool(BaseTool):
         if not root_path.exists() or not root_path.is_dir():
             return ToolResult(f"Not a directory: {root_path}", is_error=True)
 
-        if not await context.ask_approval(f"Grep in {root_str} for '{pattern}'?"):
-            return ToolResult("User denied grep", is_error=True)
+        if not await context.ask_approval(f"Search content in {root_str} for '{query}'?"):
+            return ToolResult("User denied content search", is_error=True)
 
         try:
-            rx = re.compile(pattern)
+            rx = re.compile(query if regex else re.escape(query))
         except Exception as e:
             return ToolResult(f"Invalid regex: {e}", is_error=True)
 

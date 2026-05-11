@@ -1,6 +1,7 @@
-from typing import Dict, List, Any, Optional, Set
-from core.config.schema import ToolPolicy
+from typing import Dict, List, Any, Optional
+from core.config.schema import ToolPermissionConfig
 from core.tools.base import BaseTool, ToolContext, ToolResult
+from core.tools.catalog import ToolDescriptor, ToolSelectionPolicy
 from core.tools.permissions import ToolPermissionResolver
 
 class ToolRegistry:
@@ -24,32 +25,40 @@ class ToolRegistry:
     def get_tool(self, name: str) -> Optional[BaseTool]:
         return self._tools.get(name)
 
+    def list_tools(self) -> List[BaseTool]:
+        return list(self._tools.values())
+
+    def list_descriptors(self, *, availability: Optional[Dict[str, bool]] = None) -> List[ToolDescriptor]:
+        availability = availability or {}
+        return [
+            tool.descriptor(available=availability.get(tool.name, True))
+            for tool in self._tools.values()
+        ]
+
     def get_all_tool_schemas(
         self,
         *,
-        allowed_groups: Optional[Set[str]] = None,
-        tool_policies: Optional[Dict[str, ToolPolicy]] = None,
+        tool_selection: Optional[ToolSelectionPolicy] = None,
+        tool_permissions: Optional[ToolPermissionConfig] = None,
     ) -> List[Dict[str, Any]]:
         """Get OpenAI-compatible schemas with optional filtering.
-
-        Parameters
-        ----------
-        allowed_groups
-            If provided, only return tools whose ``group`` is in this set.
-        tool_policies
-            If provided, tools with an explicit ``enabled=False`` policy are
-            omitted from the result.
         """
         schemas: List[Dict[str, Any]] = []
-        policies = tool_policies or {}
+        permissions = tool_permissions or ToolPermissionConfig()
         for tool in self._tools.values():
-            if allowed_groups is not None and tool.group not in allowed_groups:
+            descriptor = tool.descriptor()
+            if tool_selection is not None and not tool_selection.allows(descriptor):
                 continue
-            # Per-tool visibility filter
-            policy = policies.get(tool.name)
+            # Effective visibility filter: per-tool override -> category default.
+            policy = permissions.resolve(tool.name, descriptor.category)
             if policy is not None and not policy.enabled:
                 continue
-            schemas.append(tool.to_openai_tool())
+            schema = tool.to_openai_tool()
+            fn = schema.get("function") if isinstance(schema, dict) else None
+            if isinstance(fn, dict):
+                fn["x_pycat_category"] = descriptor.category
+                fn["x_pycat_source"] = descriptor.source
+            schemas.append(schema)
         return schemas
 
     def update_permissions(self, config: Dict[str, Any]):

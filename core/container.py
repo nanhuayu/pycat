@@ -13,7 +13,6 @@ from services.app_settings_service import AppSettingsService
 from services.provider_catalog_service import ProviderCatalogService
 from services.provider_service import ProviderService
 from services.conversation_service import ConversationService
-from services.command_service import CommandService
 from services.context_service import ContextService
 from services.skill_service import SkillService
 from core.config import load_app_config
@@ -34,7 +33,6 @@ class AppServices:
     provider_catalog_service: ProviderCatalogService
     provider_service: ProviderService
     conv_service: ConversationService
-    command_service: CommandService
     context_service: ContextService
     skill_service: SkillService
     command_registry: CommandRegistry
@@ -90,7 +88,6 @@ class AppContainer:
             provider_catalog_service=provider_catalog_service,
             conv_service=conv_service,
         )
-        command_service = CommandService()
         context_service = ContextService(client)
         skill_service = SkillService()
         command_registry = CommandRegistry()
@@ -101,7 +98,6 @@ class AppContainer:
             provider_catalog_service=provider_catalog_service,
             provider_service=provider_service,
             conv_service=conv_service,
-            command_service=command_service,
             context_service=context_service,
             skill_service=skill_service,
             command_registry=command_registry,

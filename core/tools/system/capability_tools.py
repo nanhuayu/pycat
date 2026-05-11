@@ -21,13 +21,14 @@ from core.capabilities.exposure import capability_exposed_as_tool
 from core.capabilities.manager import CapabilitiesManager
 from core.config import load_app_config
 from core.tools.base import BaseTool, ToolContext, ToolResult
+from core.tools.catalog import ToolSelectionPolicy
 
 
 CAPABILITY_TOOL_PREFIX = "capability__"
 _COMMON_CAPABILITY_FIELDS = {
     "task",
     "input_text",
-    "file_path",
+    "path",
     "output_format",
     "max_length",
     "focus",
@@ -74,12 +75,28 @@ def normalize_string_list(value: Any) -> list[str]:
     return normalized
 
 
-def normalize_subtask_tool_groups(groups: Iterable[str] | None) -> list[str]:
-    """Normalize a subtask tool-group list and always keep mode tools enabled."""
-    normalized = normalize_string_list(list(groups or ()))
-    if "modes" not in normalized:
-        normalized.append("modes")
+def normalize_subtask_allowed_tool_categories(categories: Iterable[str] | None) -> list[str]:
+    """Normalize a subtask tool-category list and always keep manage tools enabled."""
+    from core.tools.catalog import normalize_tool_category
+
+    normalized: list[str] = []
+    for category in normalize_string_list(list(categories or ())):
+        canonical = normalize_tool_category(category)
+        if canonical not in normalized:
+            normalized.append(canonical)
+    if "manage" not in normalized:
+        normalized.append("manage")
     return normalized
+
+
+def capability_runtime_mode(capability: CapabilityConfig) -> str:
+    """Infer child-task mode from the capability tool categories.
+
+    Capabilities no longer expose a separate user-configured mode. Text-only
+    capabilities run as chat subtasks; any capability with tool categories runs as
+    an agent subtask so those tools can be used.
+    """
+    return "agent" if tuple(capability.allowed_tool_categories or ()) else "chat"
 
 
 def capability_prompt_block(capability: CapabilityConfig) -> str:
@@ -145,14 +162,17 @@ def schedule_subtask(
     *,
     mode: str,
     message: str,
+    title: str = "",
+    kind: str = "subagent",
     model_ref: str = "",
     max_turns: int | None = None,
-    tool_groups: Iterable[str] | None = None,
+    allowed_tool_categories: Iterable[str] | None = None,
     capability: CapabilityConfig | None = None,
     capability_id: str = "",
     capabilities: Iterable[str] | None = None,
     instructions: str = "",
     auto_spillover: bool | None = None,
+    tool_selection: ToolSelectionPolicy | None = None,
 ) -> None:
     """Schedule a child task using the Task engine's pending-subtask contract."""
     capability_ids = normalize_string_list(list(capabilities or ()))
@@ -160,15 +180,21 @@ def schedule_subtask(
     if resolved_capability_id and resolved_capability_id not in capability_ids:
         capability_ids.insert(0, resolved_capability_id)
 
+    normalized_categories = normalize_subtask_allowed_tool_categories(allowed_tool_categories)
     payload: dict[str, Any] = {
         "mode": (mode or "agent").strip() or "agent",
         "message": message,
+        "title": str(title or "").strip(),
+        "kind": str(kind or "subagent").strip() or "subagent",
         "model_ref": model_ref or "",
         "max_turns": max_turns,
-        "tool_groups": normalize_subtask_tool_groups(tool_groups),
         "capability_id": resolved_capability_id,
         "capabilities": capability_ids,
     }
+    if tool_selection is not None:
+        payload["tool_selection"] = tool_selection.to_dict()
+    else:
+        payload["tool_selection"] = ToolSelectionPolicy.from_categories(normalized_categories).to_dict()
     runtime_instructions = str(instructions or "").strip()
     if runtime_instructions:
         payload["instructions"] = runtime_instructions
@@ -208,13 +234,14 @@ class CapabilityTool(BaseTool):
             f"Run the '{self.capability.name}' capability and return its result.",
         )
 
-    @property
-    def group(self) -> str:
-        return "modes"
 
     @property
     def category(self) -> str:
-        return "delegate"
+        return "extension"
+
+    @property
+    def source(self) -> str:
+        return "capability"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -229,7 +256,7 @@ class CapabilityTool(BaseTool):
                     "type": "string",
                     "description": "Text, file path, URL content, or extracted material to process.",
                 },
-                "file_path": {
+                "path": {
                     "type": "string",
                     "description": "Optional workspace file path or tool-result file path to read/analyze.",
                 },
@@ -289,11 +316,13 @@ class CapabilityTool(BaseTool):
 
         schedule_subtask(
             context,
-            mode=capability.mode or "agent",
+            mode=capability_runtime_mode(capability),
             message=message,
+            title=capability.name,
+            kind="capability",
             model_ref=capability.model_ref or "",
             max_turns=self._max_turns(capability),
-            tool_groups=capability.tool_groups or (),
+            allowed_tool_categories=capability.allowed_tool_categories or (),
             capability=capability,
             capabilities=(capability.id,),
             instructions=self._combined_instructions(capability, runtime_instructions),
@@ -307,14 +336,14 @@ class CapabilityTool(BaseTool):
     @staticmethod
     def _build_input_text(arguments: Dict[str, Any]) -> str:
         parts: list[str] = []
-        file_path = str(arguments.get("file_path") or "").strip()
+        path = str(arguments.get("path") or "").strip()
         input_text = str(arguments.get("input_text") or "").strip()
         focus = str(arguments.get("focus") or "").strip()
         target_language = str(arguments.get("target_language") or "").strip()
         max_length = arguments.get("max_length")
 
-        if file_path:
-            parts.append(f"File path: {file_path}")
+        if path:
+            parts.append(f"File path: {path}")
         if input_text:
             parts.append(input_text)
         if focus:

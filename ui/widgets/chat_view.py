@@ -108,7 +108,7 @@ class ChatView(QWidget):
 
         # ===== Message navigation (toolbar-style group) =====
         header_layout.addWidget(self._create_nav_bar())
-        
+
         layout.addWidget(self.header_bar)
 
         self.body_stack = QStackedWidget()
@@ -414,21 +414,6 @@ class ChatView(QWidget):
         self._schedule_nav_update()
     
     def add_message(self, message: Message):
-        # Try to update existing assistant message if this is a tool result
-        if message.role == 'tool' and message.tool_call_id:
-            # Search backwards for the matching assistant widget
-            for i in range(len(self._message_widgets) - 1, -1, -1):
-                widget = self._message_widgets[i]
-                if widget.message.role == 'assistant' and widget.has_tool_call(message.tool_call_id):
-                    # The message object in widget should already be updated by Conversation.add_message
-                    # because it's the same object reference. We just need to refresh the UI.
-                    widget.refresh_tool_calls()
-                    
-                    # Only auto-scroll if we updated the very last message
-                    if i == len(self._message_widgets) - 1 and self._should_follow_output():
-                        QTimer.singleShot(50, self._scroll_to_bottom)
-                    return
-
         # Create widget
         widget = MessageWidget(message)
         widget.edit_requested.connect(self.edit_message.emit)
@@ -440,6 +425,43 @@ class ChatView(QWidget):
         if self._should_follow_output():
             QTimer.singleShot(50, self._scroll_to_bottom)
         self._schedule_nav_update()
+
+    def update_subtask_trace(self, trace: dict) -> bool:
+        if not isinstance(trace, dict):
+            return False
+        metadata = trace.get('metadata') if isinstance(trace.get('metadata'), dict) else {}
+        parent_message_id = str(trace.get('parent_message_id') or metadata.get('parent_message_id') or '').strip()
+        tool_call_id = str(
+            trace.get('parent_tool_call_id')
+            or trace.get('tool_call_id')
+            or metadata.get('parent_tool_call_id')
+            or metadata.get('tool_call_id')
+            or ''
+        ).strip()
+        trace_id = str(trace.get('id') or '').strip()
+        if parent_message_id:
+            for i in range(len(self._message_widgets) - 1, -1, -1):
+                widget = self._message_widgets[i]
+                if str(getattr(widget.message, 'id', '') or '') != parent_message_id:
+                    continue
+                if tool_call_id and not widget.has_tool_call(tool_call_id):
+                    break
+                if widget.update_subtask_trace(trace):
+                    if i == len(self._message_widgets) - 1 and self._should_follow_output():
+                        QTimer.singleShot(50, self._scroll_to_bottom)
+                    self._schedule_nav_update()
+                    return True
+        for i in range(len(self._message_widgets) - 1, -1, -1):
+            widget = self._message_widgets[i]
+            if tool_call_id and not widget.has_tool_call(tool_call_id):
+                continue
+            if widget.update_subtask_trace(trace):
+                if i == len(self._message_widgets) - 1 and self._should_follow_output():
+                    QTimer.singleShot(50, self._scroll_to_bottom)
+                self._schedule_nav_update()
+                return True
+        logger.debug("No parent assistant widget found for subtask trace %s / tool %s", trace_id, tool_call_id)
+        return False
 
     def show_inline_question(
         self,

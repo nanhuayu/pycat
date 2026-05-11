@@ -37,12 +37,24 @@ def _as_bool(value: Any, default: bool = False) -> bool:
     except Exception:
         return default
 
+
+REMOVED_BUILTIN_CAPABILITY_IDS: frozenset[str] = frozenset(
+    {
+        "context_curator",
+        "image_generate",
+        "research_brief",
+        "researcher",
+        "summarize_long_text",
+        "tool_result_analyzer",
+    }
+)
+
 @dataclass(frozen=True)
 class CapabilityConfig:
     """Reusable task capability configuration.
 
     A capability is a self-contained workflow exposed as a tool (``capability__*``).
-    It carries its own instructions, model, tool groups, and execution budget.
+    It carries its own instructions, model, tool categories, and execution budget.
     There is no separate configured sub-agent entity; each capability is the
     first-class reusable runtime entity.
     """
@@ -52,10 +64,9 @@ class CapabilityConfig:
     kind: str = "custom"
     enabled: bool = True
     model_ref: str = ""
-    mode: str = "agent"
     system_prompt: str = ""
     description: str = ""
-    tool_groups: tuple[str, ...] = ()
+    allowed_tool_categories: tuple[str, ...] = ()
     input_schema: dict[str, Any] = field(default_factory=dict)
     output_schema: dict[str, Any] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)
@@ -73,12 +84,11 @@ class CapabilityConfig:
             kind=kind,
             enabled=_as_bool(payload.get("enabled"), True),
             model_ref=_as_str(payload.get("model_ref") or payload.get("modelRef"), "").strip(),
-            mode=_as_str(payload.get("mode"), "agent").strip().lower() or "agent",
             system_prompt=_as_str(payload.get("system_prompt") or payload.get("systemPrompt"), "").strip(),
             description=_as_str(payload.get("description") or payload.get("desc"), "").strip(),
-            tool_groups=tuple(
+            allowed_tool_categories=tuple(
                 _as_str(item, "").strip()
-                for item in _as_list(payload.get("tool_groups") or payload.get("toolGroups"))
+                for item in _as_list(payload.get("allowed_tool_categories"))
                 if _as_str(item, "").strip()
             ),
             input_schema=_as_dict(payload.get("input_schema") or payload.get("inputSchema")),
@@ -93,10 +103,9 @@ class CapabilityConfig:
             "kind": self.kind,
             "enabled": bool(self.enabled),
             "model_ref": self.model_ref,
-            "mode": self.mode,
             "system_prompt": self.system_prompt,
             "description": self.description,
-            "tool_groups": list(self.tool_groups),
+            "allowed_tool_categories": list(self.allowed_tool_categories),
             "input_schema": dict(self.input_schema or {}),
             "output_schema": dict(self.output_schema or {}),
             "options": dict(self.options or {}),
@@ -113,6 +122,8 @@ class CapabilitiesConfig:
         for item in _as_list(payload.get("capabilities")):
             if isinstance(item, Mapping):
                 capability = CapabilityConfig.from_dict(item)
+                if capability.id.strip().lower() in REMOVED_BUILTIN_CAPABILITY_IDS:
+                    continue
                 capabilities.append(capability)
         return CapabilitiesConfig(capabilities=tuple(capabilities))
 

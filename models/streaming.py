@@ -28,6 +28,7 @@ class ConversationStreamState:
     last_event_kind: str = ""
     last_event_detail: str = ""
     active_tool: str = ""
+    pending_tool_invocations: dict[str, dict[str, Any]] = field(default_factory=dict)
     recent_events: list[dict[str, Any]] = field(default_factory=list)
     cancel_event: threading.Event = field(default_factory=threading.Event)
 
@@ -53,6 +54,31 @@ class ConversationStreamState:
 
         phase = str(item.get("phase") or "").strip()
         tool_name = str(item.get("tool_name") or item.get("name") or "").strip()
+        tool_call_id = str(item.get("tool_call_id") or "").strip()
+        if tool_call_id:
+            pending = self.pending_tool_invocations.setdefault(
+                tool_call_id,
+                {
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "status": "running",
+                    "started_at": item.get("recorded_at"),
+                },
+            )
+            if tool_name:
+                pending["tool_name"] = tool_name
+            if kind == "tool_start":
+                pending["status"] = "running"
+                pending.setdefault("started_at", item.get("recorded_at"))
+            elif kind == "step" and str(item.get("role") or "") == "tool_result":
+                pending["status"] = "completed"
+                pending["summary"] = str(item.get("summary") or "")
+                pending["ended_at"] = item.get("recorded_at")
+            elif kind == "tool_end":
+                pending["status"] = "completed"
+                pending["summary"] = str(item.get("summary") or pending.get("summary") or "")
+                pending["ended_at"] = item.get("recorded_at")
+                self.pending_tool_invocations.pop(tool_call_id, None)
         if kind == "tool_start" and tool_name:
             self.active_tool = tool_name
         elif kind == "tool_end" and (not tool_name or tool_name == self.active_tool):

@@ -39,6 +39,21 @@ class ToolPermissionPolicy:
     def is_enabled(self, tool_name: str, category: str = "misc") -> bool:
         return self.config.is_enabled(tool_name, category)
 
+    @classmethod
+    def from_effective(
+        cls,
+        *,
+        category_defaults: Dict[str, ToolPolicy] | None = None,
+        tools: Dict[str, ToolPolicy] | None = None,
+    ) -> "ToolPermissionPolicy":
+        """Build a policy from already-normalized runtime permission maps."""
+        return cls(
+            config=ToolPermissionConfig(
+                category_defaults=dict(category_defaults or {}),
+                tools=dict(tools or {}),
+            )
+        )
+
 
 class ToolPermissionResolver:
     """Wrap tool approval callbacks with a repository-wide permission policy."""
@@ -54,10 +69,18 @@ class ToolPermissionResolver:
         self._policy = ToolPermissionPolicy.from_config(config)
 
     def wrap_context(self, context: ToolContext, tool: BaseTool) -> ToolContext:
+        return self.wrap_context_with_policy(context, tool, self._policy)
+
+    @staticmethod
+    def wrap_context_with_policy(
+        context: ToolContext,
+        tool: BaseTool,
+        policy: ToolPermissionPolicy,
+    ) -> ToolContext:
         original_callback = context.approval_callback
 
         async def permission_aware_callback(message: str) -> bool:
-            if self._policy.is_auto_approved(tool.name, tool.category):
+            if policy.is_auto_approved(tool.name, tool.category):
                 return True
             if not original_callback:
                 return False

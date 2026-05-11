@@ -30,17 +30,18 @@ from ui.utils.icon_manager import Icons
 
 logger = logging.getLogger(__name__)
 from core.modes.manager import ModeManager
-from core.modes.types import ModeConfig, GroupOptions
+from core.modes.types import ModeConfig, ToolCategoryOptions
+from core.tools.catalog import normalize_tool_category
 
 
 def _mode_to_json(mode: ModeConfig) -> Dict[str, Any]:
-    groups: List[Any] = []
-    for g in mode.groups or []:
-        if isinstance(g, tuple) and len(g) == 2:
-            name = str(g[0])
-            opts = g[1]
-            if isinstance(opts, GroupOptions):
-                groups.append(
+    allowed_tool_categories: List[Any] = []
+    for category in mode.allowed_tool_categories or []:
+        if isinstance(category, tuple) and len(category) == 2:
+            name = str(category[0])
+            opts = category[1]
+            if isinstance(opts, ToolCategoryOptions):
+                allowed_tool_categories.append(
                     [
                         name,
                         {
@@ -50,9 +51,9 @@ def _mode_to_json(mode: ModeConfig) -> Dict[str, Any]:
                     ]
                 )
             else:
-                groups.append(name)
+                allowed_tool_categories.append(name)
         else:
-            groups.append(str(g))
+            allowed_tool_categories.append(str(category))
 
     payload = {
         "slug": mode.slug,
@@ -61,7 +62,7 @@ def _mode_to_json(mode: ModeConfig) -> Dict[str, Any]:
         "whenToUse": mode.when_to_use or "",
         "description": mode.description or "",
         "customInstructions": mode.custom_instructions or "",
-        "groups": groups,
+        "allowed_tool_categories": allowed_tool_categories,
     }
     if getattr(mode, "tool_allowlist", None):
         payload["toolAllowlist"] = list(mode.tool_allowlist or [])
@@ -127,7 +128,7 @@ class ModesPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        layout.addWidget(build_page_header("模式", "管理核心工作模式：Chat、Agent、Plan、Explore。"))
+        layout.addWidget(build_page_header("模式", "管理核心工作模式：Chat、Channel、Agent、Explore、Plan。"))
 
         path = get_user_modes_json_path()
         self.path_label = QLabel(f"全局配置文件：{path}")
@@ -227,14 +228,14 @@ class ModesPage(QWidget):
         self.when_to_use_edit.textChanged.connect(self._apply_current_edits)
         form.addRow("适用场景", self.when_to_use_edit)
 
-        self.groups_edit = QLineEdit()
-        self.groups_edit.setPlaceholderText("例如：read, edit, command, search, mcp, modes")
-        self.groups_edit.setToolTip(
-            "可用工具组: read (文件读取), edit (文件编辑), command (Shell 执行), "
-            "search (搜索), browser (浏览器), mcp (MCP 服务), modes (多 Agent 协作)"
+        self.allowed_tool_categories_edit = QLineEdit()
+        self.allowed_tool_categories_edit.setPlaceholderText("例如：read, search, edit, execute, manage, delegate, extension, mcp")
+        self.allowed_tool_categories_edit.setToolTip(
+            "可用工具类别: read (文件读取), search (搜索/获取), edit (文件编辑), execute (Shell/Python 执行), "
+            "manage (状态/待办/产物管理), delegate (子任务委托), extension (扩展能力), mcp (MCP 服务)"
         )
-        self.groups_edit.textChanged.connect(self._apply_current_edits)
-        form.addRow("能力组", self.groups_edit)
+        self.allowed_tool_categories_edit.textChanged.connect(self._apply_current_edits)
+        form.addRow("允许工具类别", self.allowed_tool_categories_edit)
 
         self.role_edit = QTextEdit()
         self.role_edit.setAcceptRichText(False)
@@ -253,7 +254,7 @@ class ModesPage(QWidget):
         right_layout.addWidget(form_group)
 
         hint = QLabel(
-            "建议只保留 Chat / Agent / Plan / Explore 四个常用入口；Channel 为外部频道内部模式，不需要在常规界面切换。\n"
+            "建议只保留 Chat / Channel / Agent / Explore / Plan 五个核心模式；不同模式只声明允许工具类别。\n"
             "Code / Debug / Orchestrator 等旧模式仍可作为高级配置存在，但不会默认占用主界面。"
         )
         hint.setWordWrap(True)
@@ -290,6 +291,8 @@ class ModesPage(QWidget):
 
         if self.mode_combo.count() > 0:
             self.mode_combo.setCurrentIndex(0)
+            self._current_index = self.mode_combo.currentIndex()
+            self._load_current_into_form()
 
     def _rebuild_combo(self) -> None:
         cur_slug = ""
@@ -320,7 +323,7 @@ class ModesPage(QWidget):
             self.name_edit.setText("")
             self.description_edit.setText("")
             self.when_to_use_edit.setPlainText("")
-            self.groups_edit.setText("")
+            self.allowed_tool_categories_edit.setText("")
             self.role_edit.setPlainText("")
             self.custom_edit.setPlainText("")
             self.mode_summary_label.setText("")
@@ -331,7 +334,7 @@ class ModesPage(QWidget):
         self.name_edit.blockSignals(True)
         self.description_edit.blockSignals(True)
         self.when_to_use_edit.blockSignals(True)
-        self.groups_edit.blockSignals(True)
+        self.allowed_tool_categories_edit.blockSignals(True)
         self.role_edit.blockSignals(True)
         self.custom_edit.blockSignals(True)
         try:
@@ -339,17 +342,17 @@ class ModesPage(QWidget):
             self.description_edit.setText(str(m.get("description") or ""))
             self.when_to_use_edit.setPlainText(str(m.get("whenToUse") or ""))
 
-            groups = m.get("groups")
-            if isinstance(groups, list):
+            allowed_tool_categories = m.get("allowed_tool_categories")
+            if isinstance(allowed_tool_categories, list):
                 flat: List[str] = []
-                for g in groups:
-                    if isinstance(g, str):
-                        flat.append(g)
-                    elif isinstance(g, list) and g:
-                        flat.append(str(g[0]))
-                self.groups_edit.setText(", ".join([x for x in flat if x]))
+                for category in allowed_tool_categories:
+                    if isinstance(category, str):
+                        flat.append(category)
+                    elif isinstance(category, list) and category:
+                        flat.append(str(category[0]))
+                self.allowed_tool_categories_edit.setText(", ".join([x for x in flat if x]))
             else:
-                self.groups_edit.setText("")
+                self.allowed_tool_categories_edit.setText("")
 
             self.role_edit.setPlainText(str(m.get("roleDefinition") or ""))
             self.custom_edit.setPlainText(str(m.get("customInstructions") or ""))
@@ -357,16 +360,16 @@ class ModesPage(QWidget):
             self.name_edit.blockSignals(False)
             self.description_edit.blockSignals(False)
             self.when_to_use_edit.blockSignals(False)
-            self.groups_edit.blockSignals(False)
+            self.allowed_tool_categories_edit.blockSignals(False)
             self.role_edit.blockSignals(False)
             self.custom_edit.blockSignals(False)
 
         summary_name = str(m.get("name") or m.get("slug") or "未命名模式")
         summary_slug = str(m.get("slug") or "")
         summary_desc = str(m.get("description") or "")
-        groups = m.get("groups") if isinstance(m.get("groups"), list) else []
-        group_count = len(groups)
-        summary = f"当前模式：{summary_name} ({summary_slug}) · {group_count} 个工具组"
+        allowed_tool_categories = m.get("allowed_tool_categories") if isinstance(m.get("allowed_tool_categories"), list) else []
+        category_count = len(allowed_tool_categories)
+        summary = f"当前模式：{summary_name} ({summary_slug}) · {category_count} 个允许工具类别"
         if summary_desc:
             summary += f"\n{summary_desc}"
         self.mode_summary_label.setText(summary)
@@ -380,14 +383,14 @@ class ModesPage(QWidget):
         m["description"] = (self.description_edit.text() or "").strip()
         m["whenToUse"] = (self.when_to_use_edit.toPlainText() or "").strip()
 
-        groups_raw = (self.groups_edit.text() or "").strip()
-        groups: List[Any] = []
-        if groups_raw:
-            for part in groups_raw.split(","):
-                g = part.strip()
-                if g:
-                    groups.append(g)
-        m["groups"] = groups
+        categories_raw = (self.allowed_tool_categories_edit.text() or "").strip()
+        allowed_tool_categories: List[Any] = []
+        if categories_raw:
+            for part in categories_raw.split(","):
+                category = normalize_tool_category(part.strip())
+                if category and category not in allowed_tool_categories:
+                    allowed_tool_categories.append(category)
+        m["allowed_tool_categories"] = allowed_tool_categories
 
         m["roleDefinition"] = (self.role_edit.toPlainText() or "").strip()
         m["customInstructions"] = (self.custom_edit.toPlainText() or "").strip()
@@ -401,19 +404,19 @@ class ModesPage(QWidget):
             self.mode_combo.blockSignals(False)
         desc = str(m.get("description") or "")
         self.mode_summary_label.setText(
-            f"当前模式：{name or slug} ({slug}) · {len(groups)} 个工具组"
+            f"当前模式：{name or slug} ({slug}) · {len(allowed_tool_categories)} 个允许工具类别"
             + (f"\n{desc}" if desc else "")
         )
 
     def _add_mode(self) -> None:
-        QMessageBox.information(self, "已精简", "当前仅保留 Chat / Agent / Plan / Explore 四个核心模式。")
+        QMessageBox.information(self, "已精简", "当前仅保留 Chat / Channel / Agent / Explore / Plan 五个核心模式。")
 
     def _delete_mode(self) -> None:
         if self._current_index < 0 or self._current_index >= len(self._modes):
             return
         slug = str(self._modes[self._current_index].get("slug") or "")
         if slug in set(get_primary_mode_slugs()):
-            QMessageBox.information(self, "禁止删除", "核心模式固定保留：Chat / Agent / Plan / Explore。")
+            QMessageBox.information(self, "禁止删除", "核心模式固定保留：Chat / Channel / Agent / Explore / Plan。")
             return
         if QMessageBox.question(self, "删除", f"确定删除 {slug}？") != QMessageBox.StandardButton.Yes:
             return

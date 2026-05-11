@@ -58,12 +58,12 @@ class WorkspaceSessionService:
                 "updated_at": getattr(conversation, "updated_at", None).isoformat()
                 if getattr(conversation, "updated_at", None)
                 else "",
-                "enable_mcp": bool(settings.get("enable_mcp", False)),
-                "enable_search": bool(settings.get("enable_search", False)),
                 "show_thinking": bool(settings.get("show_thinking", True)),
             },
         )
         self._write_json(session_dir / "state.json", state.to_dict())
+        self._copy_artifact_files(session_dir, state.to_dict(), work_dir=str(getattr(conversation, "work_dir", "") or "."))
+        self._copy_tool_result_files(session_dir, conversation)
         self._cleanup_legacy_artifacts(session_dir)
 
     def delete_snapshot(self, conversation_id: str, *, work_dir: str | None = None) -> None:
@@ -152,3 +152,54 @@ class WorkspaceSessionService:
                 shutil.rmtree(docs_dir, ignore_errors=True)
             except Exception as exc:
                 logger.debug("Failed to remove legacy workspace session documents dir %s: %s", docs_dir, exc)
+
+    @staticmethod
+    def _copy_artifact_files(session_dir: Path, state_payload: Dict[str, Any], *, work_dir: str) -> None:
+        artifacts = state_payload.get("artifacts") if isinstance(state_payload, dict) else {}
+        if not isinstance(artifacts, dict):
+            return
+        workspace_root = Path(work_dir or ".").expanduser().resolve()
+        target_dir = session_dir / "artifacts"
+        for artifact in artifacts.values():
+            if not isinstance(artifact, dict):
+                continue
+            rel_path = str(artifact.get("content_path") or "").strip()
+            if not rel_path:
+                continue
+            source = Path(rel_path)
+            if not source.is_absolute():
+                source = workspace_root / source
+            if not source.exists() or not source.is_file():
+                continue
+            try:
+                target_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target_dir / source.name)
+            except Exception as exc:
+                logger.debug("Failed to copy artifact file %s: %s", source, exc)
+
+    @staticmethod
+    def _copy_tool_result_files(session_dir: Path, conversation: Conversation) -> None:
+        target_dir = session_dir / "tool-results"
+        seen: set[Path] = set()
+        for message in getattr(conversation, "messages", []) or []:
+            metadata = getattr(message, "metadata", {}) or {}
+            if not isinstance(metadata, dict):
+                continue
+            source_text = str(metadata.get("tool_result_file") or "").strip()
+            if not source_text:
+                continue
+            source = Path(source_text)
+            try:
+                source = source.expanduser().resolve()
+            except Exception:
+                continue
+            if source in seen or not source.is_file():
+                continue
+            seen.add(source)
+            try:
+                target_dir.mkdir(parents=True, exist_ok=True)
+                dest = target_dir / source.name
+                if source != dest.resolve():
+                    shutil.copy2(source, dest)
+            except Exception as exc:
+                logger.debug("Failed to copy tool result file %s: %s", source, exc)

@@ -64,12 +64,6 @@ class ComposerToolbar(QWidget):
         self.thinking_toggle.setVisible(False)
         layout.addWidget(self.thinking_toggle)
 
-        self.mcp_toggle = self._make_icon_toggle(Icons.PLUG, "启用 MCP 工具")
-        layout.addWidget(self.mcp_toggle)
-
-        self.search_toggle = self._make_icon_toggle(Icons.SEARCH, "启用网络搜索")
-        layout.addWidget(self.search_toggle)
-
         self.conv_settings_btn = self._make_icon_button(Icons.SETTINGS, "对话设置 (采样参数/系统提示)")
         self.conv_settings_btn.clicked.connect(self.conversation_settings_requested.emit)
         layout.addWidget(self.conv_settings_btn)
@@ -118,8 +112,6 @@ class ComposerToolbar(QWidget):
         self._set_send_button_icon(is_streaming=is_streaming, style=style)
         if is_streaming:
             self.prompt_optimize_btn.setEnabled(False)
-            self.mcp_toggle.setEnabled(False)
-            self.search_toggle.setEnabled(False)
             return
 
         self.prompt_optimize_btn.setEnabled(True)

@@ -127,16 +127,6 @@ class ConversationPresenter:
             except Exception as e:
                 logger.debug("Failed to sync mode selection during select: %s", e)
 
-            try:
-                conv_settings = conversation.settings or {}
-                default_search, default_mcp = host.input_area.get_mode_default_tool_flags()
-                host.input_area.set_tool_toggles(
-                    enable_mcp=bool(conv_settings.get("enable_mcp", default_mcp)),
-                    enable_search=bool(conv_settings.get("enable_search", default_search)),
-                )
-            except Exception as e:
-                logger.debug("Failed to sync MCP/Search toggles during select: %s", e)
-
             # Update chat header
             host.chat_view.update_header(
                 host.services.conv_service.build_model_ref(conversation, host.providers),
@@ -347,16 +337,6 @@ class ConversationPresenter:
         host.input_area.set_show_thinking(
             bool((host.current_conversation.settings or {}).get('show_thinking', True))
         )
-        try:
-            settings = host.current_conversation.settings or {}
-            default_search, default_mcp = host.input_area.get_mode_default_tool_flags()
-            host.input_area.set_tool_toggles(
-                enable_mcp=bool(settings.get('enable_mcp', default_mcp)),
-                enable_search=bool(settings.get('enable_search', default_search)),
-            )
-        except Exception as e:
-            logger.debug("Failed to sync MCP/Search from conversation settings dialog: %s", e)
-
         conversations = host.services.conv_service.list_all()
         host.sidebar.update_conversations(conversations)
         host.services.app_coordinator.sync_catalog(
@@ -433,12 +413,6 @@ class ConversationPresenter:
     def update_show_thinking(self, enabled: bool) -> None:
         self._apply_toggle('show_thinking', bool(enabled))
 
-    def update_mcp(self, enabled: bool) -> None:
-        self._apply_toggle('enable_mcp', bool(enabled))
-
-    def update_search(self, enabled: bool) -> None:
-        self._apply_toggle('enable_search', bool(enabled))
-
     def update_mode(self, mode_slug: str) -> None:
         host = self._host
         conversation = self.ensure_current_conversation_shell()
@@ -488,6 +462,14 @@ class ConversationPresenter:
 
     def export_current(self, fmt: str = "markdown") -> None:
         self._command_presenter.export_current(fmt)
+
+    def export(self, conversation_id: str, fmt: str = "markdown") -> None:
+        host = self._host
+        conversation = host.services.conv_service.load(str(conversation_id or ""))
+        if conversation is None:
+            QMessageBox.warning(host, "导出失败", "未找到要导出的会话")
+            return
+        self._command_presenter.export_conversation(conversation, fmt)
 
     def handle_command_result(self, result) -> None:
         self._command_presenter.handle_command_result(result)
@@ -561,8 +543,6 @@ class ConversationPresenter:
             mode_slug=str(host.input_area.get_selected_mode_slug() or "chat").strip() or "chat",
             work_dir=str(host.input_area.get_work_dir() or "").strip(),
             show_thinking=bool(host.input_area.is_show_thinking_enabled()),
-            enable_mcp=bool(host.input_area.is_mcp_enabled()),
-            enable_search=bool(host.input_area.is_search_enabled()),
         )
 
     def _resolve_default_provider_model(self, model_ref: str):

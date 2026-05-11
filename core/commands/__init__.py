@@ -1,7 +1,6 @@
 """Command system.
 
-Explicit commands use ``/``. Explicit shell execution uses ``!``.
-Inline mentions use ``#`` for files only.
+Explicit commands use ``/``. Inline mentions use ``#`` for files only.
 
 Extensible via ``~/.PyCat/commands/`` or ``.pycat/commands/``.
 """
@@ -87,7 +86,7 @@ class CommandRegistry:
     def build_input_placeholder(self) -> str:
         slash_hints = "，".join(self.get_placeholder_hints(limit=4))
         command_hint = f"，{slash_hints}" if slash_hints else ""
-        return f"输入消息... (Ctrl+Enter 发送{command_hint}，!command，#file，/skill-name)"
+        return f"输入消息... (Ctrl+Enter 发送{command_hint}，#file，/skill-name)"
 
     def get_menu_presentation(self, name: str) -> Optional[CommandPresentation]:
         cmd = self.get(name)
@@ -98,8 +97,6 @@ class CommandRegistry:
         prefix, cmd_name, _args = parse_command_text(text)
         if not prefix or not cmd_name:
             return False
-        if prefix == "!":
-            return bool(invocation and not invocation.leading_text.strip())
         if self.has(cmd_name):
             return True
         return bool(prefix == "/" and self._resolve_skill_alias(cmd_name, context))
@@ -180,20 +177,6 @@ class CommandRegistry:
                 return None
 
             prefix, cmd_name, _args = parse_command_text(text)
-            if prefix == "!":
-                if invocation.leading_text.strip():
-                    return None
-                shell_command = " ".join(part for part in (cmd_name, invocation.args) if part).strip()
-                if not shell_command:
-                    return None
-                return CommandResult(
-                    action=CommandAction.SHELL_RUN,
-                    data=ShellInvocation(
-                        command_text=shell_command,
-                        source_prefix=prefix,
-                        original_text=str(text or "").strip(),
-                    ),
-                )
             if prefix == "/":
                 skill_name = self._resolve_skill_name(cmd_name, context)
                 if skill_name:
@@ -211,8 +194,7 @@ class CommandRegistry:
                                     "user_input": invocation.surrounding_text,
                                     "invoke_mode": "run",
                                     "mode": spec.mode if spec is not None else "agent",
-                                    "enable_mcp": bool(spec.enable_mcp) if spec is not None else False,
-                                    "enable_search": bool(spec.enable_search) if spec is not None else False,
+                                    "tool_selection": spec.tool_selection.to_dict() if spec is not None else None,
                                 }
                             },
                             source_prefix=prefix,

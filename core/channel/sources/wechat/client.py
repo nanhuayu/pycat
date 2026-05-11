@@ -70,7 +70,7 @@ class WeChatChannelClient:
             "channel_type": "wechat",
             "source": str(getattr(channel, "source", "") or "").strip(),
             "name": str(getattr(channel, "name", "") or "").strip(),
-            "allow_tools": bool(getattr(channel, "allow_tools", True)),
+            "tool_selection": getattr(channel, "tool_selection", None).to_dict() if getattr(channel, "tool_selection", None) is not None else {},
         }
         with httpx.Client(timeout=20.0) as client:
             response = client.post(
@@ -355,7 +355,7 @@ class WeChatChannelClient:
             name=channel.name,
             type=channel.type,
             enabled=channel.enabled,
-            allow_tools=channel.allow_tools,
+            tool_selection=channel.tool_selection,
             source=channel.source,
             description=channel.description,
             agent_id=channel.agent_id,

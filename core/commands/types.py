@@ -13,8 +13,8 @@ class CommandAction(str, Enum):
     CLEAR = "clear"               # Clear conversation / new conversation
     MODE_SWITCH = "mode_switch"   # Switch mode (data = slug)
     PROMPT_RUN = "prompt_run"     # Run a prompt in the normal runtime chain
-    SHELL_RUN = "shell_run"            # Run an explicit shell command in the current turn
     EXPORT = "export"             # Export conversation (data = format)
+    SHELL_RUN = "shell_run"       # Execute an explicit shell command
 
 
 @dataclass(frozen=True)
@@ -24,16 +24,17 @@ class PromptInvocation:
     content: str
     mode_slug: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
-    document_updates: Dict[str, Any] = field(default_factory=dict)
+    artifact_updates: Dict[str, Any] = field(default_factory=dict)
     source_prefix: str = "/"
     original_text: str = ""
 
 
 @dataclass(frozen=True)
 class ShellInvocation:
-    """Structured payload for explicit shell execution."""
+    """Structured payload for explicit ``!`` shell execution."""
 
-    command_text: str
+    command: str
+    cwd: str = ""
     source_prefix: str = "!"
     original_text: str = ""
 

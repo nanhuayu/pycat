@@ -207,8 +207,6 @@ class ConversationService:
         mode: str | None = None,
         work_dir: str | None = None,
         show_thinking: bool | None = None,
-        enable_mcp: bool | None = None,
-        enable_search: bool | None = None,
     ) -> Conversation:
         if mode is not None:
             self.set_mode(conversation, mode)
@@ -218,10 +216,6 @@ class ConversationService:
         runtime_settings: dict[str, Any] = {}
         if show_thinking is not None:
             runtime_settings["show_thinking"] = bool(show_thinking)
-        if enable_mcp is not None:
-            runtime_settings["enable_mcp"] = bool(enable_mcp)
-        if enable_search is not None:
-            runtime_settings["enable_search"] = bool(enable_search)
         if runtime_settings:
             self.set_settings(conversation, runtime_settings)
         return conversation
@@ -244,12 +238,14 @@ class ConversationService:
             model=update.model,
         )
 
-        llm_config = conversation.get_llm_config().with_updates(
-            temperature=update.temperature,
-            top_p=update.top_p,
-            max_tokens=update.max_tokens,
-            stream=update.stream,
-        )
+        llm_config_updates: dict[str, Any] = {"stream": update.stream}
+        if update.temperature is not None:
+            llm_config_updates["temperature"] = update.temperature
+        if update.top_p is not None:
+            llm_config_updates["top_p"] = update.top_p
+        if update.max_tokens is not None:
+            llm_config_updates["max_tokens"] = update.max_tokens
+        llm_config = conversation.get_llm_config().with_updates(**llm_config_updates)
         conversation.set_llm_config(llm_config)
 
         self.set_mode(conversation, update.mode_slug)
@@ -260,12 +256,11 @@ class ConversationService:
             else None,
             "max_turns": None,
             "show_thinking": bool(update.show_thinking),
-            "enable_mcp": bool(update.enable_mcp),
-            "enable_search": bool(update.enable_search),
             "primary_model_ref": str(update.primary_model_ref or "").strip() or None,
             "secondary_model_ref": str(update.secondary_model_ref or "").strip() or None,
             "fallback_model_ref": str(update.fallback_model_ref or "").strip() or None,
             "memory_sources": [str(item).strip() for item in (update.memory_sources or ()) if str(item).strip()],
+            "tool_selection": update.tool_selection.to_dict() if update.tool_selection is not None else None,
             "allowed_channel_sources": [
                 str(item).strip() for item in (update.allowed_channel_sources or ()) if str(item).strip()
             ],
@@ -273,14 +268,9 @@ class ConversationService:
                 str(item).strip() for item in (update.trusted_channel_sources or ()) if str(item).strip()
             ],
             "channel_notice_policy": str(update.channel_notice_policy or "notice").strip().lower() or "notice",
-            "summary_model": None,
-            "summary_include_tool_details": None,
-            "summary_system_prompt": None,
             "prompt_optimizer_model": None,
             "prompt_optimizer_system_prompt": None,
         }
-        if update.tool_policies:
-            settings_payload["tool_policies"] = dict(update.tool_policies)
         self.set_settings(conversation, settings_payload)
         return conversation
 

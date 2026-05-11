@@ -5,9 +5,9 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-from models.conversation import Conversation, Message
+from models.conversation import Conversation, Message, normalize_tool_result
 from models.provider import Provider
-from core.attachments import encode_image_file_to_data_url
+from core.content.attachments import encode_image_file_to_data_url
 from core.prompts.system import PromptManager
 from core.prompts.context_assembler import build_context_messages
 from core.prompts.history import apply_context_window
@@ -51,6 +51,19 @@ def _build_multimodal_content(text_content: Any, images: list[str], provider: Pr
 def _build_message_content(msg: Message, provider: Provider) -> Any:
     text_content = msg.summary if msg.summary else msg.content
     return _build_multimodal_content(text_content, list(getattr(msg, "images", []) or []), provider)
+
+
+def _tool_result_content_for_api(result: Any) -> str:
+    payload = normalize_tool_result(result)
+    content = payload.get("content")
+    if isinstance(content, str):
+        return content
+    if content is None:
+        return ""
+    try:
+        return json.dumps(content, ensure_ascii=False)
+    except Exception:
+        return str(content)
 
 
 def _provider_declares_reasoning_support(provider: Provider) -> bool:
@@ -123,41 +136,13 @@ def _tool_call_summary_lines(tool_calls: Any) -> list[str]:
         func = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
         name = str(func.get("name") or "unknown_tool").strip() or "unknown_tool"
         summary = str(tool_call.get("result_summary") or "").strip()
-        result = str(tool_call.get("result") or "").strip()
+        result = _tool_result_content_for_api(tool_call.get("result")).strip()
         if not summary and result:
             summary = result.splitlines()[0].strip()[:220]
         if summary:
             lines.append(f"- {name}: {summary}")
         else:
             lines.append(f"- {name}")
-    return lines
-
-
-def _tool_call_ids(tool_calls: Any) -> set[str]:
-    ids: set[str] = set()
-    for tool_call in tool_calls or []:
-        if not isinstance(tool_call, dict):
-            continue
-        tc_id = str(tool_call.get("id") or "").strip()
-        if tc_id:
-            ids.add(tc_id)
-    return ids
-
-
-def _matching_tool_result_lines(messages: list[Message], tool_call_ids: set[str]) -> list[str]:
-    if not tool_call_ids:
-        return []
-    lines: list[str] = []
-    for msg in messages:
-        if getattr(msg, "role", "") != "tool":
-            continue
-        if str(getattr(msg, "tool_call_id", "") or "").strip() not in tool_call_ids:
-            continue
-        metadata = getattr(msg, "metadata", {}) or {}
-        name = str(metadata.get("name") or getattr(msg, "tool_call_id", "") or "tool").strip()
-        summary = str(getattr(msg, "summary", "") or getattr(msg, "content", "") or "").strip()
-        first_line = summary.splitlines()[0].strip() if summary else "-"
-        lines.append(f"- {name}: {first_line[:220]}")
     return lines
 
 
@@ -199,19 +184,6 @@ def _recover_assistant_as_user(msg: Message) -> Message | None:
     )
 
 
-def _recover_orphan_tool_as_user(msg: Message) -> Message:
-    metadata = getattr(msg, "metadata", {}) or {}
-    tool_name = str(metadata.get("name") or "").strip()
-    summary = str(getattr(msg, "summary", "") or getattr(msg, "content", "") or "").strip()
-    label = f" from {tool_name}" if tool_name else ""
-    content = f"[Recovered tool output{label}]\n{summary or '-'}"
-    return Message(
-        role="user",
-        content=content,
-        metadata={"synthetic": True, "context_kind": "recovered_tool"},
-    )
-
-
 def _tool_call_has_result(tool_call: Any) -> bool:
     if not isinstance(tool_call, dict):
         return False
@@ -245,33 +217,17 @@ def _sanitize_reasoning_history(
         return messages
 
     sanitized: List[Message] = []
-    recovered_tool_ids: set[str] = set()
     for msg in messages:
-        if msg.role == "tool" and str(getattr(msg, "tool_call_id", "") or "").strip() in recovered_tool_ids:
-            continue
-
         if msg.role == "assistant" and not _assistant_has_reasoning(msg):
             if _is_runtime_error_message(msg):
                 continue
             recovered = _recover_assistant_as_user(msg)
             if recovered is not None:
-                tool_ids = _tool_call_ids(getattr(msg, "tool_calls", None))
-                tool_result_lines = _matching_tool_result_lines(messages, tool_ids)
-                if tool_result_lines:
-                    recovered.content = (
-                        str(recovered.content or "").rstrip()
-                        + "\n\n[Recovered tool outputs for the omitted tool-call step]\n"
-                        + "\n".join(tool_result_lines[:8])
-                    )
-                    recovered_tool_ids.update(tool_ids)
                 sanitized.append(recovered)
             continue
 
         if msg.role == "tool":
-            prev = sanitized[-1] if sanitized else None
-            if not prev or prev.role not in {"assistant", "tool"}:
-                sanitized.append(_recover_orphan_tool_as_user(msg))
-                continue
+            continue
 
         sanitized.append(msg)
 
@@ -329,18 +285,6 @@ def build_api_messages(
     if not has_user:
         logger.warning("build_api_messages: no user messages found — context may be corrupted")
 
-    tool_result_by_id: Dict[str, Any] = {}
-    for m in messages:
-        if m.role != "tool":
-            continue
-        if not m.tool_call_id:
-            continue
-        content = _build_message_content(m, provider)
-        if content is None:
-            content = ""
-        if m.tool_call_id not in tool_result_by_id:
-            tool_result_by_id[m.tool_call_id] = content
-
     for msg in messages:
         if msg.role == "tool":
             continue
@@ -357,10 +301,10 @@ def build_api_messages(
                     continue
                 result = tc.get("result")
                 result_images = list(tc.get("result_images") or [])
+                if result is not None:
+                    result = _tool_result_content_for_api(result)
                 if result_images:
                     result = _build_multimodal_content(result, result_images, provider)
-                if result is None:
-                    result = tool_result_by_id.get(tc_id)
                 if result is None:
                     continue
 

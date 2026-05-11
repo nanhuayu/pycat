@@ -44,12 +44,12 @@ class LoadSkillTool(BaseTool):
         )
 
     @property
-    def group(self) -> str:
-        return "read"
+    def category(self) -> str:
+        return "extension"
 
     @property
-    def category(self) -> str:
-        return "read"
+    def source(self) -> str:
+        return "skill"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -124,12 +124,12 @@ class ReadSkillResourceTool(BaseTool):
         )
 
     @property
-    def group(self) -> str:
-        return "read"
+    def category(self) -> str:
+        return "extension"
 
     @property
-    def category(self) -> str:
-        return "read"
+    def source(self) -> str:
+        return "skill"
 
     @property
     def input_schema(self) -> Dict[str, Any]:

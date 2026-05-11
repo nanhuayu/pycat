@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 
-COMMAND_PREFIXES = ("/", "!")
+COMMAND_PREFIXES = ("/",)
 _COMMAND_NAME_EXTRA_CHARS = {"-", "_", "."}
 
 
@@ -116,3 +116,17 @@ def parse_slash_command(text: str) -> tuple[str, str]:
 
 def is_slash_command(text: str) -> bool:
     return get_command_prefix(text) == "/"
+
+
+def parse_bang_command_text(text: str) -> str | None:
+    """Parse explicit ``!<command>`` shell text.
+
+    ``!`` is intentionally separate from slash commands so completion and
+    skill aliases remain slash-only. Leading whitespace is ignored; inline
+    ``!`` text is treated as normal user content.
+    """
+    raw = str(text or "").strip()
+    if not raw.startswith("!"):
+        return None
+    command = raw[1:].lstrip()
+    return command or None

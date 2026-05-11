@@ -6,20 +6,7 @@ from typing import Any, List
 from models.conversation import Conversation, Message
 
 from core.prompts.history import get_effective_history
-from core.prompts.user_context import (
-    build_conversation_summary,
-    build_environment_info,
-    build_workspace_info,
-)
-from core.state.services.memory_service import MemoryService
-
-
-def _synthetic_context_message(content: str, *, kind: str) -> Message:
-    return Message(
-        role="user",
-        content=content,
-        metadata={"context_kind": kind, "synthetic": True},
-    )
+from core.prompts.providers import ProviderContext, get_default_context_providers
 
 
 def _latest_user_query(conversation: Conversation) -> str:
@@ -30,11 +17,6 @@ def _latest_user_query(conversation: Conversation) -> str:
         if content:
             return content
     return ""
-
-
-def _selected_memory_sources(conversation: Conversation) -> tuple[str, ...] | None:
-    settings = getattr(conversation, "settings", {}) or {}
-    return settings.get("memory_sources")
 
 
 def build_context_messages(
@@ -51,44 +33,20 @@ def build_context_messages(
     2. Historical summary from SessionState
     3. Recent complete conversation turns
     """
-    prompt_cfg = getattr(app_config, "prompts", None)
     work_dir = getattr(conversation, "work_dir", None) or default_work_dir or "."
-    max_depth = max(1, int(getattr(prompt_cfg, "file_tree_max_depth", 2) or 2))
 
     sections: List[Message] = []
-
-    environment_blocks: List[str] = []
-    if bool(getattr(prompt_cfg, "include_environment", True)):
-        environment_blocks.append(build_environment_info(cwd=work_dir))
-
-    workspace_block = build_workspace_info(work_dir, max_depth=max_depth)
-    if workspace_block:
-        environment_blocks.append(workspace_block)
-
-    if environment_blocks:
-        sections.append(
-            _synthetic_context_message(
-                "\n\n".join(block for block in environment_blocks if block.strip()),
-                kind="environment",
-            )
-        )
-
-    summary_block = build_conversation_summary(conversation)
-    if summary_block:
-        sections.append(_synthetic_context_message(summary_block, kind="summary"))
-
-    memory_block = ""
-    try:
-        memory_block = MemoryService.build_prompt_section(
-            conversation.get_state(),
-            _latest_user_query(conversation),
-            work_dir=str(work_dir or "."),
-            sources=_selected_memory_sources(conversation),
-        )
-    except Exception:
-        memory_block = ""
-    if memory_block:
-        sections.append(_synthetic_context_message(memory_block, kind="memory"))
+    provider_context = ProviderContext(
+        conversation=conversation,
+        app_config=app_config,
+        work_dir=str(work_dir or "."),
+        latest_user_query=_latest_user_query(conversation),
+    )
+    for provider in get_default_context_providers():
+        try:
+            sections.extend(provider.build(provider_context))
+        except Exception:
+            continue
 
     recent_history = [
         copy.deepcopy(msg)

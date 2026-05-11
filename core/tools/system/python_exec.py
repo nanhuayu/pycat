@@ -3,6 +3,7 @@ import logging
 import subprocess
 import sys
 import os
+import tempfile
 from typing import Any, Dict
 
 from core.tools.base import BaseTool, ToolContext, ToolResult
@@ -43,7 +44,8 @@ class PythonExecTool(BaseTool):
 
     @property
     def category(self) -> str:
-        return "command"
+        return "execute"
+
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -51,7 +53,7 @@ class PythonExecTool(BaseTool):
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "Python code to execute"},
-                "timeoutSec": {"type": "number", "description": "Timeout seconds (default: 60)"},
+                "timeout": {"type": "number", "description": "Timeout seconds (default: 60)"},
                 "cwd": {"type": "string", "description": "Workspace-relative working directory (default: '.')"},
             },
             "required": ["code"],
@@ -60,7 +62,7 @@ class PythonExecTool(BaseTool):
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         code = arguments.get("code", "")
-        timeout_sec = float(arguments.get("timeoutSec", 60) or 60)
+        timeout_sec = float(arguments.get("timeout", 60) or 60)
         cwd_str = arguments.get("cwd", ".")
         
         if not code or not code.strip():
@@ -83,14 +85,36 @@ class PythonExecTool(BaseTool):
             # Prefer UTF-8 to reduce mojibake across Windows terminals.
             env.setdefault("PYTHONUTF8", "1")
             env.setdefault("PYTHONIOENCODING", "utf-8")
-            proc = subprocess.run(
-                [sys.executable, "-c", code],
-                cwd=str(cwd_path),
-                capture_output=True,
-                text=False,
-                timeout=timeout_sec,
-                env=env,
-            )
+            script_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    suffix=".py",
+                    prefix="pycat_exec_",
+                    encoding="utf-8",
+                    delete=False,
+                ) as handle:
+                    script_path = handle.name
+                    handle.write(code)
+                    if not code.endswith("\n"):
+                        handle.write("\n")
+
+                proc = subprocess.run(
+                    [sys.executable, script_path],
+                    cwd=str(cwd_path),
+                    capture_output=True,
+                    text=False,
+                    timeout=timeout_sec,
+                    env=env,
+                )
+            finally:
+                if script_path:
+                    try:
+                        os.unlink(script_path)
+                    except FileNotFoundError:
+                        pass
+                    except Exception as exc:
+                        logger.debug("Failed to remove python exec temp file %s: %s", script_path, exc)
             return ToolResult(json.dumps(
                 {
                     "exitCode": proc.returncode,

@@ -172,6 +172,11 @@ class SettingsPresenter:
                 update,
             )
 
+            try:
+                host.input_area.set_app_settings(host.app_settings)
+            except Exception as e:
+                logger.debug("Failed to sync updated settings into input area: %s", e)
+
             self.apply_proxy()
             try:
                 host.services.client.set_timeout(float(host.app_settings.get('llm_timeout_seconds', 600.0) or 600.0))
@@ -179,6 +184,7 @@ class SettingsPresenter:
                 logger.debug("Failed to apply updated LLM timeout: %s", e)
 
             host.services.tool_manager.update_permissions(host.app_settings)
+            host.services.tool_manager.refresh_search_config()
             host.services.app_settings_service.save(host.app_settings)
 
             host.services.app_coordinator.remember_current_conversation(

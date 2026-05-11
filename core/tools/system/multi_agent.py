@@ -10,7 +10,7 @@
 
 ``subagent__custom``
     General-purpose default subagent with a custom goal. The parent agent may
-    narrow the child tool groups for focused delegated work.
+    narrow the child tool categories for focused delegated work.
 
 ``attempt_completion``
     Called by the agent to signal that the current sub-task is done.
@@ -55,9 +55,6 @@ class SubagentReadAnalyzeTool(BaseTool):
             "This subagent has read-only access and cannot modify files or run commands."
         )
 
-    @property
-    def group(self) -> str:
-        return "modes"
 
     @property
     def category(self) -> str:
@@ -72,11 +69,11 @@ class SubagentReadAnalyzeTool(BaseTool):
                     "type": "string",
                     "description": "What to analyze or summarize. Be specific about the desired outcome.",
                 },
-                "file_path": {
+                "path": {
                     "type": "string",
                     "description": "Path to the file to read and analyze (optional).",
                 },
-                "file_paths": {
+                "paths": {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Optional list of multiple files to read and analyze together.",
@@ -107,18 +104,18 @@ class SubagentReadAnalyzeTool(BaseTool):
         if not goal:
             return ToolResult("Missing 'goal' for subagent__read_analyze.", is_error=True)
 
-        file_path = str(arguments.get("file_path") or "").strip()
-        file_paths = normalize_string_list(arguments.get("file_paths"))
+        path = str(arguments.get("path") or "").strip()
+        paths = normalize_string_list(arguments.get("paths"))
         input_text = str(arguments.get("input_text") or "").strip()
         output_format = str(arguments.get("output_format") or "").strip() or "structured report"
         focus = str(arguments.get("focus") or "").strip()
         max_length = arguments.get("max_length")
 
         parts: list[str] = [f"Goal: {goal}"]
-        if file_path:
-            parts.append(f"File path: {file_path}")
-        if file_paths:
-            parts.append("File paths:\n" + "\n".join(f"- {path}" for path in file_paths))
+        if path:
+            parts.append(f"File path: {path}")
+        if paths:
+            parts.append("File paths:\n" + "\n".join(f"- {path}" for path in paths))
         if input_text:
             parts.append(f"Content to analyze:\n{input_text}")
         if focus:
@@ -145,7 +142,9 @@ class SubagentReadAnalyzeTool(BaseTool):
             context,
             mode="agent",
             message=message,
-            tool_groups=["read", "modes"],
+            title="Read/analyze",
+            kind="subagent",
+            allowed_tool_categories=["read", "manage"],
             instructions=(
                 "You are a read-only analysis assistant. "
                 "You may read files and analyze text, but you must NOT write files, "
@@ -157,6 +156,94 @@ class SubagentReadAnalyzeTool(BaseTool):
         return ToolResult(
             "Read-analyze subagent scheduled. It will read the specified content and return a structured report."
         )
+
+
+class SubagentExploreTool(BaseTool):
+    """Read-only subagent for broad-to-narrow workspace exploration."""
+
+    @property
+    def name(self) -> str:
+        return "subagent__explore"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Launch a read-only exploration subagent for codebase discovery and architecture Q&A. "
+            "Use this when you need fast broad-to-narrow searches, relevant files/symbols/patterns, "
+            "or implementation risks before planning or editing. The subagent cannot modify files or run commands."
+        )
+
+
+    @property
+    def category(self) -> str:
+        return "delegate"
+
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "goal": {
+                    "type": "string",
+                    "description": "Exploration goal. Be specific about the area, behavior, or architecture question.",
+                },
+                "focus": {
+                    "type": "string",
+                    "description": "Optional focus such as files, symbols, risks, dependencies, or test coverage.",
+                },
+                "thoroughness": {
+                    "type": "string",
+                    "enum": ["quick", "medium", "thorough"],
+                    "description": "How deep the exploration should be. Default: medium.",
+                },
+                "output_format": {
+                    "type": "string",
+                    "description": "Desired format, e.g. findings with file paths, implementation map, or risk report.",
+                },
+            },
+            "required": ["goal"],
+            "additionalProperties": False,
+        }
+
+    async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
+        goal = str(arguments.get("goal") or "").strip()
+        if not goal:
+            return ToolResult("Missing 'goal' for subagent__explore.", is_error=True)
+
+        focus = str(arguments.get("focus") or "").strip()
+        thoroughness = str(arguments.get("thoroughness") or "medium").strip().lower() or "medium"
+        if thoroughness not in {"quick", "medium", "thorough"}:
+            thoroughness = "medium"
+        output_format = str(arguments.get("output_format") or "").strip() or "evidence-backed findings with file paths and symbols"
+
+        parts = [f"Exploration goal: {goal}", f"Thoroughness: {thoroughness}"]
+        if focus:
+            parts.append(f"Focus: {focus}")
+
+        instructions = (
+            "You are a read-only codebase explorer. Start broad, then narrow to the most relevant files and symbols. "
+            "Use search and file reads only; do NOT write files, execute commands, or mutate state. "
+            "Return concrete file paths, symbols, patterns, risks, and open questions. "
+            "Do not create todos, memory, or artifacts unless the parent explicitly requested it."
+        )
+        message = build_capability_subtask_message(
+            task=goal,
+            input_text="\n\n".join(parts),
+            output_format=output_format,
+            instructions=instructions,
+        )
+
+        schedule_subtask(
+            context,
+            mode="explore",
+            message=message,
+            title="Explore",
+            kind="subagent",
+            allowed_tool_categories=["read", "search", "manage"],
+            instructions=instructions,
+        )
+
+        return ToolResult("Explore subagent scheduled. It will inspect the workspace read-only and return evidence-backed findings.")
 
 
 class SubagentSearchTool(BaseTool):
@@ -178,9 +265,6 @@ class SubagentSearchTool(BaseTool):
             "The subagent has search and read access, but cannot modify files or run commands."
         )
 
-    @property
-    def group(self) -> str:
-        return "modes"
 
     @property
     def category(self) -> str:
@@ -231,7 +315,8 @@ class SubagentSearchTool(BaseTool):
             output_format=output_format,
             instructions=(
                 "You are a research assistant. "
-                "You may search the web and read files to gather information, "
+                "Use web_search directly for web research and read_file/search_content for local evidence. "
+                "Do not delegate again to subagent__search unless the parent explicitly asks for nested delegation. "
                 "but you must NOT write files, execute commands, or modify the workspace. "
                 "Cite sources where possible. Return a concise, structured report to the parent agent."
             ),
@@ -241,11 +326,14 @@ class SubagentSearchTool(BaseTool):
             context,
             mode="agent",
             message=message,
+            title="Search",
+            kind="subagent",
             max_turns=max_turns,
-            tool_groups=["search", "read", "modes"],
+            allowed_tool_categories=["search", "read", "manage"],
             instructions=(
                 "You are a research assistant. "
-                "You may search the web and read files to gather information, "
+                "Use web_search directly for web research and read_file/search_content for local evidence. "
+                "Do not delegate again to subagent__search unless the parent explicitly asks for nested delegation. "
                 "but you must NOT write files, execute commands, or modify the workspace. "
                 "Cite sources where possible. Return a concise, structured report to the parent agent."
             ),
@@ -272,7 +360,7 @@ class SubagentCustomTool(BaseTool):
     """Launch a general-purpose subagent with a custom goal.
 
     Unlike the dedicated read_analyze and search subagents, the parent agent
-    decides which tools the subagent can use via ``tool_groups``.
+    decides which tools the subagent can use via request-time tool selection.
     """
 
     @property
@@ -285,13 +373,10 @@ class SubagentCustomTool(BaseTool):
             "Launch a general-purpose subagent with a custom goal. "
             "Use this when the task requires tools beyond reading and searching, "
             "such as editing files, running commands, or using MCP tools. "
-            "The parent agent must explicitly narrow tool_groups and expected output. "
+            "The parent agent must explicitly narrow allowed tool categories and expected output. "
             "Prefer capability__* tools for standard tasks (translation, summary, title extract, etc.)."
         )
 
-    @property
-    def group(self) -> str:
-        return "modes"
 
     @property
     def category(self) -> str:
@@ -310,13 +395,13 @@ class SubagentCustomTool(BaseTool):
                     "type": "string",
                     "description": "Detailed instructions for the subagent, including constraints and expected output format.",
                 },
-                "tool_groups": {
+                "allowed_tool_categories": {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "Allowed tool groups for the subagent. "
-                        "Default: ['read', 'modes']. "
-                        "Common groups: read, edit, command, search, mcp, browser."
+                        "Allowed tool categories for the subagent. "
+                        "Default: ['read', 'manage']. "
+                        "Common categories: read, search, edit, execute, manage, delegate, extension, mcp."
                     ),
                 },
                 "model": {
@@ -341,13 +426,13 @@ class SubagentCustomTool(BaseTool):
         model_ref = str(arguments.get("model") or "").strip()
         max_turns = self._parse_max_turns(arguments.get("max_turns"))
 
-        tool_groups = normalize_string_list(arguments.get("tool_groups"))
-        if not tool_groups:
-            tool_groups = ["read", "modes"]
+        allowed_tool_categories = normalize_string_list(arguments.get("allowed_tool_categories"))
+        if not allowed_tool_categories:
+            allowed_tool_categories = ["read", "manage"]
         else:
-            tool_groups = [g for g in tool_groups if g]
-            if "modes" not in tool_groups:
-                tool_groups.append("modes")
+            allowed_tool_categories = [g for g in allowed_tool_categories if g]
+            if "manage" not in allowed_tool_categories:
+                allowed_tool_categories.append("manage")
 
         input_parts: list[str] = [f"Goal: {goal}"]
         if instructions:
@@ -363,14 +448,16 @@ class SubagentCustomTool(BaseTool):
             context,
             mode="agent",
             message=message,
+            title="Custom",
+            kind="subagent",
             model_ref=model_ref,
             max_turns=max_turns,
-            tool_groups=tool_groups,
+            allowed_tool_categories=allowed_tool_categories,
             instructions=instructions,
         )
 
         return ToolResult(
-            f"Custom subagent scheduled with tools: {', '.join(tool_groups)}. "
+            f"Custom subagent scheduled with allowed tool categories: {', '.join(allowed_tool_categories)}. "
             "Its result will be returned to the parent agent."
         )
 
@@ -402,13 +489,10 @@ class AttemptCompletionTool(BaseTool):
             "the result to the parent agent."
         )
 
-    @property
-    def group(self) -> str:
-        return "modes"
 
     @property
     def category(self) -> str:
-        return "read"
+        return "manage"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -457,13 +541,10 @@ class SwitchModeTool(BaseTool):
             "Use when the user's request is better suited for another mode."
         )
 
-    @property
-    def group(self) -> str:
-        return "modes"
 
     @property
     def category(self) -> str:
-        return "read"
+        return "manage"
 
     @property
     def input_schema(self) -> Dict[str, Any]:

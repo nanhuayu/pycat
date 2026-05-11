@@ -5,9 +5,9 @@ Main application window - Chinese UI with fixed streaming
 import logging
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QSplitter, QMenu
+    QSplitter, QMenu, QToolButton
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction
 from typing import Optional
 
@@ -23,6 +23,7 @@ from .widgets.sidebar import Sidebar
 from .widgets.chat_view import ChatView
 from .widgets.input_area import InputArea
 from .widgets.stats_panel import StatsPanel
+from .utils.icon_manager import Icons
 
 from .presenters.conversation_presenter import ConversationPresenter
 from .presenters.message_presenter import MessagePresenter
@@ -109,6 +110,7 @@ class MainWindow(QMainWindow):
         self.sidebar.import_conversation.connect(self.conversation_presenter.import_from_file)
         self.sidebar.delete_conversation.connect(self.conversation_presenter.delete)
         self.sidebar.duplicate_conversation.connect(self.conversation_presenter.duplicate)
+        self.sidebar.export_conversation.connect(self.conversation_presenter.export)
         
         # Chat area
         chat_widget = QWidget()
@@ -134,8 +136,6 @@ class MainWindow(QMainWindow):
         self.input_area.conversation_settings_requested.connect(self.conversation_presenter.open_settings)
         self.input_area.provider_settings_requested.connect(self.settings_presenter.open_provider_settings)
         self.input_area.show_thinking_changed.connect(self.conversation_presenter.update_show_thinking)
-        self.input_area.mcp_toggled.connect(self.conversation_presenter.update_mcp)
-        self.input_area.search_toggled.connect(self.conversation_presenter.update_search)
         self.input_area.prompt_optimize_requested.connect(self.message_presenter.request_prompt_optimization)
         self.input_area.prompt_optimize_cancel_requested.connect(self.message_presenter.cancel_prompt_optimization)
         self.input_area.provider_model_changed.connect(self.conversation_presenter.update_provider_model)
@@ -180,8 +180,9 @@ class MainWindow(QMainWindow):
         try:
             mode_slug = self.input_area.get_selected_mode_slug()
             mode = self.input_area.get_mode_manager().get(mode_slug)
+            from core.tools.catalog import ToolSelectionPolicy
             return self.services.tool_manager.registry.get_all_tool_schemas(
-                allowed_groups=mode.group_names(),
+                tool_selection=ToolSelectionPolicy.from_categories(mode.tool_category_names()),
             )
         except Exception as e:
             logger.debug("Failed to get tool schemas for input: %s", e)
@@ -197,6 +198,15 @@ class MainWindow(QMainWindow):
     def _create_menu_bar(self):
         menubar = self.menuBar()
         menubar.clear()
+        settings_btn = QToolButton(menubar)
+        settings_btn.setObjectName("title_settings_btn")
+        settings_btn.setIcon(Icons.get(Icons.SETTINGS, scale_factor=0.85))
+        settings_btn.setIconSize(QSize(18, 18))
+        settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        settings_btn.setToolTip("打开设置")
+        settings_btn.clicked.connect(self.settings_presenter.open_settings)
+        menubar.setCornerWidget(settings_btn, Qt.Corner.TopRightCorner)
+
         compact_presentation = self.services.command_registry.get_menu_presentation("compact")
         clear_presentation = self.services.command_registry.get_menu_presentation("clear")
         

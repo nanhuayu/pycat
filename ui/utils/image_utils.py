@@ -19,7 +19,7 @@ from PyQt6.QtCore import QByteArray, QBuffer, QIODevice
 from PyQt6.QtGui import QImage, QPixmap, QGuiApplication
 
 # Re-export for convenience (actual implementation lives in core attachments)
-from core.attachments import encode_image_file_to_data_url
+from core.content.attachments import encode_image_file_to_data_url
 
 
 logger = logging.getLogger(__name__)

@@ -13,25 +13,28 @@ This module now focuses on orchestration:
 """
 from __future__ import annotations
 
-import copy
 from dataclasses import replace
 import logging
 import threading
+import time
+import uuid
 from typing import Any, Callable, Optional
+from core.tools.catalog import ToolSelectionPolicy
 
 from models.conversation import Conversation, Message
+from models.conversation import get_tool_call_result, normalize_tool_result, set_tool_call_result
 from models.provider import Provider
 
 from core.llm.client import LLMClient
 from core.tools.manager import ToolManager
 from core.tools.base import ToolResult
-from core.tools.result_pipeline import ToolResultPipeline, ResultHandle
+from core.tools.result_pipeline import ToolResultPipeline
 from core.config import load_app_config, AppConfig
-from core.state.services.task_service import TaskService
-from core.state.services.task_planning_service import TaskPlanningService
 from core.task.types import (
     RunPolicy,
     SubTaskOutcome,
+    SubtaskTrace,
+    SubtaskTraceStatus,
     TaskEvent,
     TaskEventKind,
     TaskResult,
@@ -82,9 +85,6 @@ _REPETITION_WARNING = (
     "summarize a single long source with `capability__summarize_text`, delegate complex evidence with `subagent__custom` or `subagent__read_analyze`, "
     "or call `attempt_completion` if done."
 )
-
-_STATE_BOOTSTRAP_MODES = frozenset({"agent", "code", "debug", "plan", "orchestrator"})
-
 
 class Task:
     """Unified think-act tool loop coordinator.
@@ -203,7 +203,6 @@ class Task:
 
         emitter.emit(TaskEventKind.TURN_START, turn=turn_context.turn, detail=f"Turn {turn_context.turn}/{turns_limit}")
         turn_context.state = TaskTurnState.PRE_TURN_HOOKS
-        self._bootstrap_session_state(conversation, policy, turn_context.turn)
         for hook in self._pre_turn_hooks:
             try:
                 hook(conversation, turn_context.turn, policy)
@@ -422,17 +421,48 @@ class Task:
             subtask_req = (context.state or {}).get("_pending_subtask")
             if subtask_req and isinstance(subtask_req, dict):
                 context.state.pop("_pending_subtask", None)
+                if not subtask_req.get("id"):
+                    subtask_req["id"] = f"subtask-{uuid.uuid4().hex[:12]}"
+                preview_trace = SubtaskTrace(
+                    id=str(subtask_req.get("id") or ""),
+                    kind=str(subtask_req.get("kind") or "subagent"),
+                    name=self._subtask_display_name(subtask_req, str(subtask_req.get("mode") or "agent")),
+                    title=self._subtask_display_name(subtask_req, str(subtask_req.get("mode") or "agent")),
+                    goal=self._subtask_goal(subtask_req),
+                    mode=str(subtask_req.get("mode") or "agent"),
+                    depth=int(subtask_req.get("depth") or 0),
+                    metadata={
+                        "capability_id": str(subtask_req.get("capability_id") or ""),
+                        "capabilities": list(subtask_req.get("capabilities") or []),
+                        "tool_call_id": tool_call_id or "",
+                        "parent_message_id": str(getattr(assistant_msg, "id", "") or ""),
+                        "parent_tool_call_id": tool_call_id or "",
+                        "root_tool_call_id": tool_call_id or "",
+                    },
+                )
+                if tool_call_id:
+                    subtask_req["tool_call_id"] = tool_call_id
+                    subtask_req["parent_message_id"] = str(getattr(assistant_msg, "id", "") or "")
+                    subtask_req["parent_tool_call_id"] = tool_call_id
+                    subtask_req["root_tool_call_id"] = tool_call_id
+                    self._attach_subtask_trace(assistant_msg, tool_call_id, preview_trace)
+                    self._publish_subtask_trace_event(
+                        on_event,
+                        preview_trace,
+                        turn=turn_context.turn,
+                        detail=f"Subtask {preview_trace.title} started.",
+                    )
                 subtask_outcome = await self._run_subtask(
                     subtask_req=subtask_req,
                     provider=provider,
                     conversation=conversation,
-                    on_event=on_event,
-                    on_token=on_token,
-                    on_thinking=on_thinking,
                     approval_callback=approval_callback,
                     questions_callback=questions_callback,
                     cancel_event=cancel_event,
+                    on_event=on_event,
+                    turn=turn_context.turn,
                 )
+                self._attach_subtask_trace(assistant_msg, tool_call_id, subtask_outcome.trace)
                 tool_result = ToolResult(subtask_outcome.message)
                 result_text = self._tool_result_to_string(tool_result)
                 tool_is_error = bool(getattr(tool_result, "is_error", False))
@@ -453,17 +483,23 @@ class Task:
             if (context.state or {}).get("_task_completed"):
                 completion_result = str((context.state or {}).get("_completion_result") or result_text or "").strip()
                 completion_command = str((context.state or {}).get("_completion_command") or "").strip()
-                self._complete_session_tasks(context, completion_result or result_text, conversation)
                 self._tool_executor.sync_state(conversation, context)
-                tool_msg = self._build_tool_message(
+                result_block = self._build_tool_result_block(
                     conversation=conversation,
                     tool_name=tool_name,
                     tool_call_id=tool_call_id,
                     result=tool_result,
                     summary="Completion acknowledged.",
                 )
-                emitter.emit(TaskEventKind.STEP, turn=turn_context.turn, data=tool_msg)
-                conversation.add_message(tool_msg)
+                emitter.emit(TaskEventKind.STEP, turn=turn_context.turn, data=result_block["event"])
+                conversation.attach_tool_result(
+                    tool_call_id,
+                    result_block["result"],
+                    summary=str(result_block["result"].get("summary") or ""),
+                    metadata=dict(result_block["result"].get("metadata") or {}),
+                    images=list(result_block.get("images") or []),
+                    state_snapshot=result_block.get("state_snapshot") if isinstance(result_block.get("state_snapshot"), dict) else None,
+                )
 
                 final_msg = self._build_completion_message(
                     conversation=conversation,
@@ -477,7 +513,7 @@ class Task:
                 return TurnOutcome(kind=TurnOutcomeKind.COMPLETE, context=turn_context, final_message=final_msg)
 
             self._tool_executor.sync_state(conversation, context)
-            tool_msg = self._build_tool_message(
+            result_block = self._build_tool_result_block(
                 conversation=conversation,
                 tool_name=tool_name,
                 tool_call_id=tool_call_id,
@@ -494,12 +530,20 @@ class Task:
                 )
                 conversation.mode = switched_mode
                 try:
-                    tool_msg.metadata["mode_switch"] = switched_mode
+                    result_block["result"].setdefault("metadata", {})["mode_switch"] = switched_mode
+                    result_block["event"].setdefault("metadata", {})["mode_switch"] = switched_mode
                 except Exception as exc:
-                    logger.debug("Failed to annotate tool message with mode switch: %s", exc)
+                    logger.debug("Failed to annotate tool result with mode switch: %s", exc)
 
-            emitter.emit(TaskEventKind.STEP, turn=turn_context.turn, data=tool_msg)
-            conversation.add_message(tool_msg)
+            emitter.emit(TaskEventKind.STEP, turn=turn_context.turn, data=result_block["event"])
+            conversation.attach_tool_result(
+                tool_call_id,
+                result_block["result"],
+                summary=str(result_block["result"].get("summary") or ""),
+                metadata=dict(result_block["result"].get("metadata") or {}),
+                images=list(result_block.get("images") or []),
+                state_snapshot=result_block.get("state_snapshot") if isinstance(result_block.get("state_snapshot"), dict) else None,
+            )
 
             if next_policy is not None:
                 turn_context.nudge_count = 0
@@ -543,9 +587,15 @@ class Task:
         latest_tool_summary = ""
         try:
             for msg in reversed(getattr(conversation, "messages", []) or []):
-                if getattr(msg, "role", "") != "tool":
+                if getattr(msg, "role", "") != "assistant":
                     continue
-                latest_tool_summary = str(getattr(msg, "summary", "") or getattr(msg, "content", "") or "").strip()
+                for tool_call in reversed(getattr(msg, "tool_calls", None) or []):
+                    if not isinstance(tool_call, dict) or "result" not in tool_call:
+                        continue
+                    result = normalize_tool_result(tool_call.get("result"))
+                    latest_tool_summary = str(result.get("summary") or result.get("content") or "").strip()
+                    if latest_tool_summary:
+                        break
                 if latest_tool_summary:
                     break
         except Exception:
@@ -569,7 +619,7 @@ class Task:
         self._attach_state_snapshot(conversation, final_msg)
         return final_msg
 
-    def _build_tool_message(
+    def _build_tool_result_block(
         self,
         *,
         conversation: Conversation,
@@ -577,13 +627,22 @@ class Task:
         tool_call_id: Optional[str],
         result: ToolResult | str,
         summary: Optional[str] = None,
-    ) -> Message:
+    ) -> dict[str, Any]:
         result_text = self._tool_result_to_string(result)
 
-        # Lazy-init pipeline per conversation work_dir
-        if self._result_pipeline is None:
+        # Lazy-init pipeline per conversation session. Tool outputs belong to
+        # the same workspace session as artifacts/state instead of the process cwd.
+        pipeline_work_dir = str(getattr(conversation, "work_dir", "") or ".")
+        pipeline_session_id = str(getattr(conversation, "id", "") or "default")
+        pipeline_key = (str(pipeline_work_dir), str(pipeline_session_id))
+        current_key = getattr(self._result_pipeline, "_pycat_key", None)
+        if self._result_pipeline is None or current_key != pipeline_key:
             work_dir = str(getattr(conversation, "work_dir", "") or ".")
-            self._result_pipeline = ToolResultPipeline(work_dir)
+            self._result_pipeline = ToolResultPipeline(work_dir, conversation_id=getattr(conversation, "id", None))
+            try:
+                setattr(self._result_pipeline, "_pycat_key", pipeline_key)
+            except Exception:
+                pass
 
         handle = self._result_pipeline.process(
             tool_name=tool_name,
@@ -592,37 +651,60 @@ class Task:
             seq_id=int(conversation.current_seq_id() or 0) + 1,
         )
 
-        tool_msg = Message(role="tool", content=handle.display, tool_call_id=tool_call_id)
-        try:
-            tool_msg.seq_id = conversation.next_seq_id()
-        except Exception as e:
-            logger.warning("Failed to assign seq_id to tool message: %s", e)
-
         tool_images = self._extract_tool_images(result)
-        if tool_images:
-            tool_msg.images = tool_images
+        metadata: dict[str, Any] = {"name": tool_name}
 
         try:
-            tool_msg.metadata = tool_msg.metadata or {}
-            tool_msg.metadata["name"] = tool_name
+            subtask = self._subtask_for_tool_call(conversation, tool_call_id)
+            if subtask and (str(tool_name or '').startswith('subagent__') or str(tool_name or '').startswith('capability__')):
+                metadata["subtask_status"] = str(subtask.get("status") or "")
+                metadata["subtask_summary"] = str(subtask.get("final_message") or subtask.get("error") or subtask.get("goal") or "")[:220]
             if handle.full_path:
-                tool_msg.metadata["tool_result_file"] = handle.full_path
-                tool_msg.metadata["tool_result_chars"] = handle.total_chars
-                tool_msg.metadata["tool_result_truncated"] = True
+                metadata["tool_result_file"] = handle.full_path
+                metadata["tool_result_chars"] = handle.total_chars
+                metadata["tool_result_truncated"] = True
             if handle.hint:
-                tool_msg.metadata["tool_result_hint"] = handle.hint
+                metadata["tool_result_hint"] = handle.hint
             if handle.is_processed:
-                tool_msg.metadata["tool_result_strategy"] = handle.strategy
+                metadata["tool_result_strategy"] = handle.strategy
         except Exception as e:
             logger.debug("Failed to set tool metadata: %s", e)
 
         try:
-            tool_msg.summary = summary or self._summarize_tool_result(tool_name, handle.display)
+            result_summary = summary or self._summarize_tool_result(tool_name, handle.display)
         except Exception as e:
             logger.debug("Failed to summarize tool result for %s: %s", tool_name, e)
+            result_summary = summary or ""
 
-        self._attach_state_snapshot(conversation, tool_msg)
-        return tool_msg
+        state_snapshot: dict[str, Any] | None = None
+        try:
+            state_snapshot = conversation.get_state().to_dict()
+        except Exception as exc:
+            logger.debug("Failed to snapshot state for tool result: %s", exc)
+
+        result_payload: dict[str, Any] = {
+            "type": "tool_result",
+            "content": handle.display,
+            "summary": result_summary,
+            "metadata": metadata,
+        }
+        if tool_images:
+            result_payload["images"] = list(tool_images)
+
+        return {
+            "tool_call_id": str(tool_call_id or ""),
+            "tool_name": tool_name,
+            "result": result_payload,
+            "images": list(tool_images),
+            "state_snapshot": state_snapshot,
+            "event": {
+                "role": "tool_result",
+                "tool_call_id": str(tool_call_id or ""),
+                "tool_name": tool_name,
+                "summary": result_summary,
+                "metadata": dict(metadata),
+            },
+        }
 
     @staticmethod
     def _is_max_turns_failure_message(message: str, metadata: dict[str, Any] | None = None) -> bool:
@@ -630,27 +712,6 @@ class Task:
             return True
         text = str(message or "")
         return "任务循环已达到最大轮数" in text or "未收到 `attempt_completion`" in text
-
-    def _complete_session_tasks(self, context: Any, completion_text: str, conversation: Conversation) -> None:
-        try:
-            from models.state import SessionState
-
-            state = SessionState.from_dict(
-                {
-                    k: v for k, v in (getattr(context, "state", {}) or {}).items()
-                    if not str(k).startswith("_")
-                }
-            )
-            updated = TaskService.complete_active_tasks(
-                state,
-                int(conversation.current_seq_id() or 0),
-                reason=completion_text,
-            )
-            if not updated:
-                return
-            context.state = state.to_dict()
-        except Exception as exc:
-            logger.debug("Failed to auto-complete session tasks: %s", exc)
 
     @staticmethod
     def _tool_result_to_string(result: ToolResult | str) -> str:
@@ -722,7 +783,7 @@ class Task:
                 return ("State updated: " + "; ".join(useful[:2]))[:220]
             return "State updated."
 
-        if tool_name == "manage_document":
+        if tool_name in {"manage_todo", "manage_artifact"}:
             return lines[0][:220]
 
         if tool_name == "skill__load":
@@ -738,6 +799,160 @@ class Task:
             return "Completion acknowledged."
 
         return lines[0][:220]
+
+    @staticmethod
+    def _attach_subtask_trace(
+        assistant_msg: Message,
+        tool_call_id: str | None,
+        trace: SubtaskTrace | None,
+    ) -> None:
+        if trace is None:
+            return
+        try:
+            payload = trace.to_dict()
+            if tool_call_id:
+                payload["tool_call_id"] = tool_call_id
+                payload["parent_tool_call_id"] = tool_call_id
+                payload["root_tool_call_id"] = tool_call_id
+            parent_message_id = ""
+            try:
+                parent_message_id = str(getattr(assistant_msg, "id", "") or "")
+            except Exception:
+                parent_message_id = ""
+            if parent_message_id:
+                payload["parent_message_id"] = parent_message_id
+            metadata_payload = dict(payload.get("metadata") or {})
+            if tool_call_id:
+                metadata_payload.setdefault("tool_call_id", tool_call_id)
+                metadata_payload.setdefault("parent_tool_call_id", tool_call_id)
+                metadata_payload.setdefault("root_tool_call_id", tool_call_id)
+            if parent_message_id:
+                metadata_payload.setdefault("parent_message_id", parent_message_id)
+            payload["metadata"] = metadata_payload
+            assistant_msg.metadata = assistant_msg.metadata or {}
+            assistant_msg.metadata.pop("subtasks", None)
+            assistant_msg.metadata.pop("subtasks_by_call", None)
+            if tool_call_id and assistant_msg.tool_calls:
+                for tool_call in assistant_msg.tool_calls:
+                    if tool_call.get("id") != tool_call_id:
+                        continue
+                    current = get_tool_call_result(tool_call)
+                    metadata = dict(current.get("metadata") or {})
+                    if tool_call_id:
+                        metadata["tool_call_id"] = tool_call_id
+                        metadata["parent_tool_call_id"] = tool_call_id
+                        metadata["root_tool_call_id"] = str(metadata.get("root_tool_call_id") or tool_call_id)
+                    if parent_message_id:
+                        metadata["parent_message_id"] = parent_message_id
+                    result_payload = {
+                        "type": "subtask_run",
+                        "content": str(trace.final_message or trace.error or trace.goal or ""),
+                        "summary": str(trace.final_message or trace.error or trace.goal or "")[:220],
+                        "metadata": metadata,
+                        "run": payload,
+                    }
+                    set_tool_call_result(tool_call, result_payload)
+                    break
+        except Exception as exc:
+            logger.debug("Failed to attach subtask trace: %s", exc)
+
+    @staticmethod
+    def _publish_subtask_trace_event(
+        on_event,
+        trace: SubtaskTrace,
+        *,
+        turn: int = 0,
+        detail: str = "",
+        source: str = "subtask",
+    ) -> None:
+        if on_event is None:
+            return
+        try:
+            payload = trace.to_dict()
+            metadata = payload.get("metadata") or {}
+            parent_message_id = str(payload.get("parent_message_id") or metadata.get("parent_message_id") or "")
+            parent_tool_call_id = str(payload.get("parent_tool_call_id") or payload.get("tool_call_id") or metadata.get("parent_tool_call_id") or metadata.get("tool_call_id") or "")
+            root_tool_call_id = str(payload.get("root_tool_call_id") or metadata.get("root_tool_call_id") or parent_tool_call_id)
+            on_event(
+                TaskEvent(
+                    kind=TaskEventKind.STEP,
+                    turn=int(turn or 0),
+                    detail=detail or f"Subtask {trace.title or trace.name} updated.",
+                    data={"subtask": payload},
+                    source=source,
+                    subtask_id=trace.id,
+                    parent_message_id=parent_message_id,
+                    parent_tool_call_id=parent_tool_call_id,
+                    root_tool_call_id=root_tool_call_id,
+                )
+            )
+        except Exception as exc:
+            logger.debug("Failed to publish subtask trace event: %s", exc)
+
+    @staticmethod
+    def _update_running_subtask_thinking(trace: SubtaskTrace, thinking: str) -> None:
+        text = str(thinking or "")
+        if not text:
+            return
+        try:
+            for item in reversed(trace.messages):
+                if isinstance(item, dict) and item.get("role") == "assistant":
+                    item["thinking"] = text
+                    return
+            pending = Message(role="assistant", content="")
+            pending.metadata["subtask_streaming"] = True
+            pending.thinking = text
+            trace.add_message(pending)
+        except Exception as exc:
+            logger.debug("Failed to update running subtask thinking: %s", exc)
+
+    @staticmethod
+    def _subtask_for_tool_call(conversation: Conversation, tool_call_id: str | None) -> dict[str, Any] | None:
+        if not tool_call_id:
+            return None
+        try:
+            for message in reversed(getattr(conversation, "messages", []) or []):
+                if getattr(message, "role", "") != "assistant":
+                    continue
+                for tool_call in getattr(message, "tool_calls", []) or []:
+                    if str(tool_call.get("id") or "") != str(tool_call_id):
+                        continue
+                    result = get_tool_call_result(tool_call)
+                    run = result.get("run")
+                    if isinstance(run, dict):
+                        return dict(run)
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _subtask_display_name(subtask_req: dict[str, Any], mode_slug: str) -> str:
+        title = str(subtask_req.get("title") or "").strip()
+        if title:
+            return title
+        capability_id = str(subtask_req.get("capability_id") or "").strip()
+        if capability_id:
+            return capability_id
+        return str(mode_slug or "subtask").strip() or "subtask"
+
+    @staticmethod
+    def _subtask_goal(subtask_req: dict[str, Any]) -> str:
+        goal = str(subtask_req.get("goal") or "").strip()
+        if goal:
+            return goal
+        message = str(subtask_req.get("message") or "").strip()
+        for line in message.splitlines():
+            cleaned = line.strip(" -\t")
+            if cleaned:
+                return cleaned[:240]
+        return "Run delegated task"
+
+    def _record_subtask_event(self, trace: SubtaskTrace, event: TaskEvent) -> None:
+        if event.kind == TaskEventKind.STEP and isinstance(event.data, Message):
+            trace.add_message(event.data)
+            return
+        if event.kind == TaskEventKind.ERROR:
+            trace.error = str(event.data or event.detail or "").strip()
 
     def _build_switched_policy(
         self,
@@ -757,16 +972,16 @@ class Task:
             base_delay=float(getattr(current_policy.retry, "base_delay", 1.0) or 1.0),
             backoff_factor=float(getattr(current_policy.retry, "backoff_factor", 2.0) or 2.0),
         )
-        global_permissions = None
+        tool_permissions = None
         try:
-            global_permissions = load_app_config().permissions
+            tool_permissions = load_app_config().permissions
         except Exception:
             pass
         next_policy = build_run_policy(
             mode_slug=str(next_mode or "chat") or "chat",
             mode_manager=mode_manager,
             retry_config=retry_cfg,
-            global_permissions=global_permissions,
+            tool_permissions=tool_permissions,
         )
         return replace(
             next_policy,
@@ -775,140 +990,55 @@ class Task:
             max_tokens=current_policy.max_tokens,
         )
 
-    def _bootstrap_session_state(self, conversation: Conversation, policy: RunPolicy, turn: int) -> None:
-        """Ensure agent-like modes start with usable todo/plan/memory state."""
-        mode_slug = str(getattr(policy, "mode", "chat") or "chat").strip().lower()
-        if mode_slug not in _STATE_BOOTSTRAP_MODES:
-            return
-
-        try:
-            state = conversation.get_state()
-        except Exception:
-            return
-
-        changed = False
-
-        try:
-            latest_user = ""
-            for msg in reversed(getattr(conversation, "messages", []) or []):
-                if getattr(msg, "role", "") == "user":
-                    latest_user = (getattr(msg, "content", "") or "").strip()
-                    if latest_user:
-                        break
-        except Exception:
-            latest_user = ""
-
-        try:
-            if not state.get_active_tasks() and latest_user:
-                current_seq = int(conversation.current_seq_id() or 0)
-                seeded_tasks = TaskPlanningService.build_bootstrap_tasks(
-                    request_text=latest_user,
-                    mode_slug=mode_slug,
-                    current_seq=current_seq,
-                )
-                if seeded_tasks:
-                    state.tasks.extend(seeded_tasks)
-                    changed = True
-        except Exception as e:
-            logger.debug("Failed to seed session task: %s", e)
-
-        try:
-            if TaskService.ensure_active_task(state, int(conversation.current_seq_id() or 0)):
-                changed = True
-        except Exception as e:
-            logger.debug("Failed to promote active session task: %s", e)
-
-        try:
-            plan_doc = state.ensure_document("plan")
-            if not (plan_doc.content or "").strip() and latest_user:
-                if mode_slug == "plan":
-                    plan_doc.content = (
-                        f"Mode: {mode_slug}\n"
-                        f"Turn: {turn}\n"
-                        "Goal:\n"
-                        f"{latest_user.strip()}\n\n"
-                        "Discovery:\n"
-                        "- Inspect the relevant code paths and documents\n"
-                        "- Capture constraints, risks, and unresolved questions\n\n"
-                        "Implementation Plan:\n"
-                        "1. Gather the missing context\n"
-                        "2. Decide architecture and sequencing\n"
-                        "3. Present a concrete execution plan"
-                    )
-                else:
-                    plan_doc.content = (
-                        f"Mode: {mode_slug}\n"
-                        f"Turn: {turn}\n"
-                        "Goal:\n"
-                        f"{latest_user.strip()}\n\n"
-                        "Working Plan:\n"
-                        "1. Gather context\n"
-                        "2. Execute the next concrete step\n"
-                        "3. Update todo/memory as new facts are confirmed"
-                    )
-                plan_doc.updated_seq = int(conversation.current_seq_id() or 0)
-                changed = True
-        except Exception as e:
-            logger.debug("Failed to seed plan document: %s", e)
-
-        try:
-            memory_doc = state.ensure_document("memory")
-            if not (memory_doc.content or "").strip():
-                memory_doc.content = (
-                    "Store confirmed repo facts, important decisions, verified commands, "
-                    "or user preferences here when they become relevant."
-                )
-                memory_doc.updated_seq = int(conversation.current_seq_id() or 0)
-                changed = True
-        except Exception as e:
-            logger.debug("Failed to seed memory document: %s", e)
-
-        try:
-            if state.memory.get("active_mode") != mode_slug:
-                state.memory["active_mode"] = mode_slug
-                changed = True
-            work_dir = str(getattr(conversation, "work_dir", "") or "").strip()
-            if work_dir and state.memory.get("work_dir") != work_dir:
-                state.memory["work_dir"] = work_dir
-                changed = True
-        except Exception as e:
-            logger.debug("Failed to seed structured memory: %s", e)
-
-        if changed:
-            try:
-                state.last_updated_seq = int(conversation.current_seq_id() or 0)
-                conversation.set_state(state)
-            except Exception as e:
-                logger.debug("Failed to persist bootstrapped session state: %s", e)
-
     async def _run_subtask(
         self,
         *,
         subtask_req: dict,
         provider: Provider,
         conversation: Conversation,
-        on_event,
-        on_token,
-        on_thinking,
         approval_callback,
         questions_callback,
         cancel_event,
+        on_event=None,
+        turn: int = 0,
     ) -> SubTaskOutcome:
         """Spawn a child Task in an independent conversation context."""
-        mode_slug = subtask_req.get("mode", "code")
+        mode_slug = subtask_req.get("mode", "agent")
         message = subtask_req.get("message", "")
+        trace = SubtaskTrace(
+            id=str(subtask_req.get("id") or f"subtask-{uuid.uuid4().hex[:12]}"),
+            kind=str(subtask_req.get("kind") or "subagent"),
+            name=self._subtask_display_name(subtask_req, mode_slug),
+            title=self._subtask_display_name(subtask_req, mode_slug),
+            goal=self._subtask_goal(subtask_req),
+            mode=str(mode_slug or "agent"),
+            depth=int(subtask_req.get("depth") or 0),
+            metadata={
+                "capability_id": str(subtask_req.get("capability_id") or ""),
+                "capabilities": list(subtask_req.get("capabilities") or []),
+                "tool_call_id": str(subtask_req.get("tool_call_id") or ""),
+                "parent_message_id": str(subtask_req.get("parent_message_id") or ""),
+                "parent_tool_call_id": str(subtask_req.get("parent_tool_call_id") or subtask_req.get("tool_call_id") or ""),
+                "root_tool_call_id": str(subtask_req.get("root_tool_call_id") or subtask_req.get("tool_call_id") or ""),
+            },
+        )
 
         try:
             from core.task.builder import build_run_policy
             from core.config.io import load_app_config
             from models.provider import provider_matches_name, split_model_ref
 
-            global_permissions = None
+            tool_permissions = None
             try:
-                global_permissions = load_app_config().permissions
+                tool_permissions = load_app_config().permissions
             except Exception:
                 pass
-            child_policy = build_run_policy(mode_slug=mode_slug, global_permissions=global_permissions)
+            tool_selection = ToolSelectionPolicy.from_dict(subtask_req.get("tool_selection"))
+            child_policy = build_run_policy(
+                mode_slug=mode_slug,
+                tool_selection=tool_selection,
+                tool_permissions=tool_permissions,
+            )
             updates: dict[str, Any] = {"source": "sub_task"}
             model_ref = str(subtask_req.get("model_ref") or "").strip()
             if model_ref:
@@ -927,16 +1057,6 @@ class Task:
                     updates["max_turns"] = max_turns
             except Exception:
                 pass
-            tool_groups = {
-                str(group or "").strip()
-                for group in (subtask_req.get("tool_groups") or [])
-                if str(group or "").strip()
-            }
-            if tool_groups:
-                tool_groups.add("modes")
-                updates["tool_groups"] = tool_groups
-                # Subagent tool visibility is expressed via tool_groups;
-                # explicit per-tool policies are built only when needed.
             if subtask_req.get("auto_spillover"):
                 updates["auto_compress_enabled"] = False
             if updates:
@@ -965,119 +1085,121 @@ class Task:
                 child_conv.work_dir = getattr(conversation, "work_dir", ".") or "."
             except Exception as e:
                 logger.debug("Failed to inherit work_dir for subtask: %s", e)
-            # Inherit a minimal, sanitized snapshot of parent state.
-            # Subagents do NOT receive the full todo list or mutable documents
-            # to prevent accidental cross-contamination.
             try:
-                parent_state = conversation.get_state()
-                child_conv._state_dict = {}
-                child_state = child_conv.get_state()
-                # Copy only safe, read-only context
-                child_state.memory["_disable_auto_spillover_subagent"] = True
-                child_state.memory["active_mode"] = mode_slug
-                work_dir = str(getattr(conversation, "work_dir", ".") or ".").strip()
-                if work_dir:
-                    child_state.memory["work_dir"] = work_dir
-                # Optionally pass a subset of parent memory keys that are safe
-                for safe_key in ("project_type", "language", "framework"):
-                    if safe_key in parent_state.memory:
-                        child_state.memory[safe_key] = parent_state.memory[safe_key]
-                child_conv.set_state(child_state)
-            except Exception as e:
-                logger.debug("Failed to set up minimal subtask state: %s", e)
-
+                trace.add_message(child_conv.messages[0])
+            except Exception as exc:
+                logger.debug("Failed to record subtask prompt: %s", exc)
+            self._publish_subtask_trace_event(
+                on_event,
+                trace,
+                turn=turn,
+                detail=f"Subtask {trace.title} prompt recorded.",
+            )
             child_task = Task(client=self._client, tool_manager=self._tool_manager)
+            pending_thinking: list[str] = []
+            last_publish_at = 0.0
+
+            def publish_trace(detail: str = "Subtask updated.", *, force: bool = False) -> None:
+                nonlocal last_publish_at
+                now = time.monotonic()
+                if not force and (now - last_publish_at) < 1.0:
+                    return
+                last_publish_at = now
+                self._publish_subtask_trace_event(on_event, trace, turn=turn, detail=detail)
+
+            def child_on_event(event: TaskEvent) -> None:
+                try:
+                    event.source = "subtask"
+                    event.subtask_id = trace.id
+                    self._record_subtask_event(trace, event)
+                    publish_trace(str(getattr(event, "detail", "") or "Subtask updated."))
+                except Exception as exc:
+                    logger.debug("Failed to record subtask event: %s", exc)
+
+            def child_on_thinking(thinking: str) -> None:
+                text = str(thinking or "")
+                if text:
+                    pending_thinking.append(text)
+                    self._update_running_subtask_thinking(trace, "".join(pending_thinking))
+                    publish_trace("Subtask thinking updated.")
+
             result = await child_task.run(
                 provider=provider,
                 conversation=child_conv,
                 policy=child_policy,
-                on_event=on_event,
-                on_token=on_token,
-                on_thinking=on_thinking,
+                on_event=child_on_event,
+                on_token=None,
+                on_thinking=child_on_thinking,
                 approval_callback=approval_callback,
                 questions_callback=questions_callback,
                 cancel_event=cancel_event,
             )
 
-            self._merge_subtask_state(parent_conversation=conversation, child_conversation=child_conv)
+            combined_thinking = "".join(pending_thinking).strip()
+            if combined_thinking:
+                for item in reversed(trace.messages):
+                    if isinstance(item, dict) and item.get("role") == "assistant":
+                        if not str(item.get("thinking") or "").strip():
+                            item["thinking"] = combined_thinking
+                        break
 
             if result.status == TaskStatus.COMPLETED and result.final_message:
+                if combined_thinking and not str(getattr(result.final_message, "thinking", "") or "").strip():
+                    result.final_message.thinking = combined_thinking
                 metadata = getattr(result.final_message, "metadata", {}) or {}
                 max_turns_failure = self._is_max_turns_failure_message(
                     result.final_message.content or "",
                     metadata,
                 )
+                if not any(item.get("id") == getattr(result.final_message, "id", "") for item in trace.messages if isinstance(item, dict)):
+                    trace.add_message(result.final_message)
+                status = TaskStatus.FAILED if max_turns_failure else result.status
+                trace.finish(
+                    SubtaskTraceStatus.FAILED if max_turns_failure else SubtaskTraceStatus.COMPLETED,
+                    final_message=result.final_message.content or "Sub-task completed (no output).",
+                    error="Sub-task reached max turns before completion." if max_turns_failure else "",
+                )
+                publish_trace("Subtask completed.", force=True)
                 return SubTaskOutcome(
-                    status=TaskStatus.FAILED if max_turns_failure else result.status,
+                    status=status,
                     message=result.final_message.content or "Sub-task completed (no output).",
                     completion_command=str(metadata.get("completion_command") or "").strip(),
                     completed=bool(metadata.get("completion")) and not max_turns_failure,
+                    trace=trace,
                 )
             if result.status == TaskStatus.FAILED:
+                trace.finish(SubtaskTraceStatus.FAILED, error=str(result.error or ""))
+                publish_trace("Subtask failed.", force=True)
                 return SubTaskOutcome(
                     status=result.status,
                     message=f"Sub-task failed: {result.error}",
+                    trace=trace,
                 )
             if result.status == TaskStatus.CANCELLED:
+                trace.finish(SubtaskTraceStatus.CANCELLED, final_message="Sub-task was cancelled.")
+                publish_trace("Subtask cancelled.", force=True)
                 return SubTaskOutcome(
                     status=result.status,
                     message="Sub-task was cancelled.",
+                    trace=trace,
                 )
+            trace.finish(SubtaskTraceStatus.COMPLETED, final_message="Sub-task completed.")
+            publish_trace("Subtask completed.", force=True)
             return SubTaskOutcome(
                 status=result.status,
                 message="Sub-task completed.",
                 completed=result.status == TaskStatus.COMPLETED,
+                trace=trace,
             )
         except Exception as e:
             logger.error("Sub-task failed: %s", e)
+            trace.finish(SubtaskTraceStatus.FAILED, error=str(e))
+            self._publish_subtask_trace_event(on_event, trace, turn=turn, detail="Subtask error.")
             return SubTaskOutcome(
                 status=TaskStatus.FAILED,
                 message=f"Sub-task error: {e}",
+                trace=trace,
             )
-
-    def _merge_subtask_state(self, *, parent_conversation: Conversation, child_conversation: Conversation) -> None:
-        try:
-            parent_state = parent_conversation.get_state()
-            child_state = child_conversation.get_state()
-        except Exception as e:
-            logger.debug("Failed to load session state for subtask merge: %s", e)
-            return
-
-        changed = False
-
-        try:
-            for name, child_doc in (child_state.documents or {}).items():
-                normalized = str(name or "").strip().lower()
-                if normalized not in {"plan", "memory", "report", "notes"}:
-                    continue
-                child_content = str(getattr(child_doc, "content", "") or "").strip()
-                if not child_content:
-                    continue
-                existing = parent_state.documents.get(name)
-                if existing is None or child_content != str(getattr(existing, "content", "") or "").strip():
-                    parent_state.documents[name] = copy.deepcopy(child_doc)
-                    changed = True
-        except Exception as e:
-            logger.debug("Failed merging subtask documents: %s", e)
-
-        try:
-            for key, value in (child_state.memory or {}).items():
-                if key == "active_mode":
-                    continue
-                if parent_state.memory.get(key) != value:
-                    parent_state.memory[key] = value
-                    changed = True
-        except Exception as e:
-            logger.debug("Failed merging subtask memory: %s", e)
-
-        if not changed:
-            return
-
-        try:
-            parent_state.last_updated_seq = int(parent_conversation.current_seq_id() or 0)
-            parent_conversation.set_state(parent_state)
-        except Exception as e:
-            logger.debug("Failed to persist merged subtask state: %s", e)
 
     # ------------------------------------------------------------------
     # Context management (condense)

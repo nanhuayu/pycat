@@ -69,50 +69,65 @@ class ToolResultPipeline:
     # ------------------------------------------------------------------
     # Configurable thresholds
     # ------------------------------------------------------------------
-    SPILL_THRESHOLD_CHARS = 12_000
-    SPILL_PREVIEW_CHARS = 2_400
+    SPILL_THRESHOLD_CHARS = 32_000
+    SPILL_PREVIEW_CHARS = 8_000
 
     # ------------------------------------------------------------------
     # Built-in tool -> disposition mapping
     # ------------------------------------------------------------------
     BUILT_IN_STRATEGIES: dict[str, ResultDisposition] = {
-        # read tools: pagination is handled at the tool layer; pipeline trusts it
+        # Read/search tools: pagination is handled at the tool layer.
         "read_file": ResultDisposition.INLINE,
-        "search_code": ResultDisposition.INLINE,
+        "search_content": ResultDisposition.INLINE,
         "grep": ResultDisposition.INLINE,
         "list_directory": ResultDisposition.INLINE,
         "ls": ResultDisposition.INLINE,
         "skill__read_resource": ResultDisposition.INLINE,
-        # edit tools
-        "write_file": ResultDisposition.INLINE,
-        "edit_file": ResultDisposition.INLINE,
-        "delete_file": ResultDisposition.INLINE,
-        "apply_patch": ResultDisposition.INLINE,
-        # command / execution tools: output is unbounded -> spill when long
+
+        # Web tools can return large remote content.
+        "web_search": ResultDisposition.SPILL,
+        "web_fetch": ResultDisposition.SPILL,
+
+        # File mutation tools return compact status messages.
+        "file_write": ResultDisposition.INLINE,
+        "file_edit": ResultDisposition.INLINE,
+        "file_delete": ResultDisposition.INLINE,
+        "file_patch": ResultDisposition.INLINE,
+
+        # Command / execution tools: output is unbounded -> spill when long.
         "execute_command": ResultDisposition.SPILL,
         "shell_start": ResultDisposition.SPILL,
         "shell_logs": ResultDisposition.SPILL,
         "shell_status": ResultDisposition.INLINE,
         "shell_wait": ResultDisposition.INLINE,
         "shell_kill": ResultDisposition.INLINE,
-        # other
         "python_exec": ResultDisposition.SPILL,
+
+        # State / management tools return structured, bounded state updates.
         "manage_state": ResultDisposition.INLINE,
-        "manage_document": ResultDisposition.INLINE,
-        "skill__load": ResultDisposition.INLINE,
+        "manage_memory": ResultDisposition.INLINE,
+        "manage_todo": ResultDisposition.INLINE,
+        "manage_artifact": ResultDisposition.INLINE,
         "ask_questions": ResultDisposition.INLINE,
+
+        # Skill / delegation / control tools return bounded metadata.
+        "skill__load": ResultDisposition.INLINE,
         "subagent__read_analyze": ResultDisposition.INLINE,
         "subagent__search": ResultDisposition.INLINE,
         "subagent__custom": ResultDisposition.INLINE,
         "attempt_completion": ResultDisposition.INLINE,
         "switch_mode": ResultDisposition.INLINE,
-
-        "builtin_web_search": ResultDisposition.SPILL,
     }
 
-    def __init__(self, work_dir: str):
+    def __init__(self, work_dir: str, conversation_id: object = None):
         self.work_dir = Path(work_dir).resolve()
-        self.spill_dir = self.work_dir / ".pycat" / "tool-results"
+        session_id = self._safe_session_id(conversation_id)
+        self.spill_dir = self.work_dir / ".pycat" / "sessions" / session_id / "tool-results"
+
+    @staticmethod
+    def _safe_session_id(conversation_id: object = None) -> str:
+        raw = str(conversation_id or "default").strip() or "default"
+        return re.sub(r"[^a-zA-Z0-9_.-]+", "-", raw).strip("-._") or "default"
 
     # ------------------------------------------------------------------
     # Public API

@@ -11,7 +11,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.llm.client import LLMClient
 from core.llm.llm_config import LLMConfig
-from core.prompts.templates import DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT
+from core.capabilities.defaults import DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT
 from models.conversation import Conversation, Message
 from models.provider import Provider
 
@@ -94,8 +94,7 @@ class PromptOptimizer(QObject):
                         provider,
                         conv,
                         enable_thinking=False,
-                        enable_search=False,
-                        enable_mcp=False,
+                        prepared_tools=[],
                     )
 
                 msg = loop.run_until_complete(do_call())

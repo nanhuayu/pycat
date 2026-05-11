@@ -20,8 +20,8 @@ from core.llm.client import LLMClient
 from core.context.condenser import CondensePolicy, ContextCondenser
 from core.context.manager import ContextManager
 from core.config import AppConfig, load_app_config
-from core.modes.manager import resolve_mode_config
 from core.task.types import RunPolicy, TaskEventKind
+from core.tools.catalog import ToolAvailabilityContext, ToolSelectionPolicy
 from core.task.retry import classify_error, retry_with_backoff
 
 logger = logging.getLogger(__name__)
@@ -147,12 +147,6 @@ class LLMExecutor:
             on_token=on_token,
             on_thinking=on_thinking,
             enable_thinking=bool(policy.enable_thinking),
-            enable_search=True,
-            enable_mcp=True,
-            tool_policies={
-                name: {"enabled": p.enabled, "auto_approve": p.auto_approve}
-                for name, p in (policy.tool_policies or {}).items()
-            } if policy.tool_policies else None,
             debug_log_path=debug_log_path,
             cancel_event=cancel_event,
             prepared_messages=prepared_messages,
@@ -199,7 +193,6 @@ class LLMExecutor:
         policy: RunPolicy,
     ) -> list[dict]:
         prepared_query = ""
-        allowed_groups = None
         try:
             for msg in reversed(getattr(conversation, "messages", []) or []):
                 if getattr(msg, "role", "") != "user":
@@ -211,31 +204,21 @@ class LLMExecutor:
             logger.debug("Failed to derive prepared query for tool loading: %s", e)
             prepared_query = ""
 
-        try:
-            mode_cfg = resolve_mode_config(
-                str(getattr(policy, "mode", "chat") or "chat"),
-                work_dir=str(getattr(conversation, "work_dir", ".") or "."),
-            )
-            allowed_groups = mode_cfg.group_names()
-        except Exception as e:
-            logger.debug("Failed to resolve mode groups for tool loading: %s", e)
-            allowed_groups = None
-
-        policy_groups = getattr(policy, "tool_groups", None)
-        if policy_groups:
-            policy_group_set = {str(group or "").strip() for group in policy_groups if str(group or "").strip()}
-            if allowed_groups:
-                allowed_groups = set(allowed_groups).intersection(policy_group_set)
-            else:
-                allowed_groups = policy_group_set
+        base_selection = getattr(policy, "tool_selection", None) or ToolSelectionPolicy.all()
+        selection = base_selection
+        if prepared_query:
+            selection = selection.with_prepared_queries([prepared_query])
 
         try:
             return await self._client.tool_manager.get_all_tools(
-                include_search=True,
-                include_mcp=True,
-                prepared_queries=[prepared_query] if prepared_query else None,
-                allowed_groups=allowed_groups,
-                tool_policies=policy.tool_policies,
+                tool_selection=selection,
+                availability_context=ToolAvailabilityContext(
+                    work_dir=str(getattr(conversation, "work_dir", ".") or "."),
+                    conversation_id=str(getattr(conversation, "id", "") or ""),
+                    search_available=self._client.tool_manager.search_service.is_available(),
+                    mcp_available=bool(getattr(__import__("core.tools.manager", fromlist=["MCP_AVAILABLE"]), "MCP_AVAILABLE", False)),
+                ),
+                tool_permissions=policy.tool_permissions,
             )
         except Exception as e:
             logger.warning("Failed to load request tools: %s", e)

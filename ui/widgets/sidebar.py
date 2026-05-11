@@ -5,7 +5,7 @@ Sidebar widget for conversation list and management - Chinese UI
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
     QLineEdit, QListWidget, QListWidgetItem, QMenu,
-    QMessageBox, QFileDialog, QLabel
+    QMessageBox, QFileDialog, QLabel, QApplication
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer, QSize
 from PyQt6.QtGui import QAction, QFontMetrics
@@ -31,7 +31,11 @@ class ConversationItem(QListWidgetItem):
                 self.updated_str = ""
 
         count = data.get('message_count', 0)
-        self.setToolTip(f"标题: {self.title}\n模型: {self.model or '未设置'}\n消息: {count} 条\n更新: {self.updated_str or '-'}")
+        session_id = str(data.get('id', '') or '')
+        self.setToolTip(
+            f"标题: {self.title}\nSession ID: {session_id or '-'}\n"
+            f"模型: {self.model or '未设置'}\n消息: {count} 条\n更新: {self.updated_str or '-'}"
+        )
         self.setSizeHint(QSize(0, 34))
 
     def refresh_text(self, metrics: QFontMetrics, available_width: int) -> None:
@@ -48,6 +52,7 @@ class Sidebar(QWidget):
     import_conversation = pyqtSignal(str)
     delete_conversation = pyqtSignal(str)
     duplicate_conversation = pyqtSignal(str)
+    export_conversation = pyqtSignal(str, str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -155,20 +160,41 @@ class Sidebar(QWidget):
             return
         
         menu = QMenu(self)
+        conversation_id = str(item.data.get('id', '') or '')
+
+        copy_id_action = QAction("复制 Session ID", self)
+        copy_id_action.triggered.connect(lambda: self._copy_session_id(conversation_id))
+        menu.addAction(copy_id_action)
+
+        export_menu = QMenu("导出会话", self)
+        export_md_action = QAction("导出为 Markdown...", self)
+        export_md_action.triggered.connect(lambda: self.export_conversation.emit(conversation_id, "markdown"))
+        export_menu.addAction(export_md_action)
+        export_json_action = QAction("导出为 JSON...", self)
+        export_json_action.triggered.connect(lambda: self.export_conversation.emit(conversation_id, "json"))
+        export_menu.addAction(export_json_action)
+        menu.addMenu(export_menu)
+        menu.addSeparator()
 
         duplicate_action = QAction("复制会话", self)
         duplicate_action.triggered.connect(
-            lambda: self.duplicate_conversation.emit(item.data.get('id', ''))
+            lambda: self.duplicate_conversation.emit(conversation_id)
         )
         menu.addAction(duplicate_action)
         menu.addSeparator()
 
         delete_action = QAction("删除", self)
         delete_action.triggered.connect(
-            lambda: self._confirm_delete(item.data.get('id', ''))
+            lambda: self._confirm_delete(conversation_id)
         )
         menu.addAction(delete_action)
         menu.exec(self.conversation_list.mapToGlobal(position))
+
+    def _copy_session_id(self, conversation_id: str):
+        text = str(conversation_id or "").strip()
+        if not text:
+            return
+        QApplication.clipboard().setText(text)
     
     def _confirm_delete(self, conversation_id: str):
         reply = QMessageBox.question(

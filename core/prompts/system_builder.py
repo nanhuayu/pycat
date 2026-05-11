@@ -12,11 +12,13 @@ from core.channel import build_channel_prompt_section
 from core.config.schema import AppConfig
 from core.modes.manager import resolve_mode_config
 from core.modes.types import normalize_mode_slug
+from core.prompts.project_instructions import ProjectInstructionService
 from core.skills import (
     SkillsManager,
     check_skill_execution_availability,
     resolve_skill_invocation_spec,
 )
+from core.tools.catalog import TOOL_CATEGORY_LABELS, normalize_tool_category
 
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -29,10 +31,48 @@ DEFAULT_AGENT_TOOL_GUIDELINES = (
     "- Always check command outputs and handle errors.\n"
     "- If a tool fails, analyze the error and try a different approach.\n"
     "- Use `execute_command` for short bounded commands. Use `shell_start` plus `shell_status`, `shell_logs`, `shell_wait`, or `shell_kill` for long-running commands.\n"
-    "- Use `manage_state` to track progress and `manage_document` to keep plan/memory notes current.\n"
+    "- Use `manage_todo` for explicit current-task status, `manage_artifact` for plans/explorations/reports/notes, `manage_memory` for session/workspace/global memory, and `manage_state` for summary/archive.\n"
+    "- Complex Task Protocol: for multi-step work, web/search/browser research, multi-source reading, code edits, debugging, planning, or requested timeline/report/document output, the first state-maintenance call should be `manage_todo(action=\"set\", items=[...])` with concrete visible milestones and exactly one `in_progress` item. Do not create ceremonial todos for one-step work.\n"
+    "- Good todos are user-visible milestones and acceptance checkpoints, not implementation noise. Good: `审查调用链并定位状态边界`, `移除运行时 nudge 并更新测试`, `生成最终时间线报告`. Bad: `search web`, `read file`, `run formatter`, `grep code`.\n"
+    "- Keep todos current when they exist: update completed milestones and the current in-progress item with `manage_todo(action=\"update\", items=[...])`. Completed/cancelled todos are compacted into recent history; do not recreate equivalent completed todos unless the user asks for new work or scope changes.\n"
+    "- The todo list is rendered live to the user. Do not repeat the full todo list after a `manage_todo` call; acknowledge the state change briefly and continue with concrete work.\n"
+    "- State priority: artifacts are the source of truth for plans/reports/documents; todos are only live progress; memory is only durable reusable facts. If a final report or approved plan already satisfies the request, read/update the artifact or finish instead of rebuilding the same todo list.\n"
+    "- Use canonical artifacts: `plan` (kind=plan, status=draft/approved/final), `exploration` (kind=exploration), and `report` (kind=report). Create/update a `plan` artifact for non-trivial execution plans, an `exploration` artifact for multi-source findings, and a final `report` artifact before completion when the user requested a report, timeline, document, or substantial summary.\n"
+    "- Artifact indexes/abstracts may be injected without full content. If an existing artifact appears relevant to the current request, read it with `manage_artifact(action=\"read\")` before new broad search or duplication, then update or append as appropriate. Put file paths, URLs, or symbol locations in `references`/`related`, and use `frontmatter` for stable Markdown metadata such as created, tags, source, and status.\n"
+    "- When a tool result says the full output was stored in a file, read that exact absolute path before retrying equivalent extraction. Do not guess relative paths for MCP/browser-created files; use returned normalized paths or session `tool-results` paths.\n"
+    "- Memory is only for durable, reusable facts and preferences. Before writing workspace/global memory, inspect existing memory with `manage_memory(action=\"list\"|\"view\")` to avoid duplicates. Store stable decisions, verified commands, or repo conventions with `manage_memory`; never save long plans, tool dumps, transient todos, secrets, or temporary reports as memory facts.\n"
     "- `attempt_completion` is a built-in tool for finishing work; do not treat it as a skill or document name.\n"
     "- If another mode is a better fit, use `switch_mode`; if focused work should continue independently, use `subagent__custom`.\n"
     "- Use `capability__summarize_text` for one file or one long text, `subagent__read_analyze` for multi-file/cross-source analysis, and `subagent__search` for research."
+)
+
+DEFAULT_PLAN_WORKFLOW = (
+    "## Workflow: Plan\n"
+    "- Discover context first using read/search/delegated read-only analysis; do not edit files or run implementation commands in plan mode.\n"
+    "- Maintain `manage_artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` as the primary deliverable.\n"
+    "- Write plans with these sections in order: Summary, Scope, Phases, Steps, Relevant Files, Verification, Decisions, Risks/Open Questions.\n"
+    "- Keep each phase small and actionable; include specific files, symbols, and expected checks.\n"
+    "- Ask clarifying questions when requirements or trade-offs are unresolved.\n"
+    "- Mark the plan `status=\"approved\"` only after user alignment; implementation should read the approved plan before editing."
+)
+
+DEFAULT_EXPLORE_WORKFLOW = (
+    "## Workflow: Explore\n"
+    "- Stay read-only: search broadly, inspect narrowly, and return evidence-backed findings.\n"
+    "- Use `manage_artifact(name=\"exploration\", kind=\"exploration\", status=\"draft\")` for reusable findings when exploration spans multiple files.\n"
+    "- Report concrete file paths, symbols, patterns, existing design conventions, risks, and open questions.\n"
+    "- Summaries should end with Suggested Next Steps, but not implementation details or edits.\n"
+    "- Do not create implementation plans unless requested; hand off to Plan or Agent when changes are needed."
+)
+
+DEFAULT_IMPLEMENT_WORKFLOW = (
+    "## Workflow: Implement\n"
+    "- If a `plan` artifact exists, read it first and treat an approved/final plan as the execution source of truth.\n"
+    "- Maintain todo for concrete visible milestones when the task spans multiple substantial steps; keep one `in_progress` item and mark items complete after finishing them.\n"
+    "- Before any non-trivial edit, confirm the target files and the acceptance criteria from the plan or exploration notes.\n"
+    "- After edits, verify with targeted tests or diagnostics.\n"
+    "- Save verification notes or final summaries in `manage_artifact(name=\"report\", kind=\"report\", status=\"final\")` when the result is substantial.\n"
+    "- Use `manage_memory` only for durable facts; do not store transient progress, drafts, or large tool outputs there."
 )
 
 
@@ -76,9 +116,9 @@ def build_mode_profile_section(mode_slug: str, mode_cfg: Optional[Any]) -> str:
             lines.append(f"description: {mode_cfg.description}")
         if (mode_cfg.when_to_use or "").strip():
             lines.append(f"when_to_use: {mode_cfg.when_to_use}")
-        groups = sorted(mode_cfg.group_names())
-        if groups:
-            lines.append(f"tool_groups: {', '.join(groups)}")
+        allowed_tool_categories = sorted(mode_cfg.tool_category_names())
+        if allowed_tool_categories:
+            lines.append(f"allowed_tool_categories: {', '.join(allowed_tool_categories)}")
 
     lines.append("</mode_profile>")
     return "\n".join(lines)
@@ -88,43 +128,40 @@ def build_mode_workflow_guidance(mode_slug: str) -> str:
     slug = normalize_mode_slug(mode_slug)
     guidance: dict[str, list[str]] = {
         "agent": [
-            "Maintain the current todo list with `manage_state` when scope changes or steps complete.",
-            "Keep a short working plan in `manage_document(name=\"plan\")` for multi-step execution.",
-            "Store durable facts such as important paths, commands, or decisions in memory instead of repeating them in chat.",
+            DEFAULT_IMPLEMENT_WORKFLOW,
+            "Maintain the current todo list with `manage_todo` when scope changes or steps complete.",
+            "Create or update a short working plan with `manage_artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` for multi-step execution.",
+            "Store durable facts such as important paths, commands, or decisions with `manage_memory` instead of repeating them in chat.",
             "Use `switch_mode` if the request clearly belongs to another mode, or `subagent__custom` if a separate delegated run is better.",
             "Use `attempt_completion` only when the task is actually complete and you can summarize the result clearly.",
         ],
-        "code": [
-            "Before major edits, keep a concise implementation plan in `manage_document(name=\"plan\")`.",
-            "Update `manage_state.tasks` as you finish concrete coding steps.",
-            "Use memory for stable repo facts that matter across later turns, such as verified commands or conventions.",
-            "Switch out of code mode if the task becomes primarily architecture or debugging, rather than forcing implementation prematurely.",
-            "End the run with `attempt_completion`; do not use skill-loading tools as a completion signal.",
-        ],
-        "debug": [
-            "Track active hypotheses and verification steps in `manage_document(name=\"plan\")`.",
-            "Move confirmed root causes and important repro details into memory so they persist across retries and compression.",
-            "Keep the todo list focused on the remaining debug actions, not on already-finished analysis.",
-            "Switch to another mode once debugging is done and the remaining work is clearly implementation or planning.",
-            "Call `attempt_completion` only after the root cause and fix state are explicit.",
-        ],
         "plan": [
-            "Create and maintain a plan document as the primary artifact for architecture work.",
-            "Use the todo list to track open design questions and decision checkpoints.",
+            DEFAULT_PLAN_WORKFLOW,
+            "Create and maintain a plan artifact as the primary artifact for architecture work.",
+            "Use `manage_todo` to track open design questions and decision checkpoints.",
             "Persist only confirmed constraints or decisions into memory.",
             "Switch to a more appropriate mode if the task stops being architecture work, and call `attempt_completion` once the design output is ready.",
         ],
-        "orchestrator": [
-            "Use the plan document to track delegation strategy and aggregate results from sub-tasks.",
-            "Use the todo list for the current frontier of unfinished delegated work.",
-            "Use `subagent__custom`, `subagent__read_analyze`, or `subagent__search` for independent sub-work and `switch_mode` when the current conversation should continue in another mode.",
-            "Call `attempt_completion` only after delegated work has been consolidated.",
+        "explore": [
+            DEFAULT_EXPLORE_WORKFLOW,
+            "Prefer broad-to-narrow workspace search, then read the smallest necessary file ranges.",
+            "Use `related` and `references` when saving exploration artifacts so later implementation can recover evidence quickly.",
+            "Switch to plan or agent mode rather than editing directly.",
         ],
     }
     items = guidance.get(slug)
     if not items:
         return ""
-    return "## State Workflow\n" + "\n".join(f"- {item}" for item in items)
+    lines = ["## State Workflow"]
+    for item in items:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if text.startswith("## "):
+            lines.append(text)
+        else:
+            lines.append(f"- {text}")
+    return "\n".join(lines)
 
 
 def build_environment_section(work_dir: str, max_depth: int = 2) -> str:
@@ -177,73 +214,46 @@ def resolve_base_system_prompt_text(
 def build_state_section(conversation: Conversation) -> str:
     try:
         state = conversation.get_state()
-        return state.to_prompt_view(include_documents=False) or ""
+        return state.to_prompt_view(include_artifacts=False, include_memory_facts=False) or ""
     except Exception:
         return ""
 
 
-def _trim_prompt_block(value: str, *, max_chars: int) -> str:
-    text = str(value or "").strip()
-    if len(text) <= max_chars:
-        return text
-    return text[: max_chars - 3].rstrip() + "..."
+def build_available_tools_section(tools: List[Dict[str, Any]], *, max_description_chars: int = 180) -> str:
+    """Build a compact, catalog-aligned summary of request-time tools.
 
+    The authoritative tool schemas are still sent through the API request body;
+    this section is only a short navigation aid for the model. It avoids dumping
+    full JSON schemas or long MCP descriptions into the system prompt.
+    """
+    if not tools:
+        return ""
 
-def build_session_document_sections(conversation: Conversation, mode_slug: str) -> list[str]:
-    try:
-        state = conversation.get_state()
-    except Exception:
-        return []
-
-    sections: list[str] = []
-    documents = getattr(state, "documents", {}) or {}
-    plan_doc = documents.get("plan")
-    memory_doc = documents.get("memory")
-
-    if plan_doc is not None and str(plan_doc.content or "").strip():
-        plan_lines = ["<current_plan>"]
-        plan_lines.append(_trim_prompt_block(plan_doc.content, max_chars=6000))
-        plan_lines.append("</current_plan>")
-        if mode_slug == "plan":
-            plan_lines.append(
-                "The plan document above is the primary artifact for this run. Refine it before completion and avoid implementation work in plan mode."
-            )
-        elif mode_slug in {"agent", "code", "debug", "orchestrator"}:
-            plan_lines.append(
-                "Use the current plan as the execution source of truth. Update it when scope, sequencing, or findings materially change."
-            )
-        sections.append("\n".join(plan_lines))
-
-    if memory_doc is not None and str(memory_doc.content or "").strip():
-        sections.append(
-            "\n".join(
-                [
-                    "<session_memory>",
-                    _trim_prompt_block(memory_doc.content, max_chars=3000),
-                    "</session_memory>",
-                ]
-            )
-        )
-
-    other_docs: list[str] = []
-    for name, doc in documents.items():
-        normalized = str(name or "").strip().lower()
-        if normalized in {"plan", "memory"}:
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for tool in tools:
+        fn = tool.get("function", {}) if isinstance(tool, dict) else {}
+        name = str(fn.get("name") or "").strip()
+        if not name:
             continue
-        content = str(getattr(doc, "content", "") or "").strip()
-        abstract = str(getattr(doc, "abstract", "") or "").strip()
-        references = [str(item).strip() for item in (getattr(doc, "references", []) or []) if str(item).strip()]
-        preview_source = abstract or content
-        if not preview_source:
-            continue
-        parts = [f"- {name}: {_trim_prompt_block(preview_source, max_chars=240)}"]
-        if references:
-            parts.append(f"refs={', '.join(references[:3])}")
-        other_docs.append(" | ".join(parts))
-    if other_docs:
-        sections.append("<session_documents>\n" + "\n".join(other_docs) + "\n</session_documents>")
+        description = " ".join(str(fn.get("description") or "").split())
+        if len(description) > max_description_chars:
+            description = description[: max_description_chars - 1].rstrip() + "…"
+        category = normalize_tool_category(fn.get("x_pycat_category"))
+        grouped.setdefault(category, []).append((name, description))
 
-    return sections
+    if not grouped:
+        return ""
+    lines = ["<available_tools>", "Tool schemas are available in the request body; use only names listed here."]
+    category_order = {name: index for index, name in enumerate(TOOL_CATEGORY_LABELS.keys())}
+    for category in sorted(grouped.keys(), key=lambda c: category_order.get(c, 999)):
+        label = TOOL_CATEGORY_LABELS.get(category, category)
+        items = sorted(grouped[category], key=lambda item: item[0])
+        lines.append(f"[{category}] {label}")
+        for name, description in items:
+            suffix = f": {description}" if description else ""
+            lines.append(f"- {name}{suffix}")
+    lines.append("</available_tools>")
+    return "\n".join(lines)
 
 
 def build_system_prompt(
@@ -298,26 +308,18 @@ def build_system_prompt(
     else:
         parts.append(DEFAULT_AGENT_TOOL_GUIDELINES)
 
-    # Inject available tools summary
-    if tools:
-        tool_lines = ["<available_tools>"]
-        for t in tools:
-            fn = t.get("function", {})
-            tname = fn.get("name", "")
-            tdesc = (fn.get("description") or "")
-            if tname:
-                tool_lines.append(f"- {tname}: {tdesc}")
-        tool_lines.append("</available_tools>")
-        parts.append("\n".join(tool_lines))
+    available_tools_section = build_available_tools_section(tools)
+    if available_tools_section:
+        parts.append(available_tools_section)
+
+    project_instructions = ProjectInstructionService.build_prompt_section(str(work_dir or "."))
+    if project_instructions:
+        parts.append(project_instructions)
 
     if bool(prompt_cfg.include_state):
         state_section = build_state_section(conversation)
         if state_section:
             parts.append(state_section)
-
-    document_sections = build_session_document_sections(conversation, mode_slug)
-    if document_sections:
-        parts.extend(document_sections)
 
     enabled_channel_sources = _enabled_channel_sources(app_config)
     allowed_channel_sources = _normalize_string_tuple(settings.get("allowed_channel_sources")) or enabled_channel_sources

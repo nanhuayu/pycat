@@ -27,6 +27,10 @@ class TurnEvent:
     turn: int = 0
     detail: str = ""
     source: str = "task"
+    subtask_id: str = ""
+    parent_message_id: str = ""
+    parent_tool_call_id: str = ""
+    root_tool_call_id: str = ""
 
     @property
     def tool_name(self) -> str:
@@ -47,7 +51,11 @@ class TurnEvent:
             data=event.data,
             turn=int(getattr(event, "turn", 0) or 0),
             detail=str(getattr(event, "detail", "") or ""),
-            source="task",
+            source=str(getattr(event, "source", "") or "task"),
+            subtask_id=str(getattr(event, "subtask_id", "") or ""),
+            parent_message_id=str(getattr(event, "parent_message_id", "") or ""),
+            parent_tool_call_id=str(getattr(event, "parent_tool_call_id", "") or ""),
+            root_tool_call_id=str(getattr(event, "root_tool_call_id", "") or ""),
         )
 
     def to_task_event(self) -> TaskEvent:
@@ -56,4 +64,9 @@ class TurnEvent:
             data=self.data,
             turn=int(self.turn or 0),
             detail=str(self.detail or ""),
+            source=str(self.source or "task"),
+            subtask_id=str(self.subtask_id or ""),
+            parent_message_id=str(self.parent_message_id or ""),
+            parent_tool_call_id=str(self.parent_tool_call_id or ""),
+            root_tool_call_id=str(self.root_tool_call_id or ""),
         )

@@ -254,6 +254,11 @@ QToolButton#tool_call_header[kind="subagent"]:hover {
     background-color: #e0e7ff;
 }
 
+QWidget#subagent_trace_content {
+    background-color: #f8faff;
+    border-left-color: #818cf8;
+}
+
 QTextBrowser#message_content {
     background: transparent;
     color: #1f1f1f;

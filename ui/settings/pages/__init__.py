@@ -1,8 +1,8 @@
 from ui.settings.pages.models_page import ModelsPage
 from ui.settings.pages.modes_page import ModesPage
-from ui.settings.pages.context_page import ContextPage
-from ui.settings.pages.prompts_page import PromptsPage
-from ui.settings.pages.agent_page import AgentPermissionsPage
+from ui.settings.pages.capabilities_page import CapabilitiesPage
+from ui.settings.pages.agent_page import AgentPage
+from ui.settings.pages.permissions_page import PermissionsPage
 from ui.settings.pages.mcp_page import McpPage
 from ui.settings.pages.search_page import SearchPage
 from ui.settings.pages.channels_page import ChannelsPage
@@ -14,9 +14,9 @@ from ui.settings.pages.about_page import AboutPage
 __all__ = [
     "ModelsPage",
     "ModesPage",
-    "ContextPage",
-    "PromptsPage",
-    "AgentPermissionsPage",
+    "CapabilitiesPage",
+    "AgentPage",
+    "PermissionsPage",
     "McpPage",
     "SearchPage",
     "ChannelsPage",

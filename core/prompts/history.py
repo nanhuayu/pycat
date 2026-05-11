@@ -54,31 +54,13 @@ def count_user_turn_blocks(messages: List[Message]) -> int:
     return sum(1 for block in build_turn_blocks(get_effective_history(messages)) if any(msg.role == "user" for msg in block))
 
 
-def _sanitize_tool_messages(messages: List[Message]) -> List[Message]:
-    effective: List[Message] = []
-    for msg in messages:
-        if msg.role == "tool":
-            prev = effective[-1] if effective else None
-            if not prev or prev.role not in {"assistant", "tool"}:
-                effective.append(
-                    Message(
-                        role="user",
-                        content=f"Tool Output (Recovered Context):\n{msg.content}",
-                        tool_call_id=msg.tool_call_id,
-                    )
-                )
-                continue
-        effective.append(msg)
-    return effective
-
-
 def get_effective_history(messages: List[Message], keep_last_turns: Optional[int] = None) -> List[Message]:
     """Return messages suitable for sending to the LLM.
 
     - Filters out condensed/truncated messages.
     - Removes injected runtime control/user-context wrappers.
     - Excludes system messages; the system prompt is assembled separately.
-    - Sanitizes orphan tool messages (tool without preceding assistant).
+    - Excludes transient top-level tool messages; tool results live on assistant tool_calls.
     - Optionally keeps only the last N complete user-led turn blocks.
     - Guarantees at least 1 real user message survives.
     """
@@ -88,6 +70,8 @@ def get_effective_history(messages: List[Message], keep_last_turns: Optional[int
             continue
 
         if msg.role == "system":
+            continue
+        if msg.role == "tool":
             continue
 
         normalized = normalize_user_message(msg) if msg.role == "user" else msg
@@ -108,7 +92,7 @@ def get_effective_history(messages: List[Message], keep_last_turns: Optional[int
             first_keep_index = user_block_indexes[-keep_last_turns]
             blocks = blocks[first_keep_index:]
 
-    effective = _sanitize_tool_messages(flatten_turn_blocks(blocks))
+    effective = flatten_turn_blocks(blocks)
 
     # 保底: if no real user messages survived, force-keep the latest real user message
     has_user = any(m.role == "user" for m in effective)

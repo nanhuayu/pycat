@@ -22,6 +22,8 @@ except ImportError:
     markdown = None
 
 from models.conversation import Message
+from models.conversation import normalize_tool_result
+from ui.view_models.message_tree import ToolInvocationView, build_message_tree_view_model, view_model_for_message
 from ui.dialogs.image_viewer import ImageViewerDialog
 from ui.utils.image_loader import load_pixmap
 from ui.utils.icon_manager import Icons
@@ -63,6 +65,32 @@ def _tool_call_kind_label(kind: str) -> str:
         'capability': '能力',
         'tool': '工具',
     }.get(kind, '工具')
+
+
+def _plain_summary(text: Any, limit: int = 160) -> str:
+    value = str(text or '').strip().replace('\r\n', '\n').replace('\r', '\n')
+    value = re.sub(r"\s+", " ", value)
+    if len(value) > limit:
+        return value[: max(0, limit - 1)] + '…'
+    return value
+
+
+def _subtask_status_label(status: str) -> str:
+    return {
+        'running': '运行中',
+        'completed': '已完成',
+        'cancelled': '已取消',
+        'failed': '失败',
+    }.get(str(status or '').lower(), str(status or '未知'))
+
+
+def _subtask_status_icon(status: str) -> str:
+    return {
+        'running': '◐',
+        'completed': '✓',
+        'cancelled': '○',
+        'failed': '✗',
+    }.get(str(status or '').lower(), '•')
 
 
 MARKDOWN_CSS = """
@@ -410,22 +438,42 @@ class ThinkingSection(QWidget):
 class ToolCallItem(QWidget):
     """Widget for a single tool call with collapsible details - Concise Style"""
 
-    def __init__(self, tool_call: dict, parent=None):
+    def __init__(self, tool_call: dict | ToolInvocationView, parent=None):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        self.tool_call = tool_call
-        self.tool_id = tool_call.get('id')
+        self.invocation = tool_call if isinstance(tool_call, ToolInvocationView) else None
+        self.tool_call = self.invocation.tool_call if self.invocation is not None else tool_call
+        self.result_payload = dict(self.invocation.result) if self.invocation is not None and isinstance(self.invocation.result, dict) else None
+        if self.result_payload is None and isinstance(self.tool_call, dict) and 'result' in self.tool_call:
+            self.result_payload = normalize_tool_result(self.tool_call.get('result'))
+        self.tool_id = self.invocation.id if self.invocation is not None else self.tool_call.get('id')
         self.is_expanded = False
+        self.subtask_widget = None
+        self.toggle_btn = None
+        self.summary_label = None
+        self.meta_label = None
+        self.details_widget = None
+        self.result_label = None
+        self.result_view = None
+        self.args_view = None
         self._setup_ui()
-
-        # Auto-set result if present in tool_call data
-        if 'result' in self.tool_call:
-            self.set_result(self.tool_call['result'])
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 1, 0, 1)
         layout.setSpacing(2)
+
+        func = self.tool_call.get('function', {})
+        name = self._tool_name()
+        kind = self._tool_kind(name)
+
+        result_payload = self.result_payload or normalize_tool_result('')
+        if kind in {'subagent', 'capability'}:
+            trace = result_payload.get('run') if result_payload.get('type') == 'subtask_run' else None
+            if not isinstance(trace, dict):
+                trace = self._placeholder_subtask_trace(result_payload)
+            self.set_subtask(trace)
+            return
 
         # Header (Toggle button)
         self.toggle_btn = QToolButton()
@@ -434,10 +482,6 @@ class ToolCallItem(QWidget):
         self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggle_btn.setMaximumHeight(20)
-
-        func = self.tool_call.get('function', {})
-        name = self._tool_name()
-        kind = self._tool_kind(name)
         self.toggle_btn.setProperty("kind", kind)
         self.toggle_btn.setToolTip(f"{self._kind_label(kind)}调用：{name}")
 
@@ -494,9 +538,35 @@ class ToolCallItem(QWidget):
 
         layout.addWidget(self.details_widget)
 
+        if self.result_payload is not None:
+            self.set_result(self.result_payload)
+
+    def set_subtask(self, trace: dict):
+        if not isinstance(trace, dict):
+            return
+        current = self.result_payload or normalize_tool_result('')
+        result_payload = {
+            'type': 'subtask_run',
+            'content': str(trace.get('final_message') or trace.get('error') or trace.get('goal') or current.get('content') or ''),
+            'summary': str(trace.get('final_message') or trace.get('error') or trace.get('goal') or current.get('summary') or '')[:220],
+            'metadata': dict(current.get('metadata') or {}),
+            'run': trace,
+        }
+        self.result_payload = result_payload
+        if self.subtask_widget is None:
+            self.subtask_widget = SubtaskRunWidget(trace)
+            self.layout().addWidget(self.subtask_widget)
+        else:
+            self.subtask_widget.set_trace(trace)
+        self._apply_result_header(result_payload)
     def _toggle(self):
+        if self._tool_kind() in {'subagent', 'capability'}:
+            if self.subtask_widget is not None:
+                self.subtask_widget._toggle()
+            return
         self.is_expanded = not self.is_expanded
-        self.details_widget.setVisible(self.is_expanded)
+        if self.details_widget is not None:
+            self.details_widget.setVisible(self.is_expanded)
 
     def _tool_name(self) -> str:
         return _tool_call_name(self.tool_call)
@@ -522,10 +592,12 @@ class ToolCallItem(QWidget):
         kind = self._tool_kind(name)
         return f'✓ {self._kind_label(kind)}已完成 · {self._display_name(name)}'
 
-    def _result_summary(self, result: str) -> str:
-        summary = str(self.tool_call.get('result_summary') or '').strip()
-        if summary:
-            return summary
+    def _result_summary(self, result: Any) -> str:
+        if isinstance(result, dict):
+            summary = str(result.get('summary') or '').strip()
+            if summary:
+                return _plain_summary(summary, 120)
+            result = result.get('content') or result.get('final_message') or ''
 
         text = str(result or '').strip()
         if not text:
@@ -536,7 +608,8 @@ class ToolCallItem(QWidget):
         return first_line
 
     def _result_meta_hint(self) -> str:
-        metadata = self.tool_call.get('result_metadata') or {}
+        result = self.result_payload or normalize_tool_result('')
+        metadata = result.get('metadata') or {}
         if not isinstance(metadata, dict):
             return ''
         result_file = str(metadata.get('tool_result_file') or '').strip()
@@ -546,37 +619,83 @@ class ToolCallItem(QWidget):
             return '结果过长，当前仅展示摘要或预览。'
         return ''
 
-    def set_result(self, result: str):
-        self.result_label.setVisible(True)
-        self.result_view.setVisible(True)
-        self.result_view.set_markdown(result)
+    def _apply_result_header(self, result: Any) -> None:
+        name = self._tool_name()
+        if self._tool_kind(name) in {'subagent', 'capability'}:
+            return
+        if self.toggle_btn is not None:
+            self.toggle_btn.setText(self._completed_title(name))
+        summary = self._result_summary(result)
+        if self.summary_label is not None:
+            self.summary_label.setVisible(bool(summary))
+        if summary and self.summary_label is not None:
+            self.summary_label.setText(f"摘要：{summary}")
+
+    def _placeholder_subtask_trace(self, result_payload: dict | None = None) -> dict[str, Any]:
+        payload = result_payload or {}
+        kind = self._tool_kind()
+        final_message = str(payload.get('content') or payload.get('summary') or '').strip()
+        status = 'completed' if final_message else 'running'
+        return {
+            'id': str(self.tool_id or ''),
+            'kind': kind,
+            'name': self._tool_name(),
+            'title': self._display_name(),
+            'status': status,
+            'messages': [],
+            'final_message': final_message,
+            'goal': final_message,
+            'duration_ms': 0,
+        }
+
+    def set_result(self, result: Any):
+        result_payload = normalize_tool_result(result)
+        self.result_payload = result_payload
+        if result_payload.get('type') == 'subtask_run':
+            run = result_payload.get('run')
+            if isinstance(run, dict):
+                self.set_subtask(run)
+            self._apply_result_header(result_payload)
+            return
+        if self._tool_kind() in {'subagent', 'capability'}:
+            self.set_subtask(self._placeholder_subtask_trace(result_payload))
+            return
+        if self.result_label is not None:
+            self.result_label.setVisible(True)
+        if self.result_view is not None:
+            self.result_view.setVisible(True)
+            self.result_view.set_markdown(str(result_payload.get('content') or ''))
 
         name = self._tool_name()
-        self.toggle_btn.setText(self._completed_title(name))
+        if self.toggle_btn is not None:
+            self.toggle_btn.setText(self._completed_title(name))
 
-        summary = self._result_summary(result)
-        self.summary_label.setVisible(bool(summary))
-        if summary:
+        summary = self._result_summary(result_payload)
+        if self.summary_label is not None:
+            self.summary_label.setVisible(bool(summary))
+        if summary and self.summary_label is not None:
             self.summary_label.setText(f"摘要：{summary}")
 
         meta_hint = self._result_meta_hint()
-        self.meta_label.setVisible(bool(meta_hint))
-        if meta_hint:
+        if self.meta_label is not None:
+            self.meta_label.setVisible(bool(meta_hint))
+        if meta_hint and self.meta_label is not None:
             self.meta_label.setText(meta_hint)
 
     def update_content(self):
-        """Refresh content from tool_call data"""
-        if 'result' in self.tool_call:
-            self.set_result(self.tool_call['result'])
+        """Refresh content from the normalized invocation state."""
+        if self.result_payload is not None:
+            self.set_result(self.result_payload)
 
 
 class ToolCallsSection(QWidget):
-    """Container for multiple tool calls"""
+    """Container for normalized tool invocation views."""
 
-    def __init__(self, tool_calls: List[dict], parent=None):
+    def __init__(self, tool_calls: List[dict] | List[ToolInvocationView], parent=None):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        self.tool_calls = tool_calls
+        self.invocations: list[ToolInvocationView] = [item for item in tool_calls if isinstance(item, ToolInvocationView)]
+        self.tool_calls = [item.tool_call if isinstance(item, ToolInvocationView) else item for item in tool_calls]
         self.items = {}
         self._setup_ui()
 
@@ -589,14 +708,18 @@ class ToolCallsSection(QWidget):
         header.setObjectName("message_badge")
         layout.addWidget(header)
 
-        for tool_call in self.tool_calls:
-            item = ToolCallItem(tool_call)
+        sources = self.invocations if self.invocations else self.tool_calls
+        for source in sources:
+            tool_call = source.tool_call if isinstance(source, ToolInvocationView) else source
+            if not isinstance(tool_call, dict):
+                continue
+            item = ToolCallItem(source)
             self.items[tool_call.get('id')] = item
             layout.addWidget(item)
 
-    def update_result(self, tool_id: str, result: str):
+    def update_subtask(self, tool_id: str, trace: dict):
         if tool_id in self.items:
-            self.items[tool_id].set_result(result)
+            self.items[tool_id].set_subtask(trace)
 
     def refresh_all(self):
         """Refresh all items from their underlying data"""
@@ -616,6 +739,152 @@ class ToolCallsSection(QWidget):
             parts.append(f"子 Agent {counts['subagent']}")
         detail = " / ".join(parts) if parts else "无调用"
         return f"调用链 ({len(self.tool_calls)}) · {detail}"
+
+
+class SubtaskRunWidget(QWidget):
+    """Collapsible child-agent run rendered from a normalized RunTree node."""
+
+    def __init__(self, trace: dict[str, Any], parent=None):
+        super().__init__(parent)
+        self.trace = dict(trace or {})
+        self.is_expanded = False
+        self.toggle_btn = None
+        self.summary_label = None
+        self.content_widget = None
+        self.show_more_btn = None
+        self._show_all = False
+        self._content_built = False
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 1, 0, 1)
+        layout.setSpacing(2)
+
+        self.toggle_btn = QToolButton()
+        self.toggle_btn.setObjectName("tool_call_header")
+        self.toggle_btn.setProperty("kind", "subagent")
+        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.toggle_btn.setMaximumHeight(22)
+        self.toggle_btn.clicked.connect(self._toggle)
+        layout.addWidget(self.toggle_btn)
+
+        self.summary_label = QLabel("")
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setProperty("muted", True)
+        layout.addWidget(self.summary_label)
+
+        self.content_widget = QWidget()
+        self.content_widget.setObjectName("subagent_trace_content")
+        self.content_widget.setVisible(False)
+        content_layout = QVBoxLayout(self.content_widget)
+        content_layout.setContentsMargins(10, 6, 4, 6)
+        content_layout.setSpacing(4)
+        layout.addWidget(self.content_widget)
+        self._refresh_header()
+
+    def _show_all_messages(self):
+        self._show_all = True
+        self._rebuild_content()
+
+    def set_trace(self, trace: dict[str, Any]) -> None:
+        self.trace = dict(trace or {})
+        self._refresh_header()
+        if self.is_expanded:
+            self._rebuild_content()
+
+    def _toggle(self):
+        self.is_expanded = not self.is_expanded
+        if self.content_widget is not None:
+            self.content_widget.setVisible(self.is_expanded)
+        if self.is_expanded:
+            self._rebuild_content()
+        else:
+            self._clear_content()
+
+    def _refresh_header(self):
+        status = str(self.trace.get('status') or 'completed').strip().lower()
+        title = str(self.trace.get('title') or self.trace.get('name') or 'Subagent').strip()
+        kind = str(self.trace.get('kind') or 'subagent').strip().lower()
+        kind_label = '能力' if kind == 'capability' else '子 Agent'
+        messages = [m for m in self.trace.get('messages') or [] if isinstance(m, dict)]
+        duration_ms = int(self.trace.get('duration_ms') or 0)
+        duration = f" · {duration_ms / 1000:.1f}s" if duration_ms > 0 else ""
+
+        if self.toggle_btn is not None:
+            self.toggle_btn.setText(
+                f"{_subtask_status_icon(status)} {kind_label} · {title} · {_subtask_status_label(status)} · 消息 {len(messages)}{duration}"
+            )
+
+        summary = _plain_summary(
+            self.trace.get('final_message') or self.trace.get('error') or self.trace.get('goal'),
+            limit=180,
+        )
+        if self.summary_label is not None:
+            self.summary_label.setVisible(bool(summary))
+            self.summary_label.setText(f"摘要：{summary}" if summary else "")
+
+    def _clear_content(self):
+        if self.content_widget is None:
+            return
+        content_layout = self.content_widget.layout()
+        while content_layout.count():
+            item = content_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._content_built = False
+
+    def _rebuild_content(self):
+        if self.content_widget is None:
+            return
+        self._clear_content()
+        content_layout = self.content_widget.layout()
+        messages = [m for m in self.trace.get('messages') or [] if isinstance(m, dict)]
+
+        goal = str(self.trace.get('goal') or '').strip()
+        if goal:
+            goal_label = QLabel(f"目标：{_plain_summary(goal, 240)}")
+            goal_label.setWordWrap(True)
+            goal_label.setProperty("muted", True)
+            content_layout.addWidget(goal_label)
+
+        view_model = build_message_tree_view_model(messages)
+        render_messages = []
+        seen_message_ids: set[str] = set()
+        for view in view_model.messages:
+            message_id = str(getattr(view.message, 'id', '') or '')
+            if message_id and message_id in seen_message_ids:
+                continue
+            if message_id:
+                seen_message_ids.add(message_id)
+            render_messages.append(view.message)
+        limit = len(render_messages) if self._show_all else 80
+        for child_message in render_messages[:limit]:
+            try:
+                content_layout.addWidget(MessageWidget(child_message, embedded=True))
+            except Exception as exc:
+                logger.debug("Failed to render subtask message: %s", exc)
+        if len(render_messages) > limit:
+            self.show_more_btn = QPushButton(f"显示全部 {len(render_messages)} 条子任务消息（还有 {len(render_messages) - limit} 条）")
+            self.show_more_btn.setProperty("secondary", True)
+            self.show_more_btn.clicked.connect(self._show_all_messages)
+            content_layout.addWidget(self.show_more_btn)
+
+        error = str(self.trace.get('error') or '').strip()
+        if error:
+            error_label = QLabel("错误:")
+            error_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #c0392b; margin-top: 4px;")
+            content_layout.addWidget(error_label)
+            error_view = MarkdownView(error)
+            error_view.set_height_adjustment(minimum_height=22, padding=2)
+            content_layout.addWidget(error_view)
+        self._content_built = True
+
+
+SubagentTraceItem = SubtaskRunWidget
 
 
 class InlineQuestionCard(QFrame):
@@ -677,7 +946,7 @@ class InlineQuestionCard(QFrame):
         for index, option in enumerate(self.question.get("options") or []):
             layout.addWidget(self._build_option_widget(option, index))
 
-        if bool(self.question.get("allowFreeformInput", True)):
+        if bool(self.question.get("allow_freeform_input", True)):
             freeform_title = QLabel("补充输入")
             freeform_title.setProperty("muted", True)
             layout.addWidget(freeform_title)
@@ -711,7 +980,7 @@ class InlineQuestionCard(QFrame):
         payload = option if isinstance(option, dict) else {"label": str(option or "").strip()}
         label = str(payload.get("label") or "").strip() or f"选项 {index + 1}"
         description = str(payload.get("description") or "").strip()
-        multi_select = bool(self.question.get("multiSelect", False))
+        multi_select = bool(self.question.get("multi_select", False))
 
         container = QFrame()
         container.setObjectName("task_card")
@@ -749,7 +1018,7 @@ class InlineQuestionCard(QFrame):
             if isinstance(option, dict) and option.get("recommended")
         ]
         recommended = [item for item in recommended if item]
-        multi_select = bool(self.question.get("multiSelect", False))
+        multi_select = bool(self.question.get("multi_select", False))
 
         if not recommended and not multi_select and self._option_controls:
             recommended = [self._option_controls[0][0]]
@@ -794,9 +1063,12 @@ class MessageWidget(QFrame):
     edit_requested = pyqtSignal(str)
     delete_requested = pyqtSignal(str)
 
-    def __init__(self, message: Message, parent=None):
+    def __init__(self, message: Message, parent=None, *, embedded: bool = False):
         super().__init__(parent)
-        self.message = message
+        message_view = view_model_for_message(message)
+        self.message_view = message_view
+        self.message = message_view.message if message_view is not None else Message.from_dict(message.to_dict())
+        self.embedded = bool(embedded)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -819,7 +1091,7 @@ class MessageWidget(QFrame):
         header.setSpacing(4)
         header.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        role_label = QLabel("你" if is_user else "助手")
+        role_label = QLabel(("子用户" if is_user else "子助手") if self.embedded else ("你" if is_user else "助手"))
         role_label.setObjectName("message_role")
         role_label.setFixedHeight(MESSAGE_HEADER_HEIGHT)
         role_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -844,7 +1116,8 @@ class MessageWidget(QFrame):
         actions_layout = QHBoxLayout(actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(2)
-        self._add_action_buttons(actions_layout)
+        if not self.embedded:
+            self._add_action_buttons(actions_layout)
         actions_widget.setFixedHeight(MESSAGE_ACTION_SIZE)
         actions_widget.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         header.addWidget(actions_widget)
@@ -865,7 +1138,8 @@ class MessageWidget(QFrame):
 
         # Tool Calls (assistant only)
         if (not is_user) and self.message.tool_calls:
-            self.tool_calls_widget = ToolCallsSection(self.message.tool_calls)
+            invocations = self.message_view.tool_invocations if self.message_view is not None else self.message.tool_calls
+            self.tool_calls_widget = ToolCallsSection(invocations)
             layout.addWidget(self.tool_calls_widget)
 
         # Images
@@ -878,15 +1152,30 @@ class MessageWidget(QFrame):
             return False
         return any(tc.get('id') == tool_id for tc in self.message.tool_calls)
 
-    def add_tool_result(self, tool_message: Message):
-        """Update tool call UI with result"""
-        if hasattr(self, 'tool_calls_widget') and tool_message.tool_call_id:
-            self.tool_calls_widget.update_result(tool_message.tool_call_id, tool_message.content)
-
     def refresh_tool_calls(self):
         """Refresh tool calls display from message data"""
         if hasattr(self, 'tool_calls_widget'):
             self.tool_calls_widget.refresh_all()
+
+    def update_subtask_trace(self, trace: dict[str, Any]) -> bool:
+        if not isinstance(trace, dict):
+            return False
+        metadata = trace.get('metadata') if isinstance(trace.get('metadata'), dict) else {}
+        tool_call_id = str(
+            trace.get('parent_tool_call_id')
+            or trace.get('tool_call_id')
+            or metadata.get('parent_tool_call_id')
+            or metadata.get('tool_call_id')
+            or ''
+        ).strip()
+        if self.message.tool_calls and tool_call_id:
+            for tool_call in self.message.tool_calls:
+                if str(tool_call.get('id') or '') != tool_call_id:
+                    continue
+                if hasattr(self, 'tool_calls_widget'):
+                    self.tool_calls_widget.update_subtask(tool_call_id, trace)
+                return True
+        return False
 
     def _add_model_badge(self, layout):
         model = None

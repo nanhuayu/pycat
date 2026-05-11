@@ -17,19 +17,18 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QCheckBox,
     QLineEdit,
-    QComboBox,
     QSpinBox,
 )
 
-from core.capabilities import CapabilitiesConfig, CapabilityConfig, default_capabilities_config
+from core.capabilities import CapabilitiesConfig, CapabilitiesManager, CapabilityConfig, default_capabilities_config
 from core.config.schema import PromptsConfig, PromptOptimizerConfig
-from core.prompts.templates import DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT
+from core.capabilities.defaults import DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT
 from models.provider import Provider
 from ui.settings.page_header import build_page_header
 from ui.widgets.model_ref_selector import ModelRefCombo
 
 
-class PromptsPage(QWidget):
+class CapabilitiesPage(QWidget):
     page_title = "能力"
 
     def __init__(
@@ -44,7 +43,11 @@ class PromptsPage(QWidget):
         super().__init__(parent)
         self._original_prompts = prompts
         self._providers = list(providers or [])
-        self._capabilities = capabilities or default_capabilities_config()
+        self._capabilities = (
+            CapabilitiesManager.merge(default_capabilities_config(), capabilities)
+            if capabilities is not None
+            else default_capabilities_config()
+        )
         self._capability_items: Dict[str, CapabilityConfig] = {
             item.id: item for item in self._capabilities.capabilities
         }
@@ -81,10 +84,9 @@ class PromptsPage(QWidget):
                 kind=current.kind,
                 enabled=current.enabled,
                 model_ref=model_ref,
-                mode=current.mode,
                 system_prompt=system_prompt,
                 description=current.description,
-                tool_groups=current.tool_groups,
+                allowed_tool_categories=current.allowed_tool_categories,
                 input_schema=current.input_schema,
                 output_schema=current.output_schema,
                 options=current.options,
@@ -163,10 +165,6 @@ class PromptsPage(QWidget):
         self.capability_description.setPlaceholderText("简短说明此能力的用途")
         detail_form.addRow("说明", self.capability_description)
 
-        self.capability_mode = QComboBox()
-        self.capability_mode.addItems(["agent", "chat", "plan", "explore"])
-        detail_form.addRow("模式", self.capability_mode)
-
         self.capability_model = ModelRefCombo(
             self._providers,
             current_model_ref="",
@@ -174,9 +172,9 @@ class PromptsPage(QWidget):
         )
         detail_form.addRow("模型", self.capability_model)
 
-        self.capability_tool_groups = QLineEdit()
-        self.capability_tool_groups.setPlaceholderText("例如：read, search, mcp；留空表示跟随模式")
-        detail_form.addRow("工具组", self.capability_tool_groups)
+        self.capability_tool_categories = QLineEdit()
+        self.capability_tool_categories.setPlaceholderText("例如：read, search, mcp；留空表示文本能力")
+        detail_form.addRow("允许工具类别", self.capability_tool_categories)
 
         self.capability_max_turns = QSpinBox()
         self.capability_max_turns.setRange(0, 100)
@@ -220,8 +218,9 @@ class PromptsPage(QWidget):
 
         hint = QLabel(
             "提示：每个能力都是一个独立的工作流，注册为 capability__* 工具。"
-            "能力可配置自己的模型、工具组、最大轮次和提示词。"
-            "subagent__custom 是通用子 Agent，由父 Agent 在调用时实时配置目的和工具组；"
+            "能力可配置自己的模型、允许工具类别、最大轮次和提示词。"
+            "上下文压缩能力统一负责压缩模型、提示词与工具详情选项。"
+            "subagent__custom 是通用子 Agent，由父 Agent 在调用时实时配置目的和允许工具类别；"
             "subagent__read_analyze 和 subagent__search 是专用子 Agent，分别用于多文件长文分析和搜索研究。"
         )
         hint.setWordWrap(True)
@@ -284,10 +283,9 @@ class PromptsPage(QWidget):
             kind=current.kind,
             enabled=bool(self.capability_enabled.isChecked()),
             model_ref=self.capability_model.model_ref(),
-            mode=(self.capability_mode.currentText() or current.mode or "agent").strip().lower() or "agent",
             system_prompt=(self.capability_prompt.toPlainText() or "").strip(),
             description=(self.capability_description.toPlainText() or "").strip(),
-            tool_groups=self._parse_csv(self.capability_tool_groups.text()),
+            allowed_tool_categories=self._parse_csv(self.capability_tool_categories.text()),
             input_schema=current.input_schema,
             output_schema=current.output_schema,
             options=options,
@@ -311,9 +309,8 @@ class PromptsPage(QWidget):
             self.capability_id.setText(capability.id if capability else "")
             self.capability_name.setText(capability.name if capability else "")
             self.capability_description.setPlainText(capability.description if capability else "")
-            self._set_combo_text(self.capability_mode, capability.mode or "agent" if capability else "agent")
             self.capability_model.set_model_ref(capability.model_ref if capability else "")
-            self.capability_tool_groups.setText(", ".join(capability.tool_groups or ()) if capability else "")
+            self.capability_tool_categories.setText(", ".join(capability.allowed_tool_categories or ()) if capability else "")
             max_turns = 0
             if capability and capability.options:
                 try:
@@ -338,12 +335,13 @@ class PromptsPage(QWidget):
         if capability is None:
             return ""
         model = capability.model_ref or "跟随当前对话模型"
-        groups = ", ".join(capability.tool_groups or ()) or "不限制 / 跟随模式"
+        categories = ", ".join(capability.allowed_tool_categories or ()) or "无（文本能力）"
+        runtime = "Agent 子任务" if capability.allowed_tool_categories else "Chat 子任务"
         turns = str(capability.options.get("max_turns")) if capability.options and capability.options.get("max_turns") else "不限制"
         status = "已注册为工具" if capability.enabled else "已禁用"
         return (
-            f"ID: {capability.id} · 类型: {capability.kind} · 模式: {capability.mode} · "
-            f"模型: {model} · 工具组: {groups} · 最大轮次: {turns} · {status}"
+            f"ID: {capability.id} · 类型: {capability.kind} · 运行: {runtime} · "
+            f"模型: {model} · 允许工具类别: {categories} · 最大轮次: {turns} · {status}"
         )
 
     def _add_capability(self) -> None:
@@ -358,7 +356,6 @@ class PromptsPage(QWidget):
             name=f"自定义能力 {index}",
             kind="custom",
             enabled=True,
-            mode="agent",
         )
         self._populate_capabilities()
         for row in range(self.capability_list.count()):
@@ -388,12 +385,6 @@ class PromptsPage(QWidget):
             if value and value not in values:
                 values.append(value)
         return tuple(values)
-
-    @staticmethod
-    def _set_combo_text(combo: QComboBox, value: str) -> None:
-        target = str(value or "").strip()
-        index = combo.findText(target)
-        combo.setCurrentIndex(index if index >= 0 else 0)
 
     def _load_builtin_template(self) -> None:
         capability_id = self._current_capability_id()

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .defaults import default_capabilities_config
-from .types import CapabilitiesConfig, CapabilityConfig
+from .types import CapabilitiesConfig, CapabilityConfig, REMOVED_BUILTIN_CAPABILITY_IDS
 
 
 class CapabilitiesManager:
@@ -54,6 +54,8 @@ class CapabilitiesManager:
     def merge(base: CapabilitiesConfig, override: CapabilitiesConfig) -> CapabilitiesConfig:
         capabilities: dict[str, CapabilityConfig] = {item.id: item for item in base.capabilities}
         for item in override.capabilities:
+            if item.id.strip().lower() in REMOVED_BUILTIN_CAPABILITY_IDS:
+                continue
             base_item = capabilities.get(item.id)
             if base_item is None:
                 capabilities[item.id] = item
@@ -64,10 +66,9 @@ class CapabilitiesManager:
                 kind=item.kind or base_item.kind,
                 enabled=item.enabled,
                 model_ref=item.model_ref or base_item.model_ref,
-                mode=item.mode or base_item.mode,
                 system_prompt=item.system_prompt or base_item.system_prompt,
                 description=item.description or base_item.description,
-                tool_groups=item.tool_groups or base_item.tool_groups,
+                allowed_tool_categories=item.allowed_tool_categories or base_item.allowed_tool_categories,
                 input_schema=item.input_schema or base_item.input_schema,
                 output_schema=item.output_schema or base_item.output_schema,
                 options={**(base_item.options or {}), **(item.options or {})},

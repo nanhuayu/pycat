@@ -19,12 +19,8 @@ class AskQuestionsTool(BaseTool):
         )
 
     @property
-    def group(self) -> str:
-        return "read"
-
-    @property
     def category(self) -> str:
-        return "read"
+        return "manage"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -39,8 +35,8 @@ class AskQuestionsTool(BaseTool):
                         "properties": {
                             "header": {"type": "string", "description": "Unique short identifier for the question."},
                             "question": {"type": "string", "description": "Question shown to the user."},
-                            "multiSelect": {"type": "boolean", "description": "Allow multiple selections."},
-                            "allowFreeformInput": {"type": "boolean", "description": "Allow custom text input."},
+                            "multi_select": {"type": "boolean", "description": "Allow multiple selections."},
+                            "allow_freeform_input": {"type": "boolean", "description": "Allow custom text input."},
                             "message": {"type": "string", "description": "Optional supporting context shown under the question."},
                             "options": {
                                 "type": "array",
@@ -107,15 +103,15 @@ class AskQuestionsTool(BaseTool):
                 if label:
                     options.append({"label": label, "description": "", "recommended": False})
 
-        allow_freeform = bool(raw_question.get("allowFreeformInput", True))
+        allow_freeform = bool(raw_question.get("allow_freeform_input", True))
         if not options and not allow_freeform:
             return None
 
         return {
             "header": header,
             "question": question_text,
-            "multiSelect": bool(raw_question.get("multiSelect", False)),
-            "allowFreeformInput": allow_freeform,
+            "multi_select": bool(raw_question.get("multi_select", False)),
+            "allow_freeform_input": allow_freeform,
             "message": str(raw_question.get("message") or "").strip(),
             "options": options,
         }

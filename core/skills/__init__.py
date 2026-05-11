@@ -10,12 +10,13 @@ Explicit ``/{skill}`` invocation is the only skill execution entrypoint.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from core.config import get_global_subdir
+from core.content.markdown import extract_markdown_links, parse_frontmatter
+from core.tools.catalog import ToolSelectionPolicy, normalize_tool_category
 from core.tools.mcp.naming import build_mcp_tool_name, tool_names_match
 
 logger = logging.getLogger(__name__)
@@ -52,8 +53,7 @@ class SkillInvocationSpec:
     execution_mode: str = "inline"
     user_invocable: bool = True
     disable_model_invocation: bool = False
-    enable_mcp: bool = False
-    enable_search: bool = False
+    tool_selection: ToolSelectionPolicy = field(default_factory=ToolSelectionPolicy.all)
     declared_tools: Tuple[str, ...] = ()
     preferred_cli: Tuple[str, ...] = ()
 
@@ -184,7 +184,7 @@ class SkillsManager:
 
     def _load_skill_file(self, path: Path, *, default_name: str) -> Optional[Skill]:
         content = path.read_text(encoding="utf-8")
-        metadata, body = self._parse_frontmatter(content)
+        metadata, body = parse_frontmatter(content)
         raw_name = str(metadata.get("name") or default_name or "").strip().lower()
         if not raw_name:
             return None
@@ -203,51 +203,7 @@ class SkillsManager:
 
     @staticmethod
     def _parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
-        stripped = content.lstrip()
-        if not stripped.startswith("---"):
-            return {}, content
-
-        lines = stripped.splitlines()
-        if not lines or lines[0].strip() != "---":
-            return {}, content
-
-        closing_index = None
-        for index in range(1, len(lines)):
-            if lines[index].strip() == "---":
-                closing_index = index
-                break
-        if closing_index is None:
-            return {}, content
-
-        raw_meta = lines[1:closing_index]
-        body = "\n".join(lines[closing_index + 1 :])
-        metadata: Dict[str, Any] = {}
-        current_list_key: Optional[str] = None
-
-        for raw_line in raw_meta:
-            line = raw_line.rstrip()
-            stripped_line = line.strip()
-            if current_list_key and stripped_line.startswith("- "):
-                metadata.setdefault(current_list_key, []).append(
-                    SkillsManager._parse_frontmatter_value(stripped_line[2:].strip())
-                )
-                continue
-
-            current_list_key = None
-            line = stripped_line
-            if not line or line.startswith("#") or ":" not in line:
-                continue
-
-            key, value = line.split(":", 1)
-            key = key.strip().lower()
-            value = value.strip()
-            if not value:
-                metadata[key] = []
-                current_list_key = key
-                continue
-            metadata[key] = SkillsManager._parse_frontmatter_value(value)
-
-        return metadata, body
+        return parse_frontmatter(content)
 
     @staticmethod
     def _parse_frontmatter_value(value: str) -> Any:
@@ -329,25 +285,20 @@ def resolve_skill_invocation_spec(
         else "inline"
     )
 
-    enable_mcp = _coerce_optional_bool(
+    raw_categories = _coerce_list(
         _first_non_empty(
-            metadata.get("enable-mcp"),
-            metadata.get("enable_mcp"),
-            metadata.get("mcp"),
+            metadata.get("allowed-tool-categories"),
+            metadata.get("allowed_tool_categories"),
+            metadata.get("allowed-categories"),
+            metadata.get("allowed_categories"),
         )
     )
-    if enable_mcp is None:
-        enable_mcp = executor == "mcp"
-
-    enable_search = _coerce_optional_bool(
-        _first_non_empty(
-            metadata.get("enable-search"),
-            metadata.get("enable_search"),
-            metadata.get("search"),
-        )
-    )
-    if enable_search is None:
-        enable_search = False
+    categories = {normalize_tool_category(item) for item in raw_categories if str(item or "").strip()}
+    if executor == "cli":
+        categories.add("execute")
+    if executor == "mcp":
+        categories.add("mcp")
+    tool_selection = ToolSelectionPolicy.from_categories(categories or None)
 
     return SkillInvocationSpec(
         mode=mode,
@@ -358,8 +309,7 @@ def resolve_skill_invocation_spec(
             metadata.get("disable-model-invocation"),
             default=False,
         ),
-        enable_mcp=bool(enable_mcp),
-        enable_search=bool(enable_search),
+        tool_selection=tool_selection,
         declared_tools=tuple(_extract_declared_tool_names(raw_tools, executor=executor)),
         preferred_cli=preferred_cli,
     )
@@ -437,17 +387,7 @@ def _resolve_skill_root(path: Path) -> Path:
 
 
 def _extract_markdown_resource_links(content: str) -> List[str]:
-    result: List[str] = []
-    for match in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", str(content or "")):
-        candidate = str(match.group(1) or "").strip()
-        if not candidate or "://" in candidate or candidate.startswith("#"):
-            continue
-        if candidate.startswith("./"):
-            candidate = candidate[2:]
-        if candidate.startswith("/"):
-            continue
-        result.append(candidate.replace("\\", "/"))
-    return _dedupe_preserve_order(result)
+    return extract_markdown_links(content)
 
 
 def _list_skill_resource_paths(skill: Skill) -> List[str]:

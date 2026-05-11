@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping
 
-from core.capabilities import CapabilitiesConfig, default_capabilities_config
+from core.capabilities import CapabilitiesConfig, CapabilitiesManager, default_capabilities_config
+from core.tools.catalog import ToolSelectionPolicy
 
 
 # ---------------------------------------------------------------------------
@@ -53,10 +54,13 @@ class ToolPermissionConfig:
     category_defaults: Dict[str, ToolPolicy] = field(
         default_factory=lambda: {
             "read": ToolPolicy(enabled=True, auto_approve=True),
+            "search": ToolPolicy(enabled=True, auto_approve=True),
             "edit": ToolPolicy(enabled=True, auto_approve=False),
-            "command": ToolPolicy(enabled=True, auto_approve=False),
+            "execute": ToolPolicy(enabled=True, auto_approve=False),
+            "manage": ToolPolicy(enabled=True, auto_approve=True),
             "delegate": ToolPolicy(enabled=True, auto_approve=False),
-            "misc": ToolPolicy(enabled=True, auto_approve=False),
+            "extension": ToolPolicy(enabled=True, auto_approve=False),
+            "mcp": ToolPolicy(enabled=True, auto_approve=False),
         }
     )
 
@@ -78,16 +82,21 @@ class ToolPermissionConfig:
         # Category defaults — migrate legacy flat keys if present
         defaults: Dict[str, ToolPolicy] = {
             "read": ToolPolicy(enabled=True, auto_approve=True),
+            "search": ToolPolicy(enabled=True, auto_approve=True),
             "edit": ToolPolicy(enabled=True, auto_approve=False),
-            "command": ToolPolicy(enabled=True, auto_approve=False),
+            "execute": ToolPolicy(enabled=True, auto_approve=False),
+            "manage": ToolPolicy(enabled=True, auto_approve=True),
             "delegate": ToolPolicy(enabled=True, auto_approve=False),
-            "misc": ToolPolicy(enabled=True, auto_approve=False),
+            "extension": ToolPolicy(enabled=True, auto_approve=False),
+            "mcp": ToolPolicy(enabled=True, auto_approve=False),
         }
         raw_cat = d.get("category_defaults")
         if isinstance(raw_cat, dict):
             for key, val in raw_cat.items():
                 if isinstance(val, dict):
-                    defaults[key] = ToolPolicy.from_dict(val)
+                    from core.tools.catalog import normalize_tool_category
+                    canonical = normalize_tool_category(str(key))
+                    defaults[canonical] = ToolPolicy.from_dict(val)
         else:
             # Legacy fallback: read from old flat booleans
             defaults["read"] = ToolPolicy(
@@ -98,7 +107,7 @@ class ToolPermissionConfig:
                 enabled=True,
                 auto_approve=_as_bool(d.get("edit_auto_approve"), False),
             )
-            defaults["command"] = ToolPolicy(
+            defaults["execute"] = ToolPolicy(
                 enabled=True,
                 auto_approve=_as_bool(d.get("command_auto_approve"), False),
             )
@@ -128,7 +137,9 @@ class ToolPermissionConfig:
         if override is not None:
             return override
 
-        cat_default = (self.category_defaults or {}).get(category)
+        from core.tools.catalog import normalize_tool_category
+        canonical_category = normalize_tool_category(category)
+        cat_default = (self.category_defaults or {}).get(canonical_category)
         if cat_default is not None:
             return cat_default
 
@@ -230,9 +241,6 @@ class CompressionPolicyConfig:
 class ContextConfig:
     default_max_context_messages: int = 0
     agent_auto_compress_enabled: bool = True
-    summary_model: str = ""
-    summary_system_prompt: str = ""
-    summary_include_tool_details: bool = False
     compression_policy: CompressionPolicyConfig = field(default_factory=CompressionPolicyConfig)
 
     @staticmethod
@@ -243,9 +251,6 @@ class ContextConfig:
         return ContextConfig(
             default_max_context_messages=default_max,
             agent_auto_compress_enabled=_as_bool(d.get("agent_auto_compress_enabled"), True),
-            summary_model=_as_str(d.get("summary_model"), "").strip(),
-            summary_system_prompt=_as_str(d.get("summary_system_prompt"), "").strip(),
-            summary_include_tool_details=_as_bool(d.get("summary_include_tool_details"), False),
             compression_policy=CompressionPolicyConfig.from_dict(_as_dict(d.get("compression_policy"))),
         )
 
@@ -253,9 +258,6 @@ class ContextConfig:
         return {
             "default_max_context_messages": int(self.default_max_context_messages),
             "agent_auto_compress_enabled": bool(self.agent_auto_compress_enabled),
-            "summary_model": (self.summary_model or "").strip(),
-            "summary_system_prompt": (self.summary_system_prompt or "").strip(),
-            "summary_include_tool_details": bool(self.summary_include_tool_details),
             "compression_policy": self.compression_policy.to_dict(),
         }
 
@@ -375,7 +377,9 @@ class ChannelConfig:
     name: str = ""
     type: str = "webhook"
     enabled: bool = False
-    allow_tools: bool = True
+    tool_selection: ToolSelectionPolicy = field(
+        default_factory=lambda: ToolSelectionPolicy.from_categories(("read", "search", "manage"))
+    )
     source: str = ""
     description: str = ""
     agent_id: str = ""
@@ -435,7 +439,11 @@ class ChannelConfig:
             name=name,
             type=channel_type,
             enabled=_as_bool(d.get("enabled"), False),
-            allow_tools=_as_bool(d.get("allow_tools"), True),
+            tool_selection=(
+                ToolSelectionPolicy.from_dict(d.get("tool_selection"))
+                if isinstance(d.get("tool_selection"), dict)
+                else ToolSelectionPolicy.from_categories(("read", "search", "manage"))
+            ),
             source=source,
             description=_as_str(d.get("description"), "").strip(),
             agent_id=_as_str(d.get("agent_id"), "").strip(),
@@ -456,7 +464,7 @@ class ChannelConfig:
             "name": self.name,
             "type": self.type,
             "enabled": bool(self.enabled),
-            "allow_tools": bool(self.allow_tools),
+            "tool_selection": self.tool_selection.to_dict(),
             "source": self.source,
             "description": self.description,
             "agent_id": self.agent_id,
@@ -481,6 +489,7 @@ class ShellConfig:
     wsl_distro: str = ""
     output_encoding: str = "auto"
     inherit_env: bool = True
+    bang_command_behavior: str = "shell"
 
     @staticmethod
     def from_dict(data: Mapping[str, Any] | None) -> "ShellConfig":
@@ -493,6 +502,10 @@ class ShellConfig:
         if encoding not in {"auto", "utf-8", "system", "gb18030"}:
             encoding = "auto"
 
+        bang_behavior = _as_str(d.get("bang_command_behavior"), "shell").strip().lower() or "shell"
+        if bang_behavior not in {"shell", "agent"}:
+            bang_behavior = "shell"
+
         return ShellConfig(
             backend=backend,
             cmd_executable=_as_str(d.get("cmd_executable"), "").strip(),
@@ -501,6 +514,7 @@ class ShellConfig:
             wsl_distro=_as_str(d.get("wsl_distro"), "").strip(),
             output_encoding=encoding,
             inherit_env=_as_bool(d.get("inherit_env"), True),
+            bang_command_behavior=bang_behavior,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -512,6 +526,7 @@ class ShellConfig:
             "wsl_distro": self.wsl_distro,
             "output_encoding": self.output_encoding,
             "inherit_env": bool(self.inherit_env),
+            "bang_command_behavior": self.bang_command_behavior if self.bang_command_behavior in {"shell", "agent"} else "shell",
         }
 
 
@@ -567,7 +582,7 @@ class AppConfig:
                         "enabled": True,
                         "auto_approve": _as_bool(d.get("auto_approve_edit"), False),
                     },
-                    "command": {
+                    "execute": {
                         "enabled": True,
                         "auto_approve": _as_bool(d.get("auto_approve_command"), False),
                     },
@@ -590,7 +605,10 @@ class AppConfig:
             prompts=PromptsConfig.from_dict(_as_dict(d.get("prompts"))),
             prompt_optimizer=PromptOptimizerConfig.from_dict(_as_dict(d.get("prompt_optimizer"))),
             prompt_optimizer_model=_as_str(d.get("prompt_optimizer_model"), "").strip(),
-            capabilities=CapabilitiesConfig.from_dict(_as_dict(d.get("capabilities")))
+            capabilities=CapabilitiesManager.merge(
+                default_capabilities_config(),
+                CapabilitiesConfig.from_dict(_as_dict(d.get("capabilities"))),
+            )
             if isinstance(d.get("capabilities"), dict)
             else default_capabilities_config(),
             default_chat_model=_as_str(d.get("default_chat_model"), "").strip(),

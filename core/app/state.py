@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.tools.catalog import ToolSelectionPolicy
 from models.provider import Provider
 
 
@@ -18,8 +19,6 @@ class ConversationSelection:
     mode_slug: str = "chat"
     work_dir: str = ""
     show_thinking: bool = True
-    enable_mcp: bool = False
-    enable_search: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,11 +39,8 @@ class ConversationSettingsUpdate:
     max_tokens: int | None = None
     stream: bool | None = None
     show_thinking: bool = True
-    enable_mcp: bool = False
-    enable_search: bool = False
-    # Per-tool policy overrides for this conversation (merged with global defaults).
-    tool_policies: dict[str, Any] = field(default_factory=dict)
-    memory_sources: tuple[str, ...] = ("session", "workspace")
+    memory_sources: tuple[str, ...] = ("session", "workspace", "global")
+    tool_selection: ToolSelectionPolicy | None = None
     allowed_channel_sources: tuple[str, ...] = field(default_factory=tuple)
     trusted_channel_sources: tuple[str, ...] = field(default_factory=tuple)
     channel_notice_policy: str = "notice"
@@ -67,11 +63,9 @@ class AppState:
     mode_slug: str = "chat"
     work_dir: str = ""
     show_thinking: bool = True
-    enable_mcp: bool = False
-    enable_search: bool = False
     message_count: int = 0
     is_streaming: bool = False
-    selected_memory_sources: tuple[str, ...] = ("session", "workspace")
+    selected_memory_sources: tuple[str, ...] = ("session", "workspace", "global")
     enabled_channel_sources: tuple[str, ...] = field(default_factory=tuple)
     allowed_channel_sources: tuple[str, ...] = field(default_factory=tuple)
     trusted_channel_sources: tuple[str, ...] = field(default_factory=tuple)

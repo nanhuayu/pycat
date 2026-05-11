@@ -13,6 +13,135 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def tool_call_name(tool_call: Dict[str, Any] | None) -> str:
+    func = (tool_call or {}).get('function', {})
+    return str(func.get('name', '') or '').strip()
+
+
+def is_subtask_tool_call(tool_call: Dict[str, Any] | None) -> bool:
+    name = tool_call_name(tool_call)
+    return name.startswith('subagent__') or name.startswith('capability__')
+
+
+def normalize_tool_result(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        result = dict(value)
+        result_type = str(result.get('type') or '').strip()
+        if not result_type:
+            result['type'] = 'subtask_run' if isinstance(result.get('run'), dict) else 'tool_result'
+        elif result_type == 'simple':
+            result['type'] = 'tool_result'
+        result.setdefault('content', '')
+        result.setdefault('summary', '')
+        metadata = result.get('metadata')
+        result['metadata'] = dict(metadata) if isinstance(metadata, dict) else {}
+        if isinstance(result.get('run'), dict):
+            result['type'] = 'subtask_run'
+            result['run'] = normalize_subtask_run(result.get('run'))
+        return result
+    return {
+        'type': 'tool_result',
+        'content': '' if value is None else str(value),
+        'summary': '',
+        'metadata': {},
+    }
+
+
+def normalize_subtask_run(value: Any) -> Dict[str, Any]:
+    run = dict(value) if isinstance(value, dict) else {}
+    messages: List[Dict[str, Any]] = []
+    for item in run.get('messages') or []:
+        if isinstance(item, Message):
+            payload = item.to_dict()
+        elif isinstance(item, dict):
+            payload = dict(item)
+        else:
+            continue
+        payload = normalize_message_payload(payload)
+        if payload.get('role') == 'tool' and payload.get('tool_call_id'):
+            tool_call_id = str(payload.get('tool_call_id') or '')
+            for previous in reversed(messages):
+                if previous.get('role') != 'assistant':
+                    continue
+                for tool_call in previous.get('tool_calls') or []:
+                    if str(tool_call.get('id') or '') != tool_call_id:
+                        continue
+                    result_metadata = dict(payload.get('metadata') or {})
+                    set_tool_call_result(
+                        tool_call,
+                        {
+                            'type': 'tool_result',
+                            'content': str(payload.get('content') or ''),
+                            'summary': str(payload.get('content') or '')[:220],
+                            'metadata': result_metadata,
+                        },
+                    )
+                    break
+                else:
+                    continue
+                break
+            continue
+        messages.append(payload)
+    run['messages'] = messages
+    metadata = run.get('metadata')
+    run['metadata'] = dict(metadata) if isinstance(metadata, dict) else {}
+    return run
+
+
+def normalize_tool_call(tool_call: Any) -> Dict[str, Any]:
+    original = tool_call if isinstance(tool_call, dict) else {}
+    tc = dict(original)
+    legacy_subtask = tc.get('subtask')
+    tc.pop('subtask', None)
+    tc.pop('subtask_id', None)
+    if 'result' in original:
+        result = normalize_tool_result(original.get('result'))
+        if is_subtask_tool_call(tc) and not isinstance(result.get('run'), dict):
+            result['type'] = 'subtask_run'
+        tc['result'] = result
+    elif isinstance(legacy_subtask, dict):
+        tc['result'] = normalize_tool_result({'type': 'subtask_run', 'run': legacy_subtask})
+    return tc
+
+
+def normalize_tool_calls(tool_calls: Any) -> Optional[List[Dict[str, Any]]]:
+    if not isinstance(tool_calls, list):
+        return None
+    normalized = [normalize_tool_call(tc) for tc in tool_calls if isinstance(tc, dict)]
+    return normalized or None
+
+
+def normalize_message_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = dict(payload or {})
+    if 'tool_calls' in data:
+        data['tool_calls'] = normalize_tool_calls(data.get('tool_calls'))
+    metadata = data.get('metadata')
+    if isinstance(metadata, dict):
+        clean_metadata = dict(metadata)
+        clean_metadata.pop('subtasks', None)
+        clean_metadata.pop('subtasks_by_call', None)
+        data['metadata'] = clean_metadata
+    return data
+
+
+def get_tool_call_result(tool_call: Dict[str, Any] | None) -> Dict[str, Any]:
+    if not isinstance(tool_call, dict):
+        return normalize_tool_result('')
+    result = normalize_tool_result(tool_call.get('result'))
+    tool_call['result'] = result
+    tool_call.pop('subtask', None)
+    tool_call.pop('subtask_id', None)
+    return result
+
+
+def set_tool_call_result(tool_call: Dict[str, Any], result_payload: Any) -> Dict[str, Any]:
+    result = normalize_tool_result(result_payload)
+    tool_call['result'] = result
+    tool_call.pop('subtask', None)
+    tool_call.pop('subtask_id', None)
+    return result
+
+
 @dataclass
 class Message:
     """Represents a single message in a conversation"""
@@ -21,7 +150,7 @@ class Message:
     content: str = ""
     images: List[str] = field(default_factory=list)  # Base64 or file paths
     tool_calls: Optional[List[Dict[str, Any]]] = None  # [{id, type, function: {name, arguments}}]
-    tool_call_id: Optional[str] = None  # For role="tool" messages
+    tool_call_id: Optional[str] = None  # Provider/API boundary only; not persisted in Conversation.messages
     thinking: Optional[str] = None
     tokens: Optional[int] = None
     created_at: datetime = field(default_factory=datetime.now)
@@ -45,18 +174,21 @@ class Message:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
+        metadata = dict(self.metadata or {})
+        metadata.pop('subtasks', None)
+        metadata.pop('subtasks_by_call', None)
         result = {
             'id': self.id,
             'role': self.role,
             'content': self.content,
             'images': self.images,
-            'tool_calls': self.tool_calls,
+            'tool_calls': normalize_tool_calls(self.tool_calls),
             'tool_call_id': self.tool_call_id,
             'thinking': self.thinking,
             'tokens': self.tokens,
             'created_at': self.created_at.isoformat(),
             'response_time_ms': self.response_time_ms,
-            'metadata': self.metadata,
+            'metadata': metadata,
             'seq_id': self.seq_id,
             'condense_parent': self.condense_parent,
             'truncation_parent': self.truncation_parent,
@@ -141,13 +273,15 @@ class Message:
             data.get('images', []),
             data.get('metadata', {})
         )
+        metadata.pop('subtasks', None)
+        metadata.pop('subtasks_by_call', None)
             
         return cls(
             id=data.get('id', str(uuid.uuid4())),
             role=data.get('role', 'user'),
             content=content,
             images=images,
-            tool_calls=data.get('tool_calls'),
+            tool_calls=normalize_tool_calls(data.get('tool_calls')),
             tool_call_id=data.get('tool_call_id'),
             thinking=data.get('thinking'),
             tokens=data.get('tokens'),
@@ -291,12 +425,14 @@ class Conversation:
         return cls.from_dict(data)
 
     def add_message(self, message: Message):
-        """Add a message to the conversation.
-           If the message is a tool result (role='tool'), try to merge it into the existing assistant message.
+        """Add a visible message to the conversation.
+
+        Persisted conversation transcripts contain only system/user/assistant
+        messages. Tool results must be written through attach_tool_result().
         """
-        if message.role == 'tool' and message.tool_call_id:
-            if self._try_merge_tool_result(message):
-                return
+        if message.role == 'tool':
+            logger.debug("Ignoring transient tool message; use attach_tool_result() instead")
+            return
 
         # Normal append
         self.messages.append(message)
@@ -304,37 +440,77 @@ class Conversation:
             self.total_tokens += message.tokens
         self.updated_at = datetime.now()
 
-    def _try_merge_tool_result(self, message: Message) -> bool:
-        """Try to find the assistant message that triggered this tool result and merge it."""
-        # Search backwards for the assistant message containing the tool call
+    def attach_tool_result(
+        self,
+        tool_call_id: str | None,
+        result_payload: Any,
+        *,
+        summary: str = '',
+        metadata: Dict[str, Any] | None = None,
+        images: List[str] | None = None,
+        state_snapshot: Dict[str, Any] | None = None,
+    ) -> bool:
+        """Attach a tool result to the assistant tool_call that owns it.
+
+        This is the single persisted RunTree write path for ordinary tool results
+        and subtask final summaries. Transient role='tool' messages should be
+        converted into this call instead of being appended to Conversation.
+        """
+        call_id = str(tool_call_id or '').strip()
+        if not call_id:
+            return False
         for i in range(len(self.messages) - 1, -1, -1):
             msg = self.messages[i]
-            if msg.role == 'assistant' and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    if tc.get('id') == message.tool_call_id:
-                        tc['result'] = message.content
-                        summary = str(getattr(message, 'summary', '') or '').strip()
-                        if summary:
-                            tc['result_summary'] = summary
-                        metadata = getattr(message, 'metadata', {}) or {}
-                        if isinstance(metadata, dict) and metadata:
-                            tc['result_metadata'] = dict(metadata)
-                        if message.images:
-                            tc['result_images'] = list(message.images)
-                        # If the tool execution updated SessionState, apply it immediately.
-                        # This keeps UI panels (e.g., tasks) consistent even when tool messages are merged.
-                        if message.state_snapshot and isinstance(message.state_snapshot, dict):
-                            try:
-                                self._state_dict = message.state_snapshot.copy()
-                            except Exception as exc:
-                                logger.debug("Failed to copy merged tool state snapshot: %s", exc)
-                            # Attach checkpoint for rollback on the triggering assistant message.
-                            try:
-                                msg.state_snapshot = message.state_snapshot
-                            except Exception as exc:
-                                logger.debug("Failed to attach merged tool state snapshot to assistant message: %s", exc)
-                        self.updated_at = datetime.now()
-                        return True
+            if msg.role != 'assistant' or not msg.tool_calls:
+                continue
+            for tc in msg.tool_calls:
+                if str(tc.get('id') or '') != call_id:
+                    continue
+                clean_metadata = dict(metadata or {})
+                clean_metadata.pop('subtasks', None)
+                clean_metadata.pop('subtasks_by_call', None)
+                normalized = normalize_tool_result(result_payload)
+                existing_result = normalize_tool_result(tc.get('result'))
+                if existing_result.get('type') == 'subtask_run' or is_subtask_tool_call(tc) or normalized.get('type') == 'subtask_run':
+                    result = existing_result if existing_result.get('type') == 'subtask_run' else normalized
+                    result['type'] = 'subtask_run'
+                    if normalized.get('content') or 'content' in normalized:
+                        result['content'] = str(normalized.get('content') or '')
+                    if summary:
+                        result['summary'] = summary
+                    elif normalized.get('summary'):
+                        result['summary'] = str(normalized.get('summary') or '')
+                    if isinstance(normalized.get('run'), dict):
+                        result['run'] = normalized['run']
+                    merged_metadata = dict(result.get('metadata') or {})
+                    merged_metadata.update(clean_metadata or dict(normalized.get('metadata') or {}))
+                    result['metadata'] = merged_metadata
+                else:
+                    result = {
+                        'type': 'tool_result',
+                        'content': str(normalized.get('content') or ''),
+                        'summary': summary or str(normalized.get('summary') or ''),
+                        'metadata': clean_metadata or dict(normalized.get('metadata') or {}),
+                    }
+                if images:
+                    result['images'] = list(images)
+                set_tool_call_result(tc, result)
+                if result.get('summary'):
+                    tc['result_summary'] = str(result.get('summary') or '')
+                tc['result_metadata'] = dict(result.get('metadata') or {})
+                if images:
+                    tc['result_images'] = list(images)
+                if state_snapshot and isinstance(state_snapshot, dict):
+                    try:
+                        self._state_dict = state_snapshot.copy()
+                    except Exception as exc:
+                        logger.debug("Failed to copy merged tool state snapshot: %s", exc)
+                    try:
+                        msg.state_snapshot = state_snapshot
+                    except Exception as exc:
+                        logger.debug("Failed to attach merged tool state snapshot to assistant message: %s", exc)
+                self.updated_at = datetime.now()
+                return True
         return False
 
     def update_message(self, message_id: str, content: str = None, 

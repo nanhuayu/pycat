@@ -18,6 +18,7 @@ from models.conversation import Conversation, Message
 from models.provider import Provider
 
 from core.tools.base import ToolContext, ToolResult
+from core.tools.permissions import ToolPermissionPolicy, ToolPermissionResolver
 from core.tools.manager import ToolManager
 from core.task.types import RunPolicy
 
@@ -54,22 +55,24 @@ class ToolExecutor:
         """Check if tool is allowed by policy.
 
         Resolution order:
-        1. Explicit per-tool policy in ``policy.tool_policies``.
-        2. Group-level filter via ``policy.tool_groups``.
+        1. Effective policy from ``policy.tool_permissions``.
+        2. Tool selection policy category/tool/source filter.
         3. Default: allowed.
         """
         try:
             tool = self._tool_manager.registry.get_tool(tool_name)
 
-            # 1. Per-tool policy
-            per_tool = (policy.tool_policies or {}).get(tool_name)
-            if per_tool is not None:
-                return bool(per_tool.enabled)
+            # 1. Permission policy
+            if tool is not None:
+                category = str(getattr(tool, "category", "extension") or "extension")
+                tool_policy = policy.tool_permissions.resolve(tool_name, category)
+                if tool_policy is not None and not tool_policy.enabled:
+                    return False
 
-            # 2. Group filter
-            if policy.tool_groups is not None and tool is not None:
-                group = str(getattr(tool, "group", "") or "")
-                if group not in policy.tool_groups:
+            # 2. Request-time tool selection filter
+            if tool is not None:
+                descriptor = tool.descriptor()
+                if not policy.tool_selection.allows(descriptor):
                     return False
 
             return True
@@ -146,13 +149,26 @@ class ToolExecutor:
             Tool execution result
         """
         if not allowed:
-            tool_policy = (policy.tool_policies or {}).get(tool_name)
+            tool = self._tool_manager.registry.get_tool(tool_name)
+            category = str(getattr(tool, "category", "extension") or "extension") if tool is not None else "extension"
+            tool_policy = policy.tool_permissions.resolve(tool_name, category)
             return ToolResult(
                 f"Tool '{tool_name}' is disabled by current mode/settings. "
                 f"(tool_policy={tool_policy.to_dict() if tool_policy else 'default'})"
             )
 
         try:
+            tool = self._tool_manager.registry.get_tool(tool_name)
+            if tool is not None:
+                runtime_policy = ToolPermissionPolicy.from_effective(
+                    category_defaults=policy.tool_permissions.category_defaults or {},
+                    tools=policy.tool_permissions.tools or {},
+                )
+                context = ToolPermissionResolver.wrap_context_with_policy(
+                    context,
+                    tool,
+                    runtime_policy,
+                )
             return await self._tool_manager.execute_tool_with_context(
                 tool_name, tool_args, context
             )

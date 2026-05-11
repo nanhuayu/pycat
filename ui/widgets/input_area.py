@@ -8,8 +8,9 @@ from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import QFileDialog, QFrame, QSizePolicy, QVBoxLayout, QWidget
 
 from core.commands import CommandRegistry
+from core.commands.parser import parse_bang_command_text
+from core.commands.types import CommandAction, CommandResult, ShellInvocation
 from core.modes.manager import ModeManager
-from core.modes.features import get_mode_feature_policy, clamp_feature_flags
 from models.provider import provider_matches_name, split_model_ref
 
 from ui.utils.image_utils import extract_images_from_mime, is_supported_image_path
@@ -31,8 +32,6 @@ class InputArea(QWidget):
     conversation_settings_requested = pyqtSignal()
     provider_settings_requested = pyqtSignal()  # New: quick access to provider config
     show_thinking_changed = pyqtSignal(bool)
-    mcp_toggled = pyqtSignal(bool)  # MCP 开关
-    search_toggled = pyqtSignal(bool)  # 搜索开关
     prompt_optimize_requested = pyqtSignal(str)  # Optimize current input prompt
     prompt_optimize_cancel_requested = pyqtSignal()
     
@@ -55,12 +54,21 @@ class InputArea(QWidget):
         self._conversation = None
         self._providers = []
         self._suppress_thinking_signal = False
-        self._suppress_tool_signals = False
-        self._mcp_enabled = False
-        self._search_enabled = False
         self._work_dir = ""
+        self._app_settings: Dict[str, Any] = {}
         self._is_streaming = False
         self._setup_ui()
+
+    def set_app_settings(self, settings: Dict[str, Any] | None) -> None:
+        self._app_settings = dict(settings or {})
+
+    def _bang_command_behavior(self) -> str:
+        try:
+            shell = self._app_settings.get("shell") if isinstance(self._app_settings, dict) else None
+            behavior = str((shell or {}).get("bang_command_behavior") or "shell").strip().lower()
+        except Exception:
+            behavior = "shell"
+        return behavior if behavior in {"shell", "agent"} else "shell"
 
     def set_work_dir(self, path: str):
         self._work_dir = path
@@ -70,7 +78,7 @@ class InputArea(QWidget):
         except Exception as e:
             logger.debug("Failed to refresh modes after work_dir change: %s", e)
 
-        # Re-apply mode policy after refresh (modes.json may change groups).
+        # Re-apply mode policy after refresh (modes.json may change tool categories).
         try:
             self._apply_mode_policy(apply_defaults=False)
         except Exception as e:
@@ -152,8 +160,6 @@ class InputArea(QWidget):
         self.model_combo = self.toolbar.model_combo
         self.mode_combo = self.toolbar.mode_combo
         self.thinking_toggle = self.toolbar.thinking_toggle
-        self.mcp_toggle = self.toolbar.mcp_toggle
-        self.search_toggle = self.toolbar.search_toggle
         self.prompt_optimize_btn = self.toolbar.prompt_optimize_btn
 
         self._mode_manager = ModeManager(self._work_dir or None)
@@ -165,8 +171,6 @@ class InputArea(QWidget):
         self.model_combo.currentTextChanged.connect(self._emit_provider_model_changed)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         self.thinking_toggle.toggled.connect(self._on_thinking_toggled)
-        self.mcp_toggle.toggled.connect(self._on_mcp_toggled)
-        self.search_toggle.toggled.connect(self._on_search_toggled)
 
         # Apply initial policy (enable/disable only) based on default mode.
         # Do not force defaults here; the current conversation/settings will sync later.
@@ -183,41 +187,20 @@ class InputArea(QWidget):
             logger.debug("Failed to apply mode policy on change: %s", e)
 
     def _apply_mode_policy(self, apply_defaults: bool = True) -> None:
-        """Apply mode-derived policy to Thinking/MCP/Search toggles.
+        """Apply mode-derived policy to the thinking toggle.
 
-        - Disallowed toggles are disabled and forced off.
-        - If apply_defaults is True, allowed toggles are set to the mode defaults.
+        Tool availability is now controlled by mode tool categories and
+        ToolSelectionPolicy, not per-conversation Search/MCP toggles.
         """
         slug = self.get_selected_mode_slug()
         mode = self._mode_manager.get(slug)
-        policy = get_mode_feature_policy(mode)
+        categories = set(mode.tool_category_names())
 
         # Thinking toggle is always allowed, but can have defaults.
         if apply_defaults:
             # Apply as a real user-visible toggle change so the app state stays in sync.
-            self.thinking_toggle.setChecked(bool(policy.default_thinking))
+            self.thinking_toggle.setChecked(bool({"edit", "execute"} & categories))
 
-        # MCP/Search toggles: suppress signals while applying.
-        self._suppress_tool_signals = True
-        try:
-            # MCP
-            self.mcp_toggle.setEnabled(bool(policy.allow_mcp) and (not self._is_streaming))
-            if not policy.allow_mcp:
-                self.mcp_toggle.setChecked(False)
-            elif apply_defaults:
-                self.mcp_toggle.setChecked(bool(policy.default_mcp))
-
-            # Search
-            self.search_toggle.setEnabled(bool(policy.allow_search) and (not self._is_streaming))
-            if not policy.allow_search:
-                self.search_toggle.setChecked(False)
-            elif apply_defaults:
-                self.search_toggle.setChecked(bool(policy.default_search))
-
-            self._mcp_enabled = bool(self.mcp_toggle.isChecked())
-            self._search_enabled = bool(self.search_toggle.isChecked())
-        finally:
-            self._suppress_tool_signals = False
     def set_streaming_state(self, is_streaming: bool):
         self._is_streaming = is_streaming
         self.toolbar.set_streaming_state(is_streaming, self.style())
@@ -443,67 +426,6 @@ class InputArea(QWidget):
             return
         self.show_thinking_changed.emit(bool(checked))
     
-    def _on_mcp_toggled(self, checked: bool):
-        if self._suppress_tool_signals:
-            self._mcp_enabled = bool(checked)
-            return
-        self._mcp_enabled = bool(checked)
-        self.mcp_toggled.emit(bool(checked))
-    
-    def _on_search_toggled(self, checked: bool):
-        if self._suppress_tool_signals:
-            self._search_enabled = bool(checked)
-            return
-        self._search_enabled = bool(checked)
-        self.search_toggled.emit(bool(checked))
-    
-    def is_mcp_enabled(self) -> bool:
-        return self._mcp_enabled
-    
-    def is_search_enabled(self) -> bool:
-        return self._search_enabled
-
-    def get_effective_tool_flags(self) -> tuple[bool, bool]:
-        """Return (enable_search, enable_mcp) clamped by current mode policy."""
-        try:
-            slug = self.get_selected_mode_slug()
-            mode = self._mode_manager.get(slug)
-            policy = get_mode_feature_policy(mode)
-            _t, mcp, search = clamp_feature_flags(
-                policy,
-                enable_thinking=bool(self.thinking_toggle.isChecked()),
-                enable_mcp=bool(self._mcp_enabled),
-                enable_search=bool(self._search_enabled),
-            )
-            return bool(search), bool(mcp)
-        except Exception as e:
-            logger.debug("Failed to get effective tool flags from mode policy: %s", e)
-            return bool(self._search_enabled), bool(self._mcp_enabled)
-
-    def get_mode_default_tool_flags(self) -> tuple[bool, bool]:
-        """Return (enable_search, enable_mcp) defaults derived from the current mode."""
-        try:
-            slug = self.get_selected_mode_slug()
-            mode = self._mode_manager.get(slug)
-            policy = get_mode_feature_policy(mode)
-            return bool(policy.default_search), bool(policy.default_mcp)
-        except Exception as e:
-            logger.debug("Failed to get mode default tool flags: %s", e)
-            return False, False
-
-    def set_tool_toggles(self, *, enable_mcp: Optional[bool] = None, enable_search: Optional[bool] = None) -> None:
-        """Synchronize MCP/Search toggles without re-emitting external signals."""
-        self._suppress_tool_signals = True
-        try:
-            if enable_mcp is not None:
-                self.mcp_toggle.setChecked(bool(enable_mcp))
-                self._mcp_enabled = bool(enable_mcp)
-            if enable_search is not None:
-                self.search_toggle.setChecked(bool(enable_search))
-                self._search_enabled = bool(enable_search)
-        finally:
-            self._suppress_tool_signals = False
-
     def apply_mode_policy(self, apply_defaults: bool = False) -> None:
         """Public wrapper for applying mode policy.
 
@@ -574,9 +496,27 @@ class InputArea(QWidget):
                 {"slug": mode.slug, "name": mode.name}
                 for mode in self._mode_manager.list_ui_modes()
             ],
+            "bang_command_behavior": self._bang_command_behavior(),
         }
 
     def _try_handle_command(self, content: str) -> bool:
+        bang_command = parse_bang_command_text(content)
+        if bang_command is not None:
+            if self._bang_command_behavior() == "agent":
+                return False
+            result = CommandResult(
+                action=CommandAction.SHELL_RUN,
+                data=ShellInvocation(
+                    command=bang_command,
+                    cwd=self._work_dir,
+                    source_prefix="!",
+                    original_text=str(content or "").strip(),
+                ),
+            )
+            self.text_input.clear()
+            self.slash_command_result.emit(result)
+            return True
+
         context = self._build_command_context()
         if not self._command_registry.is_command(content, context):
             return False
@@ -590,7 +530,7 @@ class InputArea(QWidget):
         return True
 
     def _emit_message_payload(self, content: str) -> None:
-        from core.attachments import process_attachments
+        from core.content.attachments import process_attachments
 
         result = process_attachments(self._attachments)
         if result.file_content_suffix:

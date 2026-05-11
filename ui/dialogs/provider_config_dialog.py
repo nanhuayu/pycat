@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -199,6 +200,20 @@ class ProviderConfigDialog(QDialog):
         self.max_output_spin.setSpecialValueText("不设置")
         self.max_output_spin.setMinimumWidth(112)
 
+        self.temperature_spin = QDoubleSpinBox()
+        self.temperature_spin.setRange(0.0, 2.0)
+        self.temperature_spin.setDecimals(2)
+        self.temperature_spin.setSingleStep(0.05)
+        self.temperature_spin.setSpecialValueText("不设置")
+        self.temperature_spin.setMinimumWidth(112)
+
+        self.top_p_spin = QDoubleSpinBox()
+        self.top_p_spin.setRange(0.0, 1.0)
+        self.top_p_spin.setDecimals(2)
+        self.top_p_spin.setSingleStep(0.05)
+        self.top_p_spin.setSpecialValueText("不设置")
+        self.top_p_spin.setMinimumWidth(112)
+
         self.reasoning_style_combo = QComboBox()
         configure_combo_popup(self.reasoning_style_combo)
         self.reasoning_style_combo.addItem("无", "none")
@@ -249,6 +264,17 @@ class ProviderConfigDialog(QDialog):
         context_grid.setColumnStretch(1, 1)
         model_layout.addRow("Context:", context_widget)
 
+        sampling_widget = QWidget()
+        sampling_grid = QGridLayout(sampling_widget)
+        sampling_grid.setContentsMargins(0, 0, 0, 0)
+        sampling_grid.setHorizontalSpacing(8)
+        sampling_grid.setVerticalSpacing(0)
+        sampling_grid.addWidget(_field_with_right_label(self.temperature_spin, "Temperature"), 0, 0)
+        sampling_grid.addWidget(_field_with_right_label(self.top_p_spin, "Top P"), 0, 1)
+        sampling_grid.setColumnStretch(0, 1)
+        sampling_grid.setColumnStretch(1, 1)
+        model_layout.addRow("Sampling:", sampling_widget)
+
         reasoning_widget = QWidget()
         reasoning_grid = QGridLayout(reasoning_widget)
         reasoning_grid.setContentsMargins(0, 0, 0, 0)
@@ -261,7 +287,7 @@ class ProviderConfigDialog(QDialog):
         reasoning_grid.setColumnStretch(1, 1)
         model_layout.addRow("Reasoning:", reasoning_widget)
 
-        profile_hint = QLabel("这里描述模型自身能力；主/副/备用模型属于会话运行策略，不在此设置。")
+        profile_hint = QLabel("这里描述模型自身能力与默认采样参数；主/副/备用模型属于会话运行策略，不在此设置。")
         profile_hint.setWordWrap(True)
         profile_hint.setProperty("muted", True)
         model_layout.addRow("", profile_hint)
@@ -414,6 +440,8 @@ class ProviderConfigDialog(QDialog):
             self.model_reasoning_check.setChecked(supports_reasoning)
             self.context_window_spin.setValue(int(getattr(profile, "context_window", 0) or 0))
             self.max_output_spin.setValue(int(getattr(profile, "max_output_tokens", 0) or 0))
+            self.temperature_spin.setValue(float(getattr(profile, "default_temperature", 0.0) or 0.0))
+            self.top_p_spin.setValue(float(getattr(profile, "default_top_p", 0.0) or 0.0))
             style = str(getattr(profile, "reasoning_style", "") or ("reasoning" if supports_reasoning else "none"))
             idx = self.reasoning_style_combo.findData(style)
             self.reasoning_style_combo.setCurrentIndex(idx if idx >= 0 else 0)
@@ -445,6 +473,10 @@ class ProviderConfigDialog(QDialog):
         max_output_tokens = int(self.max_output_spin.value() or 0)
         profile.context_window = context_window if context_window > 0 else None
         profile.max_output_tokens = max_output_tokens if max_output_tokens > 0 else None
+        temperature = float(self.temperature_spin.value() or 0.0)
+        top_p = float(self.top_p_spin.value() or 0.0)
+        profile.default_temperature = temperature if temperature > 0 else None
+        profile.default_top_p = top_p if top_p > 0 else None
         profile.reasoning_style = str(self.reasoning_style_combo.currentData() or "none").strip().lower() or "none"
         effort = str(self.reasoning_effort_combo.currentData() or self.reasoning_effort_combo.currentText() or "").strip().lower()
         profile.reasoning_effort = "" if effort == "不设置" else effort

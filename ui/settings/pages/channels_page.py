@@ -310,7 +310,6 @@ class ChannelsPage(QWidget):
                 name=name,
                 type=definition.type,
                 enabled=False,
-                allow_tools=True,
                 source=definition.normalize_source(name),
                 status="draft",
                 created_at=now,

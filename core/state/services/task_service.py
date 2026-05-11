@@ -3,13 +3,30 @@ from models.state import SessionState, Task, TaskStatus, TaskPriority
 
 class TaskService:
     @staticmethod
-    def prune_terminal_tasks(state: SessionState) -> int:
+    def prune_terminal_tasks(state: SessionState, current_seq: int = 0) -> int:
         original_len = len(state.tasks)
+        for task in state.tasks:
+            if task.status in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}:
+                state.remember_completed_todo(task, current_seq)
         state.tasks = [
             task for task in state.tasks
             if task.status not in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
         ]
         return max(0, original_len - len(state.tasks))
+
+    @staticmethod
+    def _normalize_content(content: str) -> str:
+        return " ".join(str(content or "").strip().casefold().split())
+
+    @staticmethod
+    def _find_active_by_content(state: SessionState, content: str) -> Task | None:
+        normalized = TaskService._normalize_content(content)
+        if not normalized:
+            return None
+        for task in state.tasks:
+            if TaskService._normalize_content(task.content) == normalized:
+                return task
+        return None
 
     @staticmethod
     def handle_ops(state: SessionState, ops: List[Dict[str, Any]], current_seq: int) -> List[str]:
@@ -21,6 +38,19 @@ class TaskService:
                 content = op.get("content", "").strip()
                 if not content:
                     feedback.append("⚠️ Skipped create: empty content")
+                    continue
+
+                existing = TaskService._find_active_by_content(state, content)
+                if existing:
+                    update_fields = {}
+                    if "status" in op: update_fields["status"] = op["status"]
+                    if "priority" in op: update_fields["priority"] = op["priority"]
+                    if "tags" in op: update_fields["tags"] = op["tags"]
+                    if update_fields:
+                        existing.update(current_seq, **update_fields)
+                        feedback.append(f"✅ Reused existing task [{existing.id}]: {content[:50]}")
+                    else:
+                        feedback.append(f"ℹ️ Task already exists [{existing.id}]: {content[:50]}")
                     continue
                     
                 new_task = Task(
@@ -36,13 +66,9 @@ class TaskService:
                 
             elif action == "update":
                 task_id = op.get("id")
-                if not task_id:
-                    feedback.append("⚠️ Skipped update: missing task ID")
-                    continue
-                    
-                task = state.find_task(task_id)
+                task = state.find_task(task_id) if task_id else TaskService._find_active_by_content(state, op.get("content", ""))
                 if not task:
-                    feedback.append(f"⚠️ Task [{task_id}] not found")
+                    feedback.append(f"⚠️ Task [{task_id or op.get('content', '')}] not found")
                     continue
                 
                 # Apply updates
@@ -69,38 +95,9 @@ class TaskService:
                 else:
                     feedback.append(f"⚠️ Task [{task_id}] not found to delete")
 
-        pruned = TaskService.prune_terminal_tasks(state)
+        pruned = TaskService.prune_terminal_tasks(state, current_seq)
         if pruned:
-            feedback.append(f"🧹 Removed {pruned} completed/cancelled task(s)")
+            feedback.append(f"🧹 Compacted {pruned} completed/cancelled todo(s) into recent history")
                     
         return feedback
 
-    @staticmethod
-    def ensure_active_task(state: SessionState, current_seq: int) -> bool:
-        """Promote the first pending task when the agent has not marked any task active."""
-        active = [
-            task for task in state.tasks
-            if task.status in {TaskStatus.PENDING, TaskStatus.IN_PROGRESS}
-        ]
-        if not active:
-            return False
-        if any(task.status == TaskStatus.IN_PROGRESS for task in active):
-            return False
-        active[0].update(current_seq, status=TaskStatus.IN_PROGRESS)
-        state.last_updated_seq = current_seq
-        return True
-
-    @staticmethod
-    def complete_active_tasks(state: SessionState, current_seq: int, reason: str = "") -> int:
-        """Complete all currently active todos before a successful attempt_completion."""
-        count = 0
-        for task in list(state.tasks):
-            if task.status in {TaskStatus.PENDING, TaskStatus.IN_PROGRESS}:
-                task.update(current_seq, status=TaskStatus.COMPLETED)
-                count += 1
-        if reason:
-            state.memory["last_completion"] = str(reason or "")[:500]
-        if count:
-            state.last_updated_seq = current_seq
-        TaskService.prune_terminal_tasks(state)
-        return count

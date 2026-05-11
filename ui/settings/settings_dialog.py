@@ -4,7 +4,7 @@ This dialog hosts modular setting pages under `ui.settings.pages`.
 
 Notes:
 - Modes are user-wide (APPDATA/PyCat/modes.json), edited via `ModesPage`.
-- Prompt templates (default/system guidelines, optimizer templates) remain user-wide in settings.json.
+- Capability templates and optimizer compatibility settings remain user-wide in settings.json.
 """
 
 from __future__ import annotations
@@ -38,14 +38,14 @@ from core.config.schema import AppConfig
 
 from ui.settings.pages import (
     ModelsPage,
-    AgentPermissionsPage,
+    AgentPage,
+    PermissionsPage,
     ChannelsPage,
     TerminalPage,
     McpPage,
     SkillsPage,
     AppearancePage,
-    ContextPage,
-    PromptsPage,
+    CapabilitiesPage,
     ModesPage,
     SearchPage,
     AboutPage,
@@ -59,14 +59,14 @@ logger = logging.getLogger(__name__)
 # 页面 emoji 到统一图标的映射
 _PAGE_ICON_MAP = {
     "ModelsPage": Icons.PAGE_MODELS,
-    "AgentPermissionsPage": Icons.PAGE_AGENTS,
+    "AgentPage": Icons.PAGE_AGENTS,
+    "PermissionsPage": Icons.PAGE_CONTEXT,
     "AppearancePage": Icons.PAGE_APPEARANCE,
     "ChannelsPage": Icons.PAGE_CHANNELS,
     "TerminalPage": Icons.PAGE_TERMINAL_SETTINGS,
     "McpPage": Icons.PAGE_MCP,
     "SkillsPage": Icons.PAGE_SKILLS,
-    "ContextPage": Icons.PAGE_CONTEXT,
-    "PromptsPage": Icons.PAGE_PROMPTS,
+    "CapabilitiesPage": Icons.PAGE_CAPABILITIES,
     "ModesPage": Icons.PAGE_MODES,
     "SearchPage": Icons.PAGE_SEARCH,
     "AboutPage": Icons.PAGE_ABOUT,
@@ -120,7 +120,7 @@ class SettingsDialog(QDialog):
         self._auto_approve_patch: dict = {}
         self._agent_patch: dict = {}
         self._context_patch: dict = {}
-        self._prompt_patch: dict = {}
+        self._capability_patch: dict = {}
         self._channels_patch: dict = {}
         self._terminal_patch: dict = {}
 
@@ -184,10 +184,14 @@ class SettingsDialog(QDialog):
             provider_service=self.provider_service,
             provider_catalog_service=self.provider_catalog_service,
         )
-        self.agent_page = AgentPermissionsPage(
-            self._app_config.permissions,
-            retry=self._app_config.retry,
+        self.agent_page = AgentPage(
             agent=self._app_config.agent,
+            retry=self._app_config.retry,
+            context=self._app_config.context,
+            providers=self.providers,
+        )
+        self.permissions_page = PermissionsPage(
+            self._app_config.permissions,
             storage_service=self.storage,
             capabilities=getattr(self._app_config, "capabilities", None),
         )
@@ -203,8 +207,7 @@ class SettingsDialog(QDialog):
             proxy_url=self._app_config.proxy_url,
             llm_timeout_seconds=float(getattr(self._app_config, "llm_timeout_seconds", 600.0) or 600.0),
         )
-        self.context_page = ContextPage(self._app_config.context, providers=self.providers)
-        self.prompts_page = PromptsPage(
+        self.capabilities_page = CapabilitiesPage(
             self._app_config.prompts,
             self._app_config.prompt_optimizer,
             providers=self.providers,
@@ -219,13 +222,13 @@ class SettingsDialog(QDialog):
         self._pages = [
             self.models_page,
             self.agent_page,
+            self.permissions_page,
             self.appearance_page,
             self.channels_page,
             self.terminal_page,
             self.mcp_page,
             self.skills_page,
-            self.context_page,
-            self.prompts_page,
+            self.capabilities_page,
             self.modes_page,
             self.search_page,
             self.about_page,
@@ -290,7 +293,7 @@ class SettingsDialog(QDialog):
             self._general_patch = {}
 
         try:
-            perms = self.agent_page.collect()
+            perms = self.permissions_page.collect()
             self._auto_approve_patch = perms.to_dict()
         except Exception as exc:
             logger.debug("Failed to collect agent permission settings: %s", exc)
@@ -307,22 +310,22 @@ class SettingsDialog(QDialog):
             self._agent_patch = {}
 
         try:
-            ctx = self.context_page.collect()
+            ctx = self.agent_page.collect_context()
             self._context_patch = {"context": ctx.to_dict()}
         except Exception:
             self._context_patch = {}
 
         try:
-            prompts = self.prompts_page.collect_prompts()
-            opt = self.prompts_page.collect_prompt_optimizer()
-            self._prompt_patch = {
+            prompts = self.capabilities_page.collect_prompts()
+            opt = self.capabilities_page.collect_prompt_optimizer()
+            self._capability_patch = {
                 "prompts": prompts.to_dict(),
                 "prompt_optimizer": opt.to_dict(),
-                "prompt_optimizer_model": self.prompts_page.collect_prompt_optimizer_model(),
-                "capabilities": self.prompts_page.collect_capabilities().to_dict(),
+                "prompt_optimizer_model": self.capabilities_page.collect_prompt_optimizer_model(),
+                "capabilities": self.capabilities_page.collect_capabilities().to_dict(),
             }
         except Exception:
-            self._prompt_patch = {}
+            self._capability_patch = {}
 
         try:
             self._channels_patch = {
@@ -359,7 +362,7 @@ class SettingsDialog(QDialog):
             settings_patch["retry"] = retry_patch
 
         settings_patch.update(self.get_context_settings())
-        settings_patch.update(self.get_prompt_settings())
+        settings_patch.update(self.get_capability_settings())
         settings_patch.update(self.get_channel_settings())
         settings_patch.update(self.get_terminal_settings())
 
@@ -404,8 +407,8 @@ class SettingsDialog(QDialog):
     def get_context_settings(self) -> dict:
         return dict(self._context_patch or {})
 
-    def get_prompt_settings(self) -> dict:
-        return dict(self._prompt_patch or {})
+    def get_capability_settings(self) -> dict:
+        return dict(self._capability_patch or {})
 
     def get_channel_settings(self) -> dict:
         return dict(self._channels_patch or {})

@@ -23,6 +23,7 @@ from core.app.state import ConversationSettingsUpdate
 from core.config import AppConfig, load_app_config
 from core.modes.manager import ModeManager
 from core.prompts.system_builder import resolve_base_system_prompt_text
+from core.tools.catalog import TOOL_CATEGORIES, TOOL_CATEGORY_LABELS, ToolSelectionPolicy
 from models.conversation import Conversation
 from models.provider import Provider, build_model_ref, normalize_provider_name, split_model_ref
 from ui.utils.combo_box import configure_combo_popup
@@ -79,6 +80,7 @@ class ConversationSettingsDialog(QDialog):
 
         self._build_basic_section(body, conversation)
         self._build_model_section(body, conversation)
+        self._build_tool_selection_section(body, settings)
         self._build_sampling_section(body, settings)
         self._build_feature_section(body, settings)
         body.addWidget(self._build_memory_policy_group(settings))
@@ -182,37 +184,40 @@ class ConversationSettingsDialog(QDialog):
         section.form.addRow("", self.provider_hint)
         body.addWidget(section.group)
 
+    def _build_tool_selection_section(self, body: QVBoxLayout, settings: dict) -> None:
+        group = QGroupBox("模型工具调用能力")
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+
+        self.tool_category_checks: dict[str, QCheckBox] = {}
+        for category in TOOL_CATEGORIES:
+            check = QCheckBox(f"{TOOL_CATEGORY_LABELS.get(category, category)} ({category})")
+            check.setObjectName(f"conv_tool_category_{category}")
+            check.setToolTip("当前会话中模型可见的工具类别；具体工具启用和自动批准仍由 设置 → 权限 控制。")
+            layout.addWidget(check)
+            self.tool_category_checks[category] = check
+
+        hint = QLabel("这里控制当前会话里模型能看见哪些工具类别；可在模式默认类别外增减，但具体工具启用、禁用和自动批准仍由 设置 → 权限 控制。")
+        hint.setWordWrap(True)
+        hint.setProperty("muted", True)
+        layout.addWidget(hint)
+        body.addWidget(group)
+
     def _build_sampling_section(self, body: QVBoxLayout, settings: dict) -> None:
-        temperature = settings.get("temperature")
-        top_p = settings.get("top_p")
-        section = FormSection("采样参数")
-        self.context_limit = section.add_spin(
-            "上下文消息数",
-            value=int(settings.get("max_context_messages", 0) or 0),
-            range=(0, 200),
-            tooltip="0 表示不限制",
-            object_name="conv_context_limit",
+        group = QGroupBox("采样与上下文")
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+
+        hint = QLabel(
+            "温度、Top P 和最大输出 Token 属于服务商-模型能力/默认值；"
+            "上下文消息数使用全局上下文策略。当前对话只保留模型角色、工具、记忆和通道等会话级设置。"
         )
-        self.temperature = section.add_double_spin(
-            "温度",
-            value=float(temperature) if isinstance(temperature, (int, float)) else 0.70,
-            range=(0.0, 2.0),
-            object_name="conv_temperature",
-        )
-        self.top_p = section.add_double_spin(
-            "Top P",
-            value=float(top_p) if isinstance(top_p, (int, float)) else 1.00,
-            object_name="conv_top_p",
-        )
-        self.max_tokens = section.add_spin(
-            "最大 Token",
-            value=int(settings.get("max_tokens") or 0),
-            range=(0, 200000),
-            step=256,
-            tooltip="最大输出 Token 数",
-            object_name="conv_max_tokens",
-        )
-        body.addWidget(section.group)
+        hint.setWordWrap(True)
+        hint.setProperty("muted", True)
+        layout.addWidget(hint)
+        body.addWidget(group)
 
     def _build_feature_section(self, body: QVBoxLayout, settings: dict) -> None:
         group = QGroupBox("功能开关")
@@ -230,16 +235,6 @@ class ConversationSettingsDialog(QDialog):
         show_thinking = settings.get("show_thinking")
         self.show_thinking.setChecked(show_thinking if isinstance(show_thinking, bool) else self._default_show_thinking)
         layout.addWidget(self.show_thinking)
-
-        self.enable_mcp = QCheckBox("启用 MCP 工具")
-        self.enable_mcp.setObjectName("conv_enable_mcp")
-        self.enable_mcp.setChecked(bool(settings.get("enable_mcp", False)))
-        layout.addWidget(self.enable_mcp)
-
-        self.enable_search = QCheckBox("启用网络搜索")
-        self.enable_search.setObjectName("conv_enable_search")
-        self.enable_search.setChecked(bool(settings.get("enable_search", False)))
-        layout.addWidget(self.enable_search)
 
         layout.addStretch()
         body.addWidget(group)
@@ -266,12 +261,6 @@ class ConversationSettingsDialog(QDialog):
         normalized_primary_ref = build_model_ref(provider_name, model) if provider_name and model else primary_model_ref
         mode_slug = self.mode_combo.currentData() if hasattr(self, "mode_combo") else "chat"
         system_prompt_text = (self.system_prompt_edit.toPlainText() or "").strip()
-        max_context_messages = int(self.context_limit.value())
-        # Convert legacy feature flags into per-tool policies
-        tool_policies: dict[str, dict[str, bool]] = {}
-        if bool(self.enable_search.isChecked()):
-            tool_policies["web_search"] = {"enabled": True, "auto_approve": False}
-
         return ConversationSettingsUpdate(
             title=(self.title_edit.text() or "").strip(),
             provider_id=str(provider_id or "").strip(),
@@ -283,16 +272,10 @@ class ConversationSettingsDialog(QDialog):
             fallback_model_ref=self.fallback_model_combo.model_ref().strip(),
             mode_slug=str(mode_slug or "chat").strip() or "chat",
             system_prompt=system_prompt_text if system_prompt_text and system_prompt_text != self._system_prompt_base_text else "",
-            max_context_messages=max_context_messages if max_context_messages > 0 else None,
-            temperature=float(self.temperature.value()),
-            top_p=float(self.top_p.value()),
-            max_tokens=int(self.max_tokens.value()) or None,
             stream=bool(self.stream_enabled.isChecked()),
             show_thinking=bool(self.show_thinking.isChecked()),
-            enable_mcp=bool(self.enable_mcp.isChecked()),
-            enable_search=bool(self.enable_search.isChecked()),
-            tool_policies=tool_policies,
             memory_sources=self._selected_memory_sources(),
+            tool_selection=self._selected_tool_selection(),
             allowed_channel_sources=self._selected_allowed_channel_sources(),
             trusted_channel_sources=self._selected_trusted_channel_sources(),
             channel_notice_policy=str(self.channel_notice_combo.currentData() or "notice").strip() or "notice",
@@ -306,7 +289,7 @@ class ConversationSettingsDialog(QDialog):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(8)
 
-        self.memory_session_check = QCheckBox("使用会话记忆（todo / facts / session documents）")
+        self.memory_session_check = QCheckBox("使用会话记忆（facts；todo/artifact 独立管理）")
         self.memory_session_check.setChecked("session" in selected_sources)
         layout.addWidget(self.memory_session_check)
 
@@ -397,16 +380,16 @@ class ConversationSettingsDialog(QDialog):
         return group
 
     def _on_mode_changed(self, index: int) -> None:
-        if not hasattr(self, "enable_mcp") or not hasattr(self, "enable_search") or not hasattr(self, "show_thinking"):
+        if not hasattr(self, "show_thinking"):
             return
         slug = str(self.mode_combo.itemData(index) or "chat").strip().lower()
         settings = self._conversation.settings or {}
         try:
             manager = ModeManager(getattr(self._conversation, "work_dir", "") or None)
             mode = manager.get(slug)
-            groups = set(mode.group_names())
+            tool_categories = set(mode.tool_category_names())
         except Exception:
-            groups = set()
+            tool_categories = set()
 
         previous_base = self._system_prompt_base_text
         self._system_prompt_base_text = self._compute_base_system_prompt(slug)
@@ -418,27 +401,62 @@ class ConversationSettingsDialog(QDialog):
             finally:
                 self.system_prompt_edit.blockSignals(False)
 
-        allow_mcp = bool({"mcp", "command", "edit"} & groups)
-        allow_search = bool("search" in groups)
-        default_mcp = allow_mcp
-        default_search = allow_search
-        default_thinking = bool({"command", "edit"} & groups)
-
-        self.enable_mcp.setEnabled(allow_mcp)
-        self.enable_search.setEnabled(allow_search)
-
-        if not allow_mcp:
-            self.enable_mcp.setChecked(False)
-        elif "enable_mcp" not in settings:
-            self.enable_mcp.setChecked(default_mcp)
-
-        if not allow_search:
-            self.enable_search.setChecked(False)
-        elif "enable_search" not in settings:
-            self.enable_search.setChecked(default_search)
+        default_thinking = bool({"execute", "edit"} & tool_categories)
 
         if "show_thinking" not in settings:
             self.show_thinking.setChecked(default_thinking if slug != "chat" else self._default_show_thinking)
+
+        self._refresh_tool_selection_checks(tool_categories)
+
+    def _current_mode_tool_categories(self) -> set[str]:
+        slug = str(self.mode_combo.currentData() or "chat").strip().lower() if hasattr(self, "mode_combo") else "chat"
+        try:
+            manager = ModeManager(getattr(self._conversation, "work_dir", "") or None)
+            return set(manager.get(slug).tool_category_names())
+        except Exception:
+            return set(TOOL_CATEGORIES)
+
+    def _settings_tool_selection(self) -> ToolSelectionPolicy | None:
+        settings = self._conversation.settings or {}
+        raw = settings.get("tool_selection")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return ToolSelectionPolicy.from_dict(raw)
+        except Exception as exc:
+            logger.debug("Failed to load conversation tool selection: %s", exc)
+            return None
+
+    def _refresh_tool_selection_checks(self, mode_categories: set[str] | None = None) -> None:
+        checks = getattr(self, "tool_category_checks", None)
+        if not checks:
+            return
+        mode_allowed = set(mode_categories if mode_categories is not None else self._current_mode_tool_categories())
+        settings_selection = self._settings_tool_selection()
+        if settings_selection is None or settings_selection.allowed_categories is None:
+            selected = set(mode_allowed)
+        else:
+            selected = set(settings_selection.allowed_categories)
+
+        for category, check in checks.items():
+            check.blockSignals(True)
+            try:
+                check.setEnabled(True)
+                check.setChecked(category in selected)
+                if category in mode_allowed:
+                    check.setToolTip("当前模式默认包含该类别；可在当前会话中取消。具体工具启用和自动批准仍由 设置 → 权限 控制。")
+                else:
+                    check.setToolTip("当前模式默认不包含该类别；可在当前会话中额外启用。具体工具启用和自动批准仍由 设置 → 权限 控制。")
+            finally:
+                check.blockSignals(False)
+
+    def _selected_tool_selection(self) -> ToolSelectionPolicy:
+        categories = [
+            category
+            for category, check in getattr(self, "tool_category_checks", {}).items()
+            if check.isChecked()
+        ]
+        return ToolSelectionPolicy.from_categories(categories)
 
     def _current_primary_model_ref(self, conversation: Conversation) -> str:
         settings = conversation.settings or {}
@@ -520,7 +538,7 @@ class ConversationSettingsDialog(QDialog):
 
     def _resolve_memory_sources_from_settings(self, settings: dict) -> tuple[str, ...]:
         normalized = self._normalize_sources(settings.get("memory_sources"), allowed=("session", "workspace", "global"))
-        return normalized or ("session", "workspace")
+        return normalized or ("session", "workspace", "global")
 
     def _resolve_allowed_channel_sources_from_settings(self, settings: dict) -> tuple[str, ...]:
         enabled_sources = tuple(

@@ -58,6 +58,15 @@ class TerminalPage(QWidget):
         self.inherit_env_check = QCheckBox("继承当前进程环境变量")
         self.inherit_env_check.setChecked(bool(getattr(shell_config, "inherit_env", True)))
         backend_layout.addRow("环境:", self.inherit_env_check)
+
+        self.bang_behavior_combo = QComboBox()
+        configure_combo_popup(self.bang_behavior_combo)
+        self.bang_behavior_combo.addItem("显式执行 Shell", "shell")
+        self.bang_behavior_combo.addItem("交给大模型", "agent")
+        bang_behavior = str(getattr(shell_config, "bang_command_behavior", "shell") or "shell").strip().lower()
+        bang_idx = self.bang_behavior_combo.findData(bang_behavior)
+        self.bang_behavior_combo.setCurrentIndex(bang_idx if bang_idx >= 0 else 0)
+        backend_layout.addRow("! 命令处理方式:", self.bang_behavior_combo)
         layout.addWidget(backend_group)
 
         exec_group = QGroupBox("后端可执行文件")
@@ -119,5 +128,6 @@ class TerminalPage(QWidget):
             wsl_distro=(self.wsl_distro_edit.text() or "").strip(),
             output_encoding=str(self.encoding_combo.currentData() or "auto").strip().lower() or "auto",
             inherit_env=bool(self.inherit_env_check.isChecked()),
+            bang_command_behavior=str(self.bang_behavior_combo.currentData() or "shell").strip().lower() or "shell",
         )
         return {"shell": config.to_dict(), "shell_backend": config.backend}

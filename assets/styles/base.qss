@@ -338,6 +338,11 @@ QToolButton#tool_call_header {
     min-height: 20px;
 }
 
+QWidget#subagent_trace_content {
+    border-left: 3px solid;
+    padding-left: 6px;
+}
+
 /* Chat Header */
 QLabel#model_indicator {
     font-size: 12px;

@@ -1,8 +1,8 @@
-"""Attachment processing — Core layer.
+"""Attachment processing helpers.
 
-Handles Base64 encoding, MIME detection, and size validation
-for file attachments. Extracted from UI layer so business logic
-stays in Core.
+Handles Base64 encoding, MIME detection, and size validation for file
+attachments. Content-oriented file/image handling lives under
+``core.content`` together with Markdown helpers.
 """
 from __future__ import annotations
 

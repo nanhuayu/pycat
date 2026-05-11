@@ -40,9 +40,6 @@ class _CommandApprovalMixin:
 
 
 class _ProcessReadTool(BaseTool):
-    @property
-    def group(self) -> str:
-        return "command"
 
     @property
     def category(self) -> str:
@@ -66,13 +63,10 @@ class ExecuteCommandTool(BaseTool):
             "Dangerous commands (rm -rf, git push --force, etc.) require explicit user approval."
         )
 
-    @property
-    def group(self) -> str:
-        return "command"
 
     @property
     def category(self) -> str:
-        return "command"
+        return "execute"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -145,13 +139,10 @@ class ShellStartTool(BaseTool):
     def description(self) -> str:
         return "Start a long-running shell command in the background and return a process_id for later management."
 
-    @property
-    def group(self) -> str:
-        return "command"
 
     @property
     def category(self) -> str:
-        return "command"
+        return "execute"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -315,13 +306,10 @@ class ShellKillTool(BaseTool):
     def description(self) -> str:
         return "Terminate a background shell process by process_id."
 
-    @property
-    def group(self) -> str:
-        return "command"
 
     @property
     def category(self) -> str:
-        return "command"
+        return "execute"
 
     @property
     def input_schema(self) -> Dict[str, Any]:

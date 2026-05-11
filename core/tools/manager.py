@@ -24,9 +24,10 @@ from services.storage_service import StorageService
 from services.search_service import SearchService
 
 from core.tools.registry import ToolRegistry
+from core.tools.catalog import ToolAvailabilityContext, ToolDescriptor, ToolSelectionPolicy
 from core.tools.mcp.proxies import McpProxyTool
-from core.tools.mcp.naming import MCP_TOOL_PUBLIC_PREFIX, is_mcp_tool_name, parse_mcp_tool_name
-from core.tools.system.search import WebSearchTool
+from core.tools.mcp.naming import MCP_TOOL_PUBLIC_PREFIX, build_mcp_tool_name, is_mcp_tool_name, parse_mcp_tool_name
+from core.tools.system.search import FetchUrlTool, WebSearchTool
 
 # System Tools
 from core.tools.system.filesystem import LsTool, ReadFileTool, GrepTool
@@ -43,16 +44,20 @@ from core.tools.system.shell_exec import (
 from core.tools.system.patch import PatchTool
 from core.tools.system.state_mgr import StateMgrTool
 from core.tools.system.multi_agent import (
+    SubagentExploreTool,
     SubagentReadAnalyzeTool,
     SubagentSearchTool,
     SubagentCustomTool,
     AttemptCompletionTool,
     SwitchModeTool,
 )
-from core.tools.system.document_tools import ManageDocumentTool
+from core.tools.system.artifact_tools import ManageArtifactTool
+from core.tools.system.todo_tools import ManageTodoTool
+from core.tools.system.memory_tools import ManageMemoryTool
 from core.tools.system.ask_questions import AskQuestionsTool
 from core.tools.system.skills import LoadSkillTool, ReadSkillResourceTool
 from core.tools.system.capability_tools import CAPABILITY_TOOL_PREFIX, build_capability_tools
+from core.config.schema import ToolPermissionConfig, ToolPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +101,7 @@ class ToolManager:
         
         # Search Service
         self.search_service = SearchService(self.storage.load_search_config())
+        self.registry.register(WebSearchTool(self.search_service))
         
         # Helper for legacy
         self._workspace_root = Path(os.getcwd()).resolve()
@@ -108,17 +114,19 @@ class ToolManager:
 
     def _register_default_system_tools(self):
         tools = [
-            LsTool(), ReadFileTool(), GrepTool(),
+            LsTool(), ReadFileTool(), GrepTool(), FetchUrlTool(),
             PythonExecTool(),
             WriteToFileTool(), EditFileTool(), DeleteFileTool(),
             ExecuteCommandTool(),
             ShellStartTool(), ShellStatusTool(), ShellLogsTool(), ShellWaitTool(), ShellKillTool(),
             PatchTool(),
             StateMgrTool(),
+            ManageMemoryTool(),
+            ManageTodoTool(),
             AskQuestionsTool(),
-            ManageDocumentTool(),
+            ManageArtifactTool(),
             LoadSkillTool(), ReadSkillResourceTool(),
-            SubagentReadAnalyzeTool(), SubagentSearchTool(), SubagentCustomTool(),
+            SubagentExploreTool(), SubagentReadAnalyzeTool(), SubagentSearchTool(), SubagentCustomTool(),
             AttemptCompletionTool(), SwitchModeTool(),
         ]
         for tool in tools:
@@ -140,50 +148,63 @@ class ToolManager:
         """Update permission settings in Registry."""
         self.registry.update_permissions(config)
 
+    def refresh_search_config(self):
+        """Reload search configuration from storage.
+        
+        Called after settings dialog saves new search configuration.
+        """
+        try:
+            new_config = self.storage.load_search_config()
+            self.search_service.update_config(new_config)
+            logger.info("Search config refreshed: provider=%s", new_config.provider)
+        except Exception as e:
+            logger.warning("Failed to refresh search config: %s", e)
+
     async def get_all_tools(
         self,
-        include_search: bool = False,
-        include_mcp: bool = False,
-        prepared_queries: Optional[List[str]] = None,
-        allowed_groups: Optional[set[str]] = None,
-        tool_policies: Optional[Dict[str, Any]] = None,
+        tool_selection: Optional[ToolSelectionPolicy] = None,
+        availability_context: Optional[ToolAvailabilityContext] = None,
+        tool_permissions: Optional[ToolPermissionConfig] = None,
     ) -> List[Dict[str, Any]]:
         """
         Refreshes tools in the registry (if needed) and returns schemas.
 
-        Parameters
-        ----------
-        tool_policies
-            Per-tool permission policies. Tools with ``enabled=False`` are
-            filtered out from the returned schemas.
+        Tool visibility is selected by ``tool_selection`` and effective permissions
+        are resolved from ``tool_permissions``.
         """
-        from core.config.schema import ToolPolicy
+        if tool_selection is None:
+            tool_selection = ToolSelectionPolicy.all()
+        if availability_context is None:
+            availability_context = ToolAvailabilityContext(
+                search_available=self.search_service.is_available(),
+                mcp_available=MCP_AVAILABLE,
+            )
 
         # Capability tools come from settings and may change while the app is running.
         self._refresh_capability_tools()
 
-        # 1. Search Tool
-        if include_search and self.search_service.is_available():
-            search_tool = WebSearchTool(self.search_service, prepared_queries)
-            self.registry.register(search_tool)
+        # 1. Search Tool is always registered so it participates in the same
+        # registry/permission model as other tools. Request-time capability and
+        # provider availability only decide whether it is exposed to the model.
+        self.registry.register(WebSearchTool(self.search_service, list(tool_selection.prepared_queries) or None))
 
         # 2. MCP Tools
-        if include_mcp and MCP_AVAILABLE:
+        wants_mcp = tool_selection.allowed_categories is None or "mcp" in tool_selection.allowed_categories
+        if wants_mcp and MCP_AVAILABLE:
             await self._run_on_mcp_loop(self._refresh_mcp_tools_impl())
 
-        # Normalize tool_policies to ToolPolicy instances
-        normalized_policies: Dict[str, ToolPolicy] = {}
-        if tool_policies:
-            for name, pdata in tool_policies.items():
-                if isinstance(pdata, ToolPolicy):
-                    normalized_policies[name] = pdata
-                elif isinstance(pdata, dict):
-                    normalized_policies[name] = ToolPolicy.from_dict(pdata)
+        normalized_permissions = tool_permissions or ToolPermissionConfig()
 
         # 3. Return schemas from Registry with all filters applied
+        descriptors = self.list_tool_descriptors(availability=availability_context)
+        selected_tools = {
+            name for name, descriptor in descriptors.items()
+            if tool_selection.allows(descriptor)
+        }
+
         all_schemas = self.registry.get_all_tool_schemas(
-            allowed_groups=allowed_groups,
-            tool_policies=normalized_policies,
+            tool_selection=None,
+            tool_permissions=normalized_permissions,
         )
 
         filtered_schemas: List[Dict[str, Any]] = []
@@ -193,20 +214,63 @@ class ToolManager:
             if not isinstance(name, str) or not name:
                 continue
 
-            is_mcp = is_mcp_tool_name(name)
-            is_search = name == "builtin_web_search"
-
-            if is_search:
-                if include_search:
-                    filtered_schemas.append(schema)
+            descriptor = descriptors.get(name)
+            if name not in selected_tools or descriptor is None:
                 continue
-
-            if is_mcp and not include_mcp:
-                continue
-
+            if isinstance(fn, dict):
+                fn["x_pycat_category"] = descriptor.category
+                fn["x_pycat_source"] = descriptor.source
             filtered_schemas.append(schema)
 
         return filtered_schemas
+
+    def list_tool_descriptors(
+        self,
+        *,
+        availability: Optional[ToolAvailabilityContext] = None,
+        include_dynamic: bool = True,
+    ) -> Dict[str, ToolDescriptor]:
+        """Return catalog descriptors for built-in, capability, search, and cached MCP tools."""
+        if include_dynamic:
+            self._refresh_capability_tools()
+        if availability is None:
+            availability = ToolAvailabilityContext(
+                search_available=self.search_service.is_available(),
+                mcp_available=MCP_AVAILABLE,
+            )
+
+        descriptors: Dict[str, ToolDescriptor] = {}
+        for tool in self.registry.list_tools():
+            source = getattr(tool, "source", "builtin")
+            available = True
+            if tool.name == "web_search":
+                available = bool(availability.search_available)
+                source = "search"
+            elif is_mcp_tool_name(tool.name):
+                available = bool(availability.mcp_available)
+                source = "mcp"
+            descriptor = ToolDescriptor.from_tool(tool, source=source, available=available)
+            descriptors[descriptor.name] = descriptor
+
+        if include_dynamic:
+            for srv in self.storage.load_mcp_servers():
+                if not srv.enabled:
+                    continue
+                for tool_name in srv.cached_tools or []:
+                    full_name = build_mcp_tool_name(srv.name, tool_name)
+                    descriptors.setdefault(
+                        full_name,
+                        ToolDescriptor(
+                            name=full_name,
+                            display_name=str(tool_name),
+                            description=f"MCP tool from server {srv.name}.",
+                            category="mcp",
+                            source="mcp",
+                            available=bool(availability.mcp_available),
+                            metadata={"server": srv.name},
+                        ),
+                    )
+        return descriptors
 
     async def _refresh_mcp_tools_impl(self):
         """Register MCP tool proxies using cached schemas where possible."""

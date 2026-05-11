@@ -231,6 +231,13 @@ class MessageRuntime(QObject):
         if not self._accept_event(conversation_id, request_id):
             return
 
+        try:
+            metadata = getattr(message, "metadata", {}) or {}
+            if isinstance(metadata, dict) and metadata.get("subtask_trace_only"):
+                return
+        except Exception as exc:
+            logger.debug("Failed to inspect step metadata: %s", exc)
+
         # When we publish an assistant step (tool_calls), the UI will finish the current bubble.
         # Reset the streaming buffers so switching conversations can restore the *next* bubble cleanly.
         try:
@@ -347,10 +354,30 @@ class MessageRuntime(QObject):
 
     @staticmethod
     def _build_runtime_event_payload(event: TurnEvent) -> dict:
-        payload: dict = {"turn": int(getattr(event, "turn", 0) or 0)}
+        payload: dict = {
+            "turn": int(getattr(event, "turn", 0) or 0),
+            "source": str(getattr(event, "source", "") or "task"),
+            "subtask_id": str(getattr(event, "subtask_id", "") or ""),
+            "parent_message_id": str(getattr(event, "parent_message_id", "") or ""),
+            "parent_tool_call_id": str(getattr(event, "parent_tool_call_id", "") or ""),
+            "root_tool_call_id": str(getattr(event, "root_tool_call_id", "") or ""),
+        }
         data = getattr(event, "data", None)
         if isinstance(data, dict):
-            payload.update(data)
+            for key, value in data.items():
+                if key == "subtask" and isinstance(value, dict):
+                    payload["subtask"] = {
+                        "id": str(value.get("id") or ""),
+                        "title": str(value.get("title") or value.get("name") or ""),
+                        "status": str(value.get("status") or ""),
+                        "tool_call_id": str(value.get("tool_call_id") or (value.get("metadata") or {}).get("tool_call_id") or ""),
+                        "parent_message_id": str(value.get("parent_message_id") or (value.get("metadata") or {}).get("parent_message_id") or ""),
+                        "parent_tool_call_id": str(value.get("parent_tool_call_id") or (value.get("metadata") or {}).get("parent_tool_call_id") or ""),
+                        "root_tool_call_id": str(value.get("root_tool_call_id") or (value.get("metadata") or {}).get("root_tool_call_id") or ""),
+                        "summary": str(value.get("final_message") or value.get("error") or value.get("goal") or "")[:220],
+                    }
+                    continue
+                payload[key] = value
             return payload
 
         if isinstance(data, Message):
@@ -359,11 +386,6 @@ class MessageRuntime(QObject):
             summary = str(getattr(data, "summary", "") or getattr(data, "content", "") or "").strip()
             if summary:
                 payload["summary"] = summary[:220]
-            if payload.get("role") == "tool":
-                metadata = getattr(data, "metadata", {}) or {}
-                tool_name = str(metadata.get("name") or "").strip()
-                if tool_name:
-                    payload["tool_name"] = tool_name
             return payload
 
         if data is not None:
@@ -385,7 +407,7 @@ class MessageRuntime(QObject):
         if kind == "tool_end":
             return summary or f"{tool_name or '工具'} 已返回结果"
         if kind == "step":
-            if role == "tool":
+            if role == "tool_result":
                 return summary or f"{tool_name or '工具'} 输出已写入会话"
             if role == "assistant":
                 return summary or "助手消息已写入会话"

@@ -318,7 +318,7 @@ class Icons:
     PAGE_SKILLS = "graduation-cap"
     PAGE_TERMINAL_SETTINGS = "terminal"
     PAGE_CONTEXT = "book-open"
-    PAGE_PROMPTS = "wand-magic-sparkles"
+    PAGE_CAPABILITIES = "wand-magic-sparkles"
     PAGE_MODES = "puzzle-piece"
     PAGE_APPEARANCE = "gear"
     PAGE_ABOUT = "circle-info"

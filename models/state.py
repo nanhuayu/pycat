@@ -2,9 +2,9 @@
 SessionState: Centralized state management for conversations.
 
 This module implements the "State-Driven + Event-Sourcing Lite" architecture:
-- SessionState holds summary/tasks/memory as structured data (not scattered in messages)
+- SessionState holds summary/todos/memory/artifacts as structured data (not scattered in messages)
 - All state changes are tracked via seq_id for rollback/time-travel
-- Tools write to state explicitly via StateManagerTool
+- Tools write to state explicitly via dedicated state tools
 """
 
 from dataclasses import dataclass, field
@@ -29,6 +29,9 @@ class TaskPriority(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
+
+
+RECENT_COMPLETED_TODO_LIMIT = 5
 
 
 @dataclass
@@ -91,17 +94,55 @@ class Task:
 
 
 @dataclass
-class SessionDocument:
-    """A session-level persistent document (plan, memory, notes, etc.).
-    
-    Documents survive context condensation and are always available
-    in the system prompt, providing persistent memory across turns.
+class TodoDigest:
+    """Compact trace for recently completed/cancelled todos.
+
+    Active todos stay in ``SessionState.tasks`` for the live progress UI. Terminal
+    todos are compacted here so the next prompt can tell completion from absence
+    and avoid recreating equivalent milestones.
+    """
+    content: str
+    status: TaskStatus = TaskStatus.COMPLETED
+    priority: TaskPriority = TaskPriority.MEDIUM
+    completed_seq: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'content': self.content,
+            'status': self.status.value,
+            'priority': self.priority.value,
+            'completed_seq': self.completed_seq,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'TodoDigest':
+        return cls(
+            content=data.get('content', ''),
+            status=TaskStatus(data.get('status', 'completed')),
+            priority=TaskPriority(data.get('priority', 'medium')),
+            completed_seq=int(data.get('completed_seq', 0) or 0),
+        )
+
+
+@dataclass
+class SessionArtifact:
+    """A model-managed session artifact such as a plan, report, note, or reference.
+
+    Artifacts are not memory and are not project instructions. Prompt assembly
+    injects only their index/abstract by default; tools can read full content
+    when needed.
     """
     name: str
     content: str = ""
     abstract: str = ""
     kind: str = ""
+    status: str = "draft"
     references: List[str] = field(default_factory=list)
+    related: List[str] = field(default_factory=list)
+    frontmatter: Dict[str, Any] = field(default_factory=dict)
+    content_path: str = ""
+    content_digest: str = ""
+    content_chars: int = 0
     updated_seq: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
@@ -110,18 +151,30 @@ class SessionDocument:
             'content': self.content,
             'abstract': self.abstract,
             'kind': self.kind,
+            'status': self.status,
             'references': list(self.references),
+            'related': list(self.related),
+            'frontmatter': dict(self.frontmatter),
+            'content_path': self.content_path,
+            'content_digest': self.content_digest,
+            'content_chars': self.content_chars,
             'updated_seq': self.updated_seq,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SessionDocument':
+    def from_dict(cls, data: Dict[str, Any]) -> 'SessionArtifact':
         return cls(
             name=data.get('name', ''),
             content=data.get('content', ''),
             abstract=data.get('abstract', ''),
             kind=data.get('kind', ''),
+            status=data.get('status', 'draft'),
             references=[str(item) for item in (data.get('references', []) or []) if str(item).strip()],
+            related=[str(item) for item in (data.get('related', []) or []) if str(item).strip()],
+            frontmatter=dict(data.get('frontmatter', {}) or {}) if isinstance(data.get('frontmatter', {}), dict) else {},
+            content_path=data.get('content_path', ''),
+            content_digest=data.get('content_digest', ''),
+            content_chars=int(data.get('content_chars', 0) or 0),
             updated_seq=data.get('updated_seq', 0),
         )
 
@@ -134,8 +187,10 @@ class SessionState:
     This replaces the scattered condense_parent/summary fields with a unified state object.
     Key design decisions:
     - summary: Global rolling summary (replaces is_summary messages)
-    - tasks: Structured todo list with full lifecycle (replaces markdown parsing)
-    - memory: Key-value long-term facts (user preferences, important paths, etc.)
+    - tasks: Active model-managed todo list for current progress
+    - recent_completed_todos: Short completion trace to prevent todo amnesia
+    - memory: Key-value facts (user preferences, important paths, decisions)
+    - artifacts: Explicit model-managed session outputs and working notes
     - last_updated_seq: Tracks when state was last modified for rollback
     
     The state is:
@@ -145,8 +200,9 @@ class SessionState:
     """
     summary: str = ""
     tasks: List[Task] = field(default_factory=list)
+    recent_completed_todos: List[TodoDigest] = field(default_factory=list)
     memory: Dict[str, str] = field(default_factory=dict)
-    documents: Dict[str, SessionDocument] = field(default_factory=dict)
+    artifacts: Dict[str, SessionArtifact] = field(default_factory=dict)
     archived_summaries: List[str] = field(default_factory=list)
     last_updated_seq: int = 0
 
@@ -154,8 +210,9 @@ class SessionState:
         return {
             'summary': self.summary,
             'tasks': [t.to_dict() for t in self.tasks],
+            'recent_completed_todos': [t.to_dict() for t in self.recent_completed_todos[-RECENT_COMPLETED_TODO_LIMIT:]],
             'memory': self.memory,
-            'documents': {k: v.to_dict() for k, v in self.documents.items()},
+            'artifacts': {k: v.to_dict() for k, v in self.artifacts.items()},
             'archived_summaries': self.archived_summaries,
             'last_updated_seq': self.last_updated_seq
         }
@@ -165,13 +222,22 @@ class SessionState:
         if not data:
             return cls()
         tasks = [Task.from_dict(t) for t in data.get('tasks', [])]
-        docs_raw = data.get('documents', {})
-        documents = {k: SessionDocument.from_dict(v) for k, v in docs_raw.items()} if isinstance(docs_raw, dict) else {}
+        recent_completed_todos = [
+            TodoDigest.from_dict(t)
+            for t in data.get('recent_completed_todos', [])
+            if isinstance(t, dict)
+        ][-RECENT_COMPLETED_TODO_LIMIT:]
+        artifacts_raw = data.get('artifacts', {})
+        artifacts = {
+            k: SessionArtifact.from_dict(v)
+            for k, v in artifacts_raw.items()
+        } if isinstance(artifacts_raw, dict) else {}
         return cls(
             summary=data.get('summary', ''),
             tasks=tasks,
+            recent_completed_todos=recent_completed_todos,
             memory=data.get('memory', {}),
-            documents=documents,
+            artifacts=artifacts,
             archived_summaries=data.get('archived_summaries', []),
             last_updated_seq=data.get('last_updated_seq', 0)
         )
@@ -180,21 +246,13 @@ class SessionState:
         """Create a deep copy for rollback support"""
         return copy.deepcopy(self)
 
-    def ensure_document(self, name: str, *, default_content: str = "") -> SessionDocument:
-        """Return an existing session document or create it lazily."""
-        doc = self.documents.get(name)
-        if doc is None:
-            doc = SessionDocument(name=name, content=default_content)
-            self.documents[name] = doc
-        return doc
-
-    def get_plan_document(self) -> SessionDocument:
-        """Return the canonical session plan document."""
-        return self.ensure_document("plan")
-
-    def get_memory_document(self) -> SessionDocument:
-        """Return the canonical long-form memory document."""
-        return self.ensure_document("memory")
+    def ensure_artifact(self, name: str, *, default_content: str = "") -> SessionArtifact:
+        """Return an existing session artifact or create it lazily."""
+        artifact = self.artifacts.get(name)
+        if artifact is None:
+            artifact = SessionArtifact(name=name, content=default_content)
+            self.artifacts[name] = artifact
+        return artifact
 
     def get_active_tasks(self) -> List[Task]:
         """Get non-completed/cancelled todo items."""
@@ -204,6 +262,26 @@ class SessionState:
         """Alias used by the new concept model: current task todo list."""
         return self.get_active_tasks()
 
+    def remember_completed_todo(self, task: Task, current_seq: int) -> None:
+        """Compact a terminal todo into a short recent-completion trace."""
+        content = str(task.content or "").strip()
+        if not content:
+            return
+        normalized = content.casefold()
+        self.recent_completed_todos = [
+            item for item in self.recent_completed_todos
+            if str(item.content or "").strip().casefold() != normalized
+        ]
+        self.recent_completed_todos.append(
+            TodoDigest(
+                content=content,
+                status=task.status if isinstance(task.status, TaskStatus) else TaskStatus(str(task.status)),
+                priority=task.priority if isinstance(task.priority, TaskPriority) else TaskPriority(str(task.priority)),
+                completed_seq=current_seq,
+            )
+        )
+        self.recent_completed_todos = self.recent_completed_todos[-RECENT_COMPLETED_TODO_LIMIT:]
+
     def find_task(self, task_id: str) -> Optional[Task]:
         """Find task by ID"""
         return next((t for t in self.tasks if t.id == task_id), None)
@@ -211,8 +289,9 @@ class SessionState:
     def to_prompt_view(
         self,
         *,
-        include_documents: bool = True,
-        exclude_documents: Optional[Set[str]] = None,
+        include_artifacts: bool = True,
+        include_memory_facts: bool = True,
+        exclude_artifacts: Optional[Set[str]] = None,
     ) -> str:
         """
         Render state as Markdown for System Prompt injection.
@@ -237,9 +316,16 @@ class SessionState:
                 tags_str = " ".join([f"#{tag}" for tag in t.tags]) if t.tags else ""
                 task_lines.append(f"- {status_icon} {priority_str} {t.content} {tags_str} [id:{t.id}]")
             blocks.append("\n".join(task_lines))
+        elif self.recent_completed_todos:
+            recent_lines = ["### Current Todo List", "No active todos.", "Recently completed/cancelled todos:"]
+            for item in self.recent_completed_todos[-3:]:
+                status = item.status.value if isinstance(item.status, TaskStatus) else str(item.status)
+                recent_lines.append(f"- [{status}] {item.content}")
+            recent_lines.append("Do not recreate equivalent todos unless the user asks for new work or scope changes.")
+            blocks.append("\n".join(recent_lines))
         
         # 2. Memory section (structured facts)
-        if self.memory:
+        if include_memory_facts and self.memory:
             mem_lines = ["### Memory Facts"]
             for key, value in self.memory.items():
                 # Truncate long values
@@ -247,11 +333,11 @@ class SessionState:
                 mem_lines.append(f"- **{key}**: {display_value}")
             blocks.append("\n".join(mem_lines))
 
-        # 3. Session documents (plan/report/memory notes)
-        excluded = {str(name).strip().lower() for name in (exclude_documents or set()) if str(name).strip()}
-        if include_documents and self.documents:
-            doc_lines = ["### Session Documents"]
-            for name, doc in self.documents.items():
+        # 3. Session artifacts (plan/report/notes/references)
+        excluded = {str(name).strip().lower() for name in (exclude_artifacts or set()) if str(name).strip()}
+        if include_artifacts and self.artifacts:
+            artifact_lines = ["### Session Artifacts"]
+            for name, doc in self.artifacts.items():
                 if str(name).strip().lower() in excluded:
                     continue
                 preview_source = doc.abstract or doc.content
@@ -260,15 +346,19 @@ class SessionState:
                 line = f"\n**{name}**"
                 if doc.kind:
                     line += f" [{doc.kind}]"
+                if doc.status:
+                    line += f" ({doc.status})"
                 line += f":\n{preview or '-'}"
                 if refs:
                     line += f"\nrefs: {refs}"
-                doc_lines.append(line)
-            if len(doc_lines) > 1:
-                blocks.append("\n".join(doc_lines))
+                if doc.related:
+                    line += f"\nrelated: {', '.join(doc.related[:3])}"
+                artifact_lines.append(line)
+            if len(artifact_lines) > 1:
+                blocks.append("\n".join(artifact_lines))
         
         if not blocks:
             return ""
         
-        header = "## SESSION STATE\n_Use `manage_state` and `manage_document` to keep todos, memory, plan and reports current._\n"
+        header = "## SESSION STATE\n_Use `manage_todo`, `manage_state`, and `manage_artifact` explicitly when the task needs structured state._\n"
         return header + "\n\n".join(blocks)

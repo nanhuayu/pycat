@@ -99,7 +99,7 @@ class PatchTool(BaseTool):
     
     @property
     def name(self) -> str:
-        return "apply_patch"
+        return "file_patch"
 
     @property
     def description(self) -> str:

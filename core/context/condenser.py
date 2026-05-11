@@ -7,9 +7,9 @@ engine can call on every turn.
 
 Main changes vs the old split design:
 - ``auto_condense`` is the **only** public entry — it runs per-message
-  condensation AND global archive in one pass.
+    condensation AND global archive in one pass.
 - Token estimation is done locally (no circular deps).
-- Summary prompts come from ``core.prompts.templates``.
+- Summary model/prompt/options are owned by the ``context_compress`` capability.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from core.config import load_app_config
 from core.llm.llm_config import LLMConfig
 from core.llm.token_utils import estimate_conversation_tokens
 from core.prompts.history import count_user_turn_blocks, is_control_message
-from core.prompts.templates import SUMMARY_SYSTEM_PROMPT
+from core.capabilities.defaults import SUMMARY_SYSTEM_PROMPT
 from core.prompts.user_context import extract_user_request
 
 logger = logging.getLogger(__name__)
@@ -146,11 +146,16 @@ class ContextCondenser:
             app_cfg = None
             context_cfg = None
 
+        compress_capability = None
+        try:
+            capabilities = getattr(app_cfg, "capabilities", None)
+            compress_capability = capabilities.capability("context_compress") if capabilities is not None else None
+        except Exception:
+            compress_capability = None
+
+        compress_options = getattr(compress_capability, "options", None) or {}
         include_tool_details = bool(
-            (conversation.settings or {}).get(
-                "summary_include_tool_details",
-                bool(getattr(context_cfg, "summary_include_tool_details", False)),
-            )
+            compress_options.get("include_tool_details", False)
         )
         transcript = self._build_transcript(
             messages_to_summarize, include_tool_details=include_tool_details
@@ -159,17 +164,8 @@ class ContextCondenser:
         prompt = f"## Previous Summary\n{state.summary}\n\n## New Conversation Delta\n{transcript}\n"
         from models.provider import normalize_provider_name, split_model_ref
 
-        compress_capability = None
-        try:
-            capabilities = getattr(app_cfg, "capabilities", None)
-            compress_capability = capabilities.capability("context_compress") if capabilities is not None else None
-        except Exception:
-            compress_capability = None
-
         configured_summary_model = (
             (getattr(compress_capability, "model_ref", "") or "").strip()
-            or (conversation.settings or {}).get("summary_model")
-            or (getattr(context_cfg, "summary_model", "") or "").strip()
             or conversation.model
             or provider.default_model
         )
@@ -183,8 +179,6 @@ class ContextCondenser:
         summary_model = summary_model_name or str(configured_summary_model or "").strip()
         summary_system = (
             (getattr(compress_capability, "system_prompt", "") or "").strip()
-            or (conversation.settings or {}).get("summary_system_prompt")
-            or (getattr(context_cfg, "summary_system_prompt", "") or "").strip()
             or SUMMARY_SYSTEM_PROMPT
         )
 
@@ -203,7 +197,7 @@ class ContextCondenser:
         try:
             response = await self.client.send_message(
                 provider, summary_conv,
-                enable_thinking=False, enable_search=False, enable_mcp=False,
+                enable_thinking=False, prepared_tools=[],
             )
             new_summary = response.content or "No summary generated."
             if state.summary:
@@ -239,7 +233,11 @@ class ContextCondenser:
             if getattr(msg, "summary", None):
                 continue
             should = False
-            if msg.role == "tool" and len(msg.content or "") > pol.tool_min_chars:
+            if msg.role == "assistant" and any(
+                len(str((tool_call.get("result") or {}).get("content") if isinstance(tool_call.get("result"), dict) else tool_call.get("result") or "")) > pol.tool_min_chars
+                for tool_call in (msg.tool_calls or [])
+                if isinstance(tool_call, dict) and tool_call.get("result") is not None
+            ):
                 should = True
             elif msg.role == "assistant" and len(msg.content or "") > pol.assistant_min_chars:
                 should = True
@@ -274,7 +272,7 @@ class ContextCondenser:
         try:
             resp = await self.client.send_message(
                 provider, summary_conv,
-                enable_thinking=False, enable_search=False, enable_mcp=False,
+                enable_thinking=False, prepared_tools=[],
             )
             message.summary = resp.content
             logger.debug("Generated summary for seq_id=%s", getattr(message, "seq_id", "?"))

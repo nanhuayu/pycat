@@ -77,8 +77,6 @@ class AppCoordinator:
             conversation,
             {
                 "show_thinking": bool(selection.show_thinking),
-                "enable_mcp": bool(selection.enable_mcp),
-                "enable_search": bool(selection.enable_search),
             },
         )
         return conversation
@@ -193,8 +191,6 @@ class AppCoordinator:
             mode_slug=str(getattr(conversation, "mode", "chat") or "chat").strip() or "chat",
             work_dir=str(getattr(conversation, "work_dir", "") or "").strip(),
             show_thinking=bool(settings.get("show_thinking", defaults.get("show_thinking", True))),
-            enable_mcp=bool(settings.get("enable_mcp", False)),
-            enable_search=bool(settings.get("enable_search", False)),
             message_count=len(getattr(conversation, "messages", []) or []),
             is_streaming=bool(is_streaming),
             selected_memory_sources=selected_memory_sources,
@@ -330,7 +326,7 @@ class AppCoordinator:
 
     @staticmethod
     def _default_memory_sources() -> tuple[str, ...]:
-        return ("session", "workspace")
+        return ("session", "workspace", "global")
 
     def _resolve_memory_sources(self, conversation: Conversation) -> tuple[str, ...]:
         settings = getattr(conversation, "settings", {}) or {}

@@ -7,10 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from core.state.services.artifact_service import ArtifactService
 from core.commands.types import CommandAction, CommandResult, PromptInvocation
-from core.state.services.document_service import DocumentService
-
-
 def cmd_help(args: str, ctx: Dict[str, Any], *, list_commands) -> str:
     """Show available commands."""
     lines = ["**Available commands** (`/` only):"]
@@ -18,7 +16,11 @@ def cmd_help(args: str, ctx: Dict[str, Any], *, list_commands) -> str:
         usage = (getattr(cmd.presentation, "usage", "") or f"/{cmd.name}").strip()
         lines.append(f"  `{usage}` — {cmd.description}")
     lines.append("")
-    lines.append("Use `/{skill-name}` to run a skill directly. Use `!<shell command>` for explicit shell execution. Use `#path/to/file` for file references.")
+    lines.append("Use `/{skill-name}` to run a skill directly. Use `#path/to/file` for file references.")
+    lines.append(
+        "`!<command>` is controlled by Settings → Terminal: in Shell mode it explicitly runs `execute_command` "
+        "under the `command` permission category; in Agent mode it is sent as normal user text."
+    )
     return "\n".join(lines)
 
 
@@ -90,7 +92,7 @@ def cmd_plan(args: str, ctx: Dict[str, Any]) -> CommandResult | str:
                         "source": "slash_command",
                     }
                 },
-                document_updates={
+                artifact_updates={
                     "plan": {
                         "content": plan_text,
                         "abstract": "当前请求的活动执行计划",
@@ -106,9 +108,11 @@ def cmd_plan(args: str, ctx: Dict[str, Any]) -> CommandResult | str:
     if not conv:
         return "No active conversation."
     state = conv.get_state()
-    doc = state.documents.get("plan")
-    if doc and doc.content:
-        return f"**Session Plan:**\n{doc.content}"
+    artifact = state.artifacts.get("plan")
+    if artifact:
+        content = ArtifactService.read_content_file(artifact, work_dir=str(getattr(conv, "work_dir", ".") or "."))
+        if content:
+            return f"**Session Plan:**\n{content}"
     return "No plan set. Usage: `/plan <content>` to set one."
 
 
@@ -118,33 +122,20 @@ def cmd_memory(args: str, ctx: Dict[str, Any]) -> str:
         return "No active conversation."
     state = conv.get_state()
     if args.strip():
-        # Parse "key=value" or just append to memory doc
         if "=" in args:
             key, _, value = args.partition("=")
             state.memory[key.strip()] = value.strip()
             conv.set_state(state)
             return f"Memory '{key.strip()}' saved."
-        else:
-            DocumentService.append_document(
-                state,
-                name="memory",
-                content=args.strip(),
-                current_seq=int(conv.current_seq_id() or 0),
-                kind="memory",
-            )
-            conv.set_state(state)
-            return "Memory appended."
+        return "Usage: `/memory key=value`. Long working notes belong in `/plan` or `manage_artifact`, not memory."
     # Show current memory
     lines = []
     if state.memory:
         lines.append("**Key-Value Memory:**")
         for k, v in state.memory.items():
             lines.append(f"  - **{k}**: {v}")
-    doc = state.documents.get("memory")
-    if doc and doc.content:
-        lines.append(f"\n**Memory Document:**\n{doc.content}")
     if not lines:
-        return "No memory stored. Usage: `/memory key=value` or `/memory <text>`"
+        return "No memory stored. Usage: `/memory key=value`"
     return "\n".join(lines)
 
 

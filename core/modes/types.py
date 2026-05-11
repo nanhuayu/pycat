@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
+from typing import Literal, Optional, Sequence, Tuple, Union
+
+from core.tools.catalog import TOOL_CATEGORIES, normalize_tool_category
 
 
 ModeSource = Literal["global", "project", "builtin"]
@@ -16,16 +18,16 @@ class PromptComponent:
 
 
 @dataclass(frozen=True)
-class GroupOptions:
+class ToolCategoryOptions:
     file_regex: Optional[str] = None
     description: Optional[str] = None
 
 
-GroupName = str
-GroupEntry = Union[GroupName, Tuple[GroupName, GroupOptions]]
+ToolCategoryName = str
+ToolCategoryEntry = Union[ToolCategoryName, Tuple[ToolCategoryName, ToolCategoryOptions]]
 
-# All known tool groups.
-TOOL_GROUPS = {"read", "edit", "command", "mcp", "search", "browser", "modes"}
+# All known mode-facing tool categories.
+MODE_TOOL_CATEGORIES = set(TOOL_CATEGORIES)
 
 
 @dataclass(frozen=True)
@@ -36,7 +38,7 @@ class ModeConfig:
     when_to_use: Optional[str] = None
     description: Optional[str] = None
     custom_instructions: Optional[str] = None
-    groups: Sequence[GroupEntry] = field(default_factory=tuple)
+    allowed_tool_categories: Sequence[ToolCategoryEntry] = field(default_factory=tuple)
     tool_allowlist: Sequence[str] = field(default_factory=tuple)
     tool_denylist: Sequence[str] = field(default_factory=tuple)
     max_turns: Optional[int] = None
@@ -44,18 +46,21 @@ class ModeConfig:
     auto_compress_enabled: Optional[bool] = None
     source: Optional[ModeSource] = None
 
-    def group_names(self) -> set[str]:
-        """Return the flat set of group name strings."""
+    def tool_category_names(self) -> set[str]:
+        """Return the flat canonical set of tool category names."""
         names: set[str] = set()
-        for g in self.groups or []:
-            if isinstance(g, tuple) and g:
-                names.add(str(g[0]))
+        for item in self.allowed_tool_categories or []:
+            if isinstance(item, tuple) and item:
+                raw = str(item[0])
             else:
-                names.add(str(g))
+                raw = str(item)
+            category = normalize_tool_category(raw)
+            if category in MODE_TOOL_CATEGORIES:
+                names.add(category)
         return names
 
-    def has_group(self, name: str) -> bool:
-        return name in self.group_names()
+    def allows_tool_category(self, name: str) -> bool:
+        return normalize_tool_category(name) in self.tool_category_names()
 
 
 def normalize_mode_slug(raw: str) -> str:

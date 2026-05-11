@@ -1,30 +1,33 @@
 """Conversation command presenter.
 
-Owns command-result handling, prompt invocations, explicit shell execution,
-and export flows so conversation lifecycle concerns can stay focused.
+Owns command-result handling, prompt invocations, and export flows so
+conversation lifecycle concerns can stay focused.
 """
 from __future__ import annotations
 
 import json
 import logging
+import asyncio
 from typing import TYPE_CHECKING, Any, Callable
 
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
-from core.state.services.document_service import DocumentService
-from core.tools.permissions import ToolPermissionPolicy
+from core.config.schema import ToolPermissionConfig
+from core.tools.catalog import normalize_tool_category
+from core.state.services.artifact_service import ArtifactService
+from core.tools.base import ToolContext
+from core.tools.permissions import ToolPermissionPolicy, ToolPermissionResolver
 from models.conversation import Conversation, Message
-from services.command_service import CommandExecutionDenied
 
 if TYPE_CHECKING:
-    from core.commands import PromptInvocation, ShellInvocation
+    from core.commands import PromptInvocation
     from ui.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
 
 
 class ConversationCommandPresenter:
-    """Handles command dispatch, export, and explicit shell execution."""
+    """Handles command dispatch, prompt invocations, and export."""
 
     def __init__(
         self,
@@ -42,7 +45,14 @@ class ConversationCommandPresenter:
         if not host.current_conversation:
             return
 
-        conv = host.current_conversation
+        self.export_conversation(host.current_conversation, fmt)
+
+    def export_conversation(self, conversation: Conversation, fmt: str = "markdown") -> None:
+        host = self._host
+        if conversation is None:
+            return
+
+        conv = conversation
         default_name = (conv.title or "conversation").replace(" ", "_")
 
         if fmt == "json":
@@ -110,8 +120,7 @@ class ConversationCommandPresenter:
 
         if result.action == CommandAction.SHELL_RUN:
             payload = result.data if isinstance(result.data, ShellInvocation) else None
-            shell_command = str(payload.command_text if payload else "").strip()
-            if not shell_command:
+            if payload is None:
                 return
             self._run_shell_command(payload)
             return
@@ -122,6 +131,134 @@ class ConversationCommandPresenter:
 
         if result.action == CommandAction.DISPLAY and result.display_text:
             self._append_info_message(result.display_text)
+
+    def _run_shell_command(self, payload) -> None:
+        host = self._host
+        command = str(getattr(payload, "command", "") or "").strip()
+        if not command:
+            self._append_info_message("Shell 命令为空。")
+            return
+
+        if not host.current_conversation:
+            try:
+                host.current_conversation = host.conversation_presenter.ensure_current_conversation_shell()
+            except Exception as exc:
+                logger.debug("Failed to create conversation for shell invocation: %s", exc)
+                self._append_info_message("无法创建会话来执行 Shell 命令。")
+                return
+
+        conversation = host.current_conversation
+        if conversation is None:
+            return
+
+        tool_manager = getattr(getattr(host, "services", None), "tool_manager", None)
+        registry = getattr(tool_manager, "registry", None)
+        tool = registry.get_tool("execute_command") if registry is not None and hasattr(registry, "get_tool") else None
+        category = normalize_tool_category(str(getattr(tool, "category", "execute") or "execute"))
+
+        permissions = ToolPermissionConfig.from_dict((getattr(host, "app_settings", {}) or {}).get("permissions"))
+        effective = permissions.resolve("execute_command", category)
+        if not effective.enabled:
+            self._append_info_message("`execute_command` 已被当前权限设置禁用，无法执行 `!` Shell 命令。")
+            return
+
+        work_dir = str(getattr(payload, "cwd", "") or getattr(conversation, "work_dir", "") or ".")
+
+        user_msg = Message(
+            role="user",
+            content=str(getattr(payload, "original_text", "") or f"!{command}"),
+            metadata={
+                "command_run": {
+                    "source_prefix": "!",
+                    "action": "shell_run",
+                    "command": command,
+                }
+            },
+        )
+        conversation.messages.append(user_msg)
+        try:
+            host.chat_view.add_message(user_msg)
+        except Exception as exc:
+            logger.debug("Failed to add shell command user message to chat view: %s", exc)
+
+        async def _execute():
+            approval_callback = (lambda _message: True) if effective.auto_approve else self._ask_shell_approval
+            context = ToolContext(
+                work_dir=work_dir,
+                approval_callback=approval_callback,
+                state=self._conversation_state_dict(conversation),
+                conversation=conversation,
+            )
+            if tool is not None:
+                runtime_policy = ToolPermissionPolicy.from_effective(
+                    category_defaults=permissions.category_defaults,
+                    tools=permissions.tools,
+                )
+                context = ToolPermissionResolver.wrap_context_with_policy(context, tool, runtime_policy)
+            return await tool_manager.execute_tool_with_context(
+                "execute_command",
+                {"command": command, "cwd": ".", "timeout": 600, "background": False},
+                context,
+            )
+
+        try:
+            if tool_manager is None:
+                raise RuntimeError("Tool manager is not available")
+            result = asyncio.run(_execute())
+            content = result.to_string() if hasattr(result, "to_string") else str(result)
+            is_error = bool(getattr(result, "is_error", False))
+        except Exception as exc:
+            logger.debug("Explicit shell command failed: %s", exc)
+            content = f"Shell 执行失败：{exc}"
+            is_error = True
+
+        assistant_msg = Message(
+            role="assistant",
+            content=content,
+            metadata={
+                "command_run": {
+                    "source_prefix": "!",
+                    "action": "shell_run",
+                    "command": command,
+                    "is_error": is_error,
+                }
+            },
+        )
+        conversation.messages.append(assistant_msg)
+        try:
+            host.chat_view.add_message(assistant_msg)
+        except Exception as exc:
+            logger.debug("Failed to add shell command result to chat view: %s", exc)
+        try:
+            host.services.conv_service.save(conversation)
+        except Exception as exc:
+            logger.debug("Failed to save conversation after shell invocation: %s", exc)
+        self._remember_current_conversation(conversation)
+
+    def _ask_shell_approval(self, message: str) -> bool:
+        try:
+            reply = QMessageBox.question(
+                self._host,
+                "Shell 执行确认",
+                str(message or "确认执行 Shell 命令？"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            return reply == QMessageBox.StandardButton.Yes
+        except Exception as exc:
+            logger.debug("Failed to ask shell approval: %s", exc)
+            return False
+
+    @staticmethod
+    def _conversation_state_dict(conversation: Conversation) -> dict[str, Any]:
+        try:
+            state = conversation.get_state().to_dict()
+            return dict(state or {})
+        except Exception:
+            try:
+                return dict(getattr(conversation, "_state_dict", {}) or {})
+            except Exception:
+                return {}
 
     def _run_prompt_invocation(self, payload: PromptInvocation) -> None:
         host = self._host
@@ -141,9 +278,9 @@ class ConversationCommandPresenter:
             except Exception as exc:
                 logger.debug("Failed to sync conversation mode for prompt invocation: %s", exc)
 
-        updates = getattr(payload, "document_updates", {}) or {}
+        updates = getattr(payload, "artifact_updates", {}) or {}
         if isinstance(updates, dict) and updates:
-            self._apply_document_updates(conversation, updates)
+            self._apply_artifact_updates(conversation, updates)
             try:
                 host.services.conv_service.save(conversation)
             except Exception as exc:
@@ -163,7 +300,7 @@ class ConversationCommandPresenter:
             metadata=metadata,
         )
 
-    def _apply_document_updates(self, conversation: Conversation, updates: dict[str, Any]) -> None:
+    def _apply_artifact_updates(self, conversation: Conversation, updates: dict[str, Any]) -> None:
         try:
             state = conversation.get_state()
         except Exception as exc:
@@ -173,15 +310,15 @@ class ConversationCommandPresenter:
         changed = False
         current_seq = int(conversation.current_seq_id() or 0)
         for name, value in updates.items():
-            doc_name = str(name or "").strip().lower()
-            if not doc_name:
+            artifact_name = str(name or "").strip().lower()
+            if not artifact_name:
                 continue
             payload = value if isinstance(value, dict) else {"content": value}
             next_content = str(payload.get("content") or "")
             next_abstract = payload.get("abstract")
             next_kind = payload.get("kind")
-            next_references = DocumentService.normalize_references(payload.get("references"))
-            existing = state.documents.get(doc_name)
+            next_references = ArtifactService.normalize_references(payload.get("references"))
+            existing = state.artifacts.get(artifact_name)
             if existing is not None:
                 if (
                     existing.content == next_content
@@ -190,9 +327,9 @@ class ConversationCommandPresenter:
                     and (payload.get("references") is None or existing.references == next_references)
                 ):
                     continue
-            DocumentService.upsert_document(
+            ArtifactService.upsert_artifact(
                 state,
-                name=doc_name,
+                name=artifact_name,
                 content=next_content,
                 current_seq=current_seq,
                 abstract=next_abstract,
@@ -208,7 +345,7 @@ class ConversationCommandPresenter:
             state.last_updated_seq = current_seq
             conversation.set_state(state)
         except Exception as exc:
-            logger.debug("Failed to persist prompt invocation document updates: %s", exc)
+            logger.debug("Failed to persist prompt invocation artifact updates: %s", exc)
 
     def _append_info_message(self, content: str) -> None:
         host = self._host
@@ -241,76 +378,6 @@ class ConversationCommandPresenter:
             self._remember_current_conversation(conversation)
         except Exception as exc:
             logger.debug("Failed to persist mode switch: %s", exc)
-
-    def _run_shell_command(self, payload: ShellInvocation | None) -> None:
-        host = self._host
-        if payload is None:
-            return
-
-        if not host.current_conversation:
-            self._create_new_conversation()
-        conversation = host.current_conversation
-        if conversation is None:
-            return
-
-        command_text = str(payload.command_text or "").strip()
-        if not command_text:
-            return
-
-        display_command = str(payload.original_text or "").strip() or f"{payload.source_prefix}{command_text}"
-
-        user_msg = Message(role="user", content=display_command)
-        user_msg.metadata["explicit_shell"] = True
-        conversation.add_message(user_msg)
-        host.chat_view.add_message(user_msg)
-
-        try:
-            result_text = host.services.command_service.execute_shell_invocation(
-                payload,
-                work_dir=getattr(conversation, "work_dir", "") or ".",
-                permission_policy=ToolPermissionPolicy.from_config(host.app_settings),
-                approval_callback=self._ask_command_approval,
-            )
-            assistant_msg = Message(role="assistant", content=result_text)
-            assistant_msg.metadata["explicit_shell_result"] = True
-            assistant_msg.metadata["command"] = command_text
-        except CommandExecutionDenied as exc:
-            assistant_msg = Message(role="assistant", content=str(exc))
-            assistant_msg.metadata["explicit_shell_result"] = True
-            assistant_msg.metadata["command"] = command_text
-            assistant_msg.metadata["denied"] = True
-        except Exception as exc:
-            assistant_msg = Message(role="assistant", content=f"Shell execution failed: {exc}")
-            assistant_msg.metadata["explicit_shell_result"] = True
-            assistant_msg.metadata["command"] = command_text
-            assistant_msg.metadata["error"] = True
-
-        conversation.add_message(assistant_msg)
-        host.chat_view.add_message(assistant_msg)
-        host.stats_panel.update_stats(conversation)
-        host.services.conv_service.save(conversation)
-        self._remember_current_conversation(conversation)
-
-        try:
-            conversations = host.services.conv_service.list_all()
-            host.sidebar.update_conversations(conversations)
-            host.services.app_coordinator.sync_catalog(
-                providers=host.providers,
-                conversation_count=len(conversations),
-            )
-            host.sidebar.select_conversation(conversation.id)
-        except Exception as exc:
-            logger.debug("Failed to refresh sidebar after explicit shell command: %s", exc)
-
-    def _ask_command_approval(self, message: str) -> bool:
-        reply = QMessageBox.question(
-            self._host,
-            "命令执行确认",
-            message,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        return reply == QMessageBox.StandardButton.Yes
 
     def _remember_current_conversation(self, conversation: Conversation) -> None:
         host = self._host

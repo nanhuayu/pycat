@@ -71,7 +71,7 @@ class QuestionsDialog(QDialog):
                 options_layout.addWidget(option_widget)
             layout.addWidget(options_container)
 
-        if bool(self._question.get("allowFreeformInput", True)):
+        if bool(self._question.get("allow_freeform_input", True)):
             freeform_label = QLabel("补充输入")
             freeform_label.setProperty("muted", True)
             layout.addWidget(freeform_label)
@@ -91,7 +91,7 @@ class QuestionsDialog(QDialog):
         payload = option if isinstance(option, dict) else {"label": str(option or "").strip()}
         label = str(payload.get("label") or "").strip() or f"选项 {index + 1}"
         description = str(payload.get("description") or "").strip()
-        multi_select = bool(self._question.get("multiSelect", False))
+        multi_select = bool(self._question.get("multi_select", False))
 
         container = QFrame()
         layout = QVBoxLayout(container)
@@ -122,7 +122,7 @@ class QuestionsDialog(QDialog):
         if not options or not self._option_controls:
             return
 
-        multi_select = bool(self._question.get("multiSelect", False))
+        multi_select = bool(self._question.get("multi_select", False))
         recommended_labels = [
             str(option.get("label") or "").strip()
             for option in options

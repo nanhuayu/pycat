@@ -31,6 +31,15 @@ def _format_error_message(error: str) -> str:
     return f"错误: {text}"
 
 
+_STATE_MUTATING_TOOLS = {
+    "manage_todo",
+    "manage_state",
+    "manage_memory",
+    "manage_document",
+    "manage_artifact",
+}
+
+
 class StreamingMessagePresenter:
     """Handles streaming startup, callbacks, and runtime response updates."""
 
@@ -133,6 +142,10 @@ class StreamingMessagePresenter:
         self, conversation_id: str, request_id: str, message: Message
     ) -> None:
         host = self._host
+        metadata = getattr(message, "metadata", {}) or {}
+        if isinstance(metadata, dict) and metadata.get("subtask_trace_only"):
+            return
+
         target_conv = (
             host.current_conversation
             if (host.current_conversation and host.current_conversation.id == conversation_id)
@@ -309,7 +322,34 @@ class StreamingMessagePresenter:
         host = self._host
         if not (host.current_conversation and host.current_conversation.id == conversation_id):
             return
+        data = getattr(event, "data", None)
+        if isinstance(data, dict) and isinstance(data.get("subtask"), dict):
+            try:
+                host.chat_view.update_subtask_trace(data.get("subtask") or {})
+            except Exception as exc:
+                logger.debug("Failed to update live subtask trace: %s", exc)
+        if self._runtime_event_may_change_state(data):
+            try:
+                host.stats_panel.update_stats(host.current_conversation)
+            except Exception as exc:
+                logger.debug("Failed to update stats after runtime state event: %s", exc)
         self._sync_runtime_state(conversation_id)
+
+    @staticmethod
+    def _runtime_event_may_change_state(data: Any) -> bool:
+        if not isinstance(data, dict):
+            return False
+        if isinstance(data.get("state_snapshot"), dict):
+            return True
+        tool_name = str(data.get("tool_name") or data.get("name") or "").strip()
+        if tool_name in _STATE_MUTATING_TOOLS:
+            return True
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict):
+            meta_tool_name = str(metadata.get("name") or metadata.get("tool_name") or "").strip()
+            if meta_tool_name in _STATE_MUTATING_TOOLS:
+                return True
+        return False
 
     def _build_request_policy(
         self,
@@ -323,14 +363,23 @@ class StreamingMessagePresenter:
         from core.task.builder import build_run_policy
         from core.runtime.turn_policy import TurnPolicy
         from core.config.schema import ToolPermissionConfig
+        from core.tools.catalog import ToolSelectionPolicy
 
-        global_permissions = None
+        tool_permissions = None
         try:
             raw_permissions = (host.app_settings or {}).get("permissions")
             if raw_permissions and isinstance(raw_permissions, dict):
-                global_permissions = ToolPermissionConfig.from_dict(raw_permissions)
+                tool_permissions = ToolPermissionConfig.from_dict(raw_permissions)
         except Exception as e:
             logger.debug("Failed to load global tool permissions: %s", e)
+
+        conversation_tool_selection = None
+        try:
+            raw_tool_selection = (conversation.settings or {}).get("tool_selection")
+            if isinstance(raw_tool_selection, dict):
+                conversation_tool_selection = ToolSelectionPolicy.from_dict(raw_tool_selection)
+        except Exception as e:
+            logger.debug("Failed to load conversation tool selection: %s", e)
 
         if skill_run:
             skill_name = str(skill_run.get("name") or "").strip().lower()
@@ -342,11 +391,10 @@ class StreamingMessagePresenter:
                         build_run_policy(
                             mode_slug=spec.mode,
                             enable_thinking=bool(enable_thinking),
-                            enable_search=spec.enable_search,
-                            enable_mcp=spec.enable_mcp,
+                            tool_selection=spec.tool_selection,
                             mode_manager=host.input_area.get_mode_manager(),
                             retry_config=retry_cfg,
-                            global_permissions=global_permissions,
+                            tool_permissions=tool_permissions,
                         ),
                         conversation=conversation,
                     ),
@@ -354,17 +402,15 @@ class StreamingMessagePresenter:
 
         try:
             mode_slug = host.input_area.get_selected_mode_slug()
-            enable_search, enable_mcp = host.input_area.get_effective_tool_flags()
             return self._apply_agent_runtime_overrides(
                 TurnPolicy.from_run_policy(
                     build_run_policy(
                         mode_slug=str(mode_slug or "chat"),
                         enable_thinking=bool(enable_thinking),
-                        enable_search=bool(enable_search),
-                        enable_mcp=bool(enable_mcp),
+                            tool_selection=conversation_tool_selection,
                         mode_manager=host.input_area.get_mode_manager(),
                         retry_config=retry_cfg,
-                        global_permissions=global_permissions,
+                        tool_permissions=tool_permissions,
                     ),
                     conversation=conversation,
                 ),

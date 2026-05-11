@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from core.config.io import get_user_modes_json_path, load_project_config
-from core.modes.defaults import get_builtin_mode_required_groups, get_default_modes, get_primary_mode_slugs
-from core.modes.types import GroupOptions, ModeConfig, normalize_mode_slug
+from core.modes.defaults import get_default_modes, get_primary_mode_slugs
+from core.modes.types import ToolCategoryOptions, ModeConfig, normalize_mode_slug
 
 
 logger = logging.getLogger(__name__)
@@ -166,15 +166,11 @@ class ModeManager:
         self._cache = normalized
 
     def _normalize_loaded_mode(self, mode: ModeConfig, builtin_mode: Optional[ModeConfig]) -> ModeConfig:
-        groups = list(mode.groups or ())
-        group_names = mode.group_names()
-        required_groups = get_builtin_mode_required_groups(mode.slug)
-        for required in sorted(required_groups):
-            if required not in group_names:
-                groups.append(required)
-
+        allowed_tool_categories = list(mode.allowed_tool_categories or ())
+        if not allowed_tool_categories and builtin_mode is not None:
+            allowed_tool_categories = list(builtin_mode.allowed_tool_categories or ())
         if builtin_mode is None:
-            return replace(mode, groups=tuple(groups))
+            return replace(mode, allowed_tool_categories=tuple(allowed_tool_categories))
 
         role_definition = (mode.role_definition or "").strip() or builtin_mode.role_definition
         when_to_use = (mode.when_to_use or "").strip() or builtin_mode.when_to_use
@@ -200,7 +196,7 @@ class ModeManager:
             when_to_use=when_to_use,
             description=description,
             custom_instructions=custom_instructions,
-            groups=tuple(groups),
+            allowed_tool_categories=tuple(allowed_tool_categories),
             tool_allowlist=tool_allowlist,
             tool_denylist=tool_denylist,
             max_turns=max_turns,
@@ -228,16 +224,16 @@ class ModeManager:
             if not slug:
                 continue
 
-            groups = it.get("groups") or []
-            parsed_groups: list = []
-            if isinstance(groups, list):
-                for g in groups:
-                    if isinstance(g, str):
-                        parsed_groups.append(g)
-                    elif isinstance(g, list) and len(g) == 2 and isinstance(g[0], str) and isinstance(g[1], dict):
-                        parsed_groups.append((g[0], GroupOptions(
-                            file_regex=str(g[1].get("fileRegex") or g[1].get("file_regex") or "") or None,
-                            description=str(g[1].get("description") or "") or None,
+            categories = it.get("allowed_tool_categories") or []
+            parsed_categories: list = []
+            if isinstance(categories, list):
+                for category in categories:
+                    if isinstance(category, str):
+                        parsed_categories.append(category)
+                    elif isinstance(category, list) and len(category) == 2 and isinstance(category[0], str) and isinstance(category[1], dict):
+                        parsed_categories.append((category[0], ToolCategoryOptions(
+                            file_regex=str(category[1].get("fileRegex") or category[1].get("file_regex") or "") or None,
+                            description=str(category[1].get("description") or "") or None,
                         )))
 
             out.append(
@@ -248,7 +244,7 @@ class ModeManager:
                     when_to_use=(it.get("whenToUse") or it.get("when_to_use")),
                     description=(it.get("description")),
                     custom_instructions=(it.get("customInstructions") or it.get("custom_instructions")),
-                    groups=tuple(parsed_groups),
+                    allowed_tool_categories=tuple(parsed_categories),
                     tool_allowlist=_parse_tool_name_list(it.get("toolAllowlist") or it.get("tool_allowlist")),
                     tool_denylist=_parse_tool_name_list(it.get("toolDenylist") or it.get("tool_denylist")),
                     max_turns=_parse_optional_int(it.get("maxTurns") or it.get("max_turns")),

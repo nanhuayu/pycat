@@ -44,6 +44,10 @@ class WindowStatePresenter:
         host = self._host
         host.app_settings = dict(getattr(bootstrap_state, 'settings', {}) or {})
         host.services.tool_manager.update_permissions(host.app_settings)
+        try:
+            host.input_area.set_app_settings(host.app_settings)
+        except Exception as e:
+            logger.debug("Failed to sync app settings into input area: %s", e)
         host.settings_presenter.apply_proxy()
         try:
             host.services.client.set_timeout(

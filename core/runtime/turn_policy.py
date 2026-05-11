@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Set, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
-from core.config.schema import ToolPolicy
+from core.config.schema import ToolPermissionConfig
 from core.llm.llm_config import LLMConfig
 from core.task.types import RetryPolicy, RunPolicy
+from core.tools.catalog import ToolSelectionPolicy
 
 if TYPE_CHECKING:
     from models.conversation import Conversation
@@ -17,8 +18,8 @@ class TurnPolicy:
 
     Wraps ``RunPolicy`` while moving model/generation options into
     ``LLMConfig``, matching the planned TurnEngine contract.
-    Tool visibility and auto-approval are controlled per-tool via
-    ``tool_policies``.
+    Tool visibility and auto-approval are controlled by effective tool
+    permissions: per-tool overrides first, then category defaults.
     """
 
     mode: str = "chat"
@@ -26,8 +27,8 @@ class TurnPolicy:
     context_window_limit: int = 100_000
     llm: LLMConfig = field(default_factory=LLMConfig)
     enable_thinking: bool = True
-    tool_policies: Dict[str, ToolPolicy] = field(default_factory=dict)
-    tool_groups: Optional[Set[str]] = None
+    tool_selection: ToolSelectionPolicy = field(default_factory=ToolSelectionPolicy.all)
+    tool_permissions: ToolPermissionConfig = field(default_factory=ToolPermissionConfig)
     retry: RetryPolicy = field(default_factory=RetryPolicy)
     auto_compress_enabled: Optional[bool] = None
 
@@ -55,8 +56,8 @@ class TurnPolicy:
             context_window_limit=int(policy.context_window_limit or 100_000),
             llm=llm,
             enable_thinking=bool(policy.enable_thinking),
-            tool_policies=dict(policy.tool_policies or {}),
-            tool_groups=set(policy.tool_groups) if getattr(policy, "tool_groups", None) else None,
+            tool_selection=getattr(policy, "tool_selection", ToolSelectionPolicy.all()),
+            tool_permissions=getattr(policy, "tool_permissions", ToolPermissionConfig()),
             retry=policy.retry,
             auto_compress_enabled=policy.auto_compress_enabled,
         )
@@ -67,11 +68,11 @@ class TurnPolicy:
             max_turns=int(self.max_turns or 200),
             context_window_limit=int(self.context_window_limit or 100_000),
             enable_thinking=bool(self.enable_thinking),
+            tool_selection=self.tool_selection,
             model=self.llm.model or None,
             temperature=self.llm.temperature,
             max_tokens=self.llm.max_tokens,
-            tool_policies=dict(self.tool_policies or {}),
-            tool_groups=set(self.tool_groups) if self.tool_groups else None,
+            tool_permissions=self.tool_permissions,
             retry=self.retry,
             auto_compress_enabled=self.auto_compress_enabled,
         )

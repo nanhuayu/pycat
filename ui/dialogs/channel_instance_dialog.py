@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 from core.channel import ChannelDefinition, default_channel_manager
 from core.channel.models import ChannelConnectionSnapshot, ChannelConversationSummary
 from core.channel.runtime import ChannelRuntimeService
+from core.tools.catalog import TOOL_CATEGORIES, TOOL_CATEGORY_LABELS, ToolSelectionPolicy
 from core.config.schema import ChannelConfig
 from ui.dialogs.wechat_qr_connect_dialog import WeChatQRConnectDialog
 from ui.utils.combo_box import configure_combo_popup
@@ -154,9 +155,18 @@ class ChannelInstanceDialog(QDialog):
             self.permission_mode_combo.addItem(label, value)
         base_form.addRow("权限模式", self.permission_mode_combo)
 
-        self.allow_tools_check = QCheckBox("允许 Search / MCP")
-        self.allow_tools_check.setToolTip("开启后，频道会话可按配置使用 Search / MCP。")
-        base_form.addRow("工具能力", self.allow_tools_check)
+        self.tool_category_checks: dict[str, QCheckBox] = {}
+        tool_group = QGroupBox("工具类别")
+        tool_layout = QVBoxLayout(tool_group)
+        tool_layout.setContentsMargins(12, 8, 12, 8)
+        for category in TOOL_CATEGORIES:
+            if category in {"edit", "execute"}:
+                continue
+            check = QCheckBox(f"{TOOL_CATEGORY_LABELS.get(category, category)} ({category})")
+            check.setToolTip("频道会话可见的工具类别；具体工具仍受全局权限控制。")
+            tool_layout.addWidget(check)
+            self.tool_category_checks[category] = check
+        base_form.addRow("工具能力", tool_group)
 
         self.connection_mode_combo = QComboBox()
         configure_combo_popup(self.connection_mode_combo)
@@ -258,7 +268,12 @@ class ChannelInstanceDialog(QDialog):
             config = self._config_with_legacy_fields(self._channel)
 
             self.name_input.setText(str(self._channel.name or ""))
-            self.allow_tools_check.setChecked(bool(getattr(self._channel, "allow_tools", True)))
+            tool_selection = getattr(self._channel, "tool_selection", None) or ToolSelectionPolicy.from_categories(("read", "search", "manage"))
+            selected_categories = tool_selection.allowed_categories
+            if selected_categories is None:
+                selected_categories = set(TOOL_CATEGORIES)
+            for category, check in self.tool_category_checks.items():
+                check.setChecked(category in selected_categories)
 
             permission_index = self.permission_mode_combo.findData(self._channel.permission_mode or "default")
             self.permission_mode_combo.setCurrentIndex(permission_index if permission_index >= 0 else 0)
@@ -398,6 +413,12 @@ class ChannelInstanceDialog(QDialog):
             detail_lines.append(f"连接：{snapshot.detail}")
         self.detail_label.setText("\n".join(detail_lines))
 
+    def _selected_tool_selection(self) -> ToolSelectionPolicy:
+        categories = [category for category, check in self.tool_category_checks.items() if check.isChecked()]
+        if "manage" not in categories:
+            categories.append("manage")
+        return ToolSelectionPolicy.from_categories(categories)
+
     def _config_with_legacy_fields(self, channel: ChannelConfig) -> dict:
         config = dict(getattr(channel, "config", {}) or {})
         if channel.webhook_url and not config.get("webhook_url"):
@@ -448,7 +469,7 @@ class ChannelInstanceDialog(QDialog):
                 name=name,
                 type=self._definition.type,
                 enabled=bool(existing.enabled),
-                allow_tools=bool(self.allow_tools_check.isChecked()),
+                tool_selection=self._selected_tool_selection(),
                 source=source,
                 description=str(existing.description or "").strip(),
                 agent_id=str(getattr(existing, "agent_id", "") or "").strip(),
