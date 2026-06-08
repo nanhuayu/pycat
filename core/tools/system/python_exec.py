@@ -1,42 +1,83 @@
 import json
 import logging
+import os
 import subprocess
 import sys
-import os
 import tempfile
+from pathlib import Path
 from typing import Any, Dict
 
 from core.tools.base import BaseTool, ToolContext, ToolResult
+from core.tools.process import decode_subprocess_output
+from core.tools.system.python_worker import PYTHON_EXEC_WORKER_ARG
 
 
 logger = logging.getLogger(__name__)
 
 
-def _decode_subprocess_output(data: object) -> str:
-    if not data:
-        return ""
-    if isinstance(data, str):
-        return data
-    if not isinstance(data, (bytes, bytearray)):
-        try:
-            return str(data)
-        except Exception:
-            return ""
+def _is_nuitka_runtime() -> bool:
+    return "__compiled__" in globals()
 
-    raw = bytes(data)
-    for enc in ("utf-8", "utf-8-sig", "gbk", "mbcs"):
-        try:
-            return raw.decode(enc)
-        except UnicodeDecodeError:
-            continue
-        except Exception as exc:
-            logger.debug("Unexpected python exec decode failure for encoding %s: %s", enc, exc)
-    return raw.decode("utf-8", errors="replace")
+
+def _current_executable() -> str:
+    return sys.executable
+
+
+def resolve_python_runner() -> list[str] | None:
+    """Return the command prefix used to execute temp Python scripts.
+
+    Source mode uses the active Python interpreter. Packaged Nuitka mode uses
+    the current PyCat executable in a hidden worker mode, so python__exec works
+    without requiring a separately installed python.exe.
+    """
+    configured = os.environ.get("PYCAT_PYTHON") or os.environ.get("PYTHON")
+    if configured:
+        path = Path(configured).expanduser()
+        if path.exists() and path.is_file():
+            return _build_python_command(str(path))
+
+    if not _is_nuitka_runtime():
+        return _build_python_command(_current_executable())
+
+    return [_current_executable(), PYTHON_EXEC_WORKER_ARG]
+
+
+def resolve_python_interpreter() -> str | None:
+    """Compatibility helper for settings/tests that need the interpreter path."""
+    configured = os.environ.get("PYCAT_PYTHON") or os.environ.get("PYTHON")
+    if configured:
+        path = Path(configured).expanduser()
+        if path.exists() and path.is_file():
+            return str(path)
+
+    if not _is_nuitka_runtime():
+        return _current_executable()
+
+    return _current_executable()
+
+
+def _build_python_command(interpreter: str) -> list[str]:
+    if os.name == "nt" and Path(interpreter).name.lower() == "py.exe":
+        return [interpreter, "-3"]
+    return [interpreter]
+
+
+def _subprocess_stdio_options() -> dict[str, Any]:
+    """Return stdio options safe for GUI-subsystem Nuitka executables.
+
+    Packaged PyCat may run without valid inherited standard handles. Explicitly
+    providing stdin avoids Windows ``[WinError 6] invalid handle`` when spawning
+    the hidden python__exec worker from the GUI process.
+    """
+    options: dict[str, Any] = {"stdin": subprocess.DEVNULL}
+    if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+        options["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return options
 
 class PythonExecTool(BaseTool):
     @property
     def name(self) -> str:
-        return "python_exec"
+        return "python__exec"
 
     @property
     def description(self) -> str:
@@ -85,6 +126,13 @@ class PythonExecTool(BaseTool):
             # Prefer UTF-8 to reduce mojibake across Windows terminals.
             env.setdefault("PYTHONUTF8", "1")
             env.setdefault("PYTHONIOENCODING", "utf-8")
+            python_runner = resolve_python_runner()
+            if not python_runner:
+                return ToolResult(
+                    "Python execution runner not found.",
+                    is_error=True,
+                )
+
             script_path = None
             try:
                 with tempfile.NamedTemporaryFile(
@@ -100,12 +148,13 @@ class PythonExecTool(BaseTool):
                         handle.write("\n")
 
                 proc = subprocess.run(
-                    [sys.executable, script_path],
+                    [*python_runner, script_path],
                     cwd=str(cwd_path),
                     capture_output=True,
                     text=False,
                     timeout=timeout_sec,
                     env=env,
+                    **_subprocess_stdio_options(),
                 )
             finally:
                 if script_path:
@@ -118,8 +167,8 @@ class PythonExecTool(BaseTool):
             return ToolResult(json.dumps(
                 {
                     "exitCode": proc.returncode,
-                    "stdout": _decode_subprocess_output(proc.stdout).strip(),
-                    "stderr": _decode_subprocess_output(proc.stderr).strip(),
+                    "stdout": decode_subprocess_output(proc.stdout).strip(),
+                    "stderr": decode_subprocess_output(proc.stderr).strip(),
                 },
                 ensure_ascii=False,
                 indent=2,

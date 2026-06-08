@@ -34,6 +34,7 @@ class InputArea(QWidget):
     show_thinking_changed = pyqtSignal(bool)
     prompt_optimize_requested = pyqtSignal(str)  # Optimize current input prompt
     prompt_optimize_cancel_requested = pyqtSignal()
+    model_ref_changed = pyqtSignal(str)
     
     provider_model_changed = pyqtSignal(str, str)  # provider_id, model
     mode_changed = pyqtSignal(str)
@@ -54,6 +55,7 @@ class InputArea(QWidget):
         self._conversation = None
         self._providers = []
         self._suppress_thinking_signal = False
+        self._suppress_model_ref_signal = False
         self._work_dir = ""
         self._app_settings: Dict[str, Any] = {}
         self._is_streaming = False
@@ -153,6 +155,7 @@ class InputArea(QWidget):
         self.toolbar.prompt_optimize_requested.connect(self._on_prompt_optimize_clicked)
         self.toolbar.prompt_optimize_cancel_requested.connect(self.prompt_optimize_cancel_requested.emit)
         self.toolbar.send_requested.connect(self._handle_send_requested)
+        self.toolbar.model_ref_changed.connect(self._on_model_ref_changed)
         wrapper_layout.addWidget(self.toolbar)
         layout.addWidget(input_wrapper)
 
@@ -161,6 +164,7 @@ class InputArea(QWidget):
         self.mode_combo = self.toolbar.mode_combo
         self.thinking_toggle = self.toolbar.thinking_toggle
         self.prompt_optimize_btn = self.toolbar.prompt_optimize_btn
+        self.model_ref_combo = self.toolbar.model_ref_combo
 
         self._mode_manager = ModeManager(self._work_dir or None)
         for m in self._mode_manager.list_ui_modes():
@@ -268,6 +272,7 @@ class InputArea(QWidget):
         self.provider_combo.blockSignals(False)
         if not providers:
             self.model_combo.clear()
+            self.toolbar.set_model_ref_options([], "")
             if emit_signal:
                 self._emit_provider_model_changed()
             return
@@ -287,6 +292,11 @@ class InputArea(QWidget):
             preferred_model=desired_model,
             emit_signal=emit_signal,
         )
+        try:
+            current_ref = desired_model_ref or self._build_selected_model_ref()
+            self.toolbar.set_model_ref_options(providers or [], current_model_ref=current_ref)
+        except Exception as e:
+            logger.debug("Failed to sync bottom model selector options: %s", e)
     
     def _on_provider_changed(self, index: int):
         self._populate_models_for_provider(index, emit_signal=True)
@@ -331,6 +341,27 @@ class InputArea(QWidget):
             return
         self.provider_model_changed.emit(provider_id, model)
 
+    def _on_model_ref_changed(self, model_ref: str) -> None:
+        if self._suppress_model_ref_signal:
+            return
+        provider_name, model_name = split_model_ref(str(model_ref or "").strip())
+        provider_id = ""
+        if provider_name:
+            for provider in self._providers or []:
+                if provider_matches_name(provider, provider_name):
+                    provider_id = str(getattr(provider, "id", "") or "")
+                    break
+        self._suppress_model_ref_signal = True
+        try:
+            self.set_provider_model_selection(
+                provider_id=provider_id,
+                model=model_name or str(model_ref or "").strip(),
+                emit_signal=False,
+            )
+        finally:
+            self._suppress_model_ref_signal = False
+        self.model_ref_changed.emit(str(model_ref or "").strip())
+
     def get_selected_provider_id(self) -> str:
         return self.provider_combo.currentData() or ""
     
@@ -374,13 +405,42 @@ class InputArea(QWidget):
                 preferred_model=target_model,
                 emit_signal=emit_signal,
             )
+            try:
+                self.toolbar.set_model_ref(self._build_selected_model_ref())
+            except Exception as e:
+                logger.debug("Failed to sync bottom model selector after provider/model selection: %s", e)
             return True
 
         if target_model:
             self.model_combo.setCurrentText(target_model)
             if emit_signal:
                 self._emit_provider_model_changed()
+            try:
+                self.toolbar.set_model_ref(self._build_selected_model_ref())
+            except Exception as e:
+                logger.debug("Failed to sync bottom model selector fallback selection: %s", e)
         return False
+
+    def set_model_ref_options(self, providers: list, current_model_ref: str = "") -> None:
+        self.toolbar.set_model_ref_options(providers or [], current_model_ref=current_model_ref)
+
+    def set_model_ref(self, model_ref: str) -> None:
+        self.toolbar.set_model_ref(model_ref or "")
+
+    def model_ref(self) -> str:
+        return self.toolbar.model_ref()
+
+    def _build_selected_model_ref(self) -> str:
+        provider_id = self.get_selected_provider_id()
+        provider_name = ""
+        for provider in self._providers or []:
+            if str(getattr(provider, "id", "") or "") == str(provider_id or ""):
+                provider_name = str(getattr(provider, "name", "") or "")
+                break
+        model = self.get_selected_model()
+        if provider_name and model:
+            return f"{provider_name}|{model}"
+        return model or ""
 
     def set_mode_selection(self, mode_slug: str, *, apply_defaults: bool = False) -> bool:
         normalized = str(mode_slug or "").strip()

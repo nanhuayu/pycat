@@ -15,7 +15,7 @@ class ArtifactService:
     @staticmethod
     def artifact_storage_dir(*, work_dir: str, conversation_id: object = None) -> Path:
         session_id = str(conversation_id or "session").strip() or "session"
-        return Path(work_dir or ".").expanduser().resolve() / ".pycat" / "sessions" / session_id / "artifacts"
+        return Path(work_dir or ".").expanduser().resolve() / ".pycat" / "sessions" / session_id / "artifact"
 
     @staticmethod
     def artifact_file_path(*, work_dir: str, conversation_id: object = None, name: str) -> Path:

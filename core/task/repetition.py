@@ -17,7 +17,7 @@ class ToolRepetitionDetector:
     Usage::
 
         detector = ToolRepetitionDetector(threshold=3)
-        if detector.record("read_file", {"path": "/a.py"}):
+        if detector.record("file__read", {"path": "/a.py"}):
             # inject warning — same call repeated `threshold` times
             ...
     """

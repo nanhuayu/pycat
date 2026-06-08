@@ -17,7 +17,8 @@ from typing import Any, Callable, Optional
 from models.conversation import Conversation, Message
 from models.provider import Provider
 
-from core.tools.base import ToolContext, ToolResult
+from core.tools.base import PermissionContext, ToolContext, ToolResult, ToolRuntimeContext
+from core.tools.catalog import normalize_tool_category
 from core.tools.permissions import ToolPermissionPolicy, ToolPermissionResolver
 from core.tools.manager import ToolManager
 from core.task.types import RunPolicy
@@ -87,6 +88,9 @@ class ToolExecutor:
         approval_callback: Optional[Callable[[str], bool]],
         questions_callback: Optional[Callable[[dict[str, Any]], Any]],
         llm_client: Any,
+        policy: RunPolicy,
+        tool_call_id: str | None = None,
+        tool_name: str = "",
     ) -> ToolContext:
         """Build tool context with state.
 
@@ -100,6 +104,34 @@ class ToolExecutor:
             Tool context for execution
         """
         work_dir = getattr(conversation, "work_dir", "") or "."
+        source = str(getattr(policy, "source", "") or "desktop")
+        mode = str(getattr(policy, "mode", "") or getattr(conversation, "mode", "") or "chat")
+        agent_id = str(getattr(conversation, "id", "") or "")
+        trace_id = str(tool_call_id or "")
+        workspace_roots = (str(work_dir or "."),)
+        try:
+            tool = self._tool_manager.registry.get_tool(str(tool_name or ""))
+        except Exception:
+            tool = None
+        category = normalize_tool_category(getattr(tool, "category", "extension") if tool is not None else "extension")
+        permission = PermissionContext(
+            source=source,
+            mode=mode,
+            tool_name=str(tool_name or ""),
+            category=category,
+            agent_id=agent_id,
+            trace_id=trace_id,
+            workspace_roots=workspace_roots,
+        )
+        runtime = ToolRuntimeContext(
+            source=source,
+            mode=mode,
+            agent_id=agent_id,
+            trace_id=trace_id,
+            tool_call_id=str(tool_call_id or ""),
+            workspace_roots=workspace_roots,
+            permission=permission,
+        )
 
         # Extract state dict
         state_dict: dict[str, Any]
@@ -125,6 +157,8 @@ class ToolExecutor:
             llm_client=llm_client,
             conversation=conversation,
             provider=provider,
+            runtime=runtime,
+            permission=permission,
         )
 
     async def execute_tool(

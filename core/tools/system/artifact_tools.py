@@ -12,7 +12,7 @@ class ManageArtifactTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "manage_artifact"
+        return "state__artifact"
 
     @property
     def description(self) -> str:

@@ -11,7 +11,7 @@ from core.tools.base import BaseTool, ToolContext, ToolResult
 class LsTool(BaseTool):
     @property
     def name(self) -> str:
-        return "list_directory"
+        return "file__list"
 
     @property
     def description(self) -> str:
@@ -98,7 +98,7 @@ class ReadFileTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "read_file"
+        return "file__read"
 
     @property
     def description(self) -> str:
@@ -106,7 +106,7 @@ class ReadFileTool(BaseTool):
             "Read a workspace file. Text files support line ranges; image files can be returned as multimodal content blocks. "
             f"When no line range is specified, output is capped at {self.MAX_LINES_PER_READ} lines. "
             "If the file is larger, it will be truncated and you will receive a hint with the total line count "
-            "so you can call read_file again with start_line/end_line to read the rest."
+            "so you can call file__read again with start_line/end_line to read the rest."
         )
 
     @property
@@ -208,7 +208,7 @@ class ReadFileTool(BaseTool):
                 next_start = self.MAX_LINES_PER_READ + 1
                 next_end = min(total_lines, self.MAX_LINES_PER_READ * 2)
                 hint = (
-                    f"To continue reading, call read_file with "
+                    f"To continue reading, call file__read with "
                     f"start_line={next_start}, end_line={next_end}"
                 )
                 return ToolResult(
@@ -225,7 +225,7 @@ class ReadFileTool(BaseTool):
 class GrepTool(BaseTool):
     @property
     def name(self) -> str:
-        return "search_content"
+        return "file__search"
 
     @property
     def description(self) -> str:

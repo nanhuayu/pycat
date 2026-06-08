@@ -2,12 +2,10 @@ from typing import Dict, List, Any, Optional
 from core.config.schema import ToolPermissionConfig
 from core.tools.base import BaseTool, ToolContext, ToolResult
 from core.tools.catalog import ToolDescriptor, ToolSelectionPolicy
-from core.tools.permissions import ToolPermissionResolver
 
 class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, BaseTool] = {}
-        self._permission_resolver = ToolPermissionResolver()
 
     def register(self, tool: BaseTool):
         """Register a tool instance."""
@@ -61,23 +59,19 @@ class ToolRegistry:
             schemas.append(schema)
         return schemas
 
-    def update_permissions(self, config: Dict[str, Any]):
-        """Update permission settings."""
-        self._permission_resolver.update(config)
-
     async def execute(self, tool_name: str, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
-        """Execute a tool with permission checking."""
+        """Execute a tool.
+
+        Permission checks are resolved before reaching the registry, using the
+        request-scoped RunPolicy. The registry is only the tool catalog and
+        invocation boundary.
+        """
         tool = self._tools.get(tool_name)
         if not tool:
             return ToolResult(f"Tool '{tool_name}' not found", is_error=True)
 
-        wrapped_context = self._permission_resolver.wrap_context(context, tool)
-
         try:
-            result = await tool.execute(arguments, wrapped_context)
-            # Apply output truncation
-            if isinstance(result.content, str):
-                result.content = tool.truncate_output(result.content)
+            result = await tool.execute(arguments, context)
             return result
         except Exception as e:
             return ToolResult(f"Tool execution error: {str(e)}", is_error=True)

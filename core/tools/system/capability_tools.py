@@ -1,15 +1,14 @@
-"""Capability tool adapters and child-task scheduling helpers.
+"""Capability tool adapters and nested-run scheduling helpers.
 
 Capability definitions live in :mod:`core.capabilities` and remain the single
 source of truth.  This module adapts those definitions to the tool runtime:
 
 - load and merge configured capabilities;
-- expose each enabled capability as its own ``capability__*`` tool;
+- expose each ``visibility=agent_tool`` capability as ``capability__*``;
 - render capability instructions into child-task messages;
-- schedule child tasks through ``ToolContext.state``.
+- run capability tools through ``AgentRuntime.run_capability``.
 
-There is intentionally no single ``run_capability`` router here.  Each enabled
-capability is a first-class tool with a stable prefixed name.
+Each agent-visible capability is a first-class tool with a stable prefixed name.
 """
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ from core.capabilities import CapabilitiesConfig, CapabilityConfig, default_capa
 from core.capabilities.exposure import capability_exposed_as_tool
 from core.capabilities.manager import CapabilitiesManager
 from core.config import load_app_config
-from core.tools.base import BaseTool, ToolContext, ToolResult
+from core.tools.base import BaseTool, ToolContext, ToolControlAction, ToolResult
 from core.tools.catalog import ToolSelectionPolicy
 
 
@@ -53,6 +52,7 @@ def capability_tool_name(capability_id: str) -> str:
     """Return the stable tool name for a capability id."""
     raw = str(capability_id or "").strip().lower()
     safe = re.sub(r"[^a-z0-9_]+", "_", raw).strip("_") or "capability"
+    safe = re.sub(r"_{2,}", "_", safe)
     return f"{CAPABILITY_TOOL_PREFIX}{safe}"
 
 
@@ -152,7 +152,7 @@ def build_capability_subtask_message(
         f"- Return {str(output_format or '').strip() or 'a concise report'} to the parent agent.\n"
         "- If you create or read large artifacts, include their file paths.\n"
         "- Prefer structured findings, key evidence, risks, and next actions.\n"
-        "- Finish by calling attempt_completion with the final report."
+        "- Finish by calling agent__complete with the final report."
     )
     return "\n\n---\n\n".join(section for section in sections if section.strip())
 
@@ -173,8 +173,8 @@ def schedule_subtask(
     instructions: str = "",
     auto_spillover: bool | None = None,
     tool_selection: ToolSelectionPolicy | None = None,
-) -> None:
-    """Schedule a child task using the Task engine's pending-subtask contract."""
+) -> ToolControlAction:
+    """Create a typed control action for a child task."""
     capability_ids = normalize_string_list(list(capabilities or ()))
     resolved_capability_id = capability.id if capability is not None else str(capability_id or "").strip()
     if resolved_capability_id and resolved_capability_id not in capability_ids:
@@ -200,11 +200,11 @@ def schedule_subtask(
         payload["instructions"] = runtime_instructions
     if auto_spillover is not None:
         payload["auto_spillover"] = bool(auto_spillover)
-    context.state["_pending_subtask"] = payload
+    return ToolControlAction.schedule_subtask(payload)
 
 
 class CapabilityTool(BaseTool):
-    """Run one configured capability through the child-task scheduler."""
+    """Run one configured capability through AgentRuntime."""
 
     def __init__(self, capability: CapabilityConfig, all_capabilities: CapabilitiesConfig | None = None):
         self.capability = capability
@@ -225,9 +225,12 @@ class CapabilityTool(BaseTool):
         defaults: dict[str, str] = {
             "translate": "Translate or polish text into the target language. Use this for localization, rewriting, or language conversion.",
             "prompt_optimize": "Optimize a user prompt to be clearer and more actionable for large language models.",
-            "title_extract": "Generate a concise, punctuation-free Chinese title from the provided text or message.",
-            "summarize_text": "Summarize one file, one long text, or one tool-result file into a concise structured report. For multi-file synthesis, use subagent__read_analyze.",
-            "context_compress": "Compress a long conversation into a condensed summary while preserving key facts, decisions, and pending tasks. Use this when the context window is approaching its limit.",
+            "title": "Generate a concise, punctuation-free Chinese title from the provided text or message.",
+            "summarize": "Summarize one file, one long text, or one tool-result file into a concise structured report. For multi-source synthesis, use agent__run with agent_id=read_analyze.",
+            "translate": "Translate or polish text into the target language.",
+            "extract_facts": "Extract facts, constraints, decisions, references, and open questions from the provided text.",
+            "classify_risk": "Classify operational, permission, privacy, and correctness risks in the provided text.",
+            "rewrite_query": "Rewrite a research/search need into precise search queries.",
         }
         return defaults.get(
             self.capability.id,
@@ -297,8 +300,8 @@ class CapabilityTool(BaseTool):
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         capability = self.capability
-        if not capability.enabled:
-            return ToolResult(f"Capability '{capability.id}' is disabled.", is_error=True)
+        if capability.hidden:
+            return ToolResult(f"Capability '{capability.id}' is hidden.", is_error=True)
 
         task = str(arguments.get("task") or "").strip() or self._default_task(capability)
         output_format = str(arguments.get("output_format") or "").strip() or self._default_output_format(capability)
@@ -314,23 +317,34 @@ class CapabilityTool(BaseTool):
             instructions=runtime_instructions,
         )
 
-        schedule_subtask(
-            context,
-            mode=capability_runtime_mode(capability),
-            message=message,
-            title=capability.name,
-            kind="capability",
-            model_ref=capability.model_ref or "",
-            max_turns=self._max_turns(capability),
-            allowed_tool_categories=capability.allowed_tool_categories or (),
-            capability=capability,
-            capabilities=(capability.id,),
-            instructions=self._combined_instructions(capability, runtime_instructions),
-        )
+        client = getattr(context, "llm_client", None)
+        provider = getattr(context, "provider", None)
+        if client is None or provider is None:
+            return ToolResult("Capability runtime is unavailable in this tool context.", is_error=True)
+
+        from core.runtime.agent_runtime import AgentRuntime, RuntimeCallContext
+
+        runtime = AgentRuntime(client=client, tool_manager=getattr(client, "tool_manager", None))
+        try:
+            result = await runtime.run_capability(
+                provider=provider,
+                capability_id=capability.id,
+                message=message,
+                conversation=getattr(context, "conversation", None),
+                context=RuntimeCallContext(
+                    caller="tool",
+                    source=str(getattr(getattr(context, "runtime", None), "source", "") or "desktop"),
+                    entrypoint=self.name,
+                    trace_id=str(getattr(getattr(context, "runtime", None), "trace_id", "") or ""),
+                ),
+                config=self.all_capabilities,
+                title=f"tool_{capability.id}",
+            )
+        except Exception as exc:
+            return ToolResult(f"Capability '{capability.id}' failed: {exc}", is_error=True)
 
         return ToolResult(
-            f"Capability tool '{self.name}' scheduled '{capability.name}' ({capability.id}). "
-            "Its result will be returned to the parent agent."
+            result.content or f"Capability '{capability.id}' completed.",
         )
 
     @staticmethod
@@ -385,9 +399,12 @@ class CapabilityTool(BaseTool):
         defaults = {
             "prompt_optimize": "Optimize the provided prompt while preserving the user's intent.",
             "translate": "Translate or polish the provided text according to the capability instructions.",
-            "title_extract": "Generate a concise Chinese title from the provided text or message.",
-            "summarize_text": "Summarize the provided single long text, file path, or tool-result file into a concise structured report.",
-            "context_compress": "Compress the provided conversation context into a condensed summary preserving key facts, decisions, and pending tasks.",
+            "title": "Generate a concise Chinese title from the provided text or message.",
+            "summarize": "Summarize the provided single long text, file path, or tool-result file into a concise structured report.",
+            "compress": "Compress the provided conversation context into a condensed summary preserving key facts, decisions, and pending tasks.",
+            "extract_facts": "Extract stable facts, constraints, decisions, references, and open questions.",
+            "classify_risk": "Classify risks and suggest mitigations.",
+            "rewrite_query": "Rewrite the provided search/research need into precise queries.",
         }
         return defaults.get(capability.id, f"Run capability {capability.id} on the provided input.")
 
@@ -396,9 +413,12 @@ class CapabilityTool(BaseTool):
         defaults = {
             "prompt_optimize": "optimized prompt",
             "translate": "translated text",
-            "title_extract": "concise title",
-            "summarize_text": "structured summary",
-            "context_compress": "condensed summary",
+            "title": "concise title",
+            "summarize": "structured summary",
+            "compress": "condensed summary",
+            "extract_facts": "structured facts",
+            "classify_risk": "risk report",
+            "rewrite_query": "search queries",
         }
         return defaults.get(capability.id, "concise report")
 
@@ -406,9 +426,8 @@ class CapabilityTool(BaseTool):
 def build_capability_tools(config: CapabilitiesConfig | None = None) -> list[CapabilityTool]:
     """Build one tool instance for each configured capability.
 
-    Capability definitions are first-class runtime entities.  Enabled
-    capabilities are exposed as ``capability__*`` tools unless explicitly
-    hidden with ``options.expose_as_tool = False``.
+    Capability definitions are first-class runtime entities. Only
+    ``visibility=agent_tool`` capabilities are exposed as ``capability__*``.
     """
     cfg = config or load_capabilities_config()
     tools: list[CapabilityTool] = []

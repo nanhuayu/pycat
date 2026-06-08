@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # 页面 emoji 到统一图标的映射
 _PAGE_ICON_MAP = {
     "ModelsPage": Icons.PAGE_MODELS,
-    "AgentPage": Icons.PAGE_AGENTS,
+    "AgentPage": Icons.SLIDERS,
     "PermissionsPage": Icons.PAGE_CONTEXT,
     "AppearancePage": Icons.PAGE_APPEARANCE,
     "ChannelsPage": Icons.PAGE_CHANNELS,
@@ -142,27 +142,29 @@ class SettingsDialog(QDialog):
 
         sidebar = QFrame()
         sidebar.setObjectName("settings_sidebar")
-        sidebar.setFixedWidth(192)
+        sidebar.setFixedWidth(184)
 
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(12, 12, 12, 12)
+        sidebar_layout.setContentsMargins(10, 10, 10, 10)
         sidebar_layout.setSpacing(6)
 
         self.page_list = QListWidget()
         self.page_list.setObjectName("settings_nav")
-        self.page_list.setIconSize(QSize(20, 20))
-        self.page_list.setSpacing(2)
+        self.page_list.setIconSize(QSize(Icons.SIZE_SETTINGS_NAV, Icons.SIZE_SETTINGS_NAV))
+        self.page_list.setSpacing(1)
         self.page_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.page_list.currentRowChanged.connect(self._change_page)
         sidebar_layout.addWidget(self.page_list, 1)
 
         sidebar_layout.addSpacing(6)
         save_btn = QPushButton("保存")
+        save_btn.setObjectName("settings_action_btn")
         save_btn.setProperty("primary", True)
         save_btn.clicked.connect(self.accept)
         sidebar_layout.addWidget(save_btn)
 
         cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("settings_action_btn")
         cancel_btn.clicked.connect(self.reject)
         sidebar_layout.addWidget(cancel_btn)
 
@@ -220,16 +222,16 @@ class SettingsDialog(QDialog):
         self.about_page = AboutPage()
 
         self._pages = [
+            self.appearance_page,
             self.models_page,
+            self.modes_page,
             self.agent_page,
             self.permissions_page,
-            self.appearance_page,
-            self.channels_page,
-            self.terminal_page,
-            self.mcp_page,
-            self.skills_page,
             self.capabilities_page,
-            self.modes_page,
+            self.skills_page,
+            self.channels_page,
+            self.mcp_page,
+            self.terminal_page,
             self.search_page,
             self.about_page,
         ]
@@ -346,6 +348,7 @@ class SettingsDialog(QDialog):
 
     def build_update(self) -> AppSettingsUpdate:
         settings_patch = {
+            "show_sidebar": bool(getattr(self._app_config, "show_sidebar", True)),
             "show_stats": self.get_show_stats(),
             "theme": self.get_theme(),
             "show_thinking": self.get_show_thinking(),

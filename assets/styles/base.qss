@@ -24,27 +24,46 @@ QToolButton#msg_copy_btn,
 QToolButton#msg_delete_btn {
     padding: 0px;
     margin: 0px;
-    min-width: 22px;
-    max-width: 22px;
-    min-height: 22px;
-    max-height: 22px;
-    icon-size: 14px;
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    icon-size: 16px;
     border-radius: 6px;
+}
+
+QPushButton#settings_action_btn {
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    icon-size: 16px;
 }
 
 QToolButton#toolbar_btn {
     padding: 0px;
-    min-width: 28px;
-    max-width: 28px;
-    min-height: 28px;
-    max-height: 28px;
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
     font-size: 12px;
     border-radius: 8px;
 }
 
+QToolButton#send_btn {
+    padding: 0px;
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    border-radius: 9px;
+    icon-size: 18px;
+}
+
 QComboBox {
     border-radius: 4px;
-    padding: 4px 30px 4px 10px;
+    padding: 3px 15px 3px 7px;
     min-height: 24px;
     font-size: 13px;
 }
@@ -53,14 +72,14 @@ QComboBox::drop-down {
     border: none;
     subcontrol-origin: padding;
     subcontrol-position: top right;
-    width: 22px;
-    margin: 2px 3px 2px 0;
+    width: 10px;
+    margin: 2px 1px 2px 0;
     border-radius: 6px;
 }
 
 QComboBox::down-arrow {
-    width: 12px;
-    height: 12px;
+    width: 8px;
+    height: 8px;
 }
 
 QComboBox::down-arrow:on {
@@ -141,6 +160,10 @@ QTextBrowser {
     padding: 0;
 }
 
+QFrame#settings_detail_card {
+    border-radius: 8px;
+}
+
 /* ============ Settings Dialog ============ */
 #settings_sidebar {
     padding: 0;
@@ -180,6 +203,12 @@ QLabel#settings_page_description {
     font-size: 12px;
 }
 
+QLabel#settings_hint {
+    padding: 7px 9px;
+    border-radius: 7px;
+    font-size: 12px;
+}
+
 /* Slightly denser group boxes inside settings content */
 #settings_content QGroupBox {
     margin-top: 6px;
@@ -203,7 +232,7 @@ QMenu {
 }
 
 QMenu::item {
-    padding: 6px 24px;
+    padding: 5px 18px;
     border-radius: 0;
     margin: 0;
 }
@@ -354,27 +383,33 @@ QLabel#runtime_indicator {
     font-weight: 600;
     padding: 0 6px;
     border-radius: 6px;
-    max-height: 20px;
+    max-height: 30px;
 }
 
 QLabel#context_indicator {
     font-size: 11px;
     padding: 0 8px;
     border-radius: 6px;
-    max-height: 20px;
+    max-height: 30px;
 }
 
 QPushButton#work_dir_btn {
     border-radius: 8px;
-    padding: 4px 10px 4px 8px;
+    padding: 0px 8px 0px 7px;
     font-size: 12px;
     text-align: left;
-    min-height: 28px;
+    min-height: 30px;
+    max-height: 30px;
 }
 
 QFrame#chat_nav_group {
     border-radius: 8px;
     padding: 2px;
+}
+
+QFrame#chat_header_separator {
+    max-width: 1px;
+    min-width: 1px;
 }
 
 QWidget#chat_empty_state {
@@ -411,8 +446,7 @@ QLabel#chat_empty_tip_title {
     line-height: 1.35;
 }
 
-QLabel#chat_empty_tip_description,
-QLabel#chat_empty_hint {
+QLabel#chat_empty_tip_description {
     font-size: 10px;
 }
 
@@ -431,11 +465,14 @@ QTextEdit#message_input {
     padding: 2px;
 }
 
-QPushButton#send_btn {
-    padding: 4px 8px;
-    font-size: 12px;
-    min-width: 0;
-    min-height: 22px;
+QPushButton#send_btn,
+QToolButton#send_btn {
+    padding: 0px;
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    border-radius: 9px;
 }
 
 /* Image Preview */
@@ -445,6 +482,15 @@ QFrame#image_preview_item {
 
 QLabel#image_thumb {
     font-size: 10px;
+}
+
+QLabel#file_thumb {
+    font-size: 10px;
+    font-weight: 700;
+}
+
+QLabel#file_name_lbl {
+    font-size: 9px;
 }
 
 QPushButton#image_remove_btn {
@@ -564,7 +610,7 @@ QToolButton#thinking_toggle {
 
 QTextBrowser#thinking_content {
     padding: 0px;
-    border-radius: 0 6px 6px 0;
+    border-radius: 6px;
     font-size: 12px;
 }
 
@@ -589,6 +635,16 @@ QLabel#editor_role_label {
     font-weight: 600;
 }
 
+QLabel#message_error_label {
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 4px;
+}
+
+QLabel#validation_error_label {
+    font-size: 12px;
+}
+
 QTextEdit#editor_content {
     padding: 8px;
     font-size: 13px;
@@ -602,4 +658,151 @@ QLabel[muted="true"] {
 QLabel[heading="true"] {
     font-size: 15px;
     font-weight: 600;
+}
+
+/* ============ Compact Refresh ============ */
+QWidget#title_corner_controls {
+    background: transparent;
+}
+
+QToolButton#title_tool_btn {
+    padding: 0px;
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    border-radius: 7px;
+}
+
+#chat_header {
+    min-height: 42px;
+    max-height: 42px;
+}
+
+QPushButton#work_dir_btn,
+QLabel#context_indicator,
+QLabel#runtime_indicator {
+    min-height: 30px;
+    max-height: 30px;
+    border-radius: 8px;
+}
+
+QLabel#context_indicator {
+    min-width: 68px;
+    max-width: 78px;
+}
+
+QFrame#chat_nav_group {
+    padding: 0px;
+}
+
+QComboBox#mode_combo,
+QComboBox#provider_combo,
+QComboBox#model_combo,
+QComboBox#bottom_model_selector {
+    min-height: 30px;
+    max-height: 30px;
+    border-radius: 8px;
+    padding: 0px 12px 0px 7px;
+}
+
+QComboBox#mode_combo::drop-down,
+QComboBox#provider_combo::drop-down,
+QComboBox#model_combo::drop-down,
+QComboBox#bottom_model_selector::drop-down {
+    width: 10px;
+    margin: 2px 1px 2px 0px;
+}
+
+QComboBox#bottom_model_selector QLineEdit {
+    padding: 0px;
+    margin: 0px;
+    border: none;
+}
+
+#conversation_list::item {
+    padding: 0px;
+    margin: 1px 4px;
+}
+
+QPushButton#thinking_toggle,
+QPushButton#tool_call_header,
+QToolButton#thinking_toggle,
+QToolButton#tool_call_header {
+    min-height: 22px;
+    max-height: 22px;
+    padding: 0px 4px;
+    border-radius: 4px;
+    text-align: left;
+    font-size: 12px;
+}
+
+QLabel#tool_call_summary {
+    font-size: 11px;
+}
+
+QTextBrowser#thinking_content {
+    padding: 0px;
+}
+
+QWidget#tool_details {
+    margin-left: 0px;
+}
+
+QLabel#tool_detail_label {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 0px 0px 2px;
+}
+
+QTextBrowser#tool_args_view,
+QTextBrowser#tool_result_view {
+    padding: 0px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+QFrame#artifact_row {
+    border-radius: 7px;
+}
+
+QLabel#artifact_title {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel#artifact_meta {
+    font-size: 10px;
+}
+
+QFrame#task_card {
+    border-radius: 6px;
+}
+
+QLabel#task_status_icon {
+    min-width: 16px;
+    max-width: 16px;
+    min-height: 16px;
+    max-height: 16px;
+}
+
+QToolButton#task_done_btn,
+QToolButton#task_delete_btn,
+QToolButton#add_task_btn {
+    padding: 0px;
+    margin: 0px;
+}
+
+StatsPanel QFrame#task_card {
+    min-height: 0px;
+}
+
+QListWidget#settings_nav::item {
+    min-height: 34px;
+    padding: 4px 10px;
+    margin: 1px 0;
+}
+
+QListWidget#file_completer_popup::item {
+    padding: 4px 8px;
 }

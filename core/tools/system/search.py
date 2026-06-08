@@ -24,7 +24,7 @@ class WebSearchTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "web_search"
+        return "web__search"
 
     @property
     def description(self) -> str:
@@ -93,13 +93,13 @@ class FetchUrlTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "web_fetch"
+        return "web__fetch"
 
     @property
     def description(self) -> str:
         return (
             "Fetch the content of a specific http(s) URL and return text, HTML, or lightweight markdown. "
-            "Use after web_search finds a relevant source, or when the user provides a URL."
+            "Use after web__search finds a relevant source, or when the user provides a URL."
         )
 
     @property

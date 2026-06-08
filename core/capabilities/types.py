@@ -49,20 +49,49 @@ REMOVED_BUILTIN_CAPABILITY_IDS: frozenset[str] = frozenset(
     }
 )
 
+LEGACY_CAPABILITY_ID_ALIASES: dict[str, str] = {
+    "context_compress": "compress",
+    "title_extract": "title",
+    "summarize_text": "summarize",
+}
+
+BUILTIN_CAPABILITY_VISIBILITY_DEFAULTS: dict[str, str] = {
+    "prompt_optimize": "internal",
+    "title": "internal",
+    "compress": "internal",
+    "translate": "agent_tool",
+    "summarize": "agent_tool",
+    "extract_facts": "agent_tool",
+    "classify_risk": "agent_tool",
+    "rewrite_query": "agent_tool",
+}
+
+BUILTIN_CAPABILITY_KIND_DEFAULTS: dict[str, str] = {
+    "prompt_optimize": "prompt_optimize",
+    "title": "title",
+    "compress": "compress",
+    "translate": "translate",
+    "summarize": "summarize",
+    "extract_facts": "extract_facts",
+    "classify_risk": "classify_risk",
+    "rewrite_query": "rewrite_query",
+}
+
 @dataclass(frozen=True)
 class CapabilityConfig:
-    """Reusable task capability configuration.
+    """Reusable LLM task capability definition.
 
-    A capability is a self-contained workflow exposed as a tool (``capability__*``).
-    It carries its own instructions, model, tool categories, and execution budget.
-    There is no separate configured sub-agent entity; each capability is the
-    first-class reusable runtime entity.
+    ``visibility`` controls where the capability can be used:
+    - ``internal``: callable by runtime/UI/internal services, not model-visible.
+    - ``agent_tool``: callable internally and registered as ``capability__<id>``.
+    - ``hidden``: disabled; not callable and not exposed.
     """
 
     id: str
     name: str
     kind: str = "custom"
-    enabled: bool = True
+    visibility: str = "agent_tool"
+    execution_mode: str = "direct_llm"
     model_ref: str = ""
     system_prompt: str = ""
     description: str = ""
@@ -74,15 +103,28 @@ class CapabilityConfig:
     @staticmethod
     def from_dict(data: Mapping[str, Any] | None) -> "CapabilityConfig":
         payload = _as_dict(data)
-        capability_id = _as_str(payload.get("id") or payload.get("slug"), "").strip()
+        raw_id = _as_str(payload.get("id") or payload.get("slug"), "").strip()
+        capability_id = LEGACY_CAPABILITY_ID_ALIASES.get(raw_id.strip().lower(), raw_id)
         kind = _as_str(payload.get("kind"), "custom").strip().lower() or "custom"
         if not capability_id:
             capability_id = kind
+        capability_id = LEGACY_CAPABILITY_ID_ALIASES.get(capability_id.strip().lower(), capability_id)
+        kind = LEGACY_CAPABILITY_ID_ALIASES.get(kind, kind)
+        visibility = _as_str(payload.get("visibility"), "").strip().lower()
+        if visibility not in {"internal", "agent_tool", "hidden"}:
+            if "enabled" in payload and not _as_bool(payload.get("enabled"), True):
+                visibility = "hidden"
+            else:
+                visibility = BUILTIN_CAPABILITY_VISIBILITY_DEFAULTS.get(capability_id.lower()) or "agent_tool"
+        execution_mode = _as_str(payload.get("execution_mode") or payload.get("executionMode"), "").strip().lower()
+        if execution_mode not in {"direct_llm", "tool_limited_loop"}:
+            execution_mode = "tool_limited_loop" if _as_list(payload.get("allowed_tool_categories")) else "direct_llm"
         return CapabilityConfig(
             id=capability_id,
             name=_as_str(payload.get("name"), capability_id).strip() or capability_id,
-            kind=kind,
-            enabled=_as_bool(payload.get("enabled"), True),
+            kind=BUILTIN_CAPABILITY_KIND_DEFAULTS.get(capability_id.lower(), kind),
+            visibility=visibility,
+            execution_mode=execution_mode,
             model_ref=_as_str(payload.get("model_ref") or payload.get("modelRef"), "").strip(),
             system_prompt=_as_str(payload.get("system_prompt") or payload.get("systemPrompt"), "").strip(),
             description=_as_str(payload.get("description") or payload.get("desc"), "").strip(),
@@ -96,12 +138,21 @@ class CapabilityConfig:
             options=_as_dict(payload.get("options")),
         )
 
+    @property
+    def hidden(self) -> bool:
+        return self.visibility == "hidden"
+
+    @property
+    def exposed_as_tool(self) -> bool:
+        return self.visibility == "agent_tool"
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "kind": self.kind,
-            "enabled": bool(self.enabled),
+            "visibility": self.visibility,
+            "execution_mode": self.execution_mode,
             "model_ref": self.model_ref,
             "system_prompt": self.system_prompt,
             "description": self.description,
@@ -133,8 +184,11 @@ class CapabilitiesConfig:
         }
 
     def capability(self, capability_id: str) -> CapabilityConfig | None:
-        target = str(capability_id or "").strip().lower()
+        target = LEGACY_CAPABILITY_ID_ALIASES.get(str(capability_id or "").strip().lower(), str(capability_id or "").strip().lower())
         for item in self.capabilities:
             if item.id.lower() == target:
                 return item
         return None
+
+
+CapabilityDefinition = CapabilityConfig

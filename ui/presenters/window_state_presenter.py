@@ -9,6 +9,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from core.llm.token_budget import build_token_usage_snapshot
+
 if TYPE_CHECKING:
     from ui.main_window import MainWindow
 
@@ -43,7 +45,6 @@ class WindowStatePresenter:
     def apply_bootstrap_state(self, bootstrap_state) -> None:
         host = self._host
         host.app_settings = dict(getattr(bootstrap_state, 'settings', {}) or {})
-        host.services.tool_manager.update_permissions(host.app_settings)
         try:
             host.input_area.set_app_settings(host.app_settings)
         except Exception as e:
@@ -57,6 +58,10 @@ class WindowStatePresenter:
             logger.debug("Failed to sync LLM timeout from settings: %s", e)
 
         host.providers = list(getattr(bootstrap_state, 'providers', []) or [])
+        try:
+            host.stats_panel.set_providers(host.providers)
+        except Exception as e:
+            logger.debug("Failed to sync providers into stats panel: %s", e)
         default_chat_model = str(host.app_settings.get("default_chat_model", "") or "").strip()
         host.input_area.set_providers(
             host.providers,
@@ -69,7 +74,7 @@ class WindowStatePresenter:
                 provider_id=host.input_area.get_selected_provider_id(),
                 model=host.input_area.get_selected_model(),
             )
-            host.chat_view.set_model_options(host.providers, current_model_ref=current_model_ref)
+            host.input_area.set_model_ref_options(host.providers, current_model_ref=current_model_ref)
         except Exception as e:
             logger.debug("Failed to sync header model options from bootstrap: %s", e)
         try:
@@ -92,7 +97,8 @@ class WindowStatePresenter:
         )
 
         host.settings_presenter.apply_bootstrap_shell_state(
-            show_stats=bool(getattr(bootstrap_state, 'show_stats', True)),
+            show_sidebar=bool(getattr(bootstrap_state, 'show_sidebar', True)),
+            show_stats=bool(getattr(bootstrap_state, 'show_stats', False)),
             splitter_sizes=getattr(bootstrap_state, 'splitter_sizes', None),
             chat_splitter_sizes=getattr(bootstrap_state, 'chat_splitter_sizes', None),
         )
@@ -131,8 +137,18 @@ class WindowStatePresenter:
         try:
             current_id = str(getattr(host.current_conversation, "id", "") or "")
             if state.current_conversation_id and state.current_conversation_id == current_id:
+                token_snapshot = None
+                if host.current_conversation is not None:
+                    token_snapshot = build_token_usage_snapshot(
+                        host.current_conversation,
+                        providers=getattr(host, "providers", None),
+                    )
                 if state.model_ref:
-                    host.chat_view.update_header(state.model_ref, msg_count=int(state.message_count or 0))
+                    host.chat_view.update_header(
+                        state.model_ref,
+                        msg_count=int(state.message_count or 0),
+                        token_snapshot=token_snapshot,
+                    )
                 host.input_area.set_streaming_state(bool(state.is_streaming))
             elif not state.current_conversation_id:
                 host.input_area.set_streaming_state(False)
@@ -168,10 +184,18 @@ class WindowStatePresenter:
                 model=selected_model or '',
             )
             try:
-                host.chat_view.set_model_options(host.providers, current_model_ref=model_ref)
+                host.input_area.set_model_ref_options(host.providers, current_model_ref=model_ref)
             except Exception as e:
                 logger.debug("Failed to sync header model options: %s", e)
-            host.chat_view.update_header(model_ref, msg_count=msg_count)
+            token_snapshot = None
+            if host.current_conversation is not None:
+                token_snapshot = build_token_usage_snapshot(
+                    host.current_conversation,
+                    providers=host.providers,
+                    provider_id=selected_provider_id,
+                    model_id=selected_model or "",
+                )
+            host.chat_view.update_header(model_ref, msg_count=msg_count, token_snapshot=token_snapshot)
         except Exception as e:
             logger.debug("Failed to sync chat header from input: %s", e)
 

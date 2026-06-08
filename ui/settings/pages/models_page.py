@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List
 
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
+from PyQt6.QtGui import QBrush, QColor
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -35,14 +36,20 @@ class ProviderListItem(QListWidgetItem):
         return api_type_label(getattr(provider, "api_type", ""))
 
     def update_display(self) -> None:
-        status_icon = Icons.get_success(Icons.CIRCLE_CHECK) if getattr(self.provider, "enabled", True) else Icons.get_muted(Icons.CIRCLE_INFO)
+        enabled = bool(getattr(self.provider, "enabled", True))
+        status_icon = Icons.get_success(Icons.CIRCLE_CHECK) if enabled else Icons.get_muted(Icons.CIRCLE_INFO)
         api_type = self._api_type_label(self.provider)
         default_model = str(getattr(self.provider, "default_model", "") or "").strip()
         model_count = len(getattr(self.provider, "models", []) or [])
+        status = "启用" if enabled else "停用"
         self.setIcon(status_icon)
-        self.setText(f"  {self.provider.name} · {api_type} · {model_count} 个模型")
+        self.setText(f"  {self.provider.name} · {status} · {api_type} · {model_count} 个模型")
+        if enabled:
+            self.setForeground(QBrush())
+        else:
+            self.setForeground(QBrush(QColor("#8b8fa3")))
         self.setToolTip(
-            f"双击配置模型服务商\n接口: {api_type}\n默认模型: {default_model or '未设置'}\nAPI: {self.provider.api_base}\n模型数: {len(self.provider.models)}"
+            f"双击配置模型服务商\n状态: {status}\n接口: {api_type}\n默认模型: {default_model or '未设置'}\nAPI: {self.provider.api_base}\n模型数: {len(self.provider.models)}"
         )
         self.setSizeHint(QSize(0, 40))
 
@@ -100,31 +107,43 @@ class ModelsPage(QWidget):
         self.provider_list.setSpacing(2)
         self.provider_list.setMinimumHeight(280)
         self.provider_list.itemDoubleClicked.connect(lambda _item: self._edit_provider())
+        self.provider_list.currentRowChanged.connect(lambda _row: self._sync_actions())
         layout.addWidget(self.provider_list, 1)
 
         actions = QHBoxLayout()
         actions.setSpacing(6)
 
         btn_add = QPushButton()
+        btn_add.setObjectName("settings_action_btn")
         btn_add.setIcon(Icons.get(Icons.PLUS, scale_factor=1.0))
         btn_add.setText("添加")
         btn_add.clicked.connect(self._add_provider)
         actions.addWidget(btn_add)
 
+        self.btn_toggle_enabled = QPushButton()
+        self.btn_toggle_enabled.setObjectName("settings_action_btn")
+        self.btn_toggle_enabled.setIcon(Icons.get(Icons.PAUSE, scale_factor=1.0))
+        self.btn_toggle_enabled.setText("停用")
+        self.btn_toggle_enabled.clicked.connect(self._toggle_provider_enabled)
+        actions.addWidget(self.btn_toggle_enabled)
+
         btn_up = QPushButton()
+        btn_up.setObjectName("settings_action_btn")
         btn_up.setIcon(Icons.get(Icons.ARROW_UP, scale_factor=1.0))
         btn_up.setText("上移")
         btn_up.clicked.connect(lambda: self._move_provider(-1))
         actions.addWidget(btn_up)
 
         btn_down = QPushButton()
+        btn_down.setObjectName("settings_action_btn")
         btn_down.setIcon(Icons.get(Icons.ARROW_DOWN, scale_factor=1.0))
         btn_down.setText("下移")
         btn_down.clicked.connect(lambda: self._move_provider(1))
         actions.addWidget(btn_down)
 
         btn_del = QPushButton()
-        btn_del.setIcon(Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR, scale_factor=1.0))
+        btn_del.setObjectName("settings_action_btn")
+        btn_del.setIcon(Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR, scale_factor=1.0))
         btn_del.setText("删除")
         btn_del.setProperty("danger", True)
         btn_del.clicked.connect(self._delete_provider)
@@ -139,6 +158,7 @@ class ModelsPage(QWidget):
         layout.addWidget(hint)
 
         self._refresh_provider_list()
+        self._sync_actions()
 
     def _refresh_provider_list(self) -> None:
         self.provider_list.clear()
@@ -155,6 +175,22 @@ class ModelsPage(QWidget):
             )
         except Exception:
             pass
+        self._sync_actions()
+
+    def _current_provider_item(self) -> ProviderListItem | None:
+        item = self.provider_list.currentItem()
+        return item if isinstance(item, ProviderListItem) else None
+
+    def _sync_actions(self) -> None:
+        item = self._current_provider_item() if hasattr(self, "provider_list") else None
+        has_selection = item is not None
+        if hasattr(self, "btn_toggle_enabled"):
+            self.btn_toggle_enabled.setEnabled(has_selection)
+            enabled = bool(getattr(item.provider, "enabled", True)) if item is not None else True
+            self.btn_toggle_enabled.setText("停用" if enabled else "启用")
+            self.btn_toggle_enabled.setIcon(
+                Icons.get(Icons.PAUSE if enabled else Icons.PLAY, scale_factor=1.0)
+            )
 
     def _add_provider(self) -> None:
         dialog = ProviderConfigDialog(parent=self, provider_service=self.provider_service)
@@ -165,8 +201,8 @@ class ModelsPage(QWidget):
             self.providers_changed.emit()
 
     def _edit_provider(self) -> None:
-        item = self.provider_list.currentItem()
-        if not isinstance(item, ProviderListItem):
+        item = self._current_provider_item()
+        if item is None:
             return
         dialog = ProviderConfigDialog(item.provider, provider_service=self.provider_service, parent=self)
         if dialog.exec():
@@ -176,8 +212,8 @@ class ModelsPage(QWidget):
             self.providers_changed.emit()
 
     def _delete_provider(self) -> None:
-        item = self.provider_list.currentItem()
-        if not isinstance(item, ProviderListItem):
+        item = self._current_provider_item()
+        if item is None:
             return
         if QMessageBox.question(self, "删除", f'确定删除 "{item.provider.name}"？') == QMessageBox.StandardButton.Yes:
             self.providers = self.provider_catalog_service.remove(
@@ -186,6 +222,19 @@ class ModelsPage(QWidget):
             )
             self._refresh_provider_list()
             self.providers_changed.emit()
+
+    def _toggle_provider_enabled(self) -> None:
+        item = self._current_provider_item()
+        if item is None:
+            return
+        provider_id = str(getattr(item.provider, "id", "") or "")
+        self.providers = self.provider_catalog_service.toggle_enabled(self.providers, provider_id)
+        self._refresh_provider_list()
+        for row, provider in enumerate(self.providers):
+            if str(getattr(provider, "id", "") or "") == provider_id:
+                self.provider_list.setCurrentRow(row)
+                break
+        self.providers_changed.emit()
 
     def _move_provider(self, delta: int) -> None:
         row = self.provider_list.currentRow()

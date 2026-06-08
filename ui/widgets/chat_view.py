@@ -11,12 +11,13 @@ from PyQt6.QtCore import pyqtSignal, Qt, QTimer, QEvent, QSize
 from typing import Callable, List
 import os
 
+from core.llm.token_budget import TokenUsageSnapshot
+from core.llm.token_budget import format_token_count
 from models.conversation import Message, Conversation
 from models.provider import Provider
 from .message_widget import InlineQuestionCard, MessageWidget, MarkdownView
 from .chat.streaming_overlay import StreamingOverlay
 from ui.utils.image_utils import extract_images_from_mime, extract_images_from_clipboard
-from ui.widgets.model_ref_selector import ModelRefCombo
 from ui.utils.icon_manager import Icons
 
 
@@ -30,7 +31,6 @@ class ChatView(QWidget):
     delete_message = pyqtSignal(str)
     images_dropped = pyqtSignal(list)
     work_dir_changed = pyqtSignal(str)  # Signal emitted when workspace directory changes
-    model_ref_changed = pyqtSignal(str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -40,7 +40,6 @@ class ChatView(QWidget):
         self._inline_question_card: InlineQuestionCard | None = None
         self._inline_question_cancel_callback: Callable[[], None] | None = None
         self._nav_update_timer: QTimer | None = None
-        self._suppress_model_signal = False
         self._stream = StreamingOverlay(scroll_area=None, should_auto_scroll=self._should_follow_output)  # scroll_area set after _setup_ui
         self._follow_output = True
         
@@ -55,46 +54,39 @@ class ChatView(QWidget):
         # ===== Header bar with model indicator =====
         self.header_bar = QFrame()
         self.header_bar.setObjectName("chat_header")
-        self.header_bar.setFixedHeight(44)
+        self.header_bar.setFixedHeight(42)
         
         header_layout = QHBoxLayout(self.header_bar)
-        header_layout.setContentsMargins(12, 4, 12, 4)
+        header_layout.setContentsMargins(6, 5, 6, 5)
         header_layout.setSpacing(6)
         
         # ===== Workspace/Folder Button =====
         self.work_dir_btn = QPushButton()
-        self.work_dir_btn.setIcon(Icons.get(Icons.FOLDER, scale_factor=0.85))
+        self.work_dir_btn.setIcon(Icons.get(Icons.FOLDER))
         self.work_dir_btn.setText(" 未设置工作区")
         self.work_dir_btn.setObjectName("work_dir_btn")
         self.work_dir_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.work_dir_btn.setToolTip("点击设置当前会话的工作目录 (用于 MCP/CMD 执行)")
-        self.work_dir_btn.setIconSize(QSize(18, 18))
+        self.work_dir_btn.setIconSize(QSize(Icons.SIZE_NAV, Icons.SIZE_NAV))
+        self.work_dir_btn.setFixedHeight(30)
         self.work_dir_btn.setMaximumWidth(240)
+        self.work_dir_btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.work_dir_btn.clicked.connect(self._select_work_dir)
         header_layout.addWidget(self.work_dir_btn)
 
         # Separator
         sep = QFrame()
+        sep.setObjectName("chat_header_separator")
         sep.setFrameShape(QFrame.Shape.VLine)
         sep.setFrameShadow(QFrame.Shadow.Sunken)
         sep.setFixedHeight(16)
-        sep.setStyleSheet("color: #ccc;")
         header_layout.addWidget(sep)
-
-        self.model_selector = ModelRefCombo([], allow_empty=False, empty_label="选择模型")
-        self.model_selector.setObjectName("header_model_selector")
-        self.model_selector.setMinimumWidth(220)
-        self.model_selector.setMaximumWidth(360)
-        self.model_selector.setToolTip("选择当前对话模型")
-        self.model_selector.currentIndexChanged.connect(self._emit_model_ref_changed)
-        try:
-            self.model_selector.lineEdit().editingFinished.connect(self._emit_model_ref_changed)
-        except Exception as exc:
-            logger.debug("Failed to connect model selector editingFinished: %s", exc)
-        header_layout.addWidget(self.model_selector)
 
         self.message_count_label = QLabel("0 条")
         self.message_count_label.setObjectName("context_indicator")
+        self.message_count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.message_count_label.setFixedHeight(30)
+        self.message_count_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         header_layout.addWidget(self.message_count_label)
 
         self.runtime_indicator = QLabel("空闲")
@@ -102,6 +94,8 @@ class ChatView(QWidget):
         self.runtime_indicator.setProperty("active", False)
         self.runtime_indicator.setToolTip("等待下一次请求")
         self.runtime_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.runtime_indicator.setFixedHeight(30)
+        self.runtime_indicator.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         header_layout.addWidget(self.runtime_indicator)
         
         header_layout.addStretch()
@@ -224,11 +218,11 @@ class ChatView(QWidget):
 
     def _create_nav_button(self, icon_name: str, tooltip: str) -> QToolButton:
         btn = QToolButton()
-        btn.setIcon(Icons.get_muted(icon_name, scale_factor=0.9))
-        btn.setIconSize(QSize(16, 16))
+        btn.setIcon(Icons.get_muted(icon_name))
+        btn.setIconSize(QSize(14, 14))
         btn.setToolTip(tooltip)
         btn.setObjectName("toolbar_btn")
-        btn.setFixedSize(24, 24)
+        btn.setFixedSize(30, 30)
         btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         return btn
 
@@ -237,31 +231,38 @@ class ChatView(QWidget):
         page.setObjectName("chat_empty_state")
 
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(28, 18, 28, 18)
+        layout.setContentsMargins(28, 16, 28, 16)
         layout.setSpacing(0)
         layout.addStretch(1)
 
         card = QFrame()
         card.setObjectName("chat_empty_card")
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        card.setMaximumWidth(720)
+        card.setMaximumWidth(560)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(22, 18, 22, 18)
-        card_layout.setSpacing(10)
+        card_layout.setSpacing(12)
+
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(8)
+        title_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         hero_icon = QLabel()
         hero_icon.setObjectName("chat_empty_hero_icon")
+        hero_icon.setFixedSize(32, 32)
         hero_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hero_icon.setPixmap(Icons.get(Icons.CHAT, scale_factor=1.15).pixmap(24, 24))
-        card_layout.addWidget(hero_icon)
+        hero_icon.setPixmap(Icons.get(Icons.PYCAT).pixmap(Icons.SIZE_EMPTY_HERO, Icons.SIZE_EMPTY_HERO))
+        title_row.addWidget(hero_icon)
 
         title = QLabel("开始新对话")
         title.setObjectName("chat_empty_title")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        card_layout.addWidget(title)
+        title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        title_row.addWidget(title)
+        card_layout.addLayout(title_row)
 
         description = QLabel(
-            "顶部先选模型，接着直接描述目标。支持把图片拖进聊天区，或在这里按 Ctrl+V 粘贴截图。"
+            "选好工作区和模型，然后直接写下目标。截图可以拖入，也可以 Ctrl+V 粘贴。"
         )
         description.setObjectName("chat_empty_description")
         description.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -273,24 +274,18 @@ class ChatView(QWidget):
         tips_row.addWidget(
             self._create_empty_tip_card(
                 Icons.PAGE_MODELS,
-                "模型 / 工作区",
-                "聊天头部可直接切换，减少来回翻设置。",
+                "工作区与模型",
+                "保持上下文明确，后续执行更稳。",
             )
         )
         tips_row.addWidget(
             self._create_empty_tip_card(
-                Icons.PLUG,
-                "频道优先级",
-                "优先接入微信 / QQBot / 飞书 / Telegram。",
+                Icons.PAPERCLIP,
+                "图片与文件",
+                "拖入、粘贴或引用文件都可以。",
             )
         )
         card_layout.addLayout(tips_row)
-
-        hint = QLabel("如果你只想快速开始，现在就输入一句目标就行。")
-        hint.setObjectName("chat_empty_hint")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setWordWrap(True)
-        card_layout.addWidget(hint)
 
         layout.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addStretch(1)
@@ -302,19 +297,25 @@ class ChatView(QWidget):
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setContentsMargins(12, 9, 12, 10)
         layout.setSpacing(6)
+
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(6)
 
         icon_label = QLabel()
         icon_label.setObjectName("chat_empty_tip_icon")
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        icon_label.setPixmap(Icons.get(icon_name, color=Icons.COLOR_MUTED, scale_factor=0.85).pixmap(16, 16))
-        layout.addWidget(icon_label)
+        icon_label.setFixedSize(20, 20)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setPixmap(Icons.get(icon_name, color=Icons.COLOR_MUTED, scale_factor=1.0).pixmap(18, 18))
+        title_row.addWidget(icon_label)
 
         title_label = QLabel(title)
         title_label.setObjectName("chat_empty_tip_title")
         title_label.setWordWrap(True)
-        layout.addWidget(title_label)
+        title_row.addWidget(title_label, 1)
+        layout.addLayout(title_row)
 
         desc_label = QLabel(description)
         desc_label.setObjectName("chat_empty_tip_description")
@@ -350,41 +351,47 @@ class ChatView(QWidget):
     def update_work_dir(self, path: str):
         """Update workspace directory display"""
         if not path:
-            self.work_dir_btn.setIcon(Icons.get(Icons.FOLDER, scale_factor=0.85))
+            self.work_dir_btn.setIcon(Icons.get(Icons.FOLDER))
             self.work_dir_btn.setText(" 未设置工作区")
             self.work_dir_btn.setToolTip("点击设置当前会话的工作目录")
         else:
             name = os.path.basename(path)
             if not name: # Root directory like C:/
                 name = path
-            self.work_dir_btn.setIcon(Icons.get_colored(Icons.FOLDER, Icons.COLOR_SUCCESS, scale_factor=0.85))
+            self.work_dir_btn.setIcon(Icons.get_colored(Icons.FOLDER, Icons.COLOR_SUCCESS))
             self.work_dir_btn.setText(f" {name}")
             self.work_dir_btn.setToolTip(f"工作区: {path}")
 
-    def update_header(self, model_ref: str, msg_count: int = 0):
+    def update_header(self, model_ref: str, msg_count: int = 0, token_snapshot: TokenUsageSnapshot | None = None):
         """Update header info"""
         text = model_ref or "未选择模型"
-        self._suppress_model_signal = True
-        try:
-            self.model_selector.set_model_ref(model_ref or "")
-        finally:
-            self._suppress_model_signal = False
-        self.model_selector.setToolTip(f"当前模型：{text}\n可在此切换当前对话模型")
-        self.message_count_label.setText(f"{int(msg_count or 0)} 条")
-        self.message_count_label.setToolTip(f"当前会话消息数：{int(msg_count or 0)}")
+        if token_snapshot is not None:
+            used = format_token_count(token_snapshot.context_tokens)
+            limit = format_token_count(token_snapshot.effective_prompt_limit or token_snapshot.context_window)
+            self.message_count_label.setText(f"{used}/{limit}")
+            self.message_count_label.setToolTip(self._format_token_tooltip(token_snapshot))
+        else:
+            self.message_count_label.setText(f"{int(msg_count or 0)} 条")
+            self.message_count_label.setToolTip(f"当前会话消息数：{int(msg_count or 0)}")
+
+    def _format_token_tooltip(self, snapshot: TokenUsageSnapshot) -> str:
+        lines = [
+            f"窗口: {format_token_count(snapshot.context_window)}",
+            f"已用: {format_token_count(snapshot.context_tokens)}",
+            f"预留输出: {format_token_count(snapshot.reserved_output_tokens)}",
+            f"剩余: {format_token_count(snapshot.remaining_prompt_tokens)}",
+            f"占用: {snapshot.usage_ratio * 100:.1f}%",
+        ]
+        if snapshot.budget.model_id:
+            lines.append(f"模型: {snapshot.budget.model_id}")
+        if snapshot.budget.provider_name:
+            lines.append(f"提供方: {snapshot.budget.provider_name}")
+        if snapshot.status != "ok":
+            lines.append(f"状态: {snapshot.status}")
+        return "\n".join(lines)
 
     def set_model_options(self, providers: list[Provider], current_model_ref: str = "") -> None:
-        self._suppress_model_signal = True
-        try:
-            current = current_model_ref or self.model_selector.model_ref()
-            self.model_selector.set_providers(providers or [], current_model_ref=current)
-        finally:
-            self._suppress_model_signal = False
-
-    def _emit_model_ref_changed(self) -> None:
-        if self._suppress_model_signal:
-            return
-        self.model_ref_changed.emit(self.model_selector.model_ref())
+        return
 
     def update_runtime_state(self, stream_state=None) -> None:
         title, detail, active = self._resolve_runtime_labels(stream_state)
@@ -562,6 +569,31 @@ class ChatView(QWidget):
                 break
         self._schedule_nav_update()
         self._update_empty_state()
+
+    def refresh_message_tool_calls(
+        self,
+        message_id: str = "",
+        tool_call_id: str = "",
+        *,
+        updated_message: Message | None = None,
+    ) -> bool:
+        """Refresh an existing assistant widget after a tool result is attached."""
+        target_message_id = str(message_id or "").strip()
+        target_tool_call_id = str(tool_call_id or "").strip()
+        for i, widget in enumerate(self._message_widgets):
+            if target_message_id and str(getattr(widget.message, "id", "") or "") != target_message_id:
+                continue
+            if target_tool_call_id and not widget.has_tool_call(target_tool_call_id):
+                continue
+            if updated_message is not None:
+                self.update_message(updated_message)
+            else:
+                widget.refresh_tool_calls()
+            if i == len(self._message_widgets) - 1 and self._should_follow_output():
+                QTimer.singleShot(50, self._scroll_to_bottom)
+            self._schedule_nav_update()
+            return True
+        return False
     
     def remove_message(self, message_id: str):
         for widget in self._message_widgets[:]:

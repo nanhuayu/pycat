@@ -6,18 +6,8 @@ from .types import CapabilitiesConfig, CapabilityConfig
 
 
 def capability_exposed_as_tool(capability: CapabilityConfig) -> bool:
-    """Return whether a capability should become an independent ``capability__*`` tool.
-
-    Capabilities are configured child-agent workflows.  By default every
-    enabled capability is exposed; callers may opt out with
-    ``options.expose_as_tool = False``.
-    """
-    if not bool(capability.enabled):
-        return False
-    options = capability.options if isinstance(capability.options, dict) else {}
-    if options.get("expose_as_tool") is False:
-        return False
-    return True
+    """Return whether a capability should become a model-visible tool."""
+    return str(getattr(capability, "visibility", "") or "") == "agent_tool"
 
 
 def exposed_capability_ids(config: CapabilitiesConfig | None = None) -> list[str]:
@@ -33,7 +23,7 @@ def capability_tool_ids(config: CapabilitiesConfig | None = None) -> list[str]:
 def format_capability_list(config: CapabilitiesConfig) -> str:
     items = []
     for cap in config.capabilities:
-        if not cap.enabled or not capability_exposed_as_tool(cap):
+        if not capability_exposed_as_tool(cap):
             continue
         items.append(f"{cap.id} ({cap.name})")
     return ", ".join(items) or "none"

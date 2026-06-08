@@ -3,10 +3,15 @@ from __future__ import annotations
 import copy
 from typing import Any, List
 
+from core.context.items import ContextBudgetState, ContextItem, ContextPacker
+from core.llm.token_budget import resolve_token_budget
 from models.conversation import Conversation, Message
 
 from core.prompts.history import get_effective_history
 from core.prompts.providers import ProviderContext, get_default_context_providers
+
+
+DEFAULT_PROVIDER_CONTEXT_LIMIT = 16_000
 
 
 def _latest_user_query(conversation: Conversation) -> str:
@@ -35,7 +40,9 @@ def build_context_messages(
     """
     work_dir = getattr(conversation, "work_dir", None) or default_work_dir or "."
 
-    sections: List[Message] = []
+    # Keep prompt assembly easy to reason about:
+    # summary -> todo/work_trace/memory -> artifacts/archive index -> recent history.
+    items: list[ContextItem] = []
     provider_context = ProviderContext(
         conversation=conversation,
         app_config=app_config,
@@ -44,9 +51,29 @@ def build_context_messages(
     )
     for provider in get_default_context_providers():
         try:
-            sections.extend(provider.build(provider_context))
+            provider_items = provider.build_items(provider_context) if hasattr(provider, "build_items") else []
+            if provider_items:
+                items.extend(provider_items)
+                continue
+            items.extend(
+                ContextItem(
+                    id=str(message.metadata.get("context_kind") or getattr(provider, "name", "context")),
+                    kind=str(message.metadata.get("context_kind") or getattr(provider, "name", "context")),
+                    content=message.content,
+                    priority=int(getattr(provider, "priority", 100)),
+                    metadata=dict(message.metadata or {}),
+                )
+                for message in provider.build(provider_context)
+            )
         except Exception:
             continue
+    token_limit = DEFAULT_PROVIDER_CONTEXT_LIMIT
+    try:
+        budget = resolve_token_budget(conversation=conversation)
+        token_limit = max(DEFAULT_PROVIDER_CONTEXT_LIMIT, min(int(budget.effective_prompt_limit * 0.25), 64_000))
+    except Exception:
+        token_limit = DEFAULT_PROVIDER_CONTEXT_LIMIT
+    messages = ContextPacker(ContextBudgetState(token_limit=token_limit)).pack(items).to_messages()
 
     recent_history = [
         copy.deepcopy(msg)
@@ -55,4 +82,4 @@ def build_context_messages(
             keep_last_turns=keep_last_turns,
         )
     ]
-    return sections + recent_history
+    return messages + recent_history

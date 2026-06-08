@@ -471,6 +471,7 @@ class Conversation:
                 clean_metadata.pop('subtasks_by_call', None)
                 normalized = normalize_tool_result(result_payload)
                 existing_result = normalize_tool_result(tc.get('result'))
+                normalized_metadata = dict(normalized.get('metadata') or {}) if isinstance(normalized.get('metadata'), dict) else {}
                 if existing_result.get('type') == 'subtask_run' or is_subtask_tool_call(tc) or normalized.get('type') == 'subtask_run':
                     result = existing_result if existing_result.get('type') == 'subtask_run' else normalized
                     result['type'] = 'subtask_run'
@@ -483,14 +484,17 @@ class Conversation:
                     if isinstance(normalized.get('run'), dict):
                         result['run'] = normalized['run']
                     merged_metadata = dict(result.get('metadata') or {})
-                    merged_metadata.update(clean_metadata or dict(normalized.get('metadata') or {}))
+                    merged_metadata.update(normalized_metadata)
+                    merged_metadata.update(clean_metadata)
                     result['metadata'] = merged_metadata
                 else:
+                    merged_metadata = dict(normalized_metadata)
+                    merged_metadata.update(clean_metadata)
                     result = {
                         'type': 'tool_result',
                         'content': str(normalized.get('content') or ''),
                         'summary': summary or str(normalized.get('summary') or ''),
-                        'metadata': clean_metadata or dict(normalized.get('metadata') or {}),
+                        'metadata': merged_metadata,
                     }
                 if images:
                     result['images'] = list(images)

@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from typing import Tuple
 
+from core.tools.naming import ToolName, sanitize_tool_segment
+
 
 MCP_TOOL_PREFIX = "mcp"
 MCP_TOOL_SEPARATOR = "__"
@@ -11,9 +13,7 @@ MCP_TOOL_PUBLIC_PREFIX = f"{MCP_TOOL_PREFIX}{MCP_TOOL_SEPARATOR}"
 
 
 def sanitize_mcp_name(value: str) -> str:
-    text = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(value or "").strip())
-    text = re.sub(r"_{2,}", "_", text).strip("_")
-    return text
+    return sanitize_tool_segment(value, allow_empty=True)
 
 
 def build_mcp_tool_name(server_name: str, tool_name: str) -> str:
@@ -21,7 +21,7 @@ def build_mcp_tool_name(server_name: str, tool_name: str) -> str:
     tool = sanitize_mcp_name(tool_name)
     if not server or not tool:
         return ""
-    return f"{MCP_TOOL_PREFIX}{MCP_TOOL_SEPARATOR}{server}{MCP_TOOL_SEPARATOR}{tool}"
+    return ToolName.build_mcp(server, tool)
 
 
 def is_mcp_tool_name(name: str) -> bool:

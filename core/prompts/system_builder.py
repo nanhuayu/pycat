@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+from html import escape
 from typing import Any, Dict, List, Optional
 
 from models.conversation import Conversation
@@ -30,26 +31,30 @@ DEFAULT_AGENT_TOOL_GUIDELINES = (
     "- Use the provided tools to interact with the system.\n"
     "- Always check command outputs and handle errors.\n"
     "- If a tool fails, analyze the error and try a different approach.\n"
-    "- Use `execute_command` for short bounded commands. Use `shell_start` plus `shell_status`, `shell_logs`, `shell_wait`, or `shell_kill` for long-running commands.\n"
-    "- Use `manage_todo` for explicit current-task status, `manage_artifact` for plans/explorations/reports/notes, `manage_memory` for session/workspace/global memory, and `manage_state` for summary/archive.\n"
-    "- Complex Task Protocol: for multi-step work, web/search/browser research, multi-source reading, code edits, debugging, planning, or requested timeline/report/document output, the first state-maintenance call should be `manage_todo(action=\"set\", items=[...])` with concrete visible milestones and exactly one `in_progress` item. Do not create ceremonial todos for one-step work.\n"
-    "- Good todos are user-visible milestones and acceptance checkpoints, not implementation noise. Good: `审查调用链并定位状态边界`, `移除运行时 nudge 并更新测试`, `生成最终时间线报告`. Bad: `search web`, `read file`, `run formatter`, `grep code`.\n"
-    "- Keep todos current when they exist: update completed milestones and the current in-progress item with `manage_todo(action=\"update\", items=[...])`. Completed/cancelled todos are compacted into recent history; do not recreate equivalent completed todos unless the user asks for new work or scope changes.\n"
-    "- The todo list is rendered live to the user. Do not repeat the full todo list after a `manage_todo` call; acknowledge the state change briefly and continue with concrete work.\n"
+    "- Use `shell__run` for short bounded commands. Use `shell__start` plus `shell__status`, `shell__logs`, `shell__wait`, or `shell__kill` for long-running commands.\n"
+    "- Use `state__todo` for explicit current-task status, `state__artifact` for plans/explorations/reports/notes, and `state__memory` for durable memory. Runtime summary/compression is internal.\n"
+    "- Complex Task Protocol: for multi-step work, web/search/browser research, multi-source reading, code edits, debugging, planning, or requested timeline/report/document output, the first state-maintenance call should be `state__todo(action=\"set\", items=[...])` with concrete visible milestones, acceptance criteria where useful, and exactly one `in_progress` item. Do not create ceremonial todos for one-step work.\n"
+    "- Good todos are user-visible milestones and acceptance checkpoints, not implementation noise. Good: `analyze root cause`, `implement archive summary`, `verify CLI flow`. Bad: `search web`, `read file`, `run formatter`, `grep code`.\n"
+    "- Keep todos current when they exist: update completed milestones and the current in-progress item with `state__todo(action=\"update\", items=[...])`. Use `blocked` with `blocked_reason` for real blockers. Completed/cancelled todos are compacted into recent history; do not recreate equivalent completed todos unless the user asks for new work or scope changes.\n"
+    "- The todo list is rendered live to the user. Do not repeat the full todo list after a `state__todo` call; acknowledge the state change briefly and continue with concrete work.\n"
     "- State priority: artifacts are the source of truth for plans/reports/documents; todos are only live progress; memory is only durable reusable facts. If a final report or approved plan already satisfies the request, read/update the artifact or finish instead of rebuilding the same todo list.\n"
     "- Use canonical artifacts: `plan` (kind=plan, status=draft/approved/final), `exploration` (kind=exploration), and `report` (kind=report). Create/update a `plan` artifact for non-trivial execution plans, an `exploration` artifact for multi-source findings, and a final `report` artifact before completion when the user requested a report, timeline, document, or substantial summary.\n"
-    "- Artifact indexes/abstracts may be injected without full content. If an existing artifact appears relevant to the current request, read it with `manage_artifact(action=\"read\")` before new broad search or duplication, then update or append as appropriate. Put file paths, URLs, or symbol locations in `references`/`related`, and use `frontmatter` for stable Markdown metadata such as created, tags, source, and status.\n"
-    "- When a tool result says the full output was stored in a file, read that exact absolute path before retrying equivalent extraction. Do not guess relative paths for MCP/browser-created files; use returned normalized paths or session `tool-results` paths.\n"
-    "- Memory is only for durable, reusable facts and preferences. Before writing workspace/global memory, inspect existing memory with `manage_memory(action=\"list\"|\"view\")` to avoid duplicates. Store stable decisions, verified commands, or repo conventions with `manage_memory`; never save long plans, tool dumps, transient todos, secrets, or temporary reports as memory facts.\n"
-    "- `attempt_completion` is a built-in tool for finishing work; do not treat it as a skill or document name.\n"
-    "- If another mode is a better fit, use `switch_mode`; if focused work should continue independently, use `subagent__custom`.\n"
-    "- Use `capability__summarize_text` for one file or one long text, `subagent__read_analyze` for multi-file/cross-source analysis, and `subagent__search` for research."
+    "- Artifact metadata is mandatory for substantial artifacts: keep `abstract`, `status`, `references`, `related`, and stable `frontmatter` current. The prompt normally contains only artifact indexes and abstracts; read the artifact before relying on exact content.\n"
+    "- Artifact indexes/abstracts may be injected without full content. If an existing artifact appears relevant to the current request, read it with `state__artifact(action=\"read\")` before new broad search or duplication, then update or append as appropriate. Put file paths, URLs, or symbol locations in `references`/`related`, and use `frontmatter` for stable Markdown metadata such as created, tags, source, and status.\n"
+    "- Read boundary: `file__read` reads real workspace files only and never summarizes. `content__read` reads PyCat archived tool-call/history content by content_id; `view=\"summary\"` waits for or creates the internal compress view by default. `capability__summarize` is for explicit one-file/one-text summaries, not runtime automatic compression.\n"
+    "- Content labels use `[type]` or `[type:desc]`: `[full]`, `[line:1-200]`, and `[char:0-4000]` are exact original content views; `[summary]` is the default balanced derived view, and `[summary:detailed]`/`[summary:*]` are specialized derived views from internal `compress`. `[summary:pending]` means only the summary view is not ready; recover exact content with `content__read(view=\"full\"|\"lines\"|\"chars\")`.\n"
+    "- Default context strategy: index + summary + relevant snippets + on-demand read. If archived tool/history content is large, do not expect raw content in prompt; use content_id/digest and `content__read(view=\"summary\"|\"lines\"|\"chars\"|\"full\", summary_mode=\"balanced\"|\"brief\"|\"detailed\"|\"timeline\"|\"topic\"|\"memory_candidates\")`.\n"
+    "- When a tool result says output was archived, use `content__read` with the returned content_id before retrying equivalent extraction. Use `file__read` only for actual workspace paths.\n"
+    "- Memory is only for durable, reusable facts and preferences. Before writing workspace/global memory, inspect existing memory with `state__memory(action=\"list\"|\"view\")` to avoid duplicates. Runtime compression may expose candidates via `state__memory(action=\"list_candidates\")`; promote only stable decisions, verified commands, repo conventions, or durable preferences. Never save long plans, tool dumps, transient todos, secrets, or temporary reports as memory facts.\n"
+    "- `agent__complete` is a built-in tool for finishing work; do not treat it as a skill or document name.\n"
+    "- If another mode is a better fit, use `agent__switch`; if focused work should continue independently, use `agent__run`.\n"
+    "- Use `capability__summarize` for one file or one long text, `agent__run(agent_id=\"read_analyze\")` for multi-file/cross-source analysis, and `agent__run(agent_id=\"search\")` for research."
 )
 
 DEFAULT_PLAN_WORKFLOW = (
     "## Workflow: Plan\n"
     "- Discover context first using read/search/delegated read-only analysis; do not edit files or run implementation commands in plan mode.\n"
-    "- Maintain `manage_artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` as the primary deliverable.\n"
+    "- Maintain `state__artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` as the primary deliverable.\n"
     "- Write plans with these sections in order: Summary, Scope, Phases, Steps, Relevant Files, Verification, Decisions, Risks/Open Questions.\n"
     "- Keep each phase small and actionable; include specific files, symbols, and expected checks.\n"
     "- Ask clarifying questions when requirements or trade-offs are unresolved.\n"
@@ -59,7 +64,7 @@ DEFAULT_PLAN_WORKFLOW = (
 DEFAULT_EXPLORE_WORKFLOW = (
     "## Workflow: Explore\n"
     "- Stay read-only: search broadly, inspect narrowly, and return evidence-backed findings.\n"
-    "- Use `manage_artifact(name=\"exploration\", kind=\"exploration\", status=\"draft\")` for reusable findings when exploration spans multiple files.\n"
+    "- Use `state__artifact(name=\"exploration\", kind=\"exploration\", status=\"draft\")` for reusable findings when exploration spans multiple files.\n"
     "- Report concrete file paths, symbols, patterns, existing design conventions, risks, and open questions.\n"
     "- Summaries should end with Suggested Next Steps, but not implementation details or edits.\n"
     "- Do not create implementation plans unless requested; hand off to Plan or Agent when changes are needed."
@@ -71,8 +76,8 @@ DEFAULT_IMPLEMENT_WORKFLOW = (
     "- Maintain todo for concrete visible milestones when the task spans multiple substantial steps; keep one `in_progress` item and mark items complete after finishing them.\n"
     "- Before any non-trivial edit, confirm the target files and the acceptance criteria from the plan or exploration notes.\n"
     "- After edits, verify with targeted tests or diagnostics.\n"
-    "- Save verification notes or final summaries in `manage_artifact(name=\"report\", kind=\"report\", status=\"final\")` when the result is substantial.\n"
-    "- Use `manage_memory` only for durable facts; do not store transient progress, drafts, or large tool outputs there."
+    "- Save verification notes or final summaries in `state__artifact(name=\"report\", kind=\"report\", status=\"final\")` when the result is substantial.\n"
+    "- Use `state__memory` only for durable facts; do not store transient progress, drafts, or large tool outputs there."
 )
 
 
@@ -92,6 +97,17 @@ def _normalize_string_tuple(values: Any) -> tuple[str, ...]:
         seen.add(item)
         normalized.append(item)
     return tuple(normalized)
+
+
+def _truncate_skill_catalog_value(value: str, *, limit: int = 250) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)].rstrip() + "..."
+
+
+def _xml_attr(value: Any) -> str:
+    return escape(str(value or ""), quote=True)
 
 
 def _enabled_channel_sources(config: AppConfig) -> tuple[str, ...]:
@@ -129,18 +145,18 @@ def build_mode_workflow_guidance(mode_slug: str) -> str:
     guidance: dict[str, list[str]] = {
         "agent": [
             DEFAULT_IMPLEMENT_WORKFLOW,
-            "Maintain the current todo list with `manage_todo` when scope changes or steps complete.",
-            "Create or update a short working plan with `manage_artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` for multi-step execution.",
-            "Store durable facts such as important paths, commands, or decisions with `manage_memory` instead of repeating them in chat.",
-            "Use `switch_mode` if the request clearly belongs to another mode, or `subagent__custom` if a separate delegated run is better.",
-            "Use `attempt_completion` only when the task is actually complete and you can summarize the result clearly.",
+            "Maintain the current todo list with `state__todo` when scope changes or steps complete.",
+            "Create or update a short working plan with `state__artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` for multi-step execution.",
+            "Store durable facts such as important paths, commands, or decisions with `state__memory` instead of repeating them in chat.",
+            "Use `agent__switch` if the request clearly belongs to another mode, or `agent__run` if a separate delegated run is better.",
+            "Use `agent__complete` only when the task is actually complete and you can summarize the result clearly.",
         ],
         "plan": [
             DEFAULT_PLAN_WORKFLOW,
             "Create and maintain a plan artifact as the primary artifact for architecture work.",
-            "Use `manage_todo` to track open design questions and decision checkpoints.",
+            "Use `state__todo` to track open design questions and decision checkpoints.",
             "Persist only confirmed constraints or decisions into memory.",
-            "Switch to a more appropriate mode if the task stops being architecture work, and call `attempt_completion` once the design output is ready.",
+            "Switch to a more appropriate mode if the task stops being architecture work, and call `agent__complete` once the design output is ready.",
         ],
         "explore": [
             DEFAULT_EXPLORE_WORKFLOW,
@@ -362,26 +378,29 @@ def build_system_prompt(
     available_skills = []
     for skill in skill_manager.list_skills():
         spec = resolve_skill_invocation_spec(skill)
-        if spec.user_invocable:
+        if spec.user_invocable or not spec.disable_model_invocation:
             available_skills.append(skill)
     if available_skills:
         catalog_lines = ["<available_skills>"]
         for skill in available_skills:
             spec = resolve_skill_invocation_spec(skill)
             attrs = [f'name="{skill.name}"']
-            description = str(skill.description or "").strip()
+            description = _truncate_skill_catalog_value(str(skill.description or "").strip())
             if description:
-                attrs.append(f'description="{description}"')
-            attrs.append(f'executor="{spec.executor}"')
+                attrs.append(f'description="{_xml_attr(description)}"')
+            attrs.append(f'user_invocable="{str(spec.user_invocable).lower()}"')
+            attrs.append(f'model_invocable="{str(not spec.disable_model_invocation).lower()}"')
+            attrs.append(f'executor="{_xml_attr(spec.executor)}"')
+            attrs.append(f'execution_mode="{_xml_attr(spec.execution_mode)}"')
             arg_hint = str(skill.metadata.get("argument-hint") or "").strip()
             if arg_hint:
-                attrs.append(f'argument_hint="{arg_hint}"')
+                attrs.append(f'argument_hint="{_xml_attr(_truncate_skill_catalog_value(arg_hint))}"')
             if skill.tags:
-                attrs.append(f'tags="{", ".join(skill.tags)}"')
+                attrs.append(f'tags="{_xml_attr(_truncate_skill_catalog_value(", ".join(skill.tags)))}"')
             catalog_lines.append(f"<skill {' '.join(attrs)} />")
         catalog_lines.append("</available_skills>")
         catalog_lines.append(
-            "The catalog above is for progressive skill discovery. Do not assume a skill is active or callable unless the user explicitly invoked `/{skill-name}` in this turn. Skill names are not tool names."
+            "The catalog above is for progressive skill discovery. If the user's task matches a skill with model_invocable=\"true\" and that skill is not already loaded for this current task, call `skill__load` before answering. For model_invocable=\"false\" skills, only load them after the user explicitly invokes `/{skill-name}` in this turn. Do not repeatedly load the same skill in the same turn. Loaded skill instructions are scoped to the current relevant task; ignore them for later unrelated requests and reload a skill when needed. Skill names are not tool names."
         )
         parts.append("\n".join(catalog_lines))
 

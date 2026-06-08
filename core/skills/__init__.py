@@ -1,11 +1,13 @@
 """Skill system — load reusable skill directories plus declared invocation metadata.
 
 Skills are discovered from:
-- ``~/.PyCat/skills/``
 - ``.pycat/skills/``
+- ``~/.PyCat/skills/``
+- read-only user-level external directories
 
 Each skill must live in its own directory with ``SKILL.md`` as the entrypoint.
-Explicit ``/{skill}`` invocation is the only skill execution entrypoint.
+Skills can be loaded explicitly through ``/{skill}`` or automatically via
+``skill__load`` when model invocation is allowed.
 """
 from __future__ import annotations
 
@@ -23,12 +25,12 @@ logger = logging.getLogger(__name__)
 
 
 COMMAND_TOOL_NAMES: Tuple[str, ...] = (
-    "execute_command",
-    "shell_start",
-    "shell_status",
-    "shell_logs",
-    "shell_wait",
-    "shell_kill",
+    "shell__run",
+    "shell__start",
+    "shell__status",
+    "shell__logs",
+    "shell__wait",
+    "shell__kill",
 )
 
 
@@ -42,6 +44,9 @@ class Skill:
     description: str = ""
     tags: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    enabled: bool = True
+    source_scope: str = "project"
+    read_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -71,8 +76,9 @@ class SkillExecutionCheck:
 class SkillsManager:
     """Discover and load skills from configured directories."""
 
-    def __init__(self, work_dir: str = ".") -> None:
+    def __init__(self, work_dir: str = ".", *, include_disabled: bool = False) -> None:
         self._work_dir = work_dir
+        self._include_disabled = bool(include_disabled)
         self._skills: Dict[str, Skill] = {}
         self._loaded = False
 
@@ -158,14 +164,23 @@ class SkillsManager:
         if global_dir.is_dir():
             dirs.append(global_dir)
 
+        for external_dir in _external_user_skill_dirs():
+            if external_dir.is_dir():
+                dirs.append(external_dir)
+
         return dirs
 
     def _load_from_dir(self, directory: Path) -> None:
+        source_scope, read_only = _skill_dir_scope(directory, self._work_dir)
         try:
             for entry in sorted(directory.iterdir()):
                 skill = None
                 try:
-                    skill = self._load_skill_entry(entry)
+                    skill = self._load_skill_entry(
+                        entry,
+                        source_scope=source_scope,
+                        read_only=read_only,
+                    )
                 except Exception as exc:
                     logger.warning("Failed to load skill %s: %s", entry, exc)
                 if not skill or skill.name in self._skills:
@@ -174,20 +189,48 @@ class SkillsManager:
         except Exception as exc:
             logger.warning("Failed to scan skill directory %s: %s", directory, exc)
 
-    def _load_skill_entry(self, entry: Path) -> Optional[Skill]:
+    def _load_skill_entry(self, entry: Path, *, source_scope: str, read_only: bool) -> Optional[Skill]:
         if entry.is_dir():
             skill_file = entry / "SKILL.md"
             if not skill_file.is_file():
                 return None
-            return self._load_skill_file(skill_file, default_name=entry.name)
+            enabled = not (entry / ".disabled").exists()
+            if not enabled and not self._include_disabled:
+                return None
+            return self._load_skill_file(
+                skill_file,
+                default_name=entry.name,
+                enabled=enabled,
+                source_scope=source_scope,
+                read_only=read_only,
+            )
         return None
 
-    def _load_skill_file(self, path: Path, *, default_name: str) -> Optional[Skill]:
+    def _load_skill_file(
+        self,
+        path: Path,
+        *,
+        default_name: str,
+        enabled: bool = True,
+        source_scope: str = "project",
+        read_only: bool = False,
+    ) -> Optional[Skill]:
         content = path.read_text(encoding="utf-8")
         metadata, body = parse_frontmatter(content)
-        raw_name = str(metadata.get("name") or default_name or "").strip().lower()
+        raw_name = str(default_name or "").strip().lower()
         if not raw_name:
             return None
+        declared_name = str(metadata.get("name") or "").strip().lower()
+        if declared_name:
+            metadata = dict(metadata)
+            metadata.setdefault("declared-name", declared_name)
+            if declared_name != raw_name:
+                logger.warning(
+                    "Skill frontmatter name mismatch for %s: declared %r, using directory name %r",
+                    path,
+                    declared_name,
+                    raw_name,
+                )
         tags = self._extract_tags(body)
         frontmatter_tags = metadata.get("tags")
         if isinstance(frontmatter_tags, list):
@@ -199,6 +242,9 @@ class SkillsManager:
             description=str(metadata.get("description") or "").strip(),
             tags=tags,
             metadata=metadata,
+            enabled=bool(enabled),
+            source_scope=str(source_scope or "project"),
+            read_only=bool(read_only),
         )
 
     @staticmethod
@@ -386,6 +432,29 @@ def _resolve_skill_root(path: Path) -> Path:
     return path.parent if path.is_file() else path
 
 
+def _external_user_skill_dirs() -> List[Path]:
+    home = Path.home()
+    return [
+        home / ".agents" / "skills",
+        home / ".claude" / "skills",
+        home / ".codex" / "skills",
+    ]
+
+
+def _skill_dir_scope(directory: Path, work_dir: str) -> Tuple[str, bool]:
+    resolved = directory.resolve()
+    project_dir = (Path(work_dir or ".").resolve() / ".pycat" / "skills").resolve()
+    global_dir = get_global_subdir("skills").resolve()
+    try:
+        if resolved == project_dir:
+            return "project", False
+        if resolved == global_dir:
+            return "global", False
+    except Exception:
+        pass
+    return "external", True
+
+
 def _extract_markdown_resource_links(content: str) -> List[str]:
     return extract_markdown_links(content)
 
@@ -403,7 +472,7 @@ def _list_skill_resource_paths(skill: Skill) -> List[str]:
         if candidate.exists() and candidate.is_file():
             results.append(candidate.relative_to(root).as_posix())
 
-    for directory_name in ("references", "templates", "scripts"):
+    for directory_name in ("references", "templates", "scripts", "assets"):
         directory = root / directory_name
         if not directory.is_dir():
             continue

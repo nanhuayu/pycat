@@ -6,9 +6,11 @@ Shows the current conversation's active tasks (SessionState) and metrics.
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -16,14 +18,18 @@ from PyQt6.QtWidgets import (
     QLabel,
     QFrame,
     QToolButton,
-    QLineEdit,
     QScrollArea,
+    QSizePolicy,
 )
 
 from models.conversation import Conversation
-from models.state import TaskStatus
+from models.provider import Provider
+from models.state import TodoStatus
+from core.llm.token_budget import build_token_usage_snapshot, format_token_count
 from core.channel import channel_origin_from_message
+from core.state.services.artifact_service import ArtifactService
 from ui.widgets.collapsible_section import CollapsibleSection
+from ui.widgets.themed_line_edit import ThemedLineEdit
 from ui.utils.icon_manager import Icons
 
 
@@ -75,9 +81,25 @@ class RuntimeStrip(QFrame):
         self.detail.setText(str(detail or "-"))
 
 
+class _ArtifactRow(QFrame):
+    clicked = pyqtSignal(str)
+
+    def __init__(self, path: str = "", parent=None):
+        super().__init__(parent)
+        self._path = str(path or "").strip()
+
+    def mousePressEvent(self, event) -> None:
+        if self._path and event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self._path)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 class StatsPanel(QWidget):
     """Panel displaying conversation state + statistics."""
 
+    artifact_open_requested = pyqtSignal(str)
     task_create_requested = pyqtSignal(str)
     task_complete_requested = pyqtSignal(str)
     task_delete_requested = pyqtSignal(str)
@@ -89,7 +111,13 @@ class StatsPanel(QWidget):
         self.setFixedWidth(260)
         self._conversation: Optional[Conversation] = None
         self._app_state = None
+        self._providers: list[Provider] = []
         self._setup_ui()
+
+    def set_providers(self, providers: list[Provider] | None) -> None:
+        self._providers = list(providers or [])
+        if self._conversation:
+            self.update_stats(self._conversation)
     
     def _setup_ui(self):
         root = QVBoxLayout(self)
@@ -108,8 +136,8 @@ class StatsPanel(QWidget):
         self.scroll.setWidget(content)
 
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
 
         self.tasks_section = CollapsibleSection("任务", summary="当前任务与待办", collapsed=False)
         layout.addWidget(self.tasks_section)
@@ -117,7 +145,7 @@ class StatsPanel(QWidget):
         add_row = QHBoxLayout()
         add_row.setSpacing(6)
 
-        self.task_input_edit = QLineEdit()
+        self.task_input_edit = ThemedLineEdit()
         self.task_input_edit.setObjectName("task_input_edit")
         self.task_input_edit.setPlaceholderText("新增任务…")
         self.task_input_edit.returnPressed.connect(self._emit_create_task)
@@ -125,7 +153,7 @@ class StatsPanel(QWidget):
 
         self.add_task_btn = QToolButton()
         self.add_task_btn.setObjectName("add_task_btn")
-        self.add_task_btn.setIcon(Icons.get(Icons.PLUS, scale_factor=0.8))
+        self.add_task_btn.setIcon(Icons.get(Icons.PLUS))
         self.add_task_btn.setAutoRaise(True)
         self.add_task_btn.setFixedSize(22, 22)
         self.add_task_btn.setToolTip("新增任务")
@@ -138,27 +166,27 @@ class StatsPanel(QWidget):
         self.tasks_container.setObjectName("tasks_container")
         self.tasks_layout = QVBoxLayout(self.tasks_container)
         self.tasks_layout.setContentsMargins(0, 0, 0, 0)
-        self.tasks_layout.setSpacing(6)
+        self.tasks_layout.setSpacing(1)
         self.tasks_section.body_layout.addWidget(self.tasks_container)
 
-        self.memory_section = CollapsibleSection("记忆", summary="会话与工作区记忆摘要", collapsed=True)
+        self.memory_section = CollapsibleSection("记忆", summary="会话 / 工作区", collapsed=True)
         layout.addWidget(self.memory_section)
 
         self.memory_container = QFrame()
         self.memory_container.setObjectName("memory_container")
         self.memory_layout = QVBoxLayout(self.memory_container)
         self.memory_layout.setContentsMargins(0, 0, 0, 0)
-        self.memory_layout.setSpacing(6)
+        self.memory_layout.setSpacing(4)
         self.memory_section.body_layout.addWidget(self.memory_container)
 
-        self.documents_section = CollapsibleSection("产物", summary="会话产物摘要", collapsed=True)
+        self.documents_section = CollapsibleSection("产物", summary="暂无会话产物", collapsed=True)
         layout.addWidget(self.documents_section)
 
         self.documents_container = QFrame()
         self.documents_container.setObjectName("documents_container")
         self.documents_layout = QVBoxLayout(self.documents_container)
         self.documents_layout.setContentsMargins(0, 0, 0, 0)
-        self.documents_layout.setSpacing(6)
+        self.documents_layout.setSpacing(4)
         self.documents_section.body_layout.addWidget(self.documents_container)
 
         self.channels_section = CollapsibleSection("通道", summary="外部来源", collapsed=True)
@@ -168,10 +196,10 @@ class StatsPanel(QWidget):
         self.channels_container.setObjectName("channels_container")
         self.channels_layout = QVBoxLayout(self.channels_container)
         self.channels_layout.setContentsMargins(0, 0, 0, 0)
-        self.channels_layout.setSpacing(6)
+        self.channels_layout.setSpacing(4)
         self.channels_section.body_layout.addWidget(self.channels_container)
 
-        self.overview_section = CollapsibleSection("会话概览", summary="模式 / 核心指标", collapsed=False)
+        self.overview_section = CollapsibleSection("会话概览", summary="模式 / 核心指标", collapsed=True)
         layout.addWidget(self.overview_section)
 
         self.mode_card = StatCard("模式")
@@ -183,14 +211,11 @@ class StatsPanel(QWidget):
         self.total_messages = StatCard("消息数量")
         self.overview_section.body_layout.addWidget(self.total_messages)
         
-        self.total_tokens = StatCard("总 Token")
-        self.overview_section.body_layout.addWidget(self.total_tokens)
+        self.context_summary = StatCard("上下文")
+        self.overview_section.body_layout.addWidget(self.context_summary)
         
-        self.tokens_per_min = StatCard("Token/分钟")
-        self.overview_section.body_layout.addWidget(self.tokens_per_min)
-        
-        self.last_response_time = StatCard("最近响应时间")
-        self.overview_section.body_layout.addWidget(self.last_response_time)
+        self.performance_summary = StatCard("性能")
+        self.overview_section.body_layout.addWidget(self.performance_summary)
 
         self.timeline_section = CollapsibleSection("调试时间线", summary="空闲", collapsed=True)
         layout.addWidget(self.timeline_section)
@@ -199,7 +224,7 @@ class StatsPanel(QWidget):
         self.timeline_container.setObjectName("timeline_container")
         self.timeline_layout = QVBoxLayout(self.timeline_container)
         self.timeline_layout.setContentsMargins(0, 0, 0, 0)
-        self.timeline_layout.setSpacing(6)
+        self.timeline_layout.setSpacing(4)
         self.timeline_section.body_layout.addWidget(self.timeline_container)
         
         layout.addStretch(1)
@@ -210,6 +235,7 @@ class StatsPanel(QWidget):
         self._render_channels(None)
         self.update_runtime_state(None)
         self._set_task_controls_enabled(False)
+        self.artifact_open_requested.connect(self._open_artifact_path)
 
     def _set_task_controls_enabled(self, enabled: bool) -> None:
         self.task_input_edit.setEnabled(bool(enabled))
@@ -242,54 +268,82 @@ class StatsPanel(QWidget):
 
         try:
             state = conversation.get_state()
-            active_tasks = list(state.get_active_tasks() or [])
+            active_tasks = list(state.get_active_todos() or [])
+            recent_tasks = list(getattr(state, "recent_completed_todos", []) or [])
         except Exception:
             active_tasks = []
+            recent_tasks = []
 
-        self.tasks_section.set_title(f"任务 ({len(active_tasks)})")
-        self.tasks_section.set_summary("当前会话待办" if active_tasks else "暂无进行中的任务")
-        if not active_tasks:
-            empty = QLabel("暂无进行中的任务")
+        tasks = active_tasks + list(reversed(recent_tasks[-4:]))
+        active_count = len(active_tasks)
+        self.tasks_section.set_title(f"任务 ({active_count})")
+        self.tasks_section.set_summary("当前会话待办" if active_count else ("最近已完成" if tasks else "暂无任务"))
+        if not tasks:
+            empty = QLabel("暂无任务")
             empty.setProperty("muted", True)
             self.tasks_layout.addWidget(empty)
             return
 
         # show top N for compactness
-        max_show = 6
-        shown = active_tasks[:max_show]
-        rest = len(active_tasks) - len(shown)
+        max_show = 8
+        shown = tasks[:max_show]
+        rest = len(tasks) - len(shown)
 
         for t in shown:
             row = QFrame()
             row.setObjectName("task_card")
             row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(10, 8, 10, 8)
-            row_layout.setSpacing(6)
+            row_layout.setContentsMargins(5, 2, 4, 2)
+            row_layout.setSpacing(5)
 
-            status = "进行中" if getattr(t, "status", None) == TaskStatus.IN_PROGRESS else "待办"
-            text = f"{status} · {getattr(t, 'content', '')}".strip()
-            lbl = QLabel(text)
+            status = self._todo_status(getattr(t, "status", TodoStatus.PENDING))
+            status_label = self._todo_status_label(status)
+            title = str(getattr(t, "title", "") or "").strip() or "未命名任务"
+
+            icon = QLabel()
+            icon.setObjectName("task_status_icon")
+            icon.setProperty("status", status.value)
+            icon.setFixedSize(16, 16)
+            icon.setToolTip(status_label)
+            icon.setPixmap(self._todo_status_icon(status).pixmap(16, 16))
+            row_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignVCenter)
+
+            lbl = QLabel(title)
             lbl.setObjectName("task_text")
-            lbl.setWordWrap(True)
+            lbl.setWordWrap(False)
+            lbl.setMinimumWidth(0)
+            lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            tooltip_parts = [f"状态：{status_label}", title]
+            description = str(getattr(t, "description", "") or "").strip()
+            blocked_reason = str(getattr(t, "blocked_reason", "") or "").strip()
+            if description:
+                tooltip_parts.append(description)
+            if blocked_reason:
+                tooltip_parts.append(f"阻塞：{blocked_reason}")
+            lbl.setToolTip("\n".join(tooltip_parts))
+            lbl.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
             row_layout.addWidget(lbl, 1)
 
-            done_btn = QToolButton()
-            done_btn.setObjectName("task_done_btn")
-            done_btn.setIcon(Icons.get_success(Icons.CHECK, scale_factor=0.75))
-            done_btn.setAutoRaise(True)
-            done_btn.setFixedSize(22, 22)
-            done_btn.setToolTip("标记完成")
-            done_btn.clicked.connect(lambda _=False, task_id=getattr(t, 'id', ''): self.task_complete_requested.emit(task_id))
-            row_layout.addWidget(done_btn)
+            task_id = str(getattr(t, "id", "") or "").strip()
+            if task_id and status not in {TodoStatus.COMPLETED, TodoStatus.CANCELLED}:
+                done_btn = QToolButton()
+                done_btn.setObjectName("task_done_btn")
+                done_btn.setIcon(Icons.get_success(Icons.CHECK))
+                done_btn.setAutoRaise(True)
+                done_btn.setFixedSize(18, 18)
+                done_btn.setToolTip("标记完成")
+                done_btn.clicked.connect(lambda _=False, task_id=task_id: self.task_complete_requested.emit(task_id))
+                row_layout.addWidget(done_btn)
 
-            del_btn = QToolButton()
-            del_btn.setObjectName("task_delete_btn")
-            del_btn.setIcon(Icons.get_error(Icons.XMARK, scale_factor=0.75))
-            del_btn.setAutoRaise(True)
-            del_btn.setFixedSize(22, 22)
-            del_btn.setToolTip("删除")
-            del_btn.clicked.connect(lambda _=False, task_id=getattr(t, 'id', ''): self.task_delete_requested.emit(task_id))
-            row_layout.addWidget(del_btn)
+            if task_id:
+                del_btn = QToolButton()
+                del_btn.setObjectName("task_delete_btn")
+                del_btn.setIcon(Icons.get_error(Icons.XMARK))
+                del_btn.setAutoRaise(True)
+                del_btn.setFixedSize(18, 18)
+                del_btn.setToolTip("删除")
+                del_btn.clicked.connect(lambda _=False, task_id=task_id: self.task_delete_requested.emit(task_id))
+                row_layout.addWidget(del_btn)
 
             self.tasks_layout.addWidget(row)
 
@@ -297,6 +351,35 @@ class StatsPanel(QWidget):
             more = QLabel(f"+{rest} 个任务未显示")
             more.setProperty("muted", True)
             self.tasks_layout.addWidget(more)
+
+    @staticmethod
+    def _todo_status(value) -> TodoStatus:
+        if isinstance(value, TodoStatus):
+            return value
+        raw = str(value or TodoStatus.PENDING.value).strip()
+        return TodoStatus(raw) if raw in {item.value for item in TodoStatus} else TodoStatus.PENDING
+
+    @staticmethod
+    def _todo_status_label(status: TodoStatus) -> str:
+        return {
+            TodoStatus.IN_PROGRESS: "进行中",
+            TodoStatus.PENDING: "待办",
+            TodoStatus.BLOCKED: "阻塞",
+            TodoStatus.COMPLETED: "已完成",
+            TodoStatus.CANCELLED: "已取消",
+        }.get(status, "待办")
+
+    @staticmethod
+    def _todo_status_icon(status: TodoStatus):
+        if status == TodoStatus.IN_PROGRESS:
+            return Icons.get(Icons.PLAY)
+        if status == TodoStatus.BLOCKED:
+            return Icons.get_warning(Icons.CIRCLE_INFO)
+        if status == TodoStatus.COMPLETED:
+            return Icons.get_success(Icons.CIRCLE_CHECK)
+        if status == TodoStatus.CANCELLED:
+            return Icons.get_muted(Icons.CIRCLE_XMARK)
+        return Icons.get_muted(Icons.CIRCLE_INFO)
 
     def _clear_layout(self, layout: QVBoxLayout) -> None:
         while layout.count():
@@ -397,7 +480,7 @@ class StatsPanel(QWidget):
 
         if not conversation:
             self.documents_section.set_title("产物")
-            self.documents_section.set_summary("会话产物摘要")
+            self.documents_section.set_summary("暂无会话产物")
             empty = QLabel("-")
             empty.setProperty("muted", True)
             self.documents_layout.addWidget(empty)
@@ -409,44 +492,16 @@ class StatsPanel(QWidget):
             artifacts = {}
 
         self.documents_section.set_title(f"产物 ({len(artifacts)})")
-        self.documents_section.set_summary("会话产物摘要" if artifacts else "暂无会话产物")
+        self.documents_section.set_summary("文件与草稿" if artifacts else "暂无会话产物")
+        self.documents_section.set_collapsed(not bool(artifacts))
         if not artifacts:
             empty = QLabel("暂无会话产物")
             empty.setProperty("muted", True)
             self.documents_layout.addWidget(empty)
             return
 
-        for name, doc in list(artifacts.items())[:4]:
-            card = QFrame()
-            card.setObjectName("task_card")
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(10, 8, 10, 8)
-            card_layout.setSpacing(4)
-
-            name_label = QLabel(str(name))
-            name_label.setObjectName("task_text")
-            card_layout.addWidget(name_label)
-
-            preview = str(getattr(doc, 'abstract', '') or '') or str(getattr(doc, 'content', '') or '')
-            if len(preview) > 140:
-                preview = preview[:140] + "..."
-            content_label = QLabel(preview or "-")
-            content_label.setWordWrap(True)
-            content_label.setProperty("muted", True)
-            full_text = str(getattr(doc, 'content', '') or '') or preview or "-"
-            content_label.setToolTip(full_text)
-            content_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            card_layout.addWidget(content_label)
-
-            refs = [str(item).strip() for item in (getattr(doc, 'references', []) or []) if str(item).strip()]
-            if refs:
-                refs_label = QLabel(" | ".join(refs[:2]))
-                refs_label.setWordWrap(True)
-                refs_label.setProperty("muted", True)
-                refs_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                card_layout.addWidget(refs_label)
-
-            self.documents_layout.addWidget(card)
+        for name, doc in list(artifacts.items())[:6]:
+            self.documents_layout.addWidget(self._create_artifact_row(str(name), doc))
 
     def _render_channels(self, conversation: Optional[Conversation]) -> None:
         self._clear_layout(self.channels_layout)
@@ -536,15 +591,20 @@ class StatsPanel(QWidget):
         
         msg_count = len(conversation.messages)
         self.total_messages.set_value(str(msg_count))
-        
-        total_tokens = sum(m.tokens or 0 for m in conversation.messages)
-        self.total_tokens.set_value(f"{total_tokens:,}")
-        
-        tpm = conversation.get_tokens_per_minute()
-        if tpm > 0:
-            self.tokens_per_min.set_value(f"{tpm:.1f}")
+        snapshot = build_token_usage_snapshot(conversation, providers=self._providers)
+        if snapshot is not None:
+            used = format_token_count(snapshot.context_tokens)
+            window = format_token_count(snapshot.context_window)
+            self.context_summary.set_value(
+                f"{used}/{window} · {snapshot.usage_ratio * 100:.1f}%"
+            )
         else:
-            self.tokens_per_min.set_value("-")
+            self.context_summary.set_value("-")
+
+        tpm = conversation.get_tokens_per_minute()
+        performance_parts = []
+        if tpm > 0:
+            performance_parts.append(f"{tpm:.1f} token/min")
         
         last_assistant = None
         for msg in reversed(conversation.messages):
@@ -554,19 +614,17 @@ class StatsPanel(QWidget):
         
         if last_assistant and last_assistant.response_time_ms:
             time_sec = last_assistant.response_time_ms / 1000
-            self.last_response_time.set_value(f"{time_sec:.2f}s")
-        else:
-            self.last_response_time.set_value("-")
+            performance_parts.append(f"{time_sec:.2f}s")
+        self.performance_summary.set_value(" · ".join(performance_parts) if performance_parts else "-")
         
         self.overview_section.set_summary(str(getattr(conversation, "mode", "chat") or "chat"))
     
     def update_streaming_stats(self, tokens: int, elapsed_ms: int):
-        self.total_tokens.set_value(f"{tokens:,}")
+        self.context_summary.set_value(format_token_count(tokens))
         if elapsed_ms > 0:
             tpm = (tokens / elapsed_ms) * 60000
-            self.tokens_per_min.set_value(f"{tpm:.1f}")
             time_sec = elapsed_ms / 1000
-            self.last_response_time.set_value(f"{time_sec:.2f}s")
+            self.performance_summary.set_value(f"{tpm:.1f} token/min · {time_sec:.2f}s")
 
     def update_app_state(self, app_state) -> None:
         self._app_state = app_state
@@ -691,9 +749,8 @@ class StatsPanel(QWidget):
         self.mode_card.set_value("-")
         self.capabilities_card.set_value("-")
         self.total_messages.set_value("-")
-        self.total_tokens.set_value("-")
-        self.tokens_per_min.set_value("-")
-        self.last_response_time.set_value("-")
+        self.context_summary.set_value("-")
+        self.performance_summary.set_value("-")
         self.update_runtime_state(None)
 
     @staticmethod
@@ -725,6 +782,92 @@ class StatsPanel(QWidget):
         card_layout.addWidget(detail_label)
 
         self.channels_layout.addWidget(card)
+
+    def _create_artifact_row(self, name: str, doc) -> QFrame:
+        path = str(getattr(doc, "content_path", "") or "").strip()
+        row = _ArtifactRow(path)
+        row.setObjectName("artifact_row")
+        row.setCursor(Qt.CursorShape.PointingHandCursor)
+        row.clicked.connect(lambda target: self.artifact_open_requested.emit(target))
+
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(8)
+
+        icon_label = QLabel()
+        icon_label.setObjectName("artifact_icon")
+        icon_label.setFixedSize(18, 18)
+        icon_label.setPixmap(Icons.get_muted(Icons.FILE_LINES).pixmap(Icons.SIZE_TOOL, Icons.SIZE_TOOL))
+        layout.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
+
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+
+        title = QLabel(name or "未命名产物")
+        title.setObjectName("artifact_title")
+        title.setWordWrap(False)
+        text_layout.addWidget(title)
+
+        kind = str(getattr(doc, "kind", "") or "").strip()
+        status = str(getattr(doc, "status", "") or "").strip()
+        chars = int(getattr(doc, "content_chars", 0) or len(str(getattr(doc, "content", "") or "")))
+        meta_parts = [part for part in (kind, status, f"{chars} 字符" if chars else "") if part]
+        meta = QLabel(" · ".join(meta_parts) or "会话产物")
+        meta.setObjectName("artifact_meta")
+        meta.setProperty("muted", True)
+        text_layout.addWidget(meta)
+
+        layout.addLayout(text_layout, 1)
+
+        row.setToolTip(self._artifact_tooltip(name, doc, path=path, meta_text=meta.text()))
+        if path:
+            open_icon = QLabel()
+            open_icon.setObjectName("artifact_open_icon")
+            open_icon.setFixedSize(16, 16)
+            open_icon.setPixmap(Icons.get_muted(Icons.EXTERNAL_OPEN).pixmap(16, 16))
+            layout.addWidget(open_icon, 0, Qt.AlignmentFlag.AlignTop)
+        return row
+
+    @staticmethod
+    def _artifact_tooltip(name: str, doc, *, path: str = "", meta_text: str = "") -> str:
+        title = str(name or getattr(doc, "name", "") or "未命名产物").strip() or "未命名产物"
+        lines = [title]
+        meta = str(meta_text or "").strip()
+        if meta:
+            lines.append(meta)
+        if path:
+            lines.append(f"路径: {path}")
+
+        abstract = str(getattr(doc, "abstract", "") or "").strip()
+        content = str(getattr(doc, "content", "") or "").strip()
+        preview = abstract or content
+        if preview:
+            if len(preview) > 700:
+                preview = preview[:699].rstrip() + "…"
+            lines.extend(["", "简介:", preview])
+
+        references = [str(item).strip() for item in (getattr(doc, "references", []) or []) if str(item).strip()]
+        if references:
+            lines.extend(["", "引用: " + "；".join(references[:5])])
+
+        related = [str(item).strip() for item in (getattr(doc, "related", []) or []) if str(item).strip()]
+        if related:
+            lines.append("相关: " + "；".join(related[:5]))
+
+        if path:
+            lines.extend(["", "点击打开文件"])
+        return "\n".join(lines)
+
+    def _open_artifact_path(self, path: str) -> None:
+        clean = str(path or "").strip()
+        if not clean:
+            return
+        work_dir = "."
+        if self._conversation is not None:
+            work_dir = str(getattr(self._conversation, "work_dir", "") or "").strip() or "."
+        resolved = ArtifactService.resolve_content_path(clean, work_dir=work_dir)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(resolved.resolve())))
 
 
 class MemoryStats:

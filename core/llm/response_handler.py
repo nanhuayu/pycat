@@ -23,7 +23,7 @@ from core.llm.http_utils import (
     iter_sse_data_lines,
     parse_sse_json,
 )
-from core.llm.token_utils import estimate_tokens
+from core.llm.token_budget import estimate_tokens
 
 logger = logging.getLogger(__name__)
 

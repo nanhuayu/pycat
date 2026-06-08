@@ -99,7 +99,7 @@ class TerminalPage(QWidget):
         layout.addWidget(self.preview_label)
 
         hint = QLabel(
-            "这里控制 execute_command / shell_start / shell_status / shell_logs / shell_wait / shell_kill 的默认宿主后端。"
+            "这里控制 shell__run / shell__start / shell__status / shell__logs / shell__wait / shell__kill 的默认宿主后端。"
             "本轮先提供统一入口与管理能力，不引入完整 PTY/终端页签系统。"
         )
         hint.setWordWrap(True)

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QComboBox, QCompleter
+from PyQt6.QtWidgets import QComboBox, QCompleter, QListView
 
 from models.provider import Provider, build_model_ref
 from ui.utils.combo_box import configure_combo_popup
@@ -165,6 +165,16 @@ class ModelRefCombo(QComboBox):
         if completer is None:
             completer = QCompleter(self.model(), self)
             self.setCompleter(completer)
+        popup = completer.popup()
+        if popup is None or popup.objectName() != "combo_popup_view":
+            popup = QListView(self)
+            popup.setObjectName("combo_popup_view")
+            completer.setPopup(popup)
+        try:
+            popup.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+            popup.setUniformItemSizes(True)
+        except Exception:
+            pass
         completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
@@ -176,3 +186,6 @@ class ModelRefCombo(QComboBox):
             widest = max(widest, metrics.horizontalAdvance(self.itemText(index) or ""))
         popup_width = min(max(280, widest + 64), 560)
         self.view().setMinimumWidth(popup_width)
+        completer = self.completer()
+        if completer is not None and completer.popup() is not None:
+            completer.popup().setMinimumWidth(popup_width)

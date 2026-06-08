@@ -6,17 +6,12 @@ from models.conversation import Conversation
 from models.provider import Provider
 
 from core.runtime.events import TurnEvent
-from core.runtime.turn_policy import TurnPolicy
 from core.task.task import Task
 from core.task.types import RunPolicy, TaskEvent, TaskResult
 
 
 class TurnEngine:
-    """Runtime-facing execution wrapper around the legacy Task loop.
-
-    This gives the rest of the app a QueryEngine-like boundary while the deeper
-    Task implementation continues to be migrated incrementally.
-    """
+    """Runtime-facing execution facade over the task loop."""
 
     def __init__(self, *, task: Task | None = None, client=None, tool_manager=None) -> None:
         if task is not None:
@@ -35,7 +30,7 @@ class TurnEngine:
         *,
         provider: Provider,
         conversation: Conversation,
-        policy: RunPolicy | TurnPolicy,
+        policy: RunPolicy,
         on_event: Optional[Callable[[TurnEvent], None]] = None,
         on_token=None,
         on_thinking=None,
@@ -44,11 +39,6 @@ class TurnEngine:
         cancel_event=None,
         debug_log_path: Optional[str] = None,
     ) -> TaskResult:
-        if isinstance(policy, TurnPolicy):
-            run_policy = policy.to_run_policy()
-        else:
-            run_policy = policy
-
         def _on_task_event(event: TaskEvent) -> None:
             if on_event is None:
                 return
@@ -57,7 +47,7 @@ class TurnEngine:
         return await self._task.run(
             provider=provider,
             conversation=conversation,
-            policy=run_policy,
+            policy=policy,
             on_event=_on_task_event if on_event is not None else None,
             on_token=on_token,
             on_thinking=on_thinking,

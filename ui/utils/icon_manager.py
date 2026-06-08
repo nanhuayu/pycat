@@ -6,33 +6,37 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 from PyQt6.QtCore import QByteArray, QRectF, Qt
 from PyQt6.QtGui import QIcon, QPainter, QPixmap
 from PyQt6.QtSvg import QSvgRenderer
 
+if os.name == "nt" and not os.environ.get("WINDIR"):
+    os.environ["WINDIR"] = os.environ.get("SystemRoot") or r"C:\Windows"
 
-def _stroke_path(d: str) -> str:
+
+def _stroke_path(d: str, width: float = 2.15) -> str:
     return (
-        f"<path d='{d}' fill='none' stroke='{{color}}' stroke-width='1.9' "
+        f"<path d='{d}' fill='none' stroke='{{color}}' stroke-width='{width}' "
         "stroke-linecap='round' stroke-linejoin='round'/>"
     )
 
 
-def _stroke_line(x1: float, y1: float, x2: float, y2: float) -> str:
+def _stroke_line(x1: float, y1: float, x2: float, y2: float, width: float = 2.15) -> str:
     return (
         f"<line x1='{x1}' y1='{y1}' x2='{x2}' y2='{y2}' stroke='{{color}}' "
-        "stroke-width='1.9' stroke-linecap='round'/>"
+        f"stroke-width='{width}' stroke-linecap='round'/>"
     )
 
 
-def _stroke_circle(cx: float, cy: float, r: float) -> str:
-    return f"<circle cx='{cx}' cy='{cy}' r='{r}' fill='none' stroke='{{color}}' stroke-width='1.9'/>"
+def _stroke_circle(cx: float, cy: float, r: float, width: float = 2.15) -> str:
+    return f"<circle cx='{cx}' cy='{cy}' r='{r}' fill='none' stroke='{{color}}' stroke-width='{width}'/>"
 
 
-def _stroke_rect(x: float, y: float, w: float, h: float, rx: float = 0.0) -> str:
-    return f"<rect x='{x}' y='{y}' width='{w}' height='{h}' rx='{rx}' fill='none' stroke='{{color}}' stroke-width='1.9'/>"
+def _stroke_rect(x: float, y: float, w: float, h: float, rx: float = 0.0, width: float = 2.15) -> str:
+    return f"<rect x='{x}' y='{y}' width='{w}' height='{h}' rx='{rx}' fill='none' stroke='{{color}}' stroke-width='{width}'/>"
 
 
 def _fill_path(d: str) -> str:
@@ -44,19 +48,16 @@ def _fill_rect(x: float, y: float, w: float, h: float, rx: float = 0.0) -> str:
 
 
 _ICON_BODIES: dict[str, str] = {
-    "folder": _stroke_path("M4.2 7.8h5.3l1.8 1.8h7.7a1.6 1.6 0 0 1 1.6 1.6v5.9A1.7 1.7 0 0 1 18.9 19H5.1A1.7 1.7 0 0 1 3.4 17.3V9.5A1.7 1.7 0 0 1 5.1 7.8z"),
-    "file": _stroke_path("M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z")
+    "pycat": "<g transform='translate(2.7 2.4) scale(.036)'><path d='M96.19 172.74c0-19.65-9.7-52.91 11.83-91.12 43.38 12.02 49.07 35.75 75.25 53.66 51.81-12.96 92.67-12.96 144.48 0 26.18-17.91 31.87-41.63 75.25-53.66 21.53 38.21 11.83 71.47 11.83 91.12 32.71 36.53 38.79 78.45 37.17 107.83-2.1 38.63-19.91 100.95-79.13 121.12l36.59 96.97-100.72-79.06c-37.01 6.72-74.02 6.72-111.03 0-31.87-5.62-75.47-18.26-99.56-40.63-24.05-22.4-42.99-64.71-43.73-99.07-.71-34.36 2.36-73.5 39.37-107.12z' fill='none' stroke='{color}' stroke-width='34' stroke-linecap='round' stroke-linejoin='round'/><path d='M167.1 242.9l33.3 33.3-33.3 33.3M344.9 242.9l-33.3 33.3 33.3 33.3' fill='none' stroke='{color}' stroke-width='24' stroke-linecap='round' stroke-linejoin='round'/><circle cx='256' cy='297.5' r='20' fill='{color}'/></g>",
+    "folder": _stroke_path("M3.8 8h6l1.6 1.8h8a1.8 1.8 0 0 1 1.8 1.8v5.2a2 2 0 0 1-2 2H4.8a2 2 0 0 1-2-2v-7a1.8 1.8 0 0 1 1.8-1.8z"),
+    "file": _stroke_path("M7 3.8h6.5L18 8.3v11.2a1.8 1.8 0 0 1-1.8 1.8H7.8A1.8 1.8 0 0 1 6 19.5V5.6a1.8 1.8 0 0 1 1.8-1.8z")
     + _stroke_line(14, 3, 14, 8)
     + _stroke_line(14, 8, 18, 8),
     "plus": _stroke_line(12, 5, 12, 19) + _stroke_line(5, 12, 19, 12),
     "minus": _stroke_line(5, 12, 19, 12),
-    "trash": _stroke_rect(7, 8, 10, 12, 2)
-    + _stroke_line(5, 8, 19, 8)
-    + _stroke_line(9, 5, 15, 5)
-    + _stroke_line(10, 11, 10, 17)
-    + _stroke_line(14, 11, 14, 17),
-    "pen-to-square": _stroke_rect(4, 4, 16, 16, 2)
-    + _stroke_path("M9 15l6-6 2 2-6 6-3 1 1-3z"),
+    "trash": _stroke_line(7.2, 7.2, 16.8, 16.8, 2.35) + _stroke_line(16.8, 7.2, 7.2, 16.8, 2.35),
+    "pen-to-square": _stroke_path("M6.6 17.4l2.1-.4 8.7-8.7a1.6 1.6 0 0 0-2.3-2.3l-8.7 8.7-.5 2.2a.5.5 0 0 0 .7.5z", 2.25)
+    + _stroke_line(13.8, 7.2, 16.8, 10.2, 2.25),
     "download": _stroke_line(12, 4, 12, 15)
     + _stroke_line(8, 11, 12, 15)
     + _stroke_line(16, 11, 12, 15)
@@ -65,7 +66,7 @@ _ICON_BODIES: dict[str, str] = {
     + _stroke_line(8, 13, 12, 9)
     + _stroke_line(16, 13, 12, 9)
     + _stroke_line(5, 5, 19, 5),
-    "paper-plane": _stroke_path("M3 11.5L21 3l-7 18-2.8-6.2L3 11.5z") + _stroke_line(11.2, 14.8, 21, 3),
+    "paper-plane": _fill_path("M3.7 11.2 20.1 3.6a1 1 0 0 1 1.3 1.3l-7.6 16.4a1 1 0 0 1-1.9-.1l-2-6.2-6.2-2a1 1 0 0 1-.1-1.8zM10.8 14l2 5.1 5.4-11.7z"),
     "arrow-right": _stroke_line(5, 12, 19, 12) + _stroke_line(13, 6, 19, 12) + _stroke_line(13, 18, 19, 12),
     "arrow-left": _stroke_line(5, 12, 19, 12) + _stroke_line(11, 6, 5, 12) + _stroke_line(11, 18, 5, 12),
     "arrow-up": _stroke_line(12, 5, 12, 19) + _stroke_line(6, 11, 12, 5) + _stroke_line(18, 11, 12, 5),
@@ -82,28 +83,29 @@ _ICON_BODIES: dict[str, str] = {
     "stop": _fill_rect(7, 7, 10, 10, 2),
     "play": _fill_path("M8 6l10 6-10 6z"),
     "pause": _fill_rect(8, 6, 3.5, 12, 1) + _fill_rect(12.5, 6, 3.5, 12, 1),
-    "gear": _stroke_circle(12, 12, 3.5)
-    + _stroke_line(12, 3, 12, 6)
-    + _stroke_line(12, 18, 12, 21)
-    + _stroke_line(3, 12, 6, 12)
-    + _stroke_line(18, 12, 21, 12)
-    + _stroke_line(5.6, 5.6, 7.7, 7.7)
-    + _stroke_line(16.3, 16.3, 18.4, 18.4)
-    + _stroke_line(16.3, 7.7, 18.4, 5.6)
-    + _stroke_line(5.6, 18.4, 7.7, 16.3),
+    "gear": _stroke_circle(12, 12, 3.2, 2.2)
+    + _stroke_path("M12 3.7v2.1M12 18.2v2.1M3.7 12h2.1M18.2 12h2.1M6.1 6.1l1.5 1.5M16.4 16.4l1.5 1.5M17.9 6.1l-1.5 1.5M7.6 16.4l-1.5 1.5", 2.2),
     "sliders": _stroke_line(5, 7, 19, 7)
     + _stroke_circle(9, 7, 1.8)
     + _stroke_line(5, 12, 19, 12)
     + _stroke_circle(15, 12, 1.8)
     + _stroke_line(5, 17, 19, 17)
     + _stroke_circle(11, 17, 1.8),
-    "comments": _stroke_rect(4, 5, 16, 11, 3) + _stroke_path("M8 16l-2 3 5-3"),
+    "panel-left": _stroke_rect(4, 4, 16, 16, 2) + _stroke_line(9, 4, 9, 20),
+    "panel-right": _stroke_rect(4, 4, 16, 16, 2) + _stroke_line(15, 4, 15, 20),
+    "panel": _stroke_rect(4, 5, 16, 14, 2) + _stroke_line(4, 10, 20, 10),
+    "external-link": _stroke_rect(5, 8, 11, 11, 2)
+    + _stroke_line(12, 5, 19, 5)
+    + _stroke_line(19, 5, 19, 12)
+    + _stroke_line(11, 13, 19, 5),
+    "comments": _stroke_rect(4, 5, 16, 11, 3, 2.15) + _stroke_path("M8 16l-2 3 5-3", 2.15),
+    "copy": _stroke_rect(8, 5, 9.5, 9.5, 1.4, 1.9) + _stroke_rect(5.5, 8.5, 9.5, 9.5, 1.4, 1.9),
     "circle-info": _stroke_circle(12, 12, 8) + _stroke_line(12, 10.5, 12, 16) + _fill_rect(11.2, 6.5, 1.6, 1.6, 0.8),
     "circle-check": _stroke_circle(12, 12, 8) + _stroke_line(8, 12.5, 11, 15.5) + _stroke_line(11, 15.5, 16.5, 9.5),
     "circle-xmark": _stroke_circle(12, 12, 8) + _stroke_line(9, 9, 15, 15) + _stroke_line(15, 9, 9, 15),
     "check": _stroke_line(5.5, 12.5, 10, 17) + _stroke_line(10, 17, 18.5, 8.5),
     "xmark": _stroke_line(7, 7, 17, 17) + _stroke_line(17, 7, 7, 17),
-    "magnifying-glass": _stroke_circle(11, 11, 5.5) + _stroke_line(15.5, 15.5, 20, 20),
+    "magnifying-glass": _stroke_circle(10.8, 10.8, 5.3) + _stroke_line(15, 15, 20, 20),
     "plug": _stroke_line(9, 4, 9, 8) + _stroke_line(15, 4, 15, 8) + _stroke_rect(7, 8, 10, 6, 2) + _stroke_line(12, 14, 12, 20),
     "paperclip": _stroke_path("M8 12l6-6a4 4 0 1 1 6 6l-7 7a5 5 0 1 1-7-7l7-7"),
     "brain": _stroke_path("M10 6a3 3 0 0 0-3 3v1a3 3 0 0 0 1 5v1a3 3 0 0 0 6 0V9a3 3 0 0 0-4-3z")
@@ -121,23 +123,29 @@ _ICON_BODIES: dict[str, str] = {
     + _stroke_line(14.5, 5.5, 17.5, 5.5)
     + _stroke_line(7, 7, 7, 9.5)
     + _stroke_line(5.8, 8.2, 8.2, 8.2),
-    "microchip": _stroke_rect(7, 7, 10, 10, 1.5)
-    + _stroke_line(9, 3, 9, 7) + _stroke_line(12, 3, 12, 7) + _stroke_line(15, 3, 15, 7)
-    + _stroke_line(9, 17, 9, 21) + _stroke_line(12, 17, 12, 21) + _stroke_line(15, 17, 15, 21)
-    + _stroke_line(3, 9, 7, 9) + _stroke_line(3, 12, 7, 12) + _stroke_line(3, 15, 7, 15)
-    + _stroke_line(17, 9, 21, 9) + _stroke_line(17, 12, 21, 12) + _stroke_line(17, 15, 21, 15),
+    "microchip": _stroke_rect(7.5, 7.5, 9, 9, 2)
+    + _fill_rect(10, 10, 4, 4, 1)
+    + _stroke_line(9, 4, 9, 7.5) + _stroke_line(15, 4, 15, 7.5)
+    + _stroke_line(9, 16.5, 9, 20) + _stroke_line(15, 16.5, 15, 20)
+    + _stroke_line(4, 9, 7.5, 9) + _stroke_line(4, 15, 7.5, 15)
+    + _stroke_line(16.5, 9, 20, 9) + _stroke_line(16.5, 15, 20, 15),
 }
 
 _ICON_ALIASES: dict[str, str] = {
     "folder-open": "folder",
     "file-lines": "file",
-    "copy": "file",
     "clone": "file",
     "file-import": "download",
     "file-export": "upload",
     "screwdriver-wrench": "gear",
     "wrench": "gear",
     "message": "comments",
+    "file-text": "file",
+    "panel-left-close": "panel-left",
+    "panel-right-close": "panel-right",
+    "sidebar-left": "panel-left",
+    "sidebar-right": "panel-right",
+    "open-external": "external-link",
     "robot": "shield-halved",
     "user": "circle-info",
     "users": "circle-info",
@@ -161,7 +169,6 @@ _ICON_ALIASES: dict[str, str] = {
     "plug-circle-bolt": "plug",
     "graduation-cap": "book-open",
 }
-
 
 def _svg_document(body: str) -> str:
     return (
@@ -243,10 +250,15 @@ class Icons:
     TOOLS = "screwdriver-wrench"
     WRENCH = "wrench"
     SLIDERS = "sliders"
+    PANEL = "panel"
+    PANEL_LEFT = "panel-left"
+    PANEL_RIGHT = "panel-right"
+    EXTERNAL_OPEN = "external-link"
     MODEL = "microchip"
 
     # === 聊天 / 对话 ===
     CHAT = "comments"
+    PYCAT = "pycat"
     MESSAGE = "message"
     BOT = "robot"
     USER = "user"
@@ -325,16 +337,26 @@ class Icons:
     PAGE_AGENTS = "shield-halved"
 
     # === 颜色常量 ===
-    COLOR_PRIMARY = "#2563EB"
+    COLOR_PRIMARY = "#7C3AED"
     COLOR_SUCCESS = "#16A34A"
     COLOR_ERROR = "#EF4444"
     COLOR_WARNING = "#F59E0B"
     COLOR_MUTED = "#64748B"
+    SIZE_TOOL = 18
+    SIZE_NAV = 17
+    SIZE_EMPTY_HERO = 30
+    SIZE_SETTINGS_NAV = 18
 
     # ---- 获取方法 ----
 
     @classmethod
-    def get(cls, icon_name: str, *, color: str | None = None, scale_factor: float = 1.0) -> QIcon:
+    def get(
+        cls,
+        icon_name: str,
+        *,
+        color: str | None = None,
+        scale_factor: float = 1.0,
+    ) -> QIcon:
         """获取 QIcon 实例。
 
         Args:
@@ -347,11 +369,12 @@ class Icons:
         """
         if not icon_name:
             return QIcon()
-        if not icon_name:
-            return QIcon()
         color_val = color or cls.COLOR_PRIMARY
         base_size = max(16, int(round(20 * scale_factor)))
-        return _build_icon(icon_name, color_name=color_val, base_size=base_size)
+        resolved = _resolve_icon_name(icon_name)
+        if resolved in _ICON_BODIES:
+            return _build_icon(icon_name, color_name=color_val, base_size=base_size)
+        return _build_icon(Icons.CIRCLE_INFO, color_name=color_val, base_size=base_size)
 
     @classmethod
     def get_colored(cls, icon_name: str, color: str, *, scale_factor: float = 1.0) -> QIcon:

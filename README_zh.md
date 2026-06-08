@@ -215,7 +215,7 @@ pycat/
 │  ├─ llm/                 # LLM 客户端、请求构建、配置
 │  ├─ modes/               # 模式注册与默认值
 │  ├─ prompts/             # system prompt 组装
-│  ├─ runtime/             # TurnEngine、TurnPolicy、事件
+│  ├─ runtime/             # TurnEngine、RuntimePolicyFactory、事件
 │  ├─ skills/              # 技能系统
 │  ├─ state/               # 会话状态服务
 │  ├─ task/                # 多步任务循环

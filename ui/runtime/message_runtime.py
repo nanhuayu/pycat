@@ -16,7 +16,6 @@ from models.streaming import ConversationStreamState
 from core.llm.client import LLMClient
 from core.runtime.events import TurnEvent, TurnEventKind
 from core.runtime.turn_engine import TurnEngine
-from core.runtime.turn_policy import TurnPolicy
 from core.tools.manager import ToolManager
 from core.task.types import RunPolicy, TaskStatus
 
@@ -89,22 +88,15 @@ class MessageRuntime(QObject):
         provider: Provider,
         conversation: Conversation,
         *,
-        policy: RunPolicy | TurnPolicy,
+        policy: RunPolicy,
         debug_log_path: Optional[str] = None,
     ) -> Optional[ConversationStreamState]:
         conversation_id = getattr(conversation, "id", "") or ""
         if not conversation_id:
             return None
 
-        if isinstance(policy, TurnPolicy):
-            turn_policy = policy
-            effective_policy = policy.to_run_policy()
-        else:
-            effective_policy = policy
-            turn_policy = TurnPolicy.from_run_policy(policy, conversation=conversation)
-
         request_id = str(uuid.uuid4())
-        model_name = build_model_ref(provider.name, turn_policy.llm.resolved_model(provider))
+        model_name = build_model_ref(provider.name, self._resolve_state_model(provider, conversation, policy))
 
         state = ConversationStreamState(
             conversation_id=conversation_id,
@@ -159,7 +151,7 @@ class MessageRuntime(QObject):
                     result = await self._engine.run(
                         provider=provider,
                         conversation=conversation_snapshot,
-                        policy=turn_policy,
+                        policy=policy,
                         on_event=on_event,
                         on_token=on_token,
                         on_thinking=on_thinking,
@@ -189,6 +181,20 @@ class MessageRuntime(QObject):
 
         threading.Thread(target=run_worker, daemon=True).start()
         return state
+
+    @staticmethod
+    def _resolve_state_model(provider: Provider, conversation: Conversation, policy: RunPolicy) -> str:
+        try:
+            llm_config = conversation.get_llm_config()
+            if policy.model:
+                llm_config = llm_config.with_updates(model=str(policy.model))
+            return llm_config.resolved_model(provider)
+        except Exception:
+            return (
+                str(getattr(policy, "model", "") or "").strip()
+                or str(getattr(conversation, "model", "") or "").strip()
+                or str(getattr(provider, "default_model", "") or "").strip()
+            )
 
     def cancel(self, conversation_id: str) -> None:
         state = self._streams.get(conversation_id)

@@ -76,7 +76,7 @@ class McpProxyTool(BaseTool):
             work_root = Path(context.work_dir or ".").expanduser().resolve()
         except Exception:
             return None
-        return work_root / ".pycat" / "sessions" / session_id / "tool-results"
+        return work_root / ".pycat" / "sessions" / session_id / "tool-call" / "mcp-output"
 
     def _rewrite_output_file_arguments(
         self,
@@ -126,10 +126,10 @@ class McpProxyTool(BaseTool):
         """Copy MCP-generated relative files into the current session.
 
         Some MCP servers write files relative to the Python process cwd and
-        return links like ``./snapshot.md``. The agent's ``read_file`` resolves
+        return links like ``./snapshot.md``. The agent's ``file__read`` resolves
         relative paths against ``context.work_dir``, so those links can become
         unreadable after workspace selection. Normalize such links into
-        ``<work_dir>/.pycat/sessions/<conversation_id>/tool-results``.
+        ``<work_dir>/.pycat/sessions/<conversation_id>/tool-call/mcp-output``.
         """
         if not text:
             return text

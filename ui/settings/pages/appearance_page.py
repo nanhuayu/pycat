@@ -24,7 +24,7 @@ class AppearancePage(QWidget):
         self,
         *,
         theme: str = "light",
-        show_stats: bool = True,
+        show_stats: bool = False,
         show_thinking: bool = True,
         log_stream: bool = False,
         proxy_url: str = "",

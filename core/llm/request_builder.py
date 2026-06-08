@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 from models.conversation import Conversation, Message, normalize_tool_result
 from models.provider import Provider
 from core.content.attachments import encode_image_file_to_data_url
+from core.content.view_protocol import ContentExactness
 from core.prompts.system import PromptManager
 from core.prompts.context_assembler import build_context_messages
 from core.prompts.history import apply_context_window
@@ -21,6 +23,14 @@ _RUNTIME_ERROR_PREFIXES = (
     "模型调用失败：",
     "错误:",
     "error sending message:",
+)
+_ASSISTANT_ROLE_PREFIX_RE = re.compile(r"^\s*(?:assistant\s*:\s*)+", re.IGNORECASE)
+_USER_ROLE_PREFIX_RE = re.compile(r"^\s*user\s*:\s*", re.IGNORECASE)
+_TOOL_TRANSCRIPT_MARKER_RE = re.compile(
+    r"(?:^|\s)tool\s+"
+    r"[a-z0-9_]+(?:__[a-z0-9_]+|_[a-z0-9_]+)?"
+    r"(?:\s*,\s*[a-z0-9_]+(?:__[a-z0-9_]+|_[a-z0-9_]+)?)*\s*:",
+    re.IGNORECASE,
 )
 
 
@@ -50,20 +60,134 @@ def _build_multimodal_content(text_content: Any, images: list[str], provider: Pr
 
 def _build_message_content(msg: Message, provider: Provider) -> Any:
     text_content = msg.summary if msg.summary else msg.content
+    if isinstance(text_content, str):
+        if msg.role == "assistant":
+            text_content = _clean_assistant_content_for_api(text_content, trim_tool_transcript=False)
+        elif msg.role == "user" and msg.summary:
+            text_content = _USER_ROLE_PREFIX_RE.sub("", text_content).strip()
     return _build_multimodal_content(text_content, list(getattr(msg, "images", []) or []), provider)
 
 
-def _tool_result_content_for_api(result: Any) -> str:
+def _build_assistant_tool_call_content(msg: Message, provider: Provider) -> Any:
+    """Return assistant text for replaying a tool-call turn.
+
+    Per-message summaries are archive notes, not provider-native assistant
+    content. Replaying those summaries alongside the original tool_calls creates
+    nested transcripts such as ``assistant: assistant: ... tool file__read:``.
+    """
+    content = msg.content
+    if isinstance(content, str):
+        content = _clean_assistant_content_for_api(content, trim_tool_transcript=True)
+    return _build_multimodal_content(content, list(getattr(msg, "images", []) or []), provider)
+
+
+def _clean_assistant_content_for_api(text: str, *, trim_tool_transcript: bool) -> str:
+    clean = str(text or "").strip()
+    while True:
+        stripped = _ASSISTANT_ROLE_PREFIX_RE.sub("", clean).strip()
+        if stripped == clean:
+            break
+        clean = stripped
+    if trim_tool_transcript:
+        marker = _TOOL_TRANSCRIPT_MARKER_RE.search(clean)
+        if marker:
+            clean = clean[: marker.start()].strip()
+    return clean
+
+
+def _tool_result_content_for_api(result: Any, *, conversation: Conversation | None = None) -> str:
     payload = normalize_tool_result(result)
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    metadata = _fresh_archive_metadata(metadata, conversation=conversation)
+    strategy = str(metadata.get("tool_result_strategy") or "").strip()
+    summary = str(payload.get("summary") or metadata.get("tool_result_summary") or "").strip()
+    content_id = str(metadata.get("content_id") or metadata.get("archive_content_id") or "").strip()
+    archive_ref = str(metadata.get("archive_ref") or "").strip()
+    digest = str(metadata.get("tool_result_digest") or "").strip()
+    total_chars = metadata.get("tool_result_chars")
+    archive_status = str(metadata.get("tool_result_summary_status") or metadata.get("archive_status") or "").strip()
+    view_exactness = str(metadata.get("tool_result_exactness") or "").strip().lower()
+    view_label = str(metadata.get("tool_result_view") or "").strip().lower()
+    view_kind = str(metadata.get("tool_result_view_kind") or "").strip().lower()
+    view_desc = str(metadata.get("tool_result_view_desc") or "").strip().lower()
     content = payload.get("content")
+    if (
+        strategy
+        and strategy != "inline"
+        and view_exactness == ContentExactness.EXACT.value
+        and isinstance(content, str)
+        and len(content) <= 12_000
+        and view_kind in {"full", "line", "char"}
+    ):
+        return content
+    if strategy and strategy != "inline" and (summary or content_id or archive_ref):
+        lines = ["[Tool result archived]"]
+        if summary:
+            prefix = "Summary"
+            if view_kind == "summary":
+                summary_desc = view_desc or view_label.removeprefix("summary:") or "balanced"
+                prefix = f"Summary (summary:{summary_desc})"
+            lines.append(f"{prefix}: {summary}")
+        if content_id:
+            lines.append(f"Content id: {content_id}")
+            lines.append("Use content__read(content_id, view=\"summary\"|\"full\"|\"lines\"|\"chars\") for exact archived content.")
+        if archive_ref:
+            lines.append(f"Archive ref: {archive_ref}")
+        if archive_status:
+            lines.append(f"Summary status: {archive_status}")
+        if digest:
+            lines.append(f"Digest: {digest[:16]}")
+        if total_chars:
+            lines.append(f"Original size: {total_chars} chars")
+        return "\n".join(lines)
     if isinstance(content, str):
         return content
     if content is None:
         return ""
     try:
-        return json.dumps(content, ensure_ascii=False)
+        serialized = json.dumps(content, ensure_ascii=False)
     except Exception:
-        return str(content)
+        serialized = str(content)
+    return serialized
+
+
+def _fresh_archive_metadata(metadata: dict[str, Any], *, conversation: Conversation | None = None) -> dict[str, Any]:
+    content_id = str(metadata.get("content_id") or metadata.get("archive_content_id") or "").strip()
+    archive_ref = str(metadata.get("archive_ref") or "").strip()
+    if not content_id and isinstance(metadata.get("archive_record"), dict):
+        content_id = str(metadata["archive_record"].get("id") or "").strip()
+    if not content_id:
+        return metadata
+
+    work_dir = str(getattr(conversation, "work_dir", "") or "").strip()
+    conversation_id = getattr(conversation, "id", None)
+    if not work_dir and archive_ref:
+        marker = "/.pycat/sessions/"
+        normalized = archive_ref.replace("\\", "/")
+        if marker in normalized:
+            work_dir = normalized.split(marker, 1)[0]
+    if not work_dir:
+        return metadata
+
+    try:
+        from core.context.archive_store import SessionArchiveStore
+
+        record = SessionArchiveStore(work_dir, conversation_id=conversation_id).read_record(content_id)
+    except Exception:
+        record = None
+    if record is None:
+        return metadata
+
+    fresh = dict(metadata)
+    fresh["content_id"] = record.id
+    fresh["archive_ref"] = record.original_ref
+    fresh["archive_status"] = record.status
+    fresh["tool_result_summary_status"] = record.summary_status
+    fresh["archive_record"] = record.to_dict()
+    if record.summary:
+        fresh["tool_result_summary"] = record.summary
+        fresh["tool_result_compression_required"] = False
+    return fresh
 
 
 def _provider_declares_reasoning_support(provider: Provider) -> bool:
@@ -128,7 +252,7 @@ def _tool_call_names(tool_calls: Any) -> list[str]:
     return names
 
 
-def _tool_call_summary_lines(tool_calls: Any) -> list[str]:
+def _tool_call_summary_lines(tool_calls: Any, *, conversation: Conversation | None = None) -> list[str]:
     lines: list[str] = []
     for tool_call in tool_calls or []:
         if not isinstance(tool_call, dict):
@@ -136,7 +260,7 @@ def _tool_call_summary_lines(tool_calls: Any) -> list[str]:
         func = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
         name = str(func.get("name") or "unknown_tool").strip() or "unknown_tool"
         summary = str(tool_call.get("result_summary") or "").strip()
-        result = _tool_result_content_for_api(tool_call.get("result")).strip()
+        result = _tool_result_content_for_api(tool_call.get("result"), conversation=conversation).strip()
         if not summary and result:
             summary = result.splitlines()[0].strip()[:220]
         if summary:
@@ -146,7 +270,7 @@ def _tool_call_summary_lines(tool_calls: Any) -> list[str]:
     return lines
 
 
-def _recover_assistant_as_user(msg: Message) -> Message | None:
+def _recover_assistant_as_user(msg: Message, *, conversation: Conversation | None = None) -> Message | None:
     sections: list[str] = []
 
     content = str(getattr(msg, "content", "") or "").strip()
@@ -165,7 +289,7 @@ def _recover_assistant_as_user(msg: Message) -> Message | None:
             f"Requested tools:\n{bullet_lines}{more}"
         )
 
-    tool_summaries = _tool_call_summary_lines(getattr(msg, "tool_calls", None))
+    tool_summaries = _tool_call_summary_lines(getattr(msg, "tool_calls", None), conversation=conversation)
     if tool_summaries:
         joined = "\n".join(tool_summaries[:8])
         more = "\n- ..." if len(tool_summaries) > 8 else ""
@@ -221,7 +345,7 @@ def _sanitize_reasoning_history(
         if msg.role == "assistant" and not _assistant_has_reasoning(msg):
             if _is_runtime_error_message(msg):
                 continue
-            recovered = _recover_assistant_as_user(msg)
+            recovered = _recover_assistant_as_user(msg, conversation=conversation)
             if recovered is not None:
                 sanitized.append(recovered)
             continue
@@ -302,7 +426,7 @@ def build_api_messages(
                 result = tc.get("result")
                 result_images = list(tc.get("result_images") or [])
                 if result is not None:
-                    result = _tool_result_content_for_api(result)
+                    result = _tool_result_content_for_api(result, conversation=conversation)
                 if result_images:
                     result = _build_multimodal_content(result, result_images, provider)
                 if result is None:
@@ -320,7 +444,7 @@ def build_api_messages(
             if tool_calls_with_results:
                 assistant_payload: Dict[str, Any] = {
                     "role": "assistant",
-                    "content": message_payload.get("content"),
+                    "content": _build_assistant_tool_call_content(msg, provider),
                     "tool_calls": [tc["clean"] for tc in tool_calls_with_results],
                 }
 

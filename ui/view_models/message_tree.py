@@ -50,7 +50,7 @@ def tool_call_name(tool_call: Dict[str, Any] | None) -> str:
 
 
 def tool_call_kind(name: str) -> str:
-    if str(name or "").startswith("subagent__"):
+    if str(name or "") == "agent__run":
         return "subagent"
     if str(name or "").startswith("capability__"):
         return "capability"

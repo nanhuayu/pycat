@@ -32,11 +32,9 @@ def _format_error_message(error: str) -> str:
 
 
 _STATE_MUTATING_TOOLS = {
-    "manage_todo",
-    "manage_state",
-    "manage_memory",
-    "manage_document",
-    "manage_artifact",
+    "state__todo",
+    "state__memory",
+    "state__artifact",
 }
 
 
@@ -62,30 +60,20 @@ class StreamingMessagePresenter:
             )
         )
 
-        retry_cfg = None
-        try:
-            from core.config.schema import RetryConfig
-
-            raw_retry = host.app_settings.get("retry")
-            if raw_retry and isinstance(raw_retry, dict):
-                retry_cfg = RetryConfig.from_dict(raw_retry)
-        except Exception as e:
-            logger.debug("Failed to load retry config: %s", e)
-
         skill_run = self._get_latest_skill_run_metadata(conversation)
 
         try:
             policy = self._build_request_policy(
                 conversation=conversation,
                 enable_thinking=enable_thinking,
-                retry_cfg=retry_cfg,
                 skill_run=skill_run,
             )
         except Exception as e:
             logger.warning("Failed to build run policy: %s", e)
-            from core.task.types import RunPolicy
-
-            policy = RunPolicy(mode="chat", enable_thinking=bool(enable_thinking))
+            policy = self._build_fallback_policy(
+                conversation=conversation,
+                enable_thinking=enable_thinking,
+            )
 
         if skill_run is None:
             try:
@@ -152,6 +140,37 @@ class StreamingMessagePresenter:
             else host.services.conv_service.load(conversation_id)
         )
         if not target_conv:
+            return
+
+        if getattr(message, "role", "") == "tool":
+            self._apply_tool_result_step(target_conv, message)
+            host.services.conv_service.save(target_conv)
+            host.services.app_coordinator.remember_current_conversation(
+                target_conv,
+                providers=host.providers,
+                app_settings=host.app_settings,
+                is_streaming=self._is_conversation_streaming(host, conversation_id),
+            )
+            if host.current_conversation and host.current_conversation.id == conversation_id:
+                updated_parent = self._find_message_for_tool_call(
+                    target_conv,
+                    str(getattr(message, "tool_call_id", "") or ""),
+                )
+                try:
+                    refreshed = host.chat_view.refresh_message_tool_calls(
+                        str(metadata.get("parent_message_id") or getattr(updated_parent, "id", "") or ""),
+                        str(getattr(message, "tool_call_id", "") or ""),
+                        updated_message=updated_parent,
+                    )
+                    if not refreshed and updated_parent is not None:
+                        host.chat_view.update_message(updated_parent)
+                except Exception as e:
+                    logger.debug("Failed to refresh tool result in chat view: %s", e)
+                try:
+                    host.stats_panel.update_stats(host.current_conversation)
+                except Exception as e:
+                    logger.debug("Failed to update stats after tool result step: %s", e)
+                self._sync_runtime_state(conversation_id)
             return
 
         msg_seq = getattr(message, "seq_id", None)
@@ -356,30 +375,10 @@ class StreamingMessagePresenter:
         *,
         conversation: Conversation,
         enable_thinking: bool,
-        retry_cfg,
         skill_run: Optional[dict[str, Any]],
     ):
         host = self._host
-        from core.task.builder import build_run_policy
-        from core.runtime.turn_policy import TurnPolicy
-        from core.config.schema import ToolPermissionConfig
-        from core.tools.catalog import ToolSelectionPolicy
-
-        tool_permissions = None
-        try:
-            raw_permissions = (host.app_settings or {}).get("permissions")
-            if raw_permissions and isinstance(raw_permissions, dict):
-                tool_permissions = ToolPermissionConfig.from_dict(raw_permissions)
-        except Exception as e:
-            logger.debug("Failed to load global tool permissions: %s", e)
-
-        conversation_tool_selection = None
-        try:
-            raw_tool_selection = (conversation.settings or {}).get("tool_selection")
-            if isinstance(raw_tool_selection, dict):
-                conversation_tool_selection = ToolSelectionPolicy.from_dict(raw_tool_selection)
-        except Exception as e:
-            logger.debug("Failed to load conversation tool selection: %s", e)
+        from core.runtime.policy_factory import RuntimePolicyFactory
 
         if skill_run:
             skill_name = str(skill_run.get("name") or "").strip().lower()
@@ -387,59 +386,66 @@ class StreamingMessagePresenter:
             spec = host.services.skill_service.get_invocation_spec(skill_name, work_dir=work_dir)
             if spec is not None:
                 return self._apply_agent_runtime_overrides(
-                    TurnPolicy.from_run_policy(
-                        build_run_policy(
-                            mode_slug=spec.mode,
-                            enable_thinking=bool(enable_thinking),
-                            tool_selection=spec.tool_selection,
-                            mode_manager=host.input_area.get_mode_manager(),
-                            retry_config=retry_cfg,
-                            tool_permissions=tool_permissions,
-                        ),
+                    RuntimePolicyFactory.build(
                         conversation=conversation,
-                    ),
+                        app_settings=host.app_settings,
+                        mode_slug=spec.mode,
+                        enable_thinking=bool(enable_thinking),
+                        tool_selection=spec.tool_selection,
+                        mode_manager=host.input_area.get_mode_manager(),
+                        source="desktop",
+                    )
                 )
 
         try:
             mode_slug = host.input_area.get_selected_mode_slug()
             return self._apply_agent_runtime_overrides(
-                TurnPolicy.from_run_policy(
-                    build_run_policy(
-                        mode_slug=str(mode_slug or "chat"),
-                        enable_thinking=bool(enable_thinking),
-                            tool_selection=conversation_tool_selection,
-                        mode_manager=host.input_area.get_mode_manager(),
-                        retry_config=retry_cfg,
-                        tool_permissions=tool_permissions,
-                    ),
+                RuntimePolicyFactory.build(
                     conversation=conversation,
-                ),
+                    app_settings=host.app_settings,
+                    mode_slug=str(mode_slug or "chat"),
+                    enable_thinking=bool(enable_thinking),
+                    mode_manager=host.input_area.get_mode_manager(),
+                    source="desktop",
+                )
             )
         except Exception as e:
             logger.warning("Failed to build run policy from input state: %s", e)
-            from core.task.types import RunPolicy
-
-            return self._apply_agent_runtime_overrides(
-                TurnPolicy.from_run_policy(
-                    RunPolicy(
-                        mode=str(getattr(conversation, "mode", "chat") or "chat"),
-                        enable_thinking=bool(enable_thinking),
-                    ),
-                    conversation=conversation,
-                ),
+            return self._build_fallback_policy(
+                conversation=conversation,
+                enable_thinking=enable_thinking,
             )
+
+    def _build_fallback_policy(self, *, conversation: Conversation, enable_thinking: bool):
+        from core.runtime.policy_factory import RuntimePolicyFactory
+
+        return self._apply_agent_runtime_overrides(
+            RuntimePolicyFactory.build(
+                conversation=conversation,
+                app_settings=getattr(self._host, "app_settings", {}) or {},
+                mode_slug=str(getattr(conversation, "mode", "chat") or "chat"),
+                enable_thinking=bool(enable_thinking),
+                source="desktop",
+            )
+        )
 
     def _apply_agent_runtime_overrides(self, policy):
         settings = getattr(self._host, "app_settings", {}) or {}
         agent_settings = settings.get("agent") if isinstance(settings, dict) else None
-        raw = agent_settings.get("max_turns") if isinstance(agent_settings, dict) else None
+        agent_settings = agent_settings if isinstance(agent_settings, dict) else {}
+        raw = agent_settings.get("max_turns")
         try:
             max_turns = int(raw) if raw not in (None, "") else 0
         except Exception:
             max_turns = 0
-        if max_turns <= 0:
-            return policy
-        return replace(policy, max_turns=max_turns)
+        updates = {}
+        if max_turns > 0:
+            updates["max_turns"] = max_turns
+        if "force_agent_complete" in agent_settings:
+            updates["force_agent_complete"] = bool(agent_settings.get("force_agent_complete"))
+        elif "forceAgentComplete" in agent_settings:
+            updates["force_agent_complete"] = bool(agent_settings.get("forceAgentComplete"))
+        return replace(policy, **updates) if updates else policy
 
     @staticmethod
     def _get_latest_skill_run_metadata(
@@ -505,6 +511,48 @@ class StreamingMessagePresenter:
                 host.input_area.set_mode_selection(next_mode, apply_defaults=True)
             except Exception as e:
                 logger.debug("Failed to sync runtime mode switch to input area: %s", e)
+
+    @staticmethod
+    def _apply_tool_result_step(conversation, message: Message) -> bool:
+        metadata = getattr(message, "metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        result_payload = metadata.get("result")
+        if not isinstance(result_payload, dict):
+            result_payload = {
+                "type": "tool_result",
+                "content": str(getattr(message, "content", "") or ""),
+                "summary": str(getattr(message, "summary", "") or metadata.get("summary") or ""),
+                "metadata": dict(metadata),
+            }
+        result_metadata = dict(result_payload.get("metadata") or {})
+        for key, value in metadata.items():
+            if key in {"result", "role"}:
+                continue
+            result_metadata.setdefault(str(key), value)
+        result_payload = dict(result_payload)
+        result_payload["metadata"] = result_metadata
+        return bool(conversation.attach_tool_result(
+            getattr(message, "tool_call_id", "") or "",
+            result_payload,
+            summary=str(result_payload.get("summary") or getattr(message, "summary", "") or ""),
+            metadata=result_metadata,
+            images=list(getattr(message, "images", []) or []),
+            state_snapshot=getattr(message, "state_snapshot", None) if isinstance(getattr(message, "state_snapshot", None), dict) else None,
+        ))
+
+    @staticmethod
+    def _find_message_for_tool_call(conversation, tool_call_id: str) -> Message | None:
+        call_id = str(tool_call_id or "").strip()
+        if not call_id:
+            return None
+        for msg in reversed(getattr(conversation, "messages", []) or []):
+            if str(getattr(msg, "role", "") or "") != "assistant":
+                continue
+            for tool_call in getattr(msg, "tool_calls", None) or []:
+                if isinstance(tool_call, dict) and str(tool_call.get("id") or "").strip() == call_id:
+                    return msg
+        return None
 
     def _forward_channel_bound_response(self, conversation: Conversation, response: Message) -> None:
         if conversation is None or not isinstance(response, Message):

@@ -45,7 +45,7 @@ class LoadSkillTool(BaseTool):
 
     @property
     def category(self) -> str:
-        return "extension"
+        return "read"
 
     @property
     def source(self) -> str:
@@ -92,6 +92,7 @@ class LoadSkillTool(BaseTool):
             f"Execution Mode: {spec.execution_mode}",
             f"User Invocable: {spec.user_invocable}",
             f"Disable Model Invocation: {spec.disable_model_invocation}",
+            "Context Scope: current task only; reload this skill for later unrelated tasks.",
         ]
         if spec.preferred_cli:
             lines.append(f"Preferred CLI: {', '.join(spec.preferred_cli)}")
@@ -125,7 +126,7 @@ class ReadSkillResourceTool(BaseTool):
 
     @property
     def category(self) -> str:
-        return "extension"
+        return "read"
 
     @property
     def source(self) -> str:

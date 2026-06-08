@@ -153,13 +153,13 @@ class ConversationCommandPresenter:
 
         tool_manager = getattr(getattr(host, "services", None), "tool_manager", None)
         registry = getattr(tool_manager, "registry", None)
-        tool = registry.get_tool("execute_command") if registry is not None and hasattr(registry, "get_tool") else None
+        tool = registry.get_tool("shell__run") if registry is not None and hasattr(registry, "get_tool") else None
         category = normalize_tool_category(str(getattr(tool, "category", "execute") or "execute"))
 
         permissions = ToolPermissionConfig.from_dict((getattr(host, "app_settings", {}) or {}).get("permissions"))
-        effective = permissions.resolve("execute_command", category)
+        effective = permissions.resolve("shell__run", category)
         if not effective.enabled:
-            self._append_info_message("`execute_command` 已被当前权限设置禁用，无法执行 `!` Shell 命令。")
+            self._append_info_message("`shell__run` 已被当前权限设置禁用，无法执行 `!` Shell 命令。")
             return
 
         work_dir = str(getattr(payload, "cwd", "") or getattr(conversation, "work_dir", "") or ".")
@@ -196,7 +196,7 @@ class ConversationCommandPresenter:
                 )
                 context = ToolPermissionResolver.wrap_context_with_policy(context, tool, runtime_policy)
             return await tool_manager.execute_tool_with_context(
-                "execute_command",
+                "shell__run",
                 {"command": command, "cwd": ".", "timeout": 600, "background": False},
                 context,
             )

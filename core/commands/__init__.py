@@ -211,7 +211,12 @@ class CommandRegistry:
             return ""
         work_dir = str((context or {}).get("work_dir") or ".")
         skill = SkillsManager(work_dir).get(normalized)
+        if skill is not None and not resolve_skill_invocation_spec(skill).user_invocable:
+            return ""
         return skill.name if skill else ""
+
+    def _resolve_skill_alias(self, name: str, context: Optional[Dict[str, Any]]) -> str:
+        return self._resolve_skill_name(name, context)
 
     def _list_skill_candidates(self, work_dir: str) -> List[Any]:
         try:

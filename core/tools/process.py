@@ -189,7 +189,7 @@ class CommandExecutionResult:
             return (
                 f"Command started in background in '{cwd}' via {self.backend or 'default shell'}. "
                 f"process_id={self.process_id}, pid={self.pid}. "
-                "Use shell_status, shell_logs, shell_wait, or shell_kill to manage it."
+                "Use shell__status, shell__logs, shell__wait, or shell__kill to manage it."
             )
 
         if self.timed_out:

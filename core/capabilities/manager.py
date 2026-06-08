@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Mapping
 
 from .defaults import default_capabilities_config
-from .types import CapabilitiesConfig, CapabilityConfig, REMOVED_BUILTIN_CAPABILITY_IDS
+from .types import (
+    BUILTIN_CAPABILITY_VISIBILITY_DEFAULTS,
+    CapabilitiesConfig,
+    CapabilityConfig,
+    LEGACY_CAPABILITY_ID_ALIASES,
+    REMOVED_BUILTIN_CAPABILITY_IDS,
+)
 
 
 class CapabilitiesManager:
@@ -13,7 +19,7 @@ class CapabilitiesManager:
 
     The manager is deliberately small: it only merges configuration and offers
     lookups. Runtime execution remains owned by prompt optimizer, context
-    condenser, task executor, or future capability runners.
+    maintenance, task executor, or future capability runners.
     """
 
     def __init__(self, config_path: str | Path | None = None) -> None:
@@ -52,19 +58,39 @@ class CapabilitiesManager:
 
     @staticmethod
     def merge(base: CapabilitiesConfig, override: CapabilitiesConfig) -> CapabilitiesConfig:
-        capabilities: dict[str, CapabilityConfig] = {item.id: item for item in base.capabilities}
+        capabilities: dict[str, CapabilityConfig] = {item.id.lower(): item for item in base.capabilities}
         for item in override.capabilities:
-            if item.id.strip().lower() in REMOVED_BUILTIN_CAPABILITY_IDS:
+            item_id = LEGACY_CAPABILITY_ID_ALIASES.get(item.id.strip().lower(), item.id.strip().lower())
+            if item_id in REMOVED_BUILTIN_CAPABILITY_IDS:
                 continue
-            base_item = capabilities.get(item.id)
+            if item_id != item.id:
+                item = CapabilityConfig(
+                    id=item_id,
+                    name=item.name,
+                    kind=item.kind,
+                    visibility=item.visibility,
+                    execution_mode=item.execution_mode,
+                    model_ref=item.model_ref,
+                    system_prompt=item.system_prompt,
+                    description=item.description,
+                    allowed_tool_categories=item.allowed_tool_categories,
+                    input_schema=item.input_schema,
+                    output_schema=item.output_schema,
+                    options=item.options,
+                )
+            base_item = capabilities.get(item_id)
             if base_item is None:
-                capabilities[item.id] = item
+                capabilities[item_id] = item
                 continue
-            capabilities[item.id] = CapabilityConfig(
-                id=item.id or base_item.id,
+            visibility = item.visibility or base_item.visibility
+            if item_id in BUILTIN_CAPABILITY_VISIBILITY_DEFAULTS and visibility == "agent_tool" and base_item.visibility != "agent_tool":
+                visibility = base_item.visibility
+            capabilities[item_id] = CapabilityConfig(
+                id=item_id or base_item.id,
                 name=item.name or base_item.name,
                 kind=item.kind or base_item.kind,
-                enabled=item.enabled,
+                visibility=visibility,
+                execution_mode=item.execution_mode or base_item.execution_mode,
                 model_ref=item.model_ref or base_item.model_ref,
                 system_prompt=item.system_prompt or base_item.system_prompt,
                 description=item.description or base_item.description,

@@ -5,12 +5,13 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from core.config.schema import ChannelConfig
 from models.provider import Provider
 from ui.dialogs.provider_config_dialog import ProviderConfigDialog
 from ui.settings.settings_dialog import SettingsDialog
+from ui.utils.theme import palette_for_theme
 
 if TYPE_CHECKING:
     from ui.main_window import MainWindow
@@ -23,6 +24,8 @@ class SettingsPresenter:
 
     def __init__(self, window: MainWindow):
         self._window = window
+        self._applied_theme_key: str | None = None
+        self._applied_stylesheet: str = ""
 
     def apply_theme(self) -> None:
         """Apply theme based on app settings."""
@@ -44,9 +47,35 @@ class SettingsPresenter:
                     parts.append(f.read())
 
             if parts:
-                self._window.setStyleSheet("\n\n".join(parts))
+                stylesheet = "\n\n".join(parts)
+                theme_key = f"{theme}:{len(stylesheet)}"
+                if theme_key != self._applied_theme_key or stylesheet != self._applied_stylesheet:
+                    app = QApplication.instance()
+                    if app is not None:
+                        app.setProperty("theme", theme)
+                        app.setPalette(palette_for_theme(theme))
+                        app.setStyleSheet(stylesheet)
+                    self._window.setProperty("theme", theme)
+                    self._sync_widget_theme(theme)
+                    self._window.setStyleSheet("")
+                    self._applied_theme_key = theme_key
+                    self._applied_stylesheet = stylesheet
         except Exception as e:
             logger.error("Error loading theme: %s", e)
+
+    def _sync_widget_theme(self, theme: str) -> None:
+        for name in ("sidebar", "chat_view", "input_area", "stats_panel"):
+            widget = getattr(self._window, name, None)
+            if widget is not None:
+                widget.setProperty("theme", theme)
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+                widget.update()
+        sidebar = getattr(self._window, "sidebar", None)
+        conversation_list = getattr(sidebar, "conversation_list", None)
+        if conversation_list is not None:
+            conversation_list.setProperty("theme", theme)
+            conversation_list.viewport().update()
 
     def apply_proxy(self) -> None:
         """Update environment variables for HTTP proxy."""
@@ -71,6 +100,10 @@ class SettingsPresenter:
         host.providers = host.services.provider_catalog_service.snapshot(providers)
         if persist:
             host.services.provider_catalog_service.save(host.providers)
+        try:
+            host.stats_panel.set_providers(host.providers)
+        except Exception as e:
+            logger.debug("Failed to sync providers into stats panel: %s", e)
         host.input_area.set_providers(
             host.providers,
             selected_provider_id=selected_provider_id,
@@ -86,7 +119,7 @@ class SettingsPresenter:
                 provider_id=current_provider_id,
                 model=current_model,
             )
-            host.chat_view.set_model_options(host.providers, current_model_ref=current_ref)
+            host.input_area.set_model_ref_options(host.providers, current_model_ref=current_ref)
         except Exception as e:
             logger.debug("Failed to refresh header model options after provider update: %s", e)
         host.services.app_coordinator.sync_catalog(providers=host.providers)
@@ -183,7 +216,6 @@ class SettingsPresenter:
             except Exception as e:
                 logger.debug("Failed to apply updated LLM timeout: %s", e)
 
-            host.services.tool_manager.update_permissions(host.app_settings)
             host.services.tool_manager.refresh_search_config()
             host.services.app_settings_service.save(host.app_settings)
 
@@ -224,8 +256,10 @@ class SettingsPresenter:
             except Exception as e:
                 logger.debug("Failed to refresh sidebar after settings update: %s", e)
 
-            host.stats_panel.setVisible(host.app_settings['show_stats'])
-            host.toggle_stats_action.setChecked(host.app_settings['show_stats'])
+            self.apply_shell_visibility(
+                show_sidebar=bool(host.app_settings.get("show_sidebar", True)),
+                show_stats=bool(host.app_settings.get("show_stats", False)),
+            )
             self.apply_theme()
 
     def _materialize_channel_sessions(
@@ -275,11 +309,56 @@ class SettingsPresenter:
         binding = settings.get("channel_binding") if isinstance(settings, dict) else None
         return bool(isinstance(binding, dict) and binding.get("manual_test_session"))
 
+    def toggle_sidebar_panel(self, visible: bool) -> None:
+        host = self._window
+        host.app_settings['show_sidebar'] = bool(visible)
+        self.apply_shell_visibility(show_sidebar=bool(visible))
+        host.services.app_settings_service.save(host.app_settings)
+
     def toggle_stats_panel(self, visible: bool) -> None:
         host = self._window
-        host.stats_panel.setVisible(visible)
         host.app_settings['show_stats'] = bool(visible)
+        self.apply_shell_visibility(show_stats=bool(visible))
         host.services.app_settings_service.save(host.app_settings)
+
+    def apply_shell_visibility(
+        self,
+        *,
+        show_sidebar: bool | None = None,
+        show_stats: bool | None = None,
+    ) -> None:
+        host = self._window
+        if show_sidebar is None:
+            show_sidebar = bool(host.app_settings.get("show_sidebar", True))
+        if show_stats is None:
+            show_stats = bool(host.app_settings.get("show_stats", False))
+
+        host.sidebar.setVisible(bool(show_sidebar))
+        host.stats_panel.setVisible(bool(show_stats))
+        self._sync_visibility_controls(
+            show_sidebar=bool(show_sidebar),
+            show_stats=bool(show_stats),
+        )
+
+    def _sync_visibility_controls(self, *, show_sidebar: bool, show_stats: bool) -> None:
+        host = self._window
+        for name, value in (
+            ("toggle_sidebar_action", show_sidebar),
+            ("toggle_sidebar_btn", show_sidebar),
+            ("toggle_stats_action", show_stats),
+            ("toggle_stats_btn", show_stats),
+        ):
+            control = getattr(host, name, None)
+            if control is None:
+                continue
+            try:
+                control.blockSignals(True)
+                control.setChecked(bool(value))
+            finally:
+                try:
+                    control.blockSignals(False)
+                except Exception:
+                    pass
 
     def persist_main_splitter_layout(self, _pos: int, _index: int) -> None:
         self._persist_splitter_layout('splitter_sizes', self._window.splitter.sizes(), 'splitter')
@@ -290,13 +369,15 @@ class SettingsPresenter:
     def apply_bootstrap_shell_state(
         self,
         *,
+        show_sidebar: bool,
         show_stats: bool,
         splitter_sizes: list[int] | None,
         chat_splitter_sizes: list[int] | None,
     ) -> None:
         host = self._window
-        host.stats_panel.setVisible(bool(show_stats))
-        host.toggle_stats_action.setChecked(bool(show_stats))
+        host.app_settings["show_sidebar"] = bool(show_sidebar)
+        host.app_settings["show_stats"] = bool(show_stats)
+        self.apply_shell_visibility(show_sidebar=bool(show_sidebar), show_stats=bool(show_stats))
 
         if splitter_sizes is not None:
             try:

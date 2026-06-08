@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.prompts.providers.base import ProviderContext, synthetic_context_message
+from core.prompts.providers.base import MessageProviderMixin, ProviderContext, context_item
 from core.state.services.memory_service import MemoryService
 
 DEFAULT_MEMORY_SOURCES = ("session", "workspace", "global")
@@ -28,11 +28,11 @@ def selected_memory_sources(conversation) -> tuple[str, ...]:
     return tuple(normalized) or DEFAULT_MEMORY_SOURCES
 
 
-class MemoryProvider:
+class MemoryProvider(MessageProviderMixin):
     name = "memory"
     priority = 30
 
-    def build(self, context: ProviderContext):
+    def build_items(self, context: ProviderContext):
         try:
             content = MemoryService.build_prompt_section(
                 context.conversation.get_state(),
@@ -42,4 +42,4 @@ class MemoryProvider:
             )
         except Exception:
             content = ""
-        return [synthetic_context_message(content, kind=self.name)] if content else []
+        return [context_item(content, kind=self.name, priority=self.priority, item_id="memory:relevant", source_ref="MemoryService")] if content else []

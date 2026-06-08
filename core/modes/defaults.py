@@ -3,7 +3,7 @@ from __future__ import annotations
 from core.modes.types import ModeConfig
 
 
-_PRIMARY_MODE_SLUGS = ("chat", "agent", "channel", "explore", "plan")
+_PRIMARY_MODE_SLUGS = ("chat", "agent", "plan", "review")
 
 
 _AGENT_AUTONOMY_SUFFIX = (
@@ -13,26 +13,26 @@ _AGENT_AUTONOMY_SUFFIX = (
     "- Do NOT stop and wait for user confirmation unless the task specification is genuinely ambiguous.\n"
     "- After modifying files, immediately run tests or check for errors to verify your changes.\n"
     "- If you encounter an error, analyze it and try a different approach instead of giving up.\n"
-    "- When the task is fully complete, call `attempt_completion` to present your result.\n"
-    "- Track progress with `manage_todo` at key milestones: create todos only for multi-step work, keep exactly one `in_progress`, and mark each item complete immediately.\n"
-    "- Maintain a short working plan with `manage_artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` for multi-step work.\n"
+    "- When the task is fully complete, call `agent__complete` to present your result.\n"
+    "- Track progress with `state__todo` at key milestones: create todos only for multi-step work, keep exactly one `in_progress`, and mark each item complete immediately.\n"
+    "- Maintain a short working plan with `state__artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` for multi-step work.\n"
     "- If a current plan already exists, treat it as the execution source of truth instead of improvising a new workflow.\n"
-    "- Store durable facts and confirmed decisions with `manage_memory`; do not store long plans or temporary reports as memory.\n"
-    "- Use `manage_artifact(name=\"report\", kind=\"report\", status=\"final\")` for substantial final verification notes.\n"
-    "- If another mode is a better fit, call `switch_mode` or delegate focused work via `subagent__custom`. "
-    "Use `subagent__read_analyze` for multi-file long-document analysis, `subagent__search` for research, and `capability__summarize_text` for one file or one long text."
+    "- Store durable facts and confirmed decisions with `state__memory`; do not store long plans or temporary reports as memory.\n"
+    "- Use `state__artifact(name=\"report\", kind=\"report\", status=\"final\")` for substantial final verification notes.\n"
+    "- If another mode is a better fit, call `agent__switch` or delegate focused work via `agent__run`. "
+    "Use `agent__run(agent_id=\"read_analyze\")` for multi-file long-document analysis, `agent__run(agent_id=\"search\")` for research, and `capability__summarize` for one file or one long text."
 )
 
 _PLANNING_AUTONOMY_SUFFIX = (
     "\n\n"
     "## Workflow Requirements\n"
-    "- Keep a concise plan in `manage_artifact(name=\"plan\", kind=\"plan\", status=\"draft\")`.\n"
+    "- Keep a concise plan in `state__artifact(name=\"plan\", kind=\"plan\", status=\"draft\")`.\n"
     "- The plan artifact is the primary deliverable in this mode; refine it before concluding.\n"
     "- Do not implement code changes or run implementation commands in plan mode unless the user explicitly asks to leave planning and switch modes.\n"
-    "- Keep todo state current with `manage_todo` for complex planning checkpoints.\n"
+    "- Keep todo state current with `state__todo` for complex planning checkpoints.\n"
     "- Mark the plan status as `approved` only after user alignment; use `related`/`references` for important files and symbols.\n"
-    "- If another mode is better suited, call `switch_mode`; if focused work should proceed independently, use `subagent__custom`, `subagent__read_analyze`, or `subagent__search`.\n"
-    "- When the planning or orchestration task is complete, call `attempt_completion` with a concise result."
+    "- If another mode is better suited, call `agent__switch`; if focused work should proceed independently, use `agent__run`.\n"
+    "- When the planning or orchestration task is complete, call `agent__complete` with a concise result."
 )
 
 DEFAULT_MODES: list[ModeConfig] = [
@@ -89,12 +89,48 @@ DEFAULT_MODES: list[ModeConfig] = [
         role_definition=(
             "You are a careful read-only codebase explorer. Search, inspect, and summarize facts from the workspace. "
             "Do not modify files or run destructive commands; focus on evidence-backed findings. "
-            "For multi-file exploration, save reusable findings in `manage_artifact(name=\"exploration\", kind=\"exploration\", status=\"draft\")` with related files and symbols."
+            "For multi-file exploration, save reusable findings in `state__artifact(name=\"exploration\", kind=\"exploration\", status=\"draft\")` with related files and symbols."
         ),
         when_to_use="需要快速阅读项目、定位代码、回答架构/实现问题，但不直接改代码。",
         description="只读探索与代码问答",
         allowed_tool_categories=("read", "search", "mcp", "manage"),
         custom_instructions="回答时引用关键文件与符号；采用 broad-to-narrow 搜索；如需要修改，先切换到 Agent 或 Plan。",
+        source="builtin",
+    ),
+    ModeConfig(
+        slug="search",
+        name="Search",
+        role_definition=(
+            "You are a nested-only research and fact-checking agent. Use web and local search/read tools, "
+            "cite sources when possible, and do not modify files or run commands."
+        ),
+        when_to_use="Nested-only: 多轮搜索、事实核查、来源综合。",
+        description="嵌套搜索 Agent",
+        allowed_tool_categories=("read", "search", "manage"),
+        source="builtin",
+    ),
+    ModeConfig(
+        slug="read_analyze",
+        name="Read Analyze",
+        role_definition=(
+            "You are a nested-only read-analysis agent for multi-file or long-document synthesis. "
+            "Compare evidence, preserve provenance, and return a concise structured report."
+        ),
+        when_to_use="Nested-only: 多文件、多来源、长文综合分析。",
+        description="嵌套只读分析 Agent",
+        allowed_tool_categories=("read", "manage"),
+        source="builtin",
+    ),
+    ModeConfig(
+        slug="review",
+        name="Review",
+        role_definition=(
+            "You are a careful reviewer. Inspect plans, diffs, implementation results, and risks. "
+            "Prioritize findings with evidence and avoid making changes unless explicitly asked to switch to agent mode."
+        ),
+        when_to_use="审查计划、diff、实现结果和风险。",
+        description="审查与风险分析",
+        allowed_tool_categories=("read", "search", "manage", "delegate", "extension", "mcp"),
         source="builtin",
     ),
 ]

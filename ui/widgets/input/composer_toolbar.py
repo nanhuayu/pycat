@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 
 from ui.utils.combo_box import configure_combo_popup
 from ui.utils.icon_manager import Icons
+from ui.widgets.model_ref_selector import ModelRefCombo
 
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,11 @@ logger = logging.getLogger(__name__)
 class ComposerToolbar(QWidget):
     """Toolbar widget for provider/model/mode controls."""
 
-    _BUTTON_SIZE = QSize(28, 28)
-    _ICON_SIZE = QSize(20, 20)
+    _BUTTON_SIZE = QSize(30, 30)
+    _SEND_BUTTON_SIZE = QSize(30, 30)
+    _ICON_SIZE = QSize(17, 17)
+    _MODEL_SELECTOR_MIN_WIDTH = 104
+    _MODEL_SELECTOR_MAX_WIDTH = 164
 
     attach_requested = pyqtSignal()
     conversation_settings_requested = pyqtSignal()
@@ -26,10 +30,12 @@ class ComposerToolbar(QWidget):
     prompt_optimize_requested = pyqtSignal()
     prompt_optimize_cancel_requested = pyqtSignal()
     send_requested = pyqtSignal()
+    model_ref_changed = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._prompt_optimize_busy = False
+        self._suppress_model_ref_signal = False
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -56,7 +62,7 @@ class ComposerToolbar(QWidget):
 
         self.mode_combo = QComboBox()
         self.mode_combo.setObjectName("mode_combo")
-        self._configure_combo(self.mode_combo, minimum=90, maximum=150, popup_minimum=220, tooltip="选择对话模式")
+        self._configure_combo(self.mode_combo, minimum=72, maximum=98, popup_minimum=180, tooltip="选择对话模式")
         layout.addWidget(self.mode_combo)
 
         self.thinking_toggle = self._make_icon_toggle(Icons.BRAIN, "显示思考过程")
@@ -74,16 +80,83 @@ class ComposerToolbar(QWidget):
 
         layout.addStretch()
 
+        self.model_ref_combo = ModelRefCombo([], allow_empty=False, empty_label="选择模型")
+        self.model_ref_combo.setObjectName("bottom_model_selector")
+        self.model_ref_combo.setMinimumContentsLength(1)
+        self.model_ref_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.model_ref_combo.setMinimumWidth(self._MODEL_SELECTOR_MIN_WIDTH)
+        self.model_ref_combo.setMaximumWidth(self._MODEL_SELECTOR_MAX_WIDTH)
+        self.model_ref_combo.setFixedHeight(self._BUTTON_SIZE.height())
+        self.model_ref_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.model_ref_combo.setToolTip("选择当前对话模型")
+        try:
+            line_edit = self.model_ref_combo.lineEdit()
+            line_edit.setTextMargins(0, 0, 0, 0)
+            line_edit.setFrame(False)
+            line_edit.setClearButtonEnabled(False)
+            line_edit.setMinimumWidth(0)
+        except Exception as exc:
+            logger.debug("Failed to compact bottom model selector line edit: %s", exc)
+        self.model_ref_combo.currentIndexChanged.connect(self._emit_model_ref_changed)
+        self.model_ref_combo.currentTextChanged.connect(self._compact_model_ref_combo_width)
+        try:
+            self.model_ref_combo.lineEdit().editingFinished.connect(self._emit_model_ref_changed)
+        except Exception as exc:
+            logger.debug("Failed to connect bottom model selector editingFinished: %s", exc)
+        self._compact_model_ref_combo_width()
+        layout.addWidget(self.model_ref_combo)
+
         self.prompt_optimize_btn = self._make_icon_button(Icons.WAND, "优化提示词")
         self.prompt_optimize_btn.clicked.connect(self._handle_prompt_optimize_clicked)
         layout.addWidget(self.prompt_optimize_btn)
 
         self.send_btn = self._make_button("", "发送消息 (Ctrl+Enter)")
+        self.send_btn.setObjectName("send_btn")
+        self.send_btn.setFixedSize(self._SEND_BUTTON_SIZE)
         self._set_send_button_icon(is_streaming=False, style=self.style())
         self.send_btn.clicked.connect(self.send_requested.emit)
         layout.addWidget(self.send_btn)
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def set_model_ref_options(self, providers: list, current_model_ref: str = "") -> None:
+        current = current_model_ref or self.model_ref_combo.model_ref()
+        self._suppress_model_ref_signal = True
+        self.model_ref_combo.blockSignals(True)
+        try:
+            self.model_ref_combo.set_providers(providers or [], current_model_ref=current)
+        finally:
+            self.model_ref_combo.blockSignals(False)
+            self._suppress_model_ref_signal = False
+        self._compact_model_ref_combo_width()
+
+    def set_model_ref(self, model_ref: str) -> None:
+        self._suppress_model_ref_signal = True
+        self.model_ref_combo.blockSignals(True)
+        try:
+            self.model_ref_combo.set_model_ref(model_ref or "")
+        finally:
+            self.model_ref_combo.blockSignals(False)
+            self._suppress_model_ref_signal = False
+        self._compact_model_ref_combo_width()
+
+    def model_ref(self) -> str:
+        return self.model_ref_combo.model_ref()
+
+    def _emit_model_ref_changed(self) -> None:
+        if self._suppress_model_ref_signal:
+            return
+        self.model_ref_changed.emit(self.model_ref_combo.model_ref())
+
+    def _compact_model_ref_combo_width(self, *_args) -> None:
+        try:
+            text = self.model_ref_combo.currentText() or self.model_ref_combo.model_ref() or "选择模型"
+            text_width = self.model_ref_combo.fontMetrics().horizontalAdvance(str(text))
+            width = text_width + 22
+            width = max(self._MODEL_SELECTOR_MIN_WIDTH, min(self._MODEL_SELECTOR_MAX_WIDTH, width))
+            self.model_ref_combo.setFixedWidth(width)
+        except Exception as exc:
+            logger.debug("Failed to compact bottom model selector width: %s", exc)
 
     def _make_button(self, text: str, tooltip: str) -> QToolButton:
         button = QToolButton()
@@ -121,7 +194,7 @@ class ComposerToolbar(QWidget):
             icon = (
                 Icons.get(Icons.STOP, color=Icons.COLOR_ERROR, scale_factor=1.0)
                 if is_streaming
-                else Icons.get(Icons.SEND, scale_factor=1.0)
+                else Icons.get(Icons.SEND, color="#ffffff", scale_factor=1.0)
             )
             self.send_btn.setIcon(icon)
             self.send_btn.setIconSize(self._ICON_SIZE)
@@ -157,7 +230,10 @@ class ComposerToolbar(QWidget):
     ) -> None:
         combo.setMinimumWidth(minimum)
         combo.setMaximumWidth(maximum)
+        combo.setFixedHeight(self._BUTTON_SIZE.height())
+        combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         combo.setMaxVisibleItems(18)
         combo.setToolTip(tooltip)
+        combo.setMinimumContentsLength(max(4, min(12, minimum // 8)))
         combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContentsOnFirstShow)
         configure_combo_popup(combo, popup_minimum_width=popup_minimum)

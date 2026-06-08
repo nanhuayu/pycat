@@ -24,12 +24,11 @@ from core.channel.sources.feishu.runtime_service import FeishuRuntimeSource
 from core.channel.sources.qqbot.runtime_service import QQBotRuntimeSource
 from core.channel.sources.telegram.runtime_service import TelegramRuntimeSource
 from core.channel.sources.wechat.runtime_service import WeChatRuntimeSource
-from core.config.schema import AppConfig, ChannelConfig, ToolPermissionConfig, ToolPolicy
+from core.config.schema import AppConfig, ChannelConfig
 from core.runtime.events import TurnEvent, TurnEventKind
+from core.runtime.policy_factory import RuntimePolicyFactory
 from core.runtime.turn_engine import TurnEngine
-from core.runtime.turn_policy import TurnPolicy
-from core.task.builder import build_run_policy
-from core.task.types import TaskStatus
+from core.task.types import RunPolicy, TaskStatus
 from core.tools.catalog import ToolSelectionPolicy
 from models.conversation import Conversation, Message
 from models.provider import Provider
@@ -660,7 +659,7 @@ class ChannelRuntimeService:
             if provider is None:
                 raise RuntimeError("当前未找到可用服务商，请先在设置里配置 Provider 和默认模型。")
 
-            policy = self._build_turn_policy(conversation, channel)
+            policy = self._build_run_policy(conversation, channel)
             result = self._run_turn(
                 provider=provider,
                 conversation=conversation,
@@ -911,15 +910,11 @@ class ChannelRuntimeService:
             manual_session=manual_session,
         )
         tool_selection = getattr(channel, "tool_selection", None) or ToolSelectionPolicy.from_categories(("read", "search", "manage"))
-        tool_permissions = ToolPermissionConfig(
-            tools={"ask_questions": ToolPolicy(enabled=False, auto_approve=False)}
-        )
         self._conv_service.set_settings(
             conversation,
             {
                 "show_thinking": False,
                 "tool_selection": tool_selection.to_dict(),
-                "tool_permissions": tool_permissions.to_dict(),
                 "channel_binding": binding,
             },
         )
@@ -1030,48 +1025,36 @@ class ChannelRuntimeService:
                 return provider
         return enabled[0]
 
-    def _build_turn_policy(self, conversation: Conversation, channel: ChannelConfig) -> TurnPolicy:
+    def _build_run_policy(self, conversation: Conversation, channel: ChannelConfig) -> RunPolicy:
         settings = getattr(conversation, "settings", {}) or {}
         mode_slug = str(getattr(conversation, "mode", "") or "").strip().lower()
         if not mode_slug:
             mode_slug = "agent"
 
-        # Load persisted tool permissions.
-        tool_permissions = None
+        app_settings: dict[str, Any] = {}
         try:
-            app_settings = self._storage.load_settings()
-            raw_permissions = app_settings.get("permissions")
-            if raw_permissions and isinstance(raw_permissions, dict):
-                tool_permissions = ToolPermissionConfig.from_dict(raw_permissions)
+            app_settings = dict(self._storage.load_settings() or {})
         except Exception as exc:
-            logger.debug("Failed to load global tool permissions for turn policy: %s", exc)
+            logger.debug("Failed to load app settings for channel run policy: %s", exc)
 
-        base_permissions = tool_permissions or ToolPermissionConfig()
-        conversation_permissions = ToolPermissionConfig.from_dict(settings.get("tool_permissions"))
-        tool_permissions = ToolPermissionConfig(
-            category_defaults=dict(base_permissions.category_defaults or {}),
-            tools={
-                **dict(base_permissions.tools or {}),
-                **dict(conversation_permissions.tools or {}),
-                "ask_questions": ToolPolicy(enabled=False, auto_approve=False),
-            },
-        )
         tool_selection = ToolSelectionPolicy.from_dict(settings.get("tool_selection"))
 
-        policy = build_run_policy(
+        return RuntimePolicyFactory.build(
+            conversation=conversation,
+            app_settings=app_settings,
             mode_slug=mode_slug,
             enable_thinking=bool(settings.get("show_thinking", False)),
             tool_selection=tool_selection,
-            tool_permissions=tool_permissions,
+            disabled_tools=("user__ask",),
+            source="channel",
         )
-        return TurnPolicy.from_run_policy(policy, conversation=conversation)
 
     def _run_turn(
         self,
         *,
         provider: Provider,
         conversation: Conversation,
-        policy: TurnPolicy,
+        policy: RunPolicy,
         channel: ChannelConfig,
         request_id: str = "",
         assistant_step_callback: Callable[[Message], None] | None = None,

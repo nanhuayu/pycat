@@ -52,6 +52,7 @@ class McpServerEditDialog(QDialog):
         self.env_edit.setMaximumHeight(110)
         self.enabled_check = QCheckBox("启用此服务")
         self.enabled_check.setChecked(True)
+        self.enabled_check.setVisible(False)
 
         layout.addRow("名称", self.name_edit)
         layout.addRow("命令", self.command_edit)
@@ -149,23 +150,33 @@ class McpSettingsWidget(QWidget):
         header.addWidget(self.count_label)
         header.addStretch()
 
-        add_btn = QPushButton("新增")
-        add_btn.setIcon(Icons.get(Icons.PLUS, scale_factor=1.0))
-        add_btn.clicked.connect(self.add_server)
-        header.addWidget(add_btn)
+        self.add_btn = QPushButton("新增")
+        self.add_btn.setObjectName("settings_action_btn")
+        self.add_btn.setIcon(Icons.get(Icons.PLUS, scale_factor=1.0))
+        self.add_btn.clicked.connect(self.add_server)
+        header.addWidget(self.add_btn)
 
-        edit_btn = QPushButton("编辑")
-        edit_btn.setIcon(Icons.get(Icons.EDIT, scale_factor=1.0))
-        edit_btn.clicked.connect(self.edit_server)
-        header.addWidget(edit_btn)
+        self.edit_btn = QPushButton("编辑")
+        self.edit_btn.setObjectName("settings_action_btn")
+        self.edit_btn.setIcon(Icons.get(Icons.EDIT, scale_factor=1.0))
+        self.edit_btn.clicked.connect(self.edit_server)
+        header.addWidget(self.edit_btn)
 
-        remove_btn = QPushButton("删除")
-        remove_btn.setIcon(Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR, scale_factor=1.0))
-        remove_btn.setProperty("danger", True)
-        remove_btn.clicked.connect(self.remove_server)
-        header.addWidget(remove_btn)
+        self.toggle_btn = QPushButton("启用")
+        self.toggle_btn.setObjectName("settings_action_btn")
+        self.toggle_btn.setIcon(Icons.get(Icons.PLAY, scale_factor=1.0))
+        self.toggle_btn.clicked.connect(self.toggle_server_enabled)
+        header.addWidget(self.toggle_btn)
+
+        self.remove_btn = QPushButton("删除")
+        self.remove_btn.setObjectName("settings_action_btn")
+        self.remove_btn.setIcon(Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR, scale_factor=1.0))
+        self.remove_btn.setProperty("danger", True)
+        self.remove_btn.clicked.connect(self.remove_server)
+        header.addWidget(self.remove_btn)
 
         reload_btn = QPushButton("重载")
+        reload_btn.setObjectName("settings_action_btn")
         reload_btn.setIcon(Icons.get(Icons.REFRESH, scale_factor=1.0))
         reload_btn.clicked.connect(self.reload_servers)
         header.addWidget(reload_btn)
@@ -209,7 +220,7 @@ class McpSettingsWidget(QWidget):
         self.detail_env = QTextEdit()
         self.detail_env.setReadOnly(True)
         self.detail_env.setPlaceholderText("当前服务没有环境变量")
-        self.detail_env.setMaximumHeight(100)
+        self.detail_env.setMaximumHeight(88)
         detail_layout.addWidget(self.detail_env)
 
         # --- Cached tools (read-only hint; per-tool enable/auto-approve lives in Agent page) ---
@@ -264,6 +275,7 @@ class McpSettingsWidget(QWidget):
 
         if self.list_widget.count() == 0:
             self._update_detail_panel(None)
+            self._sync_action_state()
             return
 
         restore_row = 0
@@ -274,6 +286,7 @@ class McpSettingsWidget(QWidget):
                     restore_row = index
                     break
         self.list_widget.setCurrentRow(restore_row)
+        self._sync_action_state()
 
     def add_server(self):
         dialog = McpServerEditDialog(parent=self)
@@ -309,6 +322,26 @@ class McpSettingsWidget(QWidget):
         self.servers = [s for s in self.servers if s is not server]
         self.save_and_refresh()
 
+    def toggle_server_enabled(self):
+        item = self.list_widget.currentItem()
+        if item is None:
+            return
+        server = item.data(Qt.ItemDataRole.UserRole)
+        if server is None:
+            return
+        idx = self.servers.index(server)
+        current = self.servers[idx]
+        self.servers[idx] = McpServerConfig(
+            name=current.name,
+            command=current.command,
+            args=list(current.args or []),
+            env=dict(current.env or {}),
+            enabled=not bool(current.enabled),
+            cached_tools=list(getattr(current, "cached_tools", []) or []),
+        )
+        self.save_and_refresh()
+        self.list_widget.setCurrentRow(idx)
+
     def reload_servers(self):
         self.servers = self.storage.load_mcp_servers()
         self.refresh_list()
@@ -320,6 +353,18 @@ class McpSettingsWidget(QWidget):
     def _on_selection_changed(self, current, _previous) -> None:
         server = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
         self._update_detail_panel(server)
+        self._sync_action_state()
+
+    def _sync_action_state(self) -> None:
+        item = self.list_widget.currentItem() if hasattr(self, "list_widget") else None
+        server = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        has_selection = server is not None
+        self.edit_btn.setEnabled(has_selection)
+        self.toggle_btn.setEnabled(has_selection)
+        self.remove_btn.setEnabled(has_selection)
+        enabled = bool(getattr(server, "enabled", False)) if server is not None else False
+        self.toggle_btn.setText("停用" if enabled else "启用")
+        self.toggle_btn.setIcon(Icons.get(Icons.PAUSE if enabled else Icons.PLAY, scale_factor=1.0))
 
     def _update_detail_panel(self, server: Optional[McpServerConfig]) -> None:
         if server is None:

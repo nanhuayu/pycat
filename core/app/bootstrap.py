@@ -14,7 +14,8 @@ class AppBootstrapState:
     settings: dict[str, Any]
     providers: tuple[Provider, ...]
     conversations: tuple[dict[str, Any], ...]
-    show_stats: bool = True
+    show_sidebar: bool = True
+    show_stats: bool = False
     splitter_sizes: tuple[int, int, int] | None = None
     chat_splitter_sizes: tuple[int, int] | None = None
 
@@ -48,7 +49,8 @@ class AppBootstrap:
             settings=settings,
             providers=tuple(providers),
             conversations=conversations,
-            show_stats=bool(settings.get("show_stats", True)),
+            show_sidebar=bool(settings.get("show_sidebar", True)),
+            show_stats=bool(settings.get("show_stats", False)),
             splitter_sizes=self._coerce_sizes(settings.get("splitter_sizes"), expected=3),
             chat_splitter_sizes=self._coerce_sizes(settings.get("chat_splitter_sizes"), expected=2),
         )

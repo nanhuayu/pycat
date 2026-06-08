@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QGroupBox,
     QVBoxLayout,
     QWidget,
 )
@@ -40,8 +41,8 @@ class ChannelInstanceItem(QListWidgetItem):
         super().__init__()
         self.instance = instance
         enabled_label = "启用" if instance.config.enabled else "停用"
-        self.setText(f"{instance.title} · {enabled_label} · {instance.status_label}")
-        self.setIcon(Icons.get(instance.definition.icon_name, scale_factor=0.9))
+        self.setText(f"{instance.title}\n{enabled_label} · {instance.status_label}")
+        self.setIcon(Icons.get(Icons.PLAY if instance.config.enabled else Icons.PAUSE, scale_factor=0.9))
         validation = "\n".join(instance.validation_errors) if instance.validation_errors else "配置校验通过"
         summary = instance.summary or instance.config.source or "未填写摘要"
         self.setToolTip(
@@ -81,11 +82,10 @@ class ChannelsPage(QWidget):
         body = QHBoxLayout()
         body.setSpacing(14)
 
-        left_panel = QVBoxLayout()
+        left_group = QGroupBox("频道类型")
+        left_panel = QVBoxLayout(left_group)
+        left_panel.setContentsMargins(10, 10, 10, 10)
         left_panel.setSpacing(8)
-        left_title = QLabel("频道类型")
-        left_title.setProperty("heading", True)
-        left_panel.addWidget(left_title)
 
         self.type_list = QListWidget()
         self.type_list.setObjectName("settings_list")
@@ -93,31 +93,37 @@ class ChannelsPage(QWidget):
         self.type_list.setMaximumWidth(220)
         self.type_list.currentRowChanged.connect(self._on_type_changed)
         left_panel.addWidget(self.type_list, 1)
-        body.addLayout(left_panel, 2)
+        body.addWidget(left_group, 2)
 
-        right_panel = QVBoxLayout()
+        right_group = QGroupBox("连接")
+        right_panel = QVBoxLayout(right_group)
+        right_panel.setContentsMargins(10, 10, 10, 10)
         right_panel.setSpacing(10)
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
         self.add_btn = QPushButton("新增")
+        self.add_btn.setObjectName("settings_action_btn")
         self.add_btn.setIcon(Icons.get(Icons.PLUS, scale_factor=1.0))
         self.add_btn.clicked.connect(self._add_channel)
         actions.addWidget(self.add_btn)
 
         self.edit_btn = QPushButton("编辑")
+        self.edit_btn.setObjectName("settings_action_btn")
         self.edit_btn.setIcon(Icons.get(Icons.EDIT, scale_factor=1.0))
         self.edit_btn.clicked.connect(self._edit_channel)
         actions.addWidget(self.edit_btn)
 
         self.toggle_btn = QPushButton("启用")
+        self.toggle_btn.setObjectName("settings_action_btn")
         self.toggle_btn.setIcon(Icons.get(Icons.PLAY, scale_factor=1.0))
         self.toggle_btn.clicked.connect(self._toggle_channel_enabled)
         actions.addWidget(self.toggle_btn)
 
         self.remove_btn = QPushButton("删除")
+        self.remove_btn.setObjectName("settings_action_btn")
         self.remove_btn.setProperty("danger", True)
-        self.remove_btn.setIcon(Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR, scale_factor=1.0))
+        self.remove_btn.setIcon(Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR, scale_factor=1.0))
         self.remove_btn.clicked.connect(self._remove_channel)
         actions.addWidget(self.remove_btn)
         actions.addStretch(1)
@@ -132,9 +138,9 @@ class ChannelsPage(QWidget):
         right_panel.addWidget(self.instance_list, 3)
 
         self.detail_card = QFrame()
-        self.detail_card.setObjectName("task_card")
+        self.detail_card.setObjectName("settings_detail_card")
         detail_layout = QVBoxLayout(self.detail_card)
-        detail_layout.setContentsMargins(14, 12, 14, 12)
+        detail_layout.setContentsMargins(10, 8, 10, 8)
         detail_layout.setSpacing(6)
 
         self.detail_title = QLabel("详情")
@@ -156,7 +162,7 @@ class ChannelsPage(QWidget):
         detail_layout.addWidget(self.detail_hint)
         right_panel.addWidget(self.detail_card, 2)
 
-        body.addLayout(right_panel, 5)
+        body.addWidget(right_group, 5)
         layout.addLayout(body, 1)
 
         self._populate_type_list()

@@ -138,21 +138,25 @@ class ModesPage(QWidget):
 
         row = QHBoxLayout()
         btn_open_dir = QPushButton("打开目录")
+        btn_open_dir.setObjectName("settings_action_btn")
         btn_open_dir.setIcon(Icons.get(Icons.FOLDER, scale_factor=1.0))
         btn_open_dir.clicked.connect(self._open_config_dir)
         row.addWidget(btn_open_dir)
 
         btn_reload = QPushButton("重新加载")
+        btn_reload.setObjectName("settings_action_btn")
         btn_reload.setIcon(Icons.get(Icons.REFRESH, scale_factor=1.0))
         btn_reload.clicked.connect(self.reload_from_disk)
         row.addWidget(btn_reload)
 
         btn_save = QPushButton("保存")
+        btn_save.setObjectName("settings_action_btn")
         btn_save.setProperty("primary", True)
         btn_save.clicked.connect(self._save_clicked)
         row.addWidget(btn_save)
 
         btn_load_json = QPushButton("载入")
+        btn_load_json.setObjectName("settings_action_btn")
         btn_load_json.setIcon(Icons.get(Icons.IMPORT, scale_factor=1.0))
         btn_load_json.setToolTip("从全局 modes.json 重新载入")
         btn_load_json.clicked.connect(self.reload_from_disk)
@@ -181,12 +185,14 @@ class ModesPage(QWidget):
         header_row.addWidget(self.mode_combo, 1)
 
         btn_add = QPushButton("新增")
+        btn_add.setObjectName("settings_action_btn")
         btn_add.setIcon(Icons.get(Icons.PLUS, scale_factor=1.0))
         btn_add.clicked.connect(self._add_mode)
         header_row.addWidget(btn_add)
 
         btn_del = QPushButton("删除")
-        btn_del.setIcon(Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR, scale_factor=1.0))
+        btn_del.setObjectName("settings_action_btn")
+        btn_del.setIcon(Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR, scale_factor=1.0))
         btn_del.setProperty("danger", True)
         btn_del.clicked.connect(self._delete_mode)
         header_row.addWidget(btn_del)

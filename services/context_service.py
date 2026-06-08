@@ -1,14 +1,11 @@
-"""Context management service.
-
-Wraps ContextCondenser / ContextManager for use by the UI layer,
-providing a simpler API and decoupling UI from core internals.
-"""
+"""Context management service used by the UI layer."""
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from models.conversation import Conversation, Message
+from core.llm.token_budget import estimate_conversation_tokens
+from models.conversation import Conversation
 from models.provider import Provider
 
 logger = logging.getLogger(__name__)
@@ -26,11 +23,14 @@ class ContextService:
         Returns True on success.
         Raises on failure so callers can show an error message.
         """
-        from core.context.condenser import ContextCondenser
+        from core.context.maintenance import ContextMaintenanceService
 
-        condenser = ContextCondenser(self._client)
-        state = conversation.get_state() if hasattr(conversation, "get_state") else None
-        condenser.condense_state(conversation, provider, state)
+        ContextMaintenanceService().maintain(
+            conversation,
+            context_window_limit=0,
+            current_seq=conversation.current_seq_id(),
+            force=True,
+        )
         return True
 
     async def auto_condense(
@@ -40,27 +40,22 @@ class ContextService:
         context_window_limit: int,
         app_config: Any = None,
     ) -> None:
-        """Run the full async condense pipeline (per-message + global archive)."""
-        from core.context.condenser import ContextCondenser
+        """Run the full async context maintenance pipeline."""
+        from core.context.maintenance import ContextMaintenanceService
 
-        condenser = ContextCondenser(self._client)
-        await condenser.auto_condense(
-            conversation=conversation,
+        await ContextMaintenanceService().maintain_async(
+            conversation,
+            client=self._client,
             provider=provider,
             context_window_limit=context_window_limit,
-            app_config=app_config,
+            current_seq=conversation.current_seq_id(),
         )
 
     @staticmethod
     def estimate_tokens(conversation: Conversation) -> int:
         """Rough token estimate for the active messages in a conversation."""
-        total = 0
-        for msg in conversation.messages:
-            if msg.condense_parent:
-                continue
-            content = msg.content or ""
-            total += len(content) // 4 + 1
-        return total
+        active = [msg for msg in conversation.messages if not msg.condense_parent]
+        return estimate_conversation_tokens(active)
 
     @staticmethod
     def should_compress(

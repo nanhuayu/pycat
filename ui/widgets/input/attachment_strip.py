@@ -49,8 +49,8 @@ class AttachmentPreviewItem(QFrame):
                 thumb.setText("IMG")
         else:
             ext = os.path.splitext(self.source)[1].lower() or "FILE"
+            thumb.setObjectName("file_thumb")
             thumb.setText(ext)
-            thumb.setStyleSheet("font-size: 10px; font-weight: bold; color: #555;")
             thumb.setToolTip(os.path.basename(self.source))
 
         layout.addWidget(thumb)
@@ -59,7 +59,6 @@ class AttachmentPreviewItem(QFrame):
             name_lbl = QLabel(os.path.basename(self.source))
             name_lbl.setObjectName("file_name_lbl")
             name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            name_lbl.setStyleSheet("font-size: 9px; color: #666;")
             elided = name_lbl.fontMetrics().elidedText(
                 name_lbl.text(),
                 Qt.TextElideMode.ElideMiddle,

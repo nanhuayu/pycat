@@ -6,7 +6,7 @@ context compression — extracted from MessagePresenter and MainWindow.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from models.conversation import Conversation
 from models.provider import Provider
@@ -16,69 +16,6 @@ logger = logging.getLogger(__name__)
 
 class AgentService:
     """Stateless helpers for agent execution lifecycle."""
-
-    @staticmethod
-    def build_run_policy(
-        *,
-        conversation: Conversation,
-        app_settings: dict,
-        mode_slug: str | None = None,
-        enable_thinking: bool | None = None,
-        work_dir: str | None = None,
-    ):
-        """Build a RunPolicy from conversation settings + app config.
-
-        Returns a RunPolicy or raises on failure.
-        """
-        from core.task.builder import build_run_policy
-        from core.modes.manager import ModeManager
-        from core.tools.catalog import ToolSelectionPolicy
-
-        slug = mode_slug or str(getattr(conversation, "mode", "chat") or "chat")
-
-        if enable_thinking is None:
-            show_thinking_default = bool(app_settings.get("show_thinking", True))
-            enable_thinking = bool(
-                (conversation.settings or {}).get("show_thinking", show_thinking_default)
-            )
-
-        retry_config = None
-        try:
-            from core.config.schema import RetryConfig
-            raw_retry = app_settings.get("retry")
-            if raw_retry and isinstance(raw_retry, dict):
-                retry_config = RetryConfig.from_dict(raw_retry)
-        except Exception as e:
-            logger.debug("Failed to load retry config: %s", e)
-
-        wd = work_dir or getattr(conversation, "work_dir", None) or None
-        mm = ModeManager(wd)
-
-        tool_permissions = None
-        try:
-            from core.config.schema import ToolPermissionConfig
-            raw_permissions = app_settings.get("permissions")
-            if raw_permissions and isinstance(raw_permissions, dict):
-                tool_permissions = ToolPermissionConfig.from_dict(raw_permissions)
-        except Exception as e:
-            logger.debug("Failed to load global tool permissions: %s", e)
-
-        tool_selection = None
-        try:
-            raw_tool_selection = (conversation.settings or {}).get("tool_selection")
-            if isinstance(raw_tool_selection, dict):
-                tool_selection = ToolSelectionPolicy.from_dict(raw_tool_selection)
-        except Exception as e:
-            logger.debug("Failed to load conversation tool selection: %s", e)
-
-        return build_run_policy(
-            mode_slug=slug,
-            enable_thinking=bool(enable_thinking),
-            tool_selection=tool_selection,
-            mode_manager=mm,
-            retry_config=retry_config,
-            tool_permissions=tool_permissions,
-        )
 
     @staticmethod
     def get_debug_log_path(app_settings: dict, storage) -> str | None:
@@ -97,12 +34,13 @@ class AgentService:
         provider: Provider,
         client: Any,
     ) -> bool:
-        """Run synchronous context condensation.
+        """Run deterministic context maintenance synchronously."""
+        from core.context.maintenance import ContextMaintenanceService
 
-        Returns True on success, raises on failure.
-        """
-        from core.context.condenser import ContextCondenser
-        condenser = ContextCondenser(client)
-        state = conversation.get_state() if hasattr(conversation, "get_state") else None
-        condenser.condense_state(conversation, provider, state)
+        ContextMaintenanceService().maintain(
+            conversation,
+            context_window_limit=0,
+            current_seq=conversation.current_seq_id(),
+            force=True,
+        )
         return True

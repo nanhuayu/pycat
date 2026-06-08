@@ -209,7 +209,7 @@ pycat/
 │  ├─ llm/                 # LLM client, request builder, config
 │  ├─ modes/               # mode registry and defaults
 │  ├─ prompts/             # system prompt assembly
-│  ├─ runtime/             # TurnEngine, TurnPolicy, events
+│  ├─ runtime/             # TurnEngine, RuntimePolicyFactory, events
 │  ├─ skills/              # skills system
 │  ├─ state/               # conversation state services
 │  ├─ task/                # multi-step task loops

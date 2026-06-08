@@ -353,17 +353,23 @@ class AgentRuntimeConfig:
     """Global defaults for agent loop execution."""
 
     max_turns: int = 20
+    force_agent_complete: bool = True
 
     @staticmethod
     def from_dict(data: Mapping[str, Any] | None) -> "AgentRuntimeConfig":
         d = _as_dict(dict(data) if data is not None else {})
         raw = d.get("max_turns") if "max_turns" in d else d.get("maxTurns")
+        force_raw = d.get("force_agent_complete") if "force_agent_complete" in d else d.get("forceAgentComplete")
         return AgentRuntimeConfig(
             max_turns=_clamp_int(_as_int(raw, 200), 1, 1000),
+            force_agent_complete=_as_bool(force_raw, True),
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"max_turns": int(self.max_turns)}
+        return {
+            "max_turns": int(self.max_turns),
+            "force_agent_complete": bool(self.force_agent_complete),
+        }
 
 
 # PermissionsConfig is replaced by ToolPermissionConfig.
@@ -534,7 +540,8 @@ class ShellConfig:
 class AppConfig:
     # UI
     theme: str = "light"
-    show_stats: bool = True
+    show_sidebar: bool = True
+    show_stats: bool = False
     show_thinking: bool = True
     log_stream: bool = False
     proxy_url: str = ""
@@ -591,7 +598,8 @@ class AppConfig:
 
         return AppConfig(
             theme=_as_str(d.get("theme"), "light").strip() or "light",
-            show_stats=_as_bool(d.get("show_stats"), True),
+            show_sidebar=_as_bool(d.get("show_sidebar"), True),
+            show_stats=_as_bool(d.get("show_stats"), False),
             show_thinking=_as_bool(d.get("show_thinking"), True),
             log_stream=_as_bool(d.get("log_stream"), False),
             proxy_url=_as_str(d.get("proxy_url"), "").strip(),
@@ -626,6 +634,7 @@ class AppConfig:
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
             "theme": self.theme,
+            "show_sidebar": bool(self.show_sidebar),
             "show_stats": bool(self.show_stats),
             "show_thinking": bool(self.show_thinking),
             "log_stream": bool(self.log_stream),

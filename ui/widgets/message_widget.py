@@ -11,10 +11,10 @@ from typing import List, Optional, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QSizePolicy, QToolButton, QTextBrowser, QAbstractScrollArea,
-    QButtonGroup, QCheckBox, QLineEdit, QRadioButton
+    QButtonGroup, QCheckBox, QLineEdit, QRadioButton, QStyle, QStyleOptionButton, QTextEdit
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer, QSize
-from PyQt6.QtGui import QTextOption, QGuiApplication, QCursor
+from PyQt6.QtGui import QTextOption, QGuiApplication, QCursor, QPainter
 
 try:
     import markdown
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 MESSAGE_HEADER_HEIGHT = 22
 MESSAGE_BADGE_HEIGHT = 20
-MESSAGE_ACTION_SIZE = 22
+MESSAGE_ACTION_SIZE = 24
 
 
 def _tool_call_name(tool_call: dict | None) -> str:
@@ -43,7 +43,7 @@ def _tool_call_name(tool_call: dict | None) -> str:
 
 
 def _tool_call_kind(name: str) -> str:
-    if str(name or '').startswith('subagent__'):
+    if str(name or '') == 'agent__run':
         return 'subagent'
     if str(name or '').startswith('capability__'):
         return 'capability'
@@ -52,8 +52,8 @@ def _tool_call_kind(name: str) -> str:
 
 def _tool_call_display_name(name: str) -> str:
     text = str(name or 'unknown_tool')
-    if text.startswith('subagent__'):
-        return text.removeprefix('subagent__')
+    if text == 'agent__run':
+        return 'run'
     if text.startswith('capability__'):
         return text.removeprefix('capability__')
     return text
@@ -71,7 +71,7 @@ def _plain_summary(text: Any, limit: int = 160) -> str:
     value = str(text or '').strip().replace('\r\n', '\n').replace('\r', '\n')
     value = re.sub(r"\s+", " ", value)
     if len(value) > limit:
-        return value[: max(0, limit - 1)] + '…'
+        return value[: max(0, limit - 1)].rstrip() + '…'
     return value
 
 
@@ -95,8 +95,9 @@ def _subtask_status_icon(status: str) -> str:
 
 MARKDOWN_CSS = """
 <style>
-    body { margin: 0; padding: 0; }
-    p { margin-bottom: 2px; margin-top: 0; }
+    body { margin: 0; padding: 0; overflow-wrap: anywhere; word-break: break-word; }
+    p { margin-bottom: 2px; margin-top: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+    li, td { overflow-wrap: anywhere; word-break: break-word; }
     ul, ol { margin-top: 2px; margin-bottom: 2px; padding-left: 18px; }
     li { margin-top: 0; margin-bottom: 2px; }
 
@@ -270,11 +271,13 @@ class MarkdownView(QTextBrowser):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self._fitting_height = False
         self._minimum_content_height = 14
+        self._maximum_content_height: int | None = None
         self._height_padding = 2
 
         doc = self.document()
@@ -282,6 +285,10 @@ class MarkdownView(QTextBrowser):
         opt.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         doc.setDefaultTextOption(opt)
         doc.setDocumentMargin(0)
+        try:
+            self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        except Exception:
+            pass
 
         # Monitor document size changes
         try:
@@ -313,10 +320,17 @@ class MarkdownView(QTextBrowser):
         self.refit_height()
         QTimer.singleShot(0, self.refit_height)
 
-    def set_height_adjustment(self, *, minimum_height: int = 14, padding: int = 2) -> None:
+    def set_height_adjustment(
+        self,
+        *,
+        minimum_height: int = 14,
+        padding: int = 2,
+        maximum_height: int | None = None,
+    ) -> None:
         """Tune auto-height for styled containers that need extra breathing room."""
         self._minimum_content_height = max(1, int(minimum_height))
         self._height_padding = max(0, int(padding))
+        self._maximum_content_height = max(self._minimum_content_height, int(maximum_height)) if maximum_height else None
         self.refit_height()
 
     def resizeEvent(self, event):
@@ -338,7 +352,15 @@ class MarkdownView(QTextBrowser):
             width = max(120, int(width))
             self.document().setTextWidth(width)
             size = self.document().documentLayout().documentSize()
-            height = max(self._minimum_content_height, int(math.ceil(size.height())) + self._height_padding)
+            desired_height = max(self._minimum_content_height, int(math.ceil(size.height())) + self._height_padding)
+            height = desired_height
+            if self._maximum_content_height is not None:
+                height = min(self._maximum_content_height, desired_height)
+                self.setVerticalScrollBarPolicy(
+                    Qt.ScrollBarPolicy.ScrollBarAsNeeded
+                    if desired_height > self._maximum_content_height
+                    else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+                )
             if self.height() != height:
                 self.setFixedHeight(height)
             self.updateGeometry()
@@ -379,9 +401,17 @@ class CompactTextBrowser(QTextBrowser):
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.document().setDocumentMargin(2)
+        opt = self.document().defaultTextOption()
+        opt.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.document().setDefaultTextOption(opt)
+        try:
+            self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        except Exception:
+            pass
         self.setPlainText(text)
         self.refit_height()
 
@@ -391,6 +421,41 @@ class CompactTextBrowser(QTextBrowser):
 
     def refit_height(self) -> None:
         _fit_text_browser_height(self, min_height=self._min_height, max_height=self._max_height)
+
+
+class ElideButton(QPushButton):
+    """PushButton that paints text elided to its current width."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self._full_text = str(text or "")
+
+    def setText(self, text: str) -> None:
+        self._full_text = str(text or "")
+        super().setText(self._full_text)
+        self.update()
+
+    def fullText(self) -> str:
+        return self._full_text
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        return QSize(min(hint.width(), 220), hint.height())
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(0, hint.height())
+
+    def paintEvent(self, event) -> None:
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        metrics = self.fontMetrics()
+        reserve = 10
+        if self.icon() and not self.icon().isNull():
+            reserve += self.iconSize().width() + 4
+        opt.text = metrics.elidedText(self._full_text, Qt.TextElideMode.ElideRight, max(12, self.width() - reserve))
+        painter = QPainter(self)
+        self.style().drawControl(QStyle.ControlElement.CE_PushButton, opt, painter, self)
 
 
 class ThinkingSection(QWidget):
@@ -408,28 +473,28 @@ class ThinkingSection(QWidget):
         layout.setContentsMargins(0, 1, 0, 1)
         layout.setSpacing(0)
 
-        self.toggle_btn = QToolButton()
+        self.toggle_btn = ElideButton()
         self.toggle_btn.setObjectName("thinking_toggle")
         self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.toggle_btn.setMaximumHeight(20)
-        self.toggle_btn.setText("💭 思考过程")
+        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.toggle_btn.setMaximumHeight(22)
+        self.toggle_btn.setMinimumWidth(0)
+        self.toggle_btn.setText("思考过程 >")
 
         self.toggle_btn.clicked.connect(self._toggle)
         layout.addWidget(self.toggle_btn)
 
         self.content_widget = MarkdownView(self.thinking_content)
         self.content_widget.setObjectName("thinking_content")
-        self.content_widget.document().setDocumentMargin(6)
-        self.content_widget.set_height_adjustment(minimum_height=34, padding=2)
+        self.content_widget.document().setDocumentMargin(7)
+        self.content_widget.set_height_adjustment(minimum_height=40, padding=4, maximum_height=180)
         self.content_widget.setVisible(False)
         layout.addWidget(self.content_widget)
 
     def _toggle(self):
         self.is_expanded = not self.is_expanded
         self.content_widget.setVisible(self.is_expanded)
-        self.toggle_btn.setText("💭 思考过程" if not self.is_expanded else "💭 收起思考")
+        self.toggle_btn.setText("思考过程 >" if not self.is_expanded else "思考过程 ˅")
         if self.is_expanded:
             self.content_widget.refit_height()
             QTimer.singleShot(0, self.content_widget.refit_height)
@@ -476,12 +541,12 @@ class ToolCallItem(QWidget):
             return
 
         # Header (Toggle button)
-        self.toggle_btn = QToolButton()
+        self.toggle_btn = ElideButton()
         self.toggle_btn.setObjectName("tool_call_header")
         self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.toggle_btn.setMaximumHeight(20)
+        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.toggle_btn.setMaximumHeight(22)
+        self.toggle_btn.setMinimumWidth(0)
         self.toggle_btn.setProperty("kind", kind)
         self.toggle_btn.setToolTip(f"{self._kind_label(kind)}调用：{name}")
 
@@ -491,8 +556,9 @@ class ToolCallItem(QWidget):
         layout.addWidget(self.toggle_btn)
 
         self.summary_label = QLabel("")
-        self.summary_label.setWordWrap(True)
+        self.summary_label.setWordWrap(False)
         self.summary_label.setProperty("muted", True)
+        self.summary_label.setObjectName("tool_call_summary")
         self.summary_label.setVisible(False)
         layout.addWidget(self.summary_label)
 
@@ -504,11 +570,12 @@ class ToolCallItem(QWidget):
 
         # Details container (Args + Result)
         self.details_widget = QWidget()
+        self.details_widget.setObjectName("tool_details")
         self.details_widget.setVisible(False)
 
         details_layout = QVBoxLayout(self.details_widget)
-        details_layout.setContentsMargins(0, 2, 0, 0)
-        details_layout.setSpacing(3)
+        details_layout.setContentsMargins(0, 3, 0, 0)
+        details_layout.setSpacing(4)
 
         # Arguments (Monospace, minimal)
         args_str = func.get('arguments', '{}')
@@ -518,20 +585,24 @@ class ToolCallItem(QWidget):
         except:
             args_display = args_str
 
-        args_label = QLabel("输入参数:")
-        args_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #888;")
+        args_label = QLabel("输入参数")
+        args_label.setObjectName("tool_detail_label")
         details_layout.addWidget(args_label)
 
-        self.args_view = CompactTextBrowser(args_display, min_height=20, max_height=96)
+        self.args_view = CompactTextBrowser(args_display, min_height=44, max_height=112)
+        self.args_view.setObjectName("tool_args_view")
         details_layout.addWidget(self.args_view)
 
         # Result section
-        self.result_label = QLabel("执行结果:")
-        self.result_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #888; margin-top: 4px;")
+        self.result_label = QLabel("执行结果")
+        self.result_label.setObjectName("tool_detail_label")
         self.result_label.setVisible(False)
         details_layout.addWidget(self.result_label)
 
         self.result_view = MarkdownView("")
+        self.result_view.setObjectName("tool_result_view")
+        self.result_view.document().setDocumentMargin(7)
+        self.result_view.set_height_adjustment(minimum_height=56, padding=4, maximum_height=220)
         self.result_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.result_view.setVisible(False)
         details_layout.addWidget(self.result_view)
@@ -567,6 +638,8 @@ class ToolCallItem(QWidget):
         self.is_expanded = not self.is_expanded
         if self.details_widget is not None:
             self.details_widget.setVisible(self.is_expanded)
+        if self.is_expanded:
+            self._refit_details()
 
     def _tool_name(self) -> str:
         return _tool_call_name(self.tool_call)
@@ -581,43 +654,54 @@ class ToolCallItem(QWidget):
         return _tool_call_kind_label(kind or self._tool_kind())
 
     def _running_title(self, name: str) -> str:
-        if name == 'ask_questions':
-            return '等待你的选择'
-        kind = self._tool_kind(name)
-        return f'{self._kind_label(kind)}运行中 · {self._display_name(name)}'
+        if name == 'user__ask':
+            return '等待你的选择 >'
+        return f'运行中 {self._display_name(name)} >'
 
     def _completed_title(self, name: str) -> str:
-        if name == 'ask_questions':
-            return '✓ 已完成: ask_questions'
-        kind = self._tool_kind(name)
-        return f'✓ {self._kind_label(kind)}已完成 · {self._display_name(name)}'
+        if name == 'user__ask':
+            return '已完成 user__ask >'
+        return f'已运行 {self._display_name(name)} >'
 
-    def _result_summary(self, result: Any) -> str:
+    def _completed_title_with_summary(self, name: str, summary: str = "") -> str:
+        title = self._completed_title(name)
+        clean = _plain_summary(summary, 48)
+        if clean:
+            return f"{title.removesuffix(' >')} · {clean} >"
+        return title
+
+    def _result_summary(self, result: Any, *, limit: int = 48) -> str:
         if isinstance(result, dict):
             summary = str(result.get('summary') or '').strip()
             if summary:
-                return _plain_summary(summary, 120)
+                return _plain_summary(summary, limit)
             result = result.get('content') or result.get('final_message') or ''
 
         text = str(result or '').strip()
         if not text:
             return ''
         first_line = text.splitlines()[0].strip()
-        if len(first_line) > 120:
-            return first_line[:119] + '…'
-        return first_line
+        return _plain_summary(first_line, limit)
+
+    def _full_result_summary(self, result: Any) -> str:
+        if isinstance(result, dict):
+            summary = str(result.get('summary') or '').strip()
+            if summary:
+                return _plain_summary(summary, 600)
+            result = result.get('content') or result.get('final_message') or ''
+        text = str(result or '').strip()
+        return _plain_summary(text, 600)
 
     def _result_meta_hint(self) -> str:
-        result = self.result_payload or normalize_tool_result('')
-        metadata = result.get('metadata') or {}
-        if not isinstance(metadata, dict):
-            return ''
-        result_file = str(metadata.get('tool_result_file') or '').strip()
-        if result_file:
-            return f'完整输出已写入文件：{result_file}'
-        if metadata.get('tool_result_truncated'):
-            return '结果过长，当前仅展示摘要或预览。'
         return ''
+
+    def _refit_details(self) -> None:
+        if self.args_view is not None:
+            self.args_view.refit_height()
+            QTimer.singleShot(0, self.args_view.refit_height)
+        if self.result_view is not None and self.result_view.isVisible():
+            self.result_view.refit_height()
+            QTimer.singleShot(0, self.result_view.refit_height)
 
     def _apply_result_header(self, result: Any) -> None:
         name = self._tool_name()
@@ -626,10 +710,15 @@ class ToolCallItem(QWidget):
         if self.toggle_btn is not None:
             self.toggle_btn.setText(self._completed_title(name))
         summary = self._result_summary(result)
+        if self.toggle_btn is not None:
+            self.toggle_btn.setText(self._completed_title_with_summary(name, summary))
+            full_summary = self._full_result_summary(result)
+            tooltip_parts = [f"{self._kind_label()}调用：{name}"]
+            if full_summary:
+                tooltip_parts.append(full_summary)
+            self.toggle_btn.setToolTip("\n".join(tooltip_parts))
         if self.summary_label is not None:
-            self.summary_label.setVisible(bool(summary))
-        if summary and self.summary_label is not None:
-            self.summary_label.setText(f"摘要：{summary}")
+            self.summary_label.setVisible(False)
 
     def _placeholder_subtask_trace(self, result_payload: dict | None = None) -> dict[str, Any]:
         payload = result_payload or {}
@@ -666,20 +755,13 @@ class ToolCallItem(QWidget):
             self.result_view.setVisible(True)
             self.result_view.set_markdown(str(result_payload.get('content') or ''))
 
-        name = self._tool_name()
-        if self.toggle_btn is not None:
-            self.toggle_btn.setText(self._completed_title(name))
-
-        summary = self._result_summary(result_payload)
+        self._apply_result_header(result_payload)
         if self.summary_label is not None:
-            self.summary_label.setVisible(bool(summary))
-        if summary and self.summary_label is not None:
-            self.summary_label.setText(f"摘要：{summary}")
+            self.summary_label.setVisible(False)
 
         meta_hint = self._result_meta_hint()
         if self.meta_label is not None:
             self.meta_label.setVisible(bool(meta_hint))
-        if meta_hint and self.meta_label is not None:
             self.meta_label.setText(meta_hint)
 
     def update_content(self):
@@ -704,10 +786,6 @@ class ToolCallsSection(QWidget):
         layout.setContentsMargins(2, 0, 2, 0)
         layout.setSpacing(2)
 
-        header = QLabel(self._header_text())
-        header.setObjectName("message_badge")
-        layout.addWidget(header)
-
         sources = self.invocations if self.invocations else self.tool_calls
         for source in sources:
             tool_call = source.tool_call if isinstance(source, ToolInvocationView) else source
@@ -725,21 +803,6 @@ class ToolCallsSection(QWidget):
         """Refresh all items from their underlying data"""
         for item in self.items.values():
             item.update_content()
-
-    def _header_text(self) -> str:
-        counts = {"tool": 0, "capability": 0, "subagent": 0}
-        for tool_call in self.tool_calls:
-            counts[_tool_call_kind(_tool_call_name(tool_call))] += 1
-        parts = []
-        if counts["tool"]:
-            parts.append(f"工具 {counts['tool']}")
-        if counts["capability"]:
-            parts.append(f"能力 {counts['capability']}")
-        if counts["subagent"]:
-            parts.append(f"子 Agent {counts['subagent']}")
-        detail = " / ".join(parts) if parts else "无调用"
-        return f"调用链 ({len(self.tool_calls)}) · {detail}"
-
 
 class SubtaskRunWidget(QWidget):
     """Collapsible child-agent run rendered from a normalized RunTree node."""
@@ -761,13 +824,13 @@ class SubtaskRunWidget(QWidget):
         layout.setContentsMargins(0, 1, 0, 1)
         layout.setSpacing(2)
 
-        self.toggle_btn = QToolButton()
+        self.toggle_btn = ElideButton()
         self.toggle_btn.setObjectName("tool_call_header")
         self.toggle_btn.setProperty("kind", "subagent")
         self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.toggle_btn.setMaximumHeight(22)
+        self.toggle_btn.setMinimumWidth(0)
         self.toggle_btn.clicked.connect(self._toggle)
         layout.addWidget(self.toggle_btn)
 
@@ -814,17 +877,23 @@ class SubtaskRunWidget(QWidget):
         duration = f" · {duration_ms / 1000:.1f}s" if duration_ms > 0 else ""
 
         if self.toggle_btn is not None:
-            self.toggle_btn.setText(
-                f"{_subtask_status_icon(status)} {kind_label} · {title} · {_subtask_status_label(status)} · 消息 {len(messages)}{duration}"
+            header_text = f"{kind_label} {title} · {_subtask_status_label(status)} · 消息 {len(messages)}{duration}"
+            summary = _plain_summary(
+                self.trace.get('final_message') or self.trace.get('error') or self.trace.get('goal'),
+                limit=48,
             )
+            if summary:
+                header_text = f"{header_text} · {summary}"
+            self.toggle_btn.setText(f"{header_text} >")
+            full_summary = _plain_summary(
+                self.trace.get('final_message') or self.trace.get('error') or self.trace.get('goal'),
+                limit=600,
+            )
+            self.toggle_btn.setToolTip(f"{kind_label}：{title}" + (f"\n{full_summary}" if full_summary else ""))
 
-        summary = _plain_summary(
-            self.trace.get('final_message') or self.trace.get('error') or self.trace.get('goal'),
-            limit=180,
-        )
         if self.summary_label is not None:
-            self.summary_label.setVisible(bool(summary))
-            self.summary_label.setText(f"摘要：{summary}" if summary else "")
+            self.summary_label.setVisible(False)
+            self.summary_label.setText("")
 
     def _clear_content(self):
         if self.content_widget is None:
@@ -876,7 +945,7 @@ class SubtaskRunWidget(QWidget):
         error = str(self.trace.get('error') or '').strip()
         if error:
             error_label = QLabel("错误:")
-            error_label.setStyleSheet("font-size: 11px; font-weight: bold; color: #c0392b; margin-top: 4px;")
+            error_label.setObjectName("message_error_label")
             content_layout.addWidget(error_label)
             error_view = MarkdownView(error)
             error_view.set_height_adjustment(minimum_height=22, padding=2)
@@ -956,9 +1025,9 @@ class InlineQuestionCard(QFrame):
             layout.addWidget(self._freeform_input)
 
         self.validation_label = QLabel("")
+        self.validation_label.setObjectName("validation_error_label")
         self.validation_label.setProperty("muted", True)
         self.validation_label.setWordWrap(True)
-        self.validation_label.setStyleSheet("color: #c0392b;")
         self.validation_label.setVisible(False)
         layout.addWidget(self.validation_label)
 
@@ -1216,8 +1285,8 @@ class MessageWidget(QFrame):
 
     def _add_action_buttons(self, layout):
         copy_btn = QToolButton()
-        copy_btn.setIcon(Icons.get_muted(Icons.COPY, scale_factor=0.75))
-        copy_btn.setIconSize(QSize(14, 14))
+        copy_btn.setIcon(Icons.get_muted(Icons.COPY))
+        copy_btn.setIconSize(QSize(16, 16))
         copy_btn.setToolTip("复制原文")
         copy_btn.setFixedSize(MESSAGE_ACTION_SIZE, MESSAGE_ACTION_SIZE)
         copy_btn.setObjectName("msg_copy_btn")
@@ -1227,8 +1296,8 @@ class MessageWidget(QFrame):
         layout.addWidget(copy_btn)
 
         edit_btn = QToolButton()
-        edit_btn.setIcon(Icons.get_muted(Icons.EDIT, scale_factor=0.75))
-        edit_btn.setIconSize(QSize(14, 14))
+        edit_btn.setIcon(Icons.get_muted(Icons.EDIT))
+        edit_btn.setIconSize(QSize(16, 16))
         edit_btn.setToolTip("编辑")
         edit_btn.setFixedSize(MESSAGE_ACTION_SIZE, MESSAGE_ACTION_SIZE)
         edit_btn.setObjectName("msg_edit_btn")
@@ -1237,8 +1306,8 @@ class MessageWidget(QFrame):
         layout.addWidget(edit_btn)
 
         delete_btn = QToolButton()
-        delete_btn.setIcon(Icons.get_error(Icons.TRASH, scale_factor=0.75))
-        delete_btn.setIconSize(QSize(14, 14))
+        delete_btn.setIcon(Icons.get_error(Icons.TRASH))
+        delete_btn.setIconSize(QSize(16, 16))
         delete_btn.setToolTip("删除")
         delete_btn.setFixedSize(MESSAGE_ACTION_SIZE, MESSAGE_ACTION_SIZE)
         delete_btn.setObjectName("msg_delete_btn")

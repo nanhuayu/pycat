@@ -1,38 +1,46 @@
-"""Explicit todo management tool backed by SessionState.tasks."""
+"""Explicit todo management tool backed by SessionState.todos."""
+
+from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from core.state.services.task_service import TaskService
+from core.state.services.todo_service import TodoService
 from core.tools.base import BaseTool, ToolContext, ToolResult
-from models.state import SessionState, TaskStatus
+from models.state import SessionState, TodoPriority, TodoStatus
+
+
+TODO_FIELDS = (
+    "id",
+    "title",
+    "description",
+    "status",
+    "priority",
+    "kind",
+    "acceptance",
+    "depends_on",
+    "evidence_refs",
+    "blocked_reason",
+    "tags",
+)
 
 
 class ManageTodoTool(BaseTool):
-    """Maintain the current session todo list as lightweight progress state."""
+    """Maintain the current session todo list as structured progress state."""
 
     @property
     def name(self) -> str:
-        return "manage_todo"
+        return "state__todo"
 
     @property
     def description(self) -> str:
         return (
-            "Maintain the explicit current-task todo list. Todos are lightweight progress state, not plans, reports, durable memory, or proof of completion. "
-            "Use todos for user-visible milestones during complex work, keep at most one item in_progress, and do not recreate equivalent todos after they were completed.\n\n"
-            "When to use:\n"
-            "- Use action=set with items=[...] to establish or synchronize visible progress milestones when a task needs ongoing tracking.\n"
-            "- Use action=update to mark progress, complete a milestone, or start the next milestone.\n"
-            "- Use action=clear when the task is finished and the final response/artifact is ready. Completed/cancelled todos are compacted into a short recent history.\n"
-            "- Good items are outcome milestones visible to the user, e.g. analyze evidence, implement patch, verify behavior, produce report.\n\n"
-            "When not to use:\n"
-            "- Do not use for one-step answers, casual chat, or durable preferences/facts. Use manage_memory for stable reusable facts and manage_artifact for long-form outputs.\n"
-            "- Do not add purely operational support actions such as searching, grepping, formatting, or reading files as todo items; todos should be user-meaningful milestones.\n"
-            "- If a final report/plan artifact already satisfies the request, finish or clear todos instead of rebuilding the same list.\n\n"
-            "Actions:\n"
-            "- set: Idempotently synchronize active todos from items[]\n"
-            "- update: Update one or more existing todos by id or content\n"
-            "- clear: Remove all active todos\n"
-            "- list: Show active and recent todos"
+            "Maintain the explicit current-task todo list. Todos are user-visible milestones and acceptance checkpoints, "
+            "not plans, reports, durable memory, or a log of tool operations.\n\n"
+            "Use todos when work spans multiple meaningful stages. Keep exactly one item in_progress unless blocked. "
+            "Use blocked with blocked_reason when progress needs external input or a prerequisite.\n\n"
+            "Good todos name deliverables and checks: analyze root cause, implement patch, verify behavior, produce report. "
+            "Bad todos are implementation noise: grep files, read docs, run formatter, search web.\n\n"
+            "Actions: set synchronizes active todos; update changes existing todos; clear removes active todos; list shows active and recent todos."
         )
 
     @property
@@ -41,6 +49,36 @@ class ManageTodoTool(BaseTool):
 
     @property
     def input_schema(self) -> Dict[str, Any]:
+        item_schema = {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "title": {"type": "string", "description": "Short milestone title."},
+                "description": {"type": "string", "description": "Optional detail explaining the milestone."},
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "in_progress", "completed", "cancelled", "blocked"],
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "urgent"],
+                },
+                "kind": {
+                    "type": "string",
+                    "description": "Optional kind such as research, analysis, edit, verify, write.",
+                },
+                "acceptance": {
+                    "type": "string",
+                    "description": "Observable completion condition for this milestone.",
+                },
+                "depends_on": {"type": "array", "items": {"type": "string"}},
+                "evidence_refs": {"type": "array", "items": {"type": "string"}},
+                "blocked_reason": {"type": "string"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["title"],
+            "additionalProperties": False,
+        }
         return {
             "type": "object",
             "properties": {
@@ -49,55 +87,32 @@ class ManageTodoTool(BaseTool):
                     "enum": ["set", "update", "clear", "list"],
                     "description": "The todo action to perform.",
                 },
-                "id": {
-                    "type": "string",
-                    "description": "Todo id. Required for update/delete.",
-                },
-                "content": {
-                    "type": "string",
-                    "description": "Todo content. Required for create; optional for update.",
-                },
+                "id": {"type": "string", "description": "Todo id for update."},
+                "title": {"type": "string", "description": "Todo title for update."},
+                "description": {"type": "string"},
                 "status": {
                     "type": "string",
-                    "enum": ["pending", "in_progress", "completed", "cancelled"],
-                    "description": "Todo status.",
+                    "enum": ["pending", "in_progress", "completed", "cancelled", "blocked"],
                 },
                 "priority": {
                     "type": "string",
                     "enum": ["low", "medium", "high", "urgent"],
-                    "description": "Todo priority.",
                 },
-                "tags": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Optional todo tags.",
-                },
+                "kind": {"type": "string"},
+                "acceptance": {"type": "string"},
+                "depends_on": {"type": "array", "items": {"type": "string"}},
+                "evidence_refs": {"type": "array", "items": {"type": "string"}},
+                "blocked_reason": {"type": "string"},
+                "tags": {"type": "array", "items": {"type": "string"}},
                 "items": {
                     "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "content": {"type": "string"},
-                            "status": {
-                                "type": "string",
-                                "enum": ["pending", "in_progress", "completed", "cancelled"],
-                            },
-                            "priority": {
-                                "type": "string",
-                                "enum": ["low", "medium", "high", "urgent"],
-                            },
-                            "tags": {"type": "array", "items": {"type": "string"}},
-                        },
-                        "required": ["content"],
-                    },
-                    "description": "Items for action=set or action=update. set synchronizes active todos; update changes matching todos by id or content.",
+                    "items": item_schema,
+                    "description": "Items for action=set or action=update.",
                 },
-                "reason": {
-                    "type": "string",
-                    "description": "Brief reason for changing todo state.",
-                },
+                "reason": {"type": "string", "description": "Brief reason for changing todo state."},
             },
             "required": ["action"],
+            "additionalProperties": False,
         }
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
@@ -106,15 +121,15 @@ class ManageTodoTool(BaseTool):
         seq = int((context.state or {}).get("_current_seq", 0))
 
         if action == "list":
-            if not state.tasks and not state.recent_completed_todos:
+            if not state.todos and not state.recent_completed_todos:
                 return ToolResult("No todos in this session.")
             return ToolResult(self._render_todos(state, include_recent=True))
 
         if action == "clear":
-            count = len(state.tasks)
-            state.tasks.clear()
+            count = len(state.todos)
+            state.todos.clear()
             state.last_updated_seq = seq
-            self._sync_context_state(context.state, state)
+            self._sync_context_state(context.state, state, seq)
             return ToolResult(f"Cleared {count} todo(s).")
 
         if action == "set":
@@ -123,131 +138,107 @@ class ManageTodoTool(BaseTool):
                 return ToolResult("items must be an array for action=set.", is_error=True)
             feedback = self._set_todos(state, items, seq)
             state.last_updated_seq = seq
-            self._sync_context_state(context.state, state)
+            self._sync_context_state(context.state, state, seq)
             return ToolResult(self._render_feedback(feedback, state))
 
         if action == "update":
             items = arguments.get("items")
-            if isinstance(items, list):
-                ops = self._ops_from_update_items(items)
-            else:
-                op: Dict[str, Any] = {"action": "update"}
-                for key in ("id", "content", "status", "priority", "tags"):
-                    if key in arguments:
-                        op[key] = arguments.get(key)
-                ops = [op]
-            feedback = TaskService.handle_ops(state, self._normalize_in_progress(ops), seq)
-            self._enforce_single_in_progress(state)
+            ops = self._ops_from_update_items(items) if isinstance(items, list) else [self._op_from_arguments(arguments)]
+            feedback = TodoService.handle_ops(state, self._normalize_in_progress(ops), seq)
+            TodoService.enforce_single_in_progress(state)
             state.last_updated_seq = seq
-            self._sync_context_state(context.state, state)
+            self._sync_context_state(context.state, state, seq)
             return ToolResult(self._render_feedback(feedback, state))
 
         return ToolResult(f"Unknown action: {action}", is_error=True)
 
     @staticmethod
-    def _sync_context_state(context_state: Dict[str, object], state: SessionState) -> None:
+    def _sync_context_state(context_state: Dict[str, object], state: SessionState, seq: int) -> None:
         context_state.clear()
         context_state.update(state.to_dict())
+        context_state["_current_seq"] = seq
 
     @staticmethod
-    def _ops_from_items(items: List[Any]) -> List[Dict[str, Any]]:
+    def _op_from_arguments(arguments: Dict[str, Any]) -> Dict[str, Any]:
+        op: Dict[str, Any] = {"action": "update"}
+        for key in TODO_FIELDS:
+            if key in arguments:
+                op[key] = arguments.get(key)
+        return op
+
+    @classmethod
+    def _ops_from_items(cls, items: List[Any]) -> List[Dict[str, Any]]:
         ops: List[Dict[str, Any]] = []
         for item in items:
             if not isinstance(item, dict):
                 continue
-            op: Dict[str, Any] = {
-                "action": "create",
-                "content": str(item.get("content") or "").strip(),
-                "status": str(item.get("status") or "pending"),
-                "priority": str(item.get("priority") or "medium"),
-            }
-            if "tags" in item:
-                op["tags"] = item.get("tags") or []
+            op = {"action": "create"}
+            for key in TODO_FIELDS:
+                if key in item:
+                    op[key] = item.get(key)
             ops.append(op)
         return ops
 
-    @staticmethod
-    def _ops_from_update_items(items: List[Any]) -> List[Dict[str, Any]]:
+    @classmethod
+    def _ops_from_update_items(cls, items: List[Any]) -> List[Dict[str, Any]]:
         ops: List[Dict[str, Any]] = []
         for item in items:
             if not isinstance(item, dict):
                 continue
-            op: Dict[str, Any] = {"action": "update"}
-            for key in ("id", "content", "status", "priority", "tags"):
+            op = {"action": "update"}
+            for key in TODO_FIELDS:
                 if key in item:
                     op[key] = item.get(key)
             ops.append(op)
         return ops
 
     @staticmethod
-    def _content_key(value: Any) -> str:
+    def _title_key(value: Any) -> str:
         return " ".join(str(value or "").strip().casefold().split())
 
     def _set_todos(self, state: SessionState, items: List[Any], seq: int) -> List[str]:
-        incoming = [item for item in items if isinstance(item, dict) and str(item.get("content") or "").strip()]
+        incoming = [
+            item for item in items
+            if isinstance(item, dict) and str(item.get("title") or "").strip()
+        ]
         incoming_ops = self._normalize_in_progress(self._ops_from_items(incoming))
-        incoming_keys = {self._content_key(op.get("content")) for op in incoming_ops}
+        incoming_keys = {self._title_key(op.get("title")) for op in incoming_ops}
 
         feedback: List[str] = []
         delete_ops = [
-            {"action": "delete", "id": task.id}
-            for task in state.tasks
-            if self._content_key(task.content) not in incoming_keys
+            {"action": "delete", "id": todo.id}
+            for todo in state.todos
+            if self._title_key(todo.title) not in incoming_keys
         ]
         if delete_ops:
-            feedback.extend(TaskService.handle_ops(state, delete_ops, seq))
+            feedback.extend(TodoService.handle_ops(state, delete_ops, seq))
 
         ops: List[Dict[str, Any]] = []
         for op in incoming_ops:
-            existing = next((task for task in state.tasks if self._content_key(task.content) == self._content_key(op.get("content"))), None)
+            title = op.get("title")
+            existing = next((todo for todo in state.todos if self._title_key(todo.title) == self._title_key(title)), None)
             if existing:
-                update_op: Dict[str, Any] = {"action": "update", "id": existing.id}
-                for key in ("content", "status", "priority", "tags"):
-                    if key in op:
-                        update_op[key] = op[key]
+                update_op = {"action": "update", "id": existing.id}
+                update_op.update({key: value for key, value in op.items() if key != "action"})
                 ops.append(update_op)
             else:
                 ops.append(op)
-        feedback.extend(TaskService.handle_ops(state, ops, seq))
-        self._enforce_single_in_progress(state)
+        feedback.extend(TodoService.handle_ops(state, ops, seq))
+        TodoService.enforce_single_in_progress(state)
         return feedback or ["Todo state unchanged."]
 
     @staticmethod
-    def _sanitize_ops(ops: List[Any]) -> List[Dict[str, Any]]:
-        sanitized: List[Dict[str, Any]] = []
-        for item in ops:
-            if not isinstance(item, dict):
-                continue
-            op: Dict[str, Any] = {"action": str(item.get("action") or "").strip().lower()}
-            for key in ("id", "content", "status", "priority", "tags"):
-                if key in item:
-                    op[key] = item.get(key)
-            sanitized.append(op)
-        return sanitized
-
-    @staticmethod
     def _normalize_in_progress(ops: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        seen_in_progress = False
+        seen = False
         normalized: List[Dict[str, Any]] = []
         for op in ops:
             item = dict(op)
-            if str(item.get("status") or "") == TaskStatus.IN_PROGRESS.value:
-                if seen_in_progress:
-                    item["status"] = TaskStatus.PENDING.value
-                seen_in_progress = True
+            if str(item.get("status") or "") == TodoStatus.IN_PROGRESS.value:
+                if seen:
+                    item["status"] = TodoStatus.PENDING.value
+                seen = True
             normalized.append(item)
         return normalized
-
-    @staticmethod
-    def _enforce_single_in_progress(state: SessionState) -> None:
-        seen = False
-        for task in state.tasks:
-            if task.status != TaskStatus.IN_PROGRESS:
-                continue
-            if not seen:
-                seen = True
-                continue
-            task.status = TaskStatus.PENDING
 
     def _render_feedback(self, feedback: List[str], state: SessionState) -> str:
         lines = list(feedback or ["No todo changes applied."])
@@ -260,14 +251,27 @@ class ManageTodoTool(BaseTool):
     @staticmethod
     def _render_todos(state: SessionState, *, include_recent: bool = False) -> str:
         lines = []
-        for task in state.tasks:
-            status = task.status.value if isinstance(task.status, TaskStatus) else str(task.status)
-            tags = f" tags={', '.join(task.tags)}" if task.tags else ""
-            lines.append(f"- [{task.id}] {status}/{task.priority.value}: {task.content}{tags}")
+        for todo in state.todos:
+            status = todo.status.value if isinstance(todo.status, TodoStatus) else str(todo.status)
+            priority = todo.priority.value if isinstance(todo.priority, TodoPriority) else str(todo.priority)
+            parts = [f"- [{todo.id}] {status}/{priority}: {todo.title}"]
+            if todo.description:
+                parts.append(f"  description: {todo.description}")
+            if todo.acceptance:
+                parts.append(f"  acceptance: {todo.acceptance}")
+            if todo.depends_on:
+                parts.append(f"  depends_on: {', '.join(todo.depends_on)}")
+            if todo.evidence_refs:
+                parts.append(f"  evidence_refs: {', '.join(todo.evidence_refs[:4])}")
+            if todo.blocked_reason:
+                parts.append(f"  blocked_reason: {todo.blocked_reason}")
+            if todo.tags:
+                parts.append(f"  tags: {', '.join(todo.tags)}")
+            lines.append("\n".join(parts))
         if include_recent and state.recent_completed_todos:
             if lines:
                 lines.append("Recent completed/cancelled todos:")
             for item in state.recent_completed_todos[-3:]:
-                status = item.status.value if isinstance(item.status, TaskStatus) else str(item.status)
-                lines.append(f"- [{status}] {item.content}")
+                status = item.status.value if isinstance(item.status, TodoStatus) else str(item.status)
+                lines.append(f"- [{status}] {item.title}")
         return "\n".join(lines)

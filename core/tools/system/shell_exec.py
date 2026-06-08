@@ -53,7 +53,7 @@ class ExecuteCommandTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "execute_command"
+        return "shell__run"
 
     @property
     def description(self) -> str:
@@ -133,7 +133,7 @@ class ShellStartTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "shell_start"
+        return "shell__start"
 
     @property
     def description(self) -> str:
@@ -186,7 +186,7 @@ class ShellStatusTool(_ProcessReadTool):
 
     @property
     def name(self) -> str:
-        return "shell_status"
+        return "shell__status"
 
     @property
     def description(self) -> str:
@@ -197,7 +197,7 @@ class ShellStatusTool(_ProcessReadTool):
         return {
             "type": "object",
             "properties": {
-                "process_id": {"type": "string", "description": "Background process id returned by shell_start or execute_command(background=true)"},
+                "process_id": {"type": "string", "description": "Background process id returned by shell__start or shell__run(background=true)"},
             },
             "required": ["process_id"],
             "additionalProperties": False,
@@ -220,7 +220,7 @@ class ShellLogsTool(_ProcessReadTool):
 
     @property
     def name(self) -> str:
-        return "shell_logs"
+        return "shell__logs"
 
     @property
     def description(self) -> str:
@@ -259,7 +259,7 @@ class ShellWaitTool(_ProcessReadTool):
 
     @property
     def name(self) -> str:
-        return "shell_wait"
+        return "shell__wait"
 
     @property
     def description(self) -> str:
@@ -300,7 +300,7 @@ class ShellKillTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "shell_kill"
+        return "shell__kill"
 
     @property
     def description(self) -> str:

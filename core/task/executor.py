@@ -17,7 +17,6 @@ from models.conversation import Conversation, Message
 from models.provider import Provider
 
 from core.llm.client import LLMClient
-from core.context.condenser import CondensePolicy, ContextCondenser
 from core.context.manager import ContextManager
 from core.config import AppConfig, load_app_config
 from core.task.types import RunPolicy, TaskEventKind
@@ -168,14 +167,7 @@ class LLMExecutor:
             logger.debug("Failed to load app config for message preparation: %s", e)
             app_config = AppConfig()
 
-        context_manager = ContextManager(
-            condenser=ContextCondenser(self._client),
-            policy=CondensePolicy(
-                max_active_messages=20,
-                token_threshold_ratio=0.7,
-                keep_last_n=3,
-            ),
-        )
+        context_manager = ContextManager(keep_last_turns=3)
         return await context_manager.prepare_messages(
             conversation=conversation,
             provider=provider,
@@ -183,7 +175,6 @@ class LLMExecutor:
             tools=tools,
             app_config=app_config,
             default_work_dir=getattr(conversation, "work_dir", ".") or ".",
-            compress=False,
         )
 
     async def _get_request_tools(

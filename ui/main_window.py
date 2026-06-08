@@ -91,7 +91,7 @@ class MainWindow(QMainWindow):
         self.settings_presenter.apply_theme()
     
     def _setup_ui(self):
-        self.setWindowTitle("PyCat Agent | LLM chat / agent / tools")
+        self.setWindowTitle("PyCat | LLM chat · agent · tools")
         self.setMinimumSize(1000, 600)
         
         central = QWidget()
@@ -125,7 +125,6 @@ class MainWindow(QMainWindow):
         self.chat_view.delete_message.connect(self.message_presenter.delete)
         self.chat_view.images_dropped.connect(self._on_images_dropped)
         self.chat_view.work_dir_changed.connect(self.conversation_presenter.update_work_dir)
-        self.chat_view.model_ref_changed.connect(self.conversation_presenter.update_model_ref)
         
         self.input_area = InputArea(
             command_registry=self.services.command_registry,
@@ -138,6 +137,7 @@ class MainWindow(QMainWindow):
         self.input_area.show_thinking_changed.connect(self.conversation_presenter.update_show_thinking)
         self.input_area.prompt_optimize_requested.connect(self.message_presenter.request_prompt_optimization)
         self.input_area.prompt_optimize_cancel_requested.connect(self.message_presenter.cancel_prompt_optimization)
+        self.input_area.model_ref_changed.connect(self.conversation_presenter.update_model_ref)
         self.input_area.provider_model_changed.connect(self.conversation_presenter.update_provider_model)
         self.input_area.mode_changed.connect(self.conversation_presenter.update_mode)
         self.input_area.slash_command_result.connect(self.conversation_presenter.handle_command_result)
@@ -198,14 +198,34 @@ class MainWindow(QMainWindow):
     def _create_menu_bar(self):
         menubar = self.menuBar()
         menubar.clear()
-        settings_btn = QToolButton(menubar)
-        settings_btn.setObjectName("title_settings_btn")
-        settings_btn.setIcon(Icons.get(Icons.SETTINGS, scale_factor=0.85))
-        settings_btn.setIconSize(QSize(18, 18))
-        settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        settings_btn.setToolTip("打开设置")
+        menubar.setNativeMenuBar(False)
+
+        corner_widget = QWidget(menubar)
+        corner_widget.setObjectName("title_corner_controls")
+        corner_layout = QHBoxLayout(corner_widget)
+        corner_layout.setContentsMargins(0, 0, 6, 0)
+        corner_layout.setSpacing(4)
+
+        self.toggle_sidebar_btn = self._create_title_tool_button(
+            Icons.PANEL_LEFT,
+            "显示/隐藏左侧会话栏",
+            checkable=True,
+        )
+        self.toggle_sidebar_btn.clicked.connect(self.settings_presenter.toggle_sidebar_panel)
+        corner_layout.addWidget(self.toggle_sidebar_btn)
+
+        self.toggle_stats_btn = self._create_title_tool_button(
+            Icons.PANEL_RIGHT,
+            "显示/隐藏右侧辅助栏",
+            checkable=True,
+        )
+        self.toggle_stats_btn.clicked.connect(self.settings_presenter.toggle_stats_panel)
+        corner_layout.addWidget(self.toggle_stats_btn)
+
+        settings_btn = self._create_title_tool_button(Icons.SETTINGS, "打开设置")
         settings_btn.clicked.connect(self.settings_presenter.open_settings)
-        menubar.setCornerWidget(settings_btn, Qt.Corner.TopRightCorner)
+        corner_layout.addWidget(settings_btn)
+        menubar.setCornerWidget(corner_widget, Qt.Corner.TopRightCorner)
 
         compact_presentation = self.services.command_registry.get_menu_presentation("compact")
         clear_presentation = self.services.command_registry.get_menu_presentation("clear")
@@ -224,6 +244,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(import_action)
 
         export_menu = QMenu("导出当前会话", self)
+        export_menu.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.export_markdown_action = QAction("导出为 Markdown...", self)
         self.export_markdown_action.triggered.connect(
             lambda: self.conversation_presenter.export_current("markdown")
@@ -293,8 +314,14 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(self.cancel_action)
         
         view_menu = menubar.addMenu("视图")
+
+        self.toggle_sidebar_action = QAction("显示会话栏", self)
+        self.toggle_sidebar_action.setCheckable(True)
+        self.toggle_sidebar_action.setChecked(True)
+        self.toggle_sidebar_action.triggered.connect(self.settings_presenter.toggle_sidebar_panel)
+        view_menu.addAction(self.toggle_sidebar_action)
         
-        self.toggle_stats_action = QAction("显示统计", self)
+        self.toggle_stats_action = QAction("显示辅助栏", self)
         self.toggle_stats_action.setCheckable(True)
         self.toggle_stats_action.setChecked(True)
         self.toggle_stats_action.triggered.connect(self.settings_presenter.toggle_stats_panel)
@@ -307,6 +334,24 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
         self.window_state_presenter.refresh_menu_action_states()
+
+    def _create_title_tool_button(
+        self,
+        icon_name: str,
+        tooltip: str,
+        *,
+        checkable: bool = False,
+    ) -> QToolButton:
+        button = QToolButton(self.menuBar())
+        button.setObjectName("title_tool_btn")
+        button.setIcon(Icons.get_muted(icon_name, scale_factor=0.9))
+        button.setIconSize(QSize(18, 18))
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setToolTip(tooltip)
+        button.setCheckable(bool(checkable))
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setFixedSize(28, 28)
+        return button
     
     def _load_data(self):
         bootstrap_state = self.services.app_bootstrap.load()

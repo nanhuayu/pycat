@@ -88,6 +88,20 @@ class ProviderCatalogService:
         next_providers[index], next_providers[target] = next_providers[target], next_providers[index]
         return next_providers
 
+    def set_enabled(self, providers: Iterable[Provider], provider_id: str, enabled: bool) -> list[Provider]:
+        next_providers = self.snapshot(providers)
+        provider, _index = self.find(next_providers, provider_id)
+        if provider is not None:
+            provider.enabled = bool(enabled)
+        return next_providers
+
+    def toggle_enabled(self, providers: Iterable[Provider], provider_id: str) -> list[Provider]:
+        next_providers = self.snapshot(providers)
+        provider, _index = self.find(next_providers, provider_id)
+        if provider is not None:
+            provider.enabled = not bool(getattr(provider, "enabled", True))
+        return next_providers
+
     def merge_defaults(self, providers: Iterable[Provider]) -> tuple[list[Provider], bool]:
         next_providers = self.snapshot(providers)
         existing_names = {

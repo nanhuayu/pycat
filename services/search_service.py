@@ -54,7 +54,7 @@ class SearchService:
         """Return OpenAI-compatible tool schema for web search.
 
         Tool contract:
-        - tool name: web_search
+        - tool name: web__search
         - argument: additional_context (optional)
         - prepared queries are embedded in description for the model to reference
         """
@@ -69,7 +69,7 @@ class SearchService:
         return {
             "type": "function",
             "function": {
-                "name": "web_search",
+                "name": "web__search",
                 "description": "Web search tool for finding current information, news, and real-time data from the internet. Use concise keyword queries; if results are irrelevant or empty, retry with a narrower query, source names, dates, or English/Chinese variants rather than repeating the same query." + prepared_hint,
                 "parameters": {
                     "type": "object",

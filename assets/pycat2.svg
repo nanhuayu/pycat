@@ -1,0 +1,29 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF"/>
+      <stop offset=".5" stop-color="#F2F8FF"/>
+      <stop offset="1" stop-color="#E6F2FF"/>
+    </linearGradient>
+    <linearGradient id="b" x1="33.94" y1="501.98" x2="477.41" y2="77.9" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#306998"/>
+      <stop offset=".5" stop-color="#3776AB"/>
+      <stop offset="1" stop-color="#FFD43B"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 背景圆形 -->
+  <circle cx="255.52" cy="255.52" r="255.52" fill="url(#a)"/>
+  
+  <!-- 猫咪轮廓 -->
+  <path d="M96.19 172.74c0.0 -19.65 -9.7 -52.91 11.83 -91.12 43.38 12.02 49.07 35.75 75.25 53.66 51.81 -13.45 100.4 -12.48 146.84 1.94 27.96 -16.61 37.59 -49.78 84.91 -52.69 18.29 35.94 2.17 74.73 2.17 88.18 32.71 36.53 38.79 78.45 37.17 107.83 -2.1 38.63 -19.91 100.95 -79.13 121.12l36.59 96.97 -100.72 -79.06c-37.01 6.72 -74.02 6.72 -111.03 0.0 -31.87 -5.62 -75.47 -18.26 -99.56 -40.63 -24.05 -22.4 -42.99 -64.71 -43.73 -99.07 -0.71 -34.36 2.36 -73.5 39.37 -107.12z" stroke="url(#b)" stroke-width="26.67" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- 左眼 -->
+  <path d="M166.95 242.91l33.29 33.29 -33.29 33.29" stroke="#306998" stroke-width="17.78" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- 右眼 -->
+  <path d="M344.73 242.91l-33.29 33.29 33.29 33.29" stroke="#FFD43B" stroke-width="17.78" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- 鼻子 -->
+  <circle cx="255.52" cy="297.54" r="18.26" fill="#333"/>
+</svg>

@@ -15,6 +15,7 @@ from core.tools.catalog import TOOL_CATEGORY_LABELS, TOOL_CATEGORIES, ToolDescri
 from core.tools.manager import ToolManager
 from services.storage_service import StorageService
 from ui.settings.page_header import build_page_header
+from ui.utils.icon_manager import Icons
 
 
 class PermissionsPage(QWidget):
@@ -117,6 +118,8 @@ class PermissionsPage(QWidget):
 
         reset_row = QHBoxLayout()
         reset_btn = QPushButton("恢复默认值")
+        reset_btn.setObjectName("settings_action_btn")
+        reset_btn.setIcon(Icons.get(Icons.REFRESH))
         reset_btn.setToolTip("读取/搜索类工具启用并自动批准；编辑/命令/委托类工具启用但需确认；其余按类别默认。")
         reset_btn.clicked.connect(self._reset_defaults)
         reset_row.addStretch(1)

@@ -9,7 +9,7 @@ from core.tools.base import BaseTool, ToolContext, ToolResult
 class AskQuestionsTool(BaseTool):
     @property
     def name(self) -> str:
-        return "ask_questions"
+        return "user__ask"
 
     @property
     def description(self) -> str:

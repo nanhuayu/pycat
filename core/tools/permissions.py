@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict
 
 from core.config.schema import ToolPermissionConfig, ToolPolicy
-from core.tools.base import BaseTool, ToolContext
+from core.tools.base import BaseTool, PermissionContext, ToolContext, ToolRuntimeContext
+from core.tools.catalog import normalize_tool_category
 
 
 @dataclass
@@ -17,14 +18,6 @@ class ToolPermissionPolicy:
     """
 
     config: ToolPermissionConfig = field(default_factory=ToolPermissionConfig)
-
-    @classmethod
-    def from_config(cls, config: dict[str, Any] | None) -> "ToolPermissionPolicy":
-        d = dict(config) if config is not None else {}
-        # Support both full app_settings dict and permissions sub-dict
-        if "permissions" in d:
-            d = d.get("permissions") or {}
-        return cls(config=ToolPermissionConfig.from_dict(d))
 
     def to_dict(self) -> dict[str, Any]:
         return self.config.to_dict()
@@ -56,20 +49,7 @@ class ToolPermissionPolicy:
 
 
 class ToolPermissionResolver:
-    """Wrap tool approval callbacks with a repository-wide permission policy."""
-
-    def __init__(self, policy: ToolPermissionPolicy | None = None) -> None:
-        self._policy = policy or ToolPermissionPolicy()
-
-    @property
-    def policy(self) -> ToolPermissionPolicy:
-        return self._policy
-
-    def update(self, config: dict[str, Any] | None) -> None:
-        self._policy = ToolPermissionPolicy.from_config(config)
-
-    def wrap_context(self, context: ToolContext, tool: BaseTool) -> ToolContext:
-        return self.wrap_context_with_policy(context, tool, self._policy)
+    """Wrap a ToolContext with the request-scoped permission policy."""
 
     @staticmethod
     def wrap_context_with_policy(
@@ -91,6 +71,27 @@ class ToolPermissionResolver:
                 return await result
             return bool(result)
 
+        runtime = getattr(context, "runtime", None) or ToolRuntimeContext()
+        permission = PermissionContext(
+            source=str(getattr(runtime, "source", "") or getattr(context, "permission", PermissionContext()).source or "desktop"),
+            mode=str(getattr(runtime, "mode", "") or getattr(context, "permission", PermissionContext()).mode or "chat"),
+            tool_name=tool.name,
+            category=normalize_tool_category(tool.category),
+            risk=str(getattr(getattr(context, "permission", None), "risk", "") or "normal"),
+            agent_id=str(getattr(runtime, "agent_id", "") or ""),
+            trace_id=str(getattr(runtime, "trace_id", "") or ""),
+            workspace_roots=tuple(getattr(runtime, "workspace_roots", ()) or (context.work_dir,)),
+        )
+        runtime = ToolRuntimeContext(
+            source=permission.source,
+            mode=permission.mode,
+            agent_id=permission.agent_id,
+            trace_id=permission.trace_id,
+            tool_call_id=str(getattr(runtime, "tool_call_id", "") or ""),
+            workspace_roots=permission.workspace_roots,
+            permission=permission,
+        )
+
         return ToolContext(
             work_dir=context.work_dir,
             approval_callback=permission_aware_callback,
@@ -99,4 +100,6 @@ class ToolPermissionResolver:
             llm_client=getattr(context, "llm_client", None),
             conversation=getattr(context, "conversation", None),
             provider=getattr(context, "provider", None),
+            runtime=runtime,
+            permission=permission,
         )

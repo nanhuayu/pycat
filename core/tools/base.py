@@ -1,13 +1,81 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, List, Union, Callable
 
 from core.tools.catalog import ToolDescriptor, normalize_tool_category
 
+
+@dataclass(frozen=True)
+class PermissionContext:
+    """Permission facts for one tool execution."""
+
+    source: str = "desktop"
+    mode: str = "chat"
+    tool_name: str = ""
+    category: str = "extension"
+    risk: str = "normal"
+    agent_id: str = ""
+    trace_id: str = ""
+    workspace_roots: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ToolRuntimeContext:
+    """Runtime identity and boundary data for one tool call."""
+
+    source: str = "desktop"
+    mode: str = "chat"
+    agent_id: str = ""
+    trace_id: str = ""
+    tool_call_id: str = ""
+    workspace_roots: tuple[str, ...] = ()
+    permission: PermissionContext = field(default_factory=PermissionContext)
+
+
+@dataclass(frozen=True)
+class ScheduledSubtaskAction:
+    """Typed request to run a child agent/capability."""
+
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self.payload or {})
+
+
+@dataclass(frozen=True)
+class ToolControlAction:
+    """A typed non-text action requested by a tool."""
+
+    kind: str
+    subtask: ScheduledSubtaskAction | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def schedule_subtask(cls, payload: dict[str, Any]) -> "ToolControlAction":
+        return cls(kind="schedule_subtask", subtask=ScheduledSubtaskAction(dict(payload or {})))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "subtask": self.subtask.to_dict() if self.subtask is not None else None,
+            "metadata": dict(self.metadata or {}),
+        }
+
+
 class ToolResult:
     """Standardized result from a tool execution."""
-    def __init__(self, content: Union[str, List[Dict[str, Any]]], is_error: bool = False):
+    def __init__(
+        self,
+        content: Union[str, List[Dict[str, Any]]],
+        is_error: bool = False,
+        *,
+        control_action: ToolControlAction | None = None,
+    ):
         self.content = content
         self.is_error = is_error
+        self.control_action = control_action
 
     def to_string(self) -> str:
         if isinstance(self.content, str):
@@ -31,7 +99,9 @@ class ToolContext:
                  state: Optional[Dict[str, Any]] = None,
                  llm_client: Any = None,
                  conversation: Any = None,
-                 provider: Any = None):
+                 provider: Any = None,
+                 runtime: ToolRuntimeContext | None = None,
+                 permission: PermissionContext | None = None):
         self.work_dir = work_dir
         self.approval_callback = approval_callback
         self.questions_callback = questions_callback
@@ -39,6 +109,11 @@ class ToolContext:
         self.llm_client = llm_client
         self.conversation = conversation
         self.provider = provider
+        self.runtime = runtime or ToolRuntimeContext(
+            workspace_roots=(str(work_dir or "."),),
+            permission=permission or PermissionContext(workspace_roots=(str(work_dir or "."),)),
+        )
+        self.permission = permission or self.runtime.permission
 
     async def ask_approval(self, message: str) -> bool:
         if self.approval_callback:
@@ -137,15 +212,20 @@ class ToolContext:
         import os
         
         p = (path or ".").strip() or "."
-        root = Path(self.work_dir).resolve()
+        roots = tuple(str(item or "").strip() for item in getattr(self.runtime, "workspace_roots", ()) if str(item or "").strip())
+        root = Path(roots[0] if roots else self.work_dir).resolve()
         candidate = (root / p).resolve() if not os.path.isabs(p) else Path(p).resolve()
         
-        # Security check: ensure path is within workspace
-        # For now, strict check
-        try:
-            candidate.relative_to(root)
-        except ValueError:
-            raise ValueError(f"Access denied: Path '{path}' is outside workspace '{self.work_dir}'")
+        allowed = False
+        for raw_root in roots or (str(root),):
+            try:
+                candidate.relative_to(Path(raw_root).resolve())
+                allowed = True
+                break
+            except ValueError:
+                continue
+        if not allowed:
+            raise ValueError(f"Access denied: Path '{path}' is outside workspace roots {roots or (str(root),)}")
             
         return candidate
 

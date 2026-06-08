@@ -63,7 +63,7 @@ class WorkspaceSessionService:
         )
         self._write_json(session_dir / "state.json", state.to_dict())
         self._copy_artifact_files(session_dir, state.to_dict(), work_dir=str(getattr(conversation, "work_dir", "") or "."))
-        self._copy_tool_result_files(session_dir, conversation)
+        self._copy_archive_files(session_dir, state.to_dict(), work_dir=str(getattr(conversation, "work_dir", "") or "."))
         self._cleanup_legacy_artifacts(session_dir)
 
     def delete_snapshot(self, conversation_id: str, *, work_dir: str | None = None) -> None:
@@ -145,13 +145,15 @@ class WorkspaceSessionService:
             except Exception as exc:
                 logger.debug("Failed to remove legacy workspace session file %s: %s", path, exc)
                 continue
-
-        docs_dir = session_dir / "documents"
-        if docs_dir.exists():
+        legacy_dirs = [
+            session_dir / "documents",
+        ]
+        for path in legacy_dirs:
             try:
-                shutil.rmtree(docs_dir, ignore_errors=True)
+                if path.exists():
+                    shutil.rmtree(path)
             except Exception as exc:
-                logger.debug("Failed to remove legacy workspace session documents dir %s: %s", docs_dir, exc)
+                logger.debug("Failed to remove legacy workspace session dir %s: %s", path, exc)
 
     @staticmethod
     def _copy_artifact_files(session_dir: Path, state_payload: Dict[str, Any], *, work_dir: str) -> None:
@@ -159,7 +161,7 @@ class WorkspaceSessionService:
         if not isinstance(artifacts, dict):
             return
         workspace_root = Path(work_dir or ".").expanduser().resolve()
-        target_dir = session_dir / "artifacts"
+        target_dir = session_dir / "artifact"
         for artifact in artifacts.values():
             if not isinstance(artifact, dict):
                 continue
@@ -178,28 +180,43 @@ class WorkspaceSessionService:
                 logger.debug("Failed to copy artifact file %s: %s", source, exc)
 
     @staticmethod
-    def _copy_tool_result_files(session_dir: Path, conversation: Conversation) -> None:
-        target_dir = session_dir / "tool-results"
-        seen: set[Path] = set()
-        for message in getattr(conversation, "messages", []) or []:
-            metadata = getattr(message, "metadata", {}) or {}
-            if not isinstance(metadata, dict):
+    def _copy_archive_files(session_dir: Path, state_payload: Dict[str, Any], *, work_dir: str) -> None:
+        archive_index = state_payload.get("archive_index") if isinstance(state_payload, dict) else {}
+        if not isinstance(archive_index, dict):
+            return
+        workspace_root = Path(work_dir or ".").expanduser().resolve()
+        source_dirs: set[Path] = set()
+        for record in archive_index.values():
+            if not isinstance(record, dict):
                 continue
-            source_text = str(metadata.get("tool_result_file") or "").strip()
-            if not source_text:
+            original_ref = str(record.get("original_ref") or "").strip()
+            if not original_ref:
                 continue
-            source = Path(source_text)
+            original = Path(original_ref)
+            if not original.is_absolute():
+                original = workspace_root / original
             try:
-                source = source.expanduser().resolve()
+                original = original.expanduser().resolve()
             except Exception:
                 continue
-            if source in seen or not source.is_file():
-                continue
-            seen.add(source)
+            if original.exists() and original.is_file():
+                source_dirs.add(original.parent)
+        for source_dir in source_dirs:
             try:
-                target_dir.mkdir(parents=True, exist_ok=True)
-                dest = target_dir / source.name
-                if source != dest.resolve():
-                    shutil.copy2(source, dest)
+                parts = source_dir.parts
+                if ".pycat" not in parts or "sessions" not in parts:
+                    continue
+                sessions_idx = parts.index("sessions")
+                if len(parts) <= sessions_idx + 2:
+                    continue
+                relative = Path(*parts[sessions_idx + 2 :])
+                dest = (session_dir / relative).resolve()
+                if session_dir.resolve() not in dest.parents:
+                    continue
+                if source_dir.resolve() == dest:
+                    continue
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.copytree(source_dir, dest)
             except Exception as exc:
-                logger.debug("Failed to copy tool result file %s: %s", source, exc)
+                logger.debug("Failed to copy archive directory %s: %s", source_dir, exc)

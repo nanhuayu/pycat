@@ -1,6 +1,6 @@
 # PyCat Agent
 
-> PyCat Agent | LLM chat / agent / tools
+> PyCat | LLM chat · agent · tools
 
 PyCat Agent 是一款基于 PyQt6 的桌面 AI 客户端，将 **Chat**、**Agent** 与 **Tools** 三类工作流统一到同一个应用中，适合希望在本地桌面环境中构建完整 AI 工作台的用户。
 

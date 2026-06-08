@@ -46,25 +46,24 @@ TEXT_SUMMARY_SYSTEM_PROMPT = """你是文本总结助手。
 
 
 def default_capabilities_config() -> CapabilitiesConfig:
-    """Return built-in capabilities.
-
-    Lightweight capabilities are exposed as ``capability__*`` tools.
-    Multi-step research / analysis should be handled by ``subagent__*``
-    tools instead.
-    """
+    """Return built-in capability definitions."""
     capabilities = (
         # --- Text-only utilities (no tool categories; runtime uses chat mode) ---
         CapabilityConfig(
             id="prompt_optimize",
             name="提示词优化",
             kind="prompt_optimize",
+            visibility="internal",
+            execution_mode="direct_llm",
             system_prompt=DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT.strip(),
             options={"input_label": "原始提示词", "output_label": "优化后提示词"},
         ),
         CapabilityConfig(
-            id="title_extract",
+            id="title",
             name="标题提取",
-            kind="title_extract",
+            kind="title",
+            visibility="internal",
+            execution_mode="direct_llm",
             system_prompt=TITLE_EXTRACT_SYSTEM_PROMPT.strip(),
             options={"max_chars": 30},
         ),
@@ -72,25 +71,55 @@ def default_capabilities_config() -> CapabilitiesConfig:
             id="translate",
             name="翻译",
             kind="translate",
+            visibility="agent_tool",
+            execution_mode="direct_llm",
             system_prompt=TRANSLATE_SYSTEM_PROMPT.strip(),
             options={"target_language": "中文", "preserve_format": True},
         ),
         # --- Context compression (text-in, text-out; no tool categories) ---
         CapabilityConfig(
-            id="context_compress",
+            id="compress",
             name="上下文压缩",
-            kind="context_compress",
+            kind="compress",
+            visibility="internal",
+            execution_mode="direct_llm",
             system_prompt=SUMMARY_SYSTEM_PROMPT.strip(),
             options={"include_tool_details": False, "keep_last_messages": 6},
         ),
         # --- Single-source summarization (read tool category; runtime uses agent mode) ---
         CapabilityConfig(
-            id="summarize_text",
+            id="summarize",
             name="长文总结",
-            kind="summarize_text",
+            kind="summarize",
+            visibility="agent_tool",
+            execution_mode="tool_limited_loop",
             system_prompt=TEXT_SUMMARY_SYSTEM_PROMPT.strip(),
             allowed_tool_categories=("read",),
             options={"outline_first": True, "max_turns": 8},
+        ),
+        CapabilityConfig(
+            id="extract_facts",
+            name="事实抽取",
+            kind="extract_facts",
+            visibility="agent_tool",
+            execution_mode="direct_llm",
+            system_prompt="Extract stable facts, constraints, decisions, references, and open questions from the input. Return concise structured text.",
+        ),
+        CapabilityConfig(
+            id="classify_risk",
+            name="风险分类",
+            kind="classify_risk",
+            visibility="agent_tool",
+            execution_mode="direct_llm",
+            system_prompt="Classify the operational, permission, privacy, and correctness risks in the input. Return risk level, rationale, and mitigation.",
+        ),
+        CapabilityConfig(
+            id="rewrite_query",
+            name="查询改写",
+            kind="rewrite_query",
+            visibility="agent_tool",
+            execution_mode="direct_llm",
+            system_prompt="Rewrite the user's research/search need into precise search queries. Preserve intent and return compact query suggestions.",
         ),
     )
     return CapabilitiesConfig(capabilities=capabilities)

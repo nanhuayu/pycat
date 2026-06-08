@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from core.state.services.artifact_service import ArtifactService
+from models.state import MemoryRecord
 from core.commands.types import CommandAction, CommandResult, PromptInvocation
 def cmd_help(args: str, ctx: Dict[str, Any], *, list_commands) -> str:
     """Show available commands."""
@@ -18,7 +19,7 @@ def cmd_help(args: str, ctx: Dict[str, Any], *, list_commands) -> str:
     lines.append("")
     lines.append("Use `/{skill-name}` to run a skill directly. Use `#path/to/file` for file references.")
     lines.append(
-        "`!<command>` is controlled by Settings → Terminal: in Shell mode it explicitly runs `execute_command` "
+        "`!<command>` is controlled by Settings → Terminal: in Shell mode it explicitly runs `shell__run` "
         "under the `command` permission category; in Agent mode it is sent as normal user text."
     )
     return "\n".join(lines)
@@ -124,16 +125,18 @@ def cmd_memory(args: str, ctx: Dict[str, Any]) -> str:
     if args.strip():
         if "=" in args:
             key, _, value = args.partition("=")
-            state.memory[key.strip()] = value.strip()
+            memory_key = key.strip()
+            state.memory[memory_key] = MemoryRecord(key=memory_key, content=value.strip())
             conv.set_state(state)
             return f"Memory '{key.strip()}' saved."
-        return "Usage: `/memory key=value`. Long working notes belong in `/plan` or `manage_artifact`, not memory."
+        return "Usage: `/memory key=value`. Long working notes belong in `/plan` or `state__artifact`, not memory."
     # Show current memory
     lines = []
     if state.memory:
         lines.append("**Key-Value Memory:**")
         for k, v in state.memory.items():
-            lines.append(f"  - **{k}**: {v}")
+            record = v if isinstance(v, MemoryRecord) else MemoryRecord.from_dict(str(k), v)
+            lines.append(f"  - **{k}** [{record.category}]: {record.content}")
     if not lines:
         return "No memory stored. Usage: `/memory key=value`"
     return "\n".join(lines)

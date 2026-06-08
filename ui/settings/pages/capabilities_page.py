@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QLineEdit,
     QSpinBox,
+    QComboBox,
 )
 
 from core.capabilities import CapabilitiesConfig, CapabilitiesManager, CapabilityConfig, default_capabilities_config
@@ -25,6 +26,8 @@ from core.config.schema import PromptsConfig, PromptOptimizerConfig
 from core.capabilities.defaults import DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT
 from models.provider import Provider
 from ui.settings.page_header import build_page_header
+from ui.utils.combo_box import configure_combo_popup
+from ui.utils.icon_manager import Icons
 from ui.widgets.model_ref_selector import ModelRefCombo
 
 
@@ -82,7 +85,8 @@ class CapabilitiesPage(QWidget):
                 id=current.id,
                 name=current.name,
                 kind=current.kind,
-                enabled=current.enabled,
+                visibility=current.visibility,
+                execution_mode=current.execution_mode,
                 model_ref=model_ref,
                 system_prompt=system_prompt,
                 description=current.description,
@@ -102,36 +106,39 @@ class CapabilitiesPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        layout.addWidget(build_page_header("能力", "统一配置可复用能力，每个能力注册为 capability__* 工具供大模型直接调用。"))
-
-        body = QWidget()
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(10)
-
-        left = QVBoxLayout()
-        left.setContentsMargins(0, 0, 0, 0)
-        left.setSpacing(6)
+        layout.addWidget(build_page_header("能力", "统一配置可复用大模型能力；agent_tool 能力注册为 capability__* 工具。"))
 
         self.capability_list = QListWidget()
-        self.capability_list.setMinimumWidth(150)
-        self.capability_list.setMaximumWidth(180)
-        self.capability_list.setMinimumHeight(260)
+        self.capability_list.setObjectName("settings_list")
+        self.capability_list.setVisible(False)
         self.capability_list.currentRowChanged.connect(self._on_capability_changed)
-        left.addWidget(self.capability_list, 1)
 
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(6)
+        actions.addWidget(QLabel("能力"))
+        self.capability_combo = QComboBox()
+        self.capability_combo.setObjectName("settings_capability_combo")
+        configure_combo_popup(self.capability_combo, popup_minimum_width=260)
+        self.capability_combo.currentIndexChanged.connect(self._on_capability_combo_changed)
+        actions.addWidget(self.capability_combo, 1)
         self.capability_add_btn = QPushButton("新增")
+        self.capability_add_btn.setObjectName("settings_action_btn")
+        self.capability_add_btn.setIcon(Icons.get(Icons.PLUS))
         self.capability_add_btn.clicked.connect(self._add_capability)
         actions.addWidget(self.capability_add_btn)
+        self.capability_toggle_btn = QPushButton("停用")
+        self.capability_toggle_btn.setObjectName("settings_action_btn")
+        self.capability_toggle_btn.setIcon(Icons.get(Icons.PAUSE, scale_factor=1.0))
+        self.capability_toggle_btn.clicked.connect(self._toggle_capability_enabled)
+        actions.addWidget(self.capability_toggle_btn)
         self.capability_delete_btn = QPushButton("删除")
+        self.capability_delete_btn.setObjectName("settings_action_btn")
+        self.capability_delete_btn.setProperty("danger", True)
+        self.capability_delete_btn.setIcon(Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR))
         self.capability_delete_btn.clicked.connect(self._delete_capability)
         actions.addWidget(self.capability_delete_btn)
-        left.addLayout(actions)
-
-        body_layout.addLayout(left)
+        layout.addLayout(actions)
 
         detail_group = QGroupBox("能力详情")
         detail_group.setProperty("flat", True)
@@ -149,8 +156,12 @@ class CapabilitiesPage(QWidget):
         detail_form.setHorizontalSpacing(10)
         detail_form.setVerticalSpacing(6)
 
-        self.capability_enabled = QCheckBox("启用此能力")
-        detail_form.addRow("状态", self.capability_enabled)
+        self.capability_visibility = QComboBox()
+        self.capability_visibility.addItem("内部调用", "internal")
+        self.capability_visibility.addItem("注册为工具", "agent_tool")
+        self.capability_visibility.addItem("停用", "hidden")
+        configure_combo_popup(self.capability_visibility)
+        detail_form.addRow("可见性", self.capability_visibility)
 
         self.capability_id = QLineEdit()
         self.capability_id.setReadOnly(True)
@@ -193,9 +204,13 @@ class CapabilitiesPage(QWidget):
         prompt_actions.setSpacing(6)
         prompt_actions.addStretch()
         self.capability_builtin_btn = QPushButton("恢复内置提示词")
+        self.capability_builtin_btn.setObjectName("settings_action_btn")
+        self.capability_builtin_btn.setIcon(Icons.get(Icons.REFRESH))
         self.capability_builtin_btn.clicked.connect(self._load_builtin_template)
         prompt_actions.addWidget(self.capability_builtin_btn)
         self.capability_clear_prompt_btn = QPushButton("清空并使用内置")
+        self.capability_clear_prompt_btn.setObjectName("settings_action_btn")
+        self.capability_clear_prompt_btn.setIcon(Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR))
         self.capability_clear_prompt_btn.clicked.connect(lambda: self.capability_prompt.setPlainText(""))
         prompt_actions.addWidget(self.capability_clear_prompt_btn)
         detail_form.addRow("", prompt_actions_widget)
@@ -207,8 +222,7 @@ class CapabilitiesPage(QWidget):
         detail_form.addRow("选项 JSON", self.capability_options)
 
         detail_group_layout.addLayout(detail_form)
-        body_layout.addWidget(detail_group, 1)
-        layout.addWidget(body, 1)
+        layout.addWidget(detail_group, 1)
 
         self._populate_capabilities()
 
@@ -217,11 +231,8 @@ class CapabilitiesPage(QWidget):
         self.prompt_opt_system_edit = self.capability_prompt
 
         hint = QLabel(
-            "提示：每个能力都是一个独立的工作流，注册为 capability__* 工具。"
-            "能力可配置自己的模型、允许工具类别、最大轮次和提示词。"
-            "上下文压缩能力统一负责压缩模型、提示词与工具详情选项。"
-            "subagent__custom 是通用子 Agent，由父 Agent 在调用时实时配置目的和允许工具类别；"
-            "subagent__read_analyze 和 subagent__search 是专用子 Agent，分别用于多文件长文分析和搜索研究。"
+            "提示：internal 能力仅供运行时和界面内部调用；agent_tool 能力会注册为 capability__* 工具；"
+            "hidden 能力不可调用。能力可配置自己的模型、允许工具类别、最大轮次和提示词。"
         )
         hint.setWordWrap(True)
         hint.setProperty("muted", True)
@@ -229,18 +240,44 @@ class CapabilitiesPage(QWidget):
 
         layout.addStretch()
 
-    def _populate_capabilities(self) -> None:
+    def _populate_capabilities(self, *, select_id: str = "") -> None:
+        current_id = str(select_id or self._current_capability_id() or "").strip()
+        self.capability_list.blockSignals(True)
+        if hasattr(self, "capability_combo"):
+            self.capability_combo.blockSignals(True)
+            self.capability_combo.clear()
         self.capability_list.clear()
-        for capability in self._capability_items.values():
-            enabled_mark = "✓" if capability.enabled else "–"
-            item = QListWidgetItem(f"{enabled_mark} {capability.name}\n{capability.kind}")
-            item.setData(Qt.ItemDataRole.UserRole, capability.id)
-            item.setToolTip(f"{capability.name}\nID: {capability.id}\n类型: {capability.kind}")
-            if not capability.enabled:
-                item.setForeground(Qt.GlobalColor.gray)
-            self.capability_list.addItem(item)
-        if self.capability_list.count() > 0:
-            self.capability_list.setCurrentRow(0)
+        try:
+            for capability in self._capability_items.values():
+                visibility_mark = {"agent_tool": "工具", "internal": "内部", "hidden": "停用"}.get(capability.visibility, "?")
+                item = QListWidgetItem(f"{capability.name}\n{visibility_mark} · {capability.kind}")
+                item.setData(Qt.ItemDataRole.UserRole, capability.id)
+                item.setToolTip(f"{capability.name}\nID: {capability.id}\n类型: {capability.kind}\n状态: {visibility_mark}")
+                if capability.visibility == "hidden":
+                    item.setForeground(Qt.GlobalColor.gray)
+                self.capability_list.addItem(item)
+                if hasattr(self, "capability_combo"):
+                    self.capability_combo.addItem(f"{capability.name} ({visibility_mark})", capability.id)
+            if self.capability_list.count() > 0:
+                target_row = 0
+                if current_id:
+                    for row in range(self.capability_list.count()):
+                        item = self.capability_list.item(row)
+                        if str(item.data(Qt.ItemDataRole.UserRole) or "") == current_id:
+                            target_row = row
+                            break
+                self.capability_list.setCurrentRow(target_row)
+                if hasattr(self, "capability_combo"):
+                    self.capability_combo.setCurrentIndex(target_row)
+        finally:
+            self.capability_list.blockSignals(False)
+            if hasattr(self, "capability_combo"):
+                self.capability_combo.blockSignals(False)
+        self._on_capability_changed(self.capability_list.currentRow())
+
+    def _on_capability_combo_changed(self, row: int) -> None:
+        if 0 <= int(row) < self.capability_list.count():
+            self.capability_list.setCurrentRow(int(row))
 
     def _current_capability_id(self) -> str:
         item = self.capability_list.currentItem()
@@ -281,7 +318,8 @@ class CapabilitiesPage(QWidget):
             id=current.id,
             name=(self.capability_name.text() or "").strip() or current.name or current.id,
             kind=current.kind,
-            enabled=bool(self.capability_enabled.isChecked()),
+            visibility=str(self.capability_visibility.currentData() or current.visibility or "agent_tool"),
+            execution_mode="tool_limited_loop" if self._parse_csv(self.capability_tool_categories.text()) else "direct_llm",
             model_ref=self.capability_model.model_ref(),
             system_prompt=(self.capability_prompt.toPlainText() or "").strip(),
             description=(self.capability_description.toPlainText() or "").strip(),
@@ -305,7 +343,8 @@ class CapabilitiesPage(QWidget):
         self._loading_capability = True
         try:
             self._loaded_capability_id = capability_id
-            self.capability_enabled.setChecked(bool(capability.enabled) if capability else False)
+            index = self.capability_visibility.findData(capability.visibility if capability else "hidden")
+            self.capability_visibility.setCurrentIndex(index if index >= 0 else 0)
             self.capability_id.setText(capability.id if capability else "")
             self.capability_name.setText(capability.name if capability else "")
             self.capability_description.setPlainText(capability.description if capability else "")
@@ -328,6 +367,13 @@ class CapabilitiesPage(QWidget):
             self.capability_delete_btn.setEnabled(
                 (capability_id not in self._builtin_capability_ids) if capability else False
             )
+            if hasattr(self, "capability_combo"):
+                row = self.capability_list.currentRow()
+                if row >= 0 and self.capability_combo.currentIndex() != row:
+                    self.capability_combo.blockSignals(True)
+                    self.capability_combo.setCurrentIndex(row)
+                    self.capability_combo.blockSignals(False)
+            self._sync_toggle_action(capability)
         finally:
             self._loading_capability = False
 
@@ -336,13 +382,56 @@ class CapabilitiesPage(QWidget):
             return ""
         model = capability.model_ref or "跟随当前对话模型"
         categories = ", ".join(capability.allowed_tool_categories or ()) or "无（文本能力）"
-        runtime = "Agent 子任务" if capability.allowed_tool_categories else "Chat 子任务"
+        runtime = capability.execution_mode
         turns = str(capability.options.get("max_turns")) if capability.options and capability.options.get("max_turns") else "不限制"
-        status = "已注册为工具" if capability.enabled else "已禁用"
+        status = {"agent_tool": "注册为工具", "internal": "内部调用", "hidden": "停用"}.get(
+            capability.visibility,
+            capability.visibility,
+        )
         return (
             f"ID: {capability.id} · 类型: {capability.kind} · 运行: {runtime} · "
             f"模型: {model} · 允许工具类别: {categories} · 最大轮次: {turns} · {status}"
         )
+
+    def _sync_toggle_action(self, capability: CapabilityConfig | None) -> None:
+        if not hasattr(self, "capability_toggle_btn"):
+            return
+        enabled = capability is not None and capability.visibility != "hidden"
+        self.capability_toggle_btn.setEnabled(capability is not None)
+        self.capability_toggle_btn.setText("停用" if enabled else "启用")
+        self.capability_toggle_btn.setIcon(Icons.get(Icons.PAUSE if enabled else Icons.PLAY, scale_factor=1.0))
+
+    def _toggle_capability_enabled(self) -> None:
+        capability_id = self._current_capability_id()
+        if not capability_id:
+            return
+        self._save_capability(capability_id)
+        current = self._capability_items.get(capability_id)
+        if current is None:
+            return
+        if current.visibility == "hidden":
+            builtin = default_capabilities_config().capability(capability_id)
+            new_visibility = str(getattr(builtin, "visibility", "") or "").strip() or "agent_tool"
+            if new_visibility == "hidden":
+                new_visibility = "agent_tool"
+        else:
+            new_visibility = "hidden"
+        self._capability_items[capability_id] = CapabilityConfig(
+            id=current.id,
+            name=current.name,
+            kind=current.kind,
+            visibility=new_visibility,
+            execution_mode=current.execution_mode,
+            model_ref=current.model_ref,
+            system_prompt=current.system_prompt,
+            description=current.description,
+            allowed_tool_categories=current.allowed_tool_categories,
+            input_schema=current.input_schema,
+            output_schema=current.output_schema,
+            options=current.options,
+        )
+        self._loaded_capability_id = ""
+        self._populate_capabilities(select_id=capability_id)
 
     def _add_capability(self) -> None:
         self._save_capability(getattr(self, "_loaded_capability_id", "") or self._current_capability_id())
@@ -355,14 +444,11 @@ class CapabilitiesPage(QWidget):
             id=cap_id,
             name=f"自定义能力 {index}",
             kind="custom",
-            enabled=True,
+            visibility="agent_tool",
+            execution_mode="direct_llm",
         )
-        self._populate_capabilities()
-        for row in range(self.capability_list.count()):
-            item = self.capability_list.item(row)
-            if str(item.data(Qt.ItemDataRole.UserRole) or "") == cap_id:
-                self.capability_list.setCurrentRow(row)
-                break
+        self._loaded_capability_id = ""
+        self._populate_capabilities(select_id=cap_id)
 
     def _delete_capability(self) -> None:
         capability_id = self._current_capability_id()

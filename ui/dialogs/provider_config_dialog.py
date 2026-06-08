@@ -119,9 +119,10 @@ class ProviderConfigDialog(QDialog):
         key_layout = QHBoxLayout()
         key_layout.addWidget(self.api_key_input)
         show_key_btn = QPushButton()
-        show_key_btn.setIcon(Icons.get(Icons.EYE, scale_factor=0.85))
-        show_key_btn.setFixedWidth(40)
-        show_key_btn.setFixedHeight(32)
+        show_key_btn.setObjectName("settings_action_btn")
+        show_key_btn.setIcon(Icons.get(Icons.EYE))
+        show_key_btn.setFixedWidth(34)
+        show_key_btn.setFixedHeight(28)
         show_key_btn.setCheckable(True)
 
         def _toggle_key_visibility(checked: bool) -> None:
@@ -129,16 +130,19 @@ class ProviderConfigDialog(QDialog):
                 QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
             )
             show_key_btn.setIcon(
-                Icons.get(Icons.EYE_SLASH if checked else Icons.EYE, scale_factor=0.85)
+                Icons.get(Icons.EYE_SLASH if checked else Icons.EYE)
             )
 
         show_key_btn.toggled.connect(_toggle_key_visibility)
         key_layout.addWidget(show_key_btn)
         info_layout.addRow("API Key:", key_layout)
 
-        self.enabled_check = QCheckBox("启用该服务商")
+        # Provider enabled/disabled state is managed from Settings > Models.
+        # Keep the hidden checkbox only as the dialog's existing persistence hook.
+        self.enabled_check = QCheckBox(self)
+        self.enabled_check.setObjectName("provider_enabled_check")
+        self.enabled_check.setVisible(False)
         self.enabled_check.setChecked(True)
-        info_layout.addRow("状态:", self.enabled_check)
 
         info_layout.addRow("说明:", self.api_type_help)
 
@@ -157,9 +161,10 @@ class ProviderConfigDialog(QDialog):
         self.model_combo.currentTextChanged.connect(self._on_model_changed)
 
         fetch_btn = QPushButton()
-        fetch_btn.setIcon(Icons.get(Icons.REFRESH, scale_factor=0.9))
+        fetch_btn.setObjectName("settings_action_btn")
+        fetch_btn.setIcon(Icons.get(Icons.REFRESH))
         fetch_btn.setToolTip("获取可用模型")
-        fetch_btn.setFixedWidth(38)
+        fetch_btn.setFixedWidth(34)
         fetch_btn.clicked.connect(self._fetch_models)
 
         model_picker = QWidget()
@@ -318,9 +323,14 @@ class ProviderConfigDialog(QDialog):
 
         headers_btn_layout = QHBoxLayout()
         add_header_btn = QPushButton("添加")
+        add_header_btn.setObjectName("settings_action_btn")
+        add_header_btn.setIcon(Icons.get(Icons.PLUS))
         add_header_btn.clicked.connect(self._add_header_row)
         headers_btn_layout.addWidget(add_header_btn)
         remove_header_btn = QPushButton("删除")
+        remove_header_btn.setObjectName("settings_action_btn")
+        remove_header_btn.setProperty("danger", True)
+        remove_header_btn.setIcon(Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR))
         remove_header_btn.clicked.connect(self._remove_header_row)
         headers_btn_layout.addWidget(remove_header_btn)
         headers_btn_layout.addStretch()
@@ -349,9 +359,13 @@ class ProviderConfigDialog(QDialog):
         # Test connection
         test_layout = QHBoxLayout()
         test_btn = QPushButton("测试连接")
+        test_btn.setObjectName("settings_action_btn")
+        test_btn.setIcon(Icons.get(Icons.CHECK))
         test_btn.clicked.connect(self._test_connection)
         test_layout.addWidget(test_btn)
         self.test_status = QLabel("")
+        self.test_status.setObjectName("provider_status_label")
+        self.test_status.setProperty("state", "muted")
         test_layout.addWidget(self.test_status)
         test_layout.addStretch()
         layout.addLayout(test_layout)
@@ -361,11 +375,14 @@ class ProviderConfigDialog(QDialog):
         btn_layout.addStretch()
 
         cancel_btn = QPushButton("取消")
+        cancel_btn.setObjectName("settings_action_btn")
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
         save_btn = QPushButton("保存")
+        save_btn.setObjectName("settings_action_btn")
         save_btn.setProperty("primary", True)
+        save_btn.setIcon(Icons.get(Icons.CHECK, color="#ffffff"))
         save_btn.clicked.connect(self._save)
         btn_layout.addWidget(save_btn)
 
@@ -585,11 +602,11 @@ class ProviderConfigDialog(QDialog):
         valid, msg = self.provider_service.validate_provider(self.provider)
         if not valid:
             self.test_status.setText(f"连接失败：{msg}")
-            self.test_status.setStyleSheet("color: #ef4444;")
+            self._set_test_status_state("error")
             return
 
         self.test_status.setText("测试中...")
-        self.test_status.setStyleSheet("color: #a1a1aa;")
+        self._set_test_status_state("muted")
 
         async def test():
             return await self.provider_service.test_connection(self.provider)
@@ -602,13 +619,18 @@ class ProviderConfigDialog(QDialog):
 
             if success:
                 self.test_status.setText("连接成功")
-                self.test_status.setStyleSheet("color: #22c55e;")
+                self._set_test_status_state("success")
             else:
                 self.test_status.setText(f"连接失败：{message}")
-                self.test_status.setStyleSheet("color: #ef4444;")
+                self._set_test_status_state("error")
         except Exception as e:
             self.test_status.setText(f"连接失败：{str(e)[:30]}")
-            self.test_status.setStyleSheet("color: #ef4444;")
+            self._set_test_status_state("error")
+
+    def _set_test_status_state(self, state: str) -> None:
+        self.test_status.setProperty("state", state)
+        self.test_status.style().unpolish(self.test_status)
+        self.test_status.style().polish(self.test_status)
 
     def _save_to_provider(self):
         self.provider.name = self.name_input.text().strip()

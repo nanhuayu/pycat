@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from core.content.markdown import extract_markdown_links, extract_title_and_preview, strip_frontmatter, with_frontmatter
-from models.state import SessionState
+from models.state import MEMORY_CATEGORIES, MEMORY_CONTENT_LIMIT, MemoryRecord, SessionState
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,9 @@ class MemoryService:
     MEMORY_FILE_PREFIX = "memory__"
     TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
     SOURCE_OPTIONS = ("session", "workspace", "global")
+    SESSION_MEMORY_VALUE_CAP = 520
+    FILE_MEMORY_VALUE_CAP = 900
+    REJECTED_MEMORY_CANDIDATES_KEY = "_rejected_memory_candidates"
 
     @classmethod
     def list_memory_entries(
@@ -87,7 +90,9 @@ class MemoryService:
         if scope == "session":
             if normalized_key not in (state.memory or {}):
                 return None
-            return str(state.memory.get(normalized_key) or "")
+            item = state.memory.get(normalized_key)
+            record = item if isinstance(item, MemoryRecord) else MemoryRecord.from_dict(normalized_key, item)
+            return record.content
 
         path = cls._resolve_memory_file(scope, normalized_key, work_dir=work_dir, create_dir=False)
         if path is None or not path.exists() or not path.is_file():
@@ -109,6 +114,9 @@ class MemoryService:
         current_seq: int = 0,
         reason: str = "",
         tags: list[Any] | None = None,
+        category: str = "fact",
+        evidence_refs: list[Any] | None = None,
+        confidence: float = 1.0,
     ) -> str:
         scope = cls._normalize_scope(scope)
         normalized_key = str(key or "").strip()
@@ -117,8 +125,24 @@ class MemoryService:
             return "Memory key is required."
         if not body:
             return "Memory content is required."
+        if len(body) > MEMORY_CONTENT_LIMIT:
+            return f"Memory content is too long ({len(body)} chars). Keep memory facts within {MEMORY_CONTENT_LIMIT} chars; use state__artifact for long notes."
         if scope == "session":
-            feedback = cls.handle_updates(state, {normalized_key: body}, current_seq)
+            feedback = cls.handle_updates(
+                state,
+                {
+                    normalized_key: MemoryRecord(
+                        key=normalized_key,
+                        content=body,
+                        scope="session",
+                        category=cls._normalize_category(category),
+                        evidence_refs=[str(item).strip() for item in (evidence_refs or []) if str(item).strip()],
+                        confidence=float(confidence or 1.0),
+                        updated_seq=int(current_seq or 0),
+                    )
+                },
+                current_seq,
+            )
             return "\n".join(feedback) if feedback else f"Remembered: {normalized_key}"
 
         path = cls._resolve_memory_file(scope, normalized_key, work_dir=work_dir, create_dir=True)
@@ -171,6 +195,94 @@ class MemoryService:
         return f"Deleted {scope} memory: {normalized_key}"
 
     @classmethod
+    def list_memory_candidates(cls, state: SessionState, *, limit: int = 20) -> list[dict[str, Any]]:
+        rejected = set(cls._rejected_candidate_ids(state))
+        candidates: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for record in (state.archive_index or {}).values():
+            metadata = getattr(record, "metadata", {}) or {}
+            for idx, item in enumerate(metadata.get("memory_candidates") or []):
+                candidate = cls._normalize_candidate(item)
+                content = candidate.get("content", "")
+                if not content:
+                    continue
+                candidate_id = cls.memory_candidate_id(record.id, content, idx)
+                if candidate_id in rejected or candidate_id in seen:
+                    continue
+                seen.add(candidate_id)
+                candidate.update(
+                    {
+                        "id": candidate_id,
+                        "content_id": record.id,
+                        "source": record.source,
+                        "title": record.title,
+                    }
+                )
+                evidence = list(candidate.get("evidence_refs") or [])
+                if record.id not in evidence:
+                    evidence.insert(0, record.id)
+                candidate["evidence_refs"] = evidence[:8]
+                candidates.append(candidate)
+                if len(candidates) >= max(1, int(limit or 20)):
+                    return candidates
+        return candidates
+
+    @classmethod
+    def promote_memory_candidate(
+        cls,
+        state: SessionState,
+        *,
+        candidate_id: str,
+        key: str = "",
+        scope: str = "session",
+        work_dir: str | None = None,
+        current_seq: int = 0,
+    ) -> str:
+        target_id = str(candidate_id or "").strip()
+        if not target_id:
+            return "candidate_id is required."
+        candidate = next((item for item in cls.list_memory_candidates(state, limit=200) if item.get("id") == target_id), None)
+        if not candidate:
+            return f"Memory candidate not found: {target_id}"
+        memory_key = str(key or "").strip() or cls._key_from_candidate(candidate)
+        message = cls.write_memory_entry(
+            state,
+            scope=scope,
+            key=memory_key,
+            content=str(candidate.get("content") or ""),
+            work_dir=work_dir,
+            current_seq=current_seq,
+            reason=f"promoted memory candidate {target_id}",
+            category=str(candidate.get("category") or "fact"),
+            evidence_refs=list(candidate.get("evidence_refs") or []),
+            confidence=float(candidate.get("confidence") or 0.5),
+        )
+        cls.reject_memory_candidate(state, candidate_id=target_id)
+        return message
+
+    @classmethod
+    def reject_memory_candidate(cls, state: SessionState, *, candidate_id: str) -> str:
+        target_id = str(candidate_id or "").strip()
+        if not target_id:
+            return "candidate_id is required."
+        rejected = cls._rejected_candidate_ids(state)
+        if target_id not in rejected:
+            rejected.append(target_id)
+        state.archived_summaries = [
+            item for item in (state.archived_summaries or [])
+            if not str(item).startswith(cls.REJECTED_MEMORY_CANDIDATES_KEY + ":")
+        ]
+        state.archived_summaries.append(cls.REJECTED_MEMORY_CANDIDATES_KEY + ":" + ",".join(rejected[-200:]))
+        return f"Rejected memory candidate: {target_id}"
+
+    @staticmethod
+    def memory_candidate_id(content_id: str, content: str, index: int = 0) -> str:
+        import hashlib
+
+        digest = hashlib.sha1(f"{content_id}:{index}:{content}".encode("utf-8", errors="replace")).hexdigest()[:12]
+        return f"memcand-{digest}"
+
+    @classmethod
     def ensure_memory_dir(cls, scope: str, *, work_dir: str | None = None) -> Path | None:
         scope = cls._normalize_scope(scope)
         if scope == "workspace":
@@ -203,9 +315,53 @@ class MemoryService:
                     del state.memory[key]
                     feedback.append(f"Forgot: {key}")
             else:
-                state.memory[key] = str(value)
+                state.memory[key] = value if isinstance(value, MemoryRecord) else MemoryRecord.from_dict(str(key), value)
+                state.memory[key].updated_seq = int(current_seq or state.memory[key].updated_seq or 0)
                 feedback.append(f"Remembered: {key}")
         return feedback
+
+    @classmethod
+    def _rejected_candidate_ids(cls, state: SessionState) -> list[str]:
+        for item in reversed(state.archived_summaries or []):
+            text = str(item or "")
+            prefix = cls.REJECTED_MEMORY_CANDIDATES_KEY + ":"
+            if text.startswith(prefix):
+                return [part.strip() for part in text[len(prefix):].split(",") if part.strip()]
+        return []
+
+    @staticmethod
+    def _normalize_candidate(item: Any) -> dict[str, Any]:
+        if isinstance(item, dict):
+            content = str(item.get("content") or item.get("fact") or item.get("text") or "").strip()[:MEMORY_CONTENT_LIMIT]
+            category = str(item.get("category") or "fact").strip().lower()
+            if category not in MEMORY_CATEGORIES:
+                category = "fact"
+            evidence_refs = [str(ref).strip() for ref in (item.get("evidence_refs") or []) if str(ref).strip()]
+            try:
+                confidence = float(item.get("confidence") or 0.5)
+            except Exception:
+                confidence = 0.5
+            return {
+                "content": content,
+                "category": category,
+                "confidence": max(0.0, min(confidence, 1.0)),
+                "evidence_refs": evidence_refs,
+            }
+        return {
+            "content": str(item or "").strip()[:MEMORY_CONTENT_LIMIT],
+            "category": "fact",
+            "confidence": 0.5,
+            "evidence_refs": [],
+        }
+
+    @staticmethod
+    def _key_from_candidate(candidate: dict[str, Any]) -> str:
+        import re
+
+        content = str(candidate.get("content") or "memory").strip().lower()
+        words = re.findall(r"[\w\u4e00-\u9fff]+", content, flags=re.UNICODE)
+        key = ".".join(words[:6]) or "memory"
+        return key[:80]
 
     @classmethod
     def select_relevant(
@@ -233,7 +389,8 @@ class MemoryService:
 
         if include_session:
             for key, value in (state.memory or {}).items():
-                text = f"{key} {value}"
+                record = value if isinstance(value, MemoryRecord) else MemoryRecord.from_dict(str(key), value)
+                text = f"{key} {record.content} {record.category}"
                 score = cls._score(text, query_tokens)
                 if score <= 0 and not query_tokens:
                     score = 1
@@ -241,9 +398,13 @@ class MemoryService:
                     snippets.append(
                         MemorySnippet(
                             key=str(key),
-                            value=cls._trim(str(value or ""), 320),
+                            value=cls._memory_value_for_prompt(
+                                key=str(key),
+                                value=f"[{record.category}] {record.content}",
+                                cap=cls.SESSION_MEMORY_VALUE_CAP,
+                            ),
                             score=score,
-                            source="fact",
+                            source=record.category or "fact",
                         )
                     )
 
@@ -257,7 +418,12 @@ class MemoryService:
                     snippets.append(
                         MemorySnippet(
                             key=item.key,
-                            value=cls._trim(item.value, 520),
+                            value=cls._memory_value_for_prompt(
+                                key=item.key,
+                                value=item.value,
+                                cap=cls.FILE_MEMORY_VALUE_CAP,
+                                source=item.source,
+                            ),
                             score=score,
                             source=item.source,
                             mtime=item.mtime,
@@ -274,7 +440,12 @@ class MemoryService:
                     snippets.append(
                         MemorySnippet(
                             key=item.key,
-                            value=cls._trim(item.value, 520),
+                            value=cls._memory_value_for_prompt(
+                                key=item.key,
+                                value=item.value,
+                                cap=cls.FILE_MEMORY_VALUE_CAP,
+                                source=item.source,
+                            ),
                             score=score,
                             source=item.source,
                             mtime=item.mtime,
@@ -283,6 +454,15 @@ class MemoryService:
 
         snippets.sort(key=lambda item: (-item.score, item.source, item.key.lower()))
         return snippets[: max(0, int(limit or 0))]
+
+    @classmethod
+    def _memory_value_for_prompt(cls, *, key: str, value: str, cap: int, source: str = "session") -> str:
+        raw = str(value or "").strip()
+        if len(raw) <= max(80, int(cap or 0)):
+            return raw
+        digest = re.sub(r"\s+", " ", raw[:160]).strip()
+        hint = f"... [memory entry trimmed; key={key}; source={source}; chars={len(raw)}; use state__memory read/list for full content if needed]"
+        return cls._trim(f"{digest} {hint}", max(160, int(cap or 0)))
 
     @classmethod
     def build_prompt_section(
@@ -335,6 +515,11 @@ class MemoryService:
             seen.add(item)
             normalized.append(item)
         return tuple(normalized)
+
+    @staticmethod
+    def _normalize_category(category: Any) -> str:
+        raw = str(category or "fact").strip().lower()
+        return raw if raw in MEMORY_CATEGORIES else "fact"
 
     @classmethod
     def load_workspace_memory(

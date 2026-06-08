@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QMessageBox
 
-from core.state.services.task_service import TaskService
+from core.state.services.todo_service import TodoService
 from core.app.state import ConversationSelection
 from models.conversation import Conversation
 from models.provider import split_model_ref
@@ -128,9 +128,23 @@ class ConversationPresenter:
                 logger.debug("Failed to sync mode selection during select: %s", e)
 
             # Update chat header
+            token_snapshot = None
+            try:
+                from core.llm.token_budget import build_token_usage_snapshot
+
+                token_snapshot = build_token_usage_snapshot(
+                    conversation,
+                    providers=host.providers,
+                    provider_id=str(getattr(conversation, "provider_id", "") or ""),
+                    provider_name=str(getattr(conversation, "provider_name", "") or ""),
+                    model_id=str(getattr(conversation, "model", "") or ""),
+                )
+            except Exception as e:
+                logger.debug("Failed to build token snapshot during select: %s", e)
             host.chat_view.update_header(
                 host.services.conv_service.build_model_ref(conversation, host.providers),
                 msg_count=len(conversation.messages),
+                token_snapshot=token_snapshot,
             )
             work_dir = getattr(conversation, "work_dir", "")
             host.chat_view.update_work_dir(work_dir)
@@ -198,10 +212,13 @@ class ConversationPresenter:
         try:
             host.services.conv_service.save(host.current_conversation)
             conversations = host.services.conv_service.list_all()
+            host.sidebar.update_conversations(conversations)
             host.services.app_coordinator.sync_catalog(
                 providers=host.providers,
                 conversation_count=len(conversations),
             )
+            if hasattr(host.sidebar, "select_conversation"):
+                host.sidebar.select_conversation(host.current_conversation.id)
         except Exception as e:
             logger.debug("Failed to save new conversation shell: %s", e)
         host.window_state_presenter.sync_input_enabled()
@@ -442,7 +459,7 @@ class ConversationPresenter:
         text = (content or "").strip()
         if not text:
             return
-        self._apply_task_ops([{"action": "create", "content": text}])
+        self._apply_task_ops([{"action": "create", "title": text}])
 
     def complete_task(self, task_id: str) -> None:
         tid = (task_id or "").strip()
@@ -487,7 +504,7 @@ class ConversationPresenter:
         try:
             current_seq = host.current_conversation.next_seq_id()
             state = host.current_conversation.get_state()
-            TaskService.handle_ops(state, ops, current_seq)
+            TodoService.handle_ops(state, ops, current_seq)
             state.last_updated_seq = current_seq
             host.current_conversation.set_state(state)
             host.services.conv_service.save(host.current_conversation)

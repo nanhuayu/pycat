@@ -21,6 +21,15 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
 
 
+class TaskStopReason(str, Enum):
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    ERROR = "error"
+    MAX_TURNS = "max_turns"
+    TOOL_DISABLED = "tool_disabled"
+    PERMISSION_DENIED = "permission_denied"
+
+
 # ---------------------------------------------------------------------------
 # TaskResult
 # ---------------------------------------------------------------------------
@@ -29,6 +38,7 @@ class TaskResult:
     status: TaskStatus = TaskStatus.COMPLETED
     final_message: Optional[Message] = None
     error: Optional[str] = None
+    stop_reason: TaskStopReason = TaskStopReason.COMPLETED
 
 
 class SubtaskTraceStatus(str, Enum):
@@ -145,15 +155,6 @@ class SubtaskTrace:
         )
 
 
-@dataclass
-class SubTaskOutcome:
-    status: TaskStatus
-    message: str
-    completion_command: str = ""
-    completed: bool = False
-    trace: Optional[SubtaskTrace] = None
-
-
 # ---------------------------------------------------------------------------
 # TaskEvent — lightweight envelope emitted during execution
 # ---------------------------------------------------------------------------
@@ -206,6 +207,7 @@ class TurnOutcomeKind(str, Enum):
 class TurnContext:
     turn: int
     nudge_count: int = 0
+    had_tool_work: bool = False
     runtime_messages: list[Message] = field(default_factory=list)
     state: TaskTurnState = TaskTurnState.TURN_START
 
@@ -217,6 +219,7 @@ class TurnOutcome:
     final_message: Optional[Message] = None
     error: Optional[str] = None
     next_policy: Optional["RunPolicy"] = None
+    stop_reason: TaskStopReason = TaskStopReason.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +252,7 @@ class RunPolicy:
     context_window_limit: int = 100_000
 
     enable_thinking: bool = True
+    force_agent_complete: bool = True
     tool_selection: ToolSelectionPolicy = field(default_factory=ToolSelectionPolicy.all)
     tool_permissions: ToolPermissionConfig = field(default_factory=ToolPermissionConfig)
 

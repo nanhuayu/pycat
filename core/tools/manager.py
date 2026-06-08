@@ -42,18 +42,15 @@ from core.tools.system.shell_exec import (
     ShellKillTool,
 )
 from core.tools.system.patch import PatchTool
-from core.tools.system.state_mgr import StateMgrTool
 from core.tools.system.multi_agent import (
-    SubagentExploreTool,
-    SubagentReadAnalyzeTool,
-    SubagentSearchTool,
-    SubagentCustomTool,
+    AgentRunTool,
     AttemptCompletionTool,
     SwitchModeTool,
 )
 from core.tools.system.artifact_tools import ManageArtifactTool
 from core.tools.system.todo_tools import ManageTodoTool
 from core.tools.system.memory_tools import ManageMemoryTool
+from core.tools.system.content_tools import ContentListTool, ContentReadTool
 from core.tools.system.ask_questions import AskQuestionsTool
 from core.tools.system.skills import LoadSkillTool, ReadSkillResourceTool
 from core.tools.system.capability_tools import CAPABILITY_TOOL_PREFIX, build_capability_tools
@@ -120,18 +117,18 @@ class ToolManager:
             ExecuteCommandTool(),
             ShellStartTool(), ShellStatusTool(), ShellLogsTool(), ShellWaitTool(), ShellKillTool(),
             PatchTool(),
-            StateMgrTool(),
+            ContentListTool(), ContentReadTool(),
             ManageMemoryTool(),
             ManageTodoTool(),
             AskQuestionsTool(),
             ManageArtifactTool(),
             LoadSkillTool(), ReadSkillResourceTool(),
-            SubagentExploreTool(), SubagentReadAnalyzeTool(), SubagentSearchTool(), SubagentCustomTool(),
+            AgentRunTool(),
             AttemptCompletionTool(), SwitchModeTool(),
         ]
         for tool in tools:
             self.registry.register(tool)
-        # Register one independent tool per enabled capability (e.g. capability__translate)
+        # Register one independent tool per agent-visible capability (e.g. capability__translate)
         self._refresh_capability_tools()
 
     def _refresh_capability_tools(self) -> None:
@@ -143,10 +140,6 @@ class ToolManager:
     def refresh_capability_tools(self) -> None:
         """Re-register capability tools after configuration changes."""
         self._refresh_capability_tools()
-
-    def update_permissions(self, config: Dict[str, Any]):
-        """Update permission settings in Registry."""
-        self.registry.update_permissions(config)
 
     def refresh_search_config(self):
         """Reload search configuration from storage.
@@ -243,7 +236,7 @@ class ToolManager:
         for tool in self.registry.list_tools():
             source = getattr(tool, "source", "builtin")
             available = True
-            if tool.name == "web_search":
+            if tool.name == "web__search":
                 available = bool(availability.search_available)
                 source = "search"
             elif is_mcp_tool_name(tool.name):

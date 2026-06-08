@@ -12,7 +12,7 @@ class ManageMemoryTool(BaseTool):
 
     @property
     def name(self) -> str:
-        return "manage_memory"
+        return "state__memory"
 
     @property
     def description(self) -> str:
@@ -33,7 +33,10 @@ class ManageMemoryTool(BaseTool):
             "- list: list memory entries in a scope.\n"
             "- view: read one memory entry by key/path.\n"
             "- upsert: create or replace one memory entry.\n"
-            "- delete: remove one memory entry."
+            "- delete: remove one memory entry.\n"
+            "- list_candidates: list durable memory candidates extracted by runtime compress from archived content.\n"
+            "- promote_candidate: explicitly save one candidate as memory.\n"
+            "- reject_candidate: hide one candidate."
         )
 
     @property
@@ -47,7 +50,7 @@ class ManageMemoryTool(BaseTool):
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["list", "view", "upsert", "delete"],
+                    "enum": ["list", "view", "upsert", "delete", "list_candidates", "promote_candidate", "reject_candidate"],
                     "description": "Memory operation to perform.",
                 },
                 "scope": {
@@ -67,6 +70,28 @@ class ManageMemoryTool(BaseTool):
                     "type": "string",
                     "description": "Why this memory should be stored or changed.",
                 },
+                "category": {
+                    "type": "string",
+                    "enum": ["preference", "fact", "decision", "convention", "command", "gotcha"],
+                    "description": "Durable memory category. Default: fact.",
+                },
+                "evidence_refs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional source paths, URLs, or archive content IDs supporting this memory.",
+                },
+                "confidence": {
+                    "type": "number",
+                    "description": "Optional confidence from 0 to 1. Default: 1.",
+                },
+                "candidate_id": {
+                    "type": "string",
+                    "description": "Candidate id for promote_candidate/reject_candidate.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum candidates to list. Default: 20.",
+                },
                 "tags": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -82,6 +107,9 @@ class ManageMemoryTool(BaseTool):
         key = str(arguments.get("key") or "").strip()
         content = str(arguments.get("content") or "")
         reason = str(arguments.get("reason") or "").strip()
+        category = str(arguments.get("category") or "fact").strip().lower()
+        evidence_refs = arguments.get("evidence_refs") or []
+        confidence = float(arguments.get("confidence") or 1.0)
         tags = arguments.get("tags") or []
         if scope not in MemoryService.SOURCE_OPTIONS:
             return ToolResult(f"Unknown memory scope: {scope}", is_error=True)
@@ -89,6 +117,40 @@ class ManageMemoryTool(BaseTool):
         state_dict = context.state if context.state is not None else {}
         state = SessionState.from_dict(state_dict)
         current_seq = int(state_dict.get("_current_seq", 0) or 0)
+
+        if action == "list_candidates":
+            candidates = MemoryService.list_memory_candidates(state, limit=int(arguments.get("limit") or 20))
+            if not candidates:
+                return ToolResult("No memory candidates.")
+            lines = ["Memory candidates:"]
+            for item in candidates:
+                refs = ",".join((item.get("evidence_refs") or [])[:3])
+                refs_text = f" refs={refs}" if refs else ""
+                lines.append(
+                    f"- {item.get('id')} [{item.get('category')}] confidence={item.get('confidence')}: "
+                    f"{item.get('content')}{refs_text}"
+                )
+            return ToolResult("\n".join(lines))
+
+        if action == "promote_candidate":
+            message = MemoryService.promote_memory_candidate(
+                state,
+                candidate_id=str(arguments.get("candidate_id") or "").strip(),
+                key=key,
+                scope=scope,
+                work_dir=context.work_dir,
+                current_seq=current_seq,
+            )
+            self._sync_context_state(context.state, state, current_seq)
+            return ToolResult(message)
+
+        if action == "reject_candidate":
+            message = MemoryService.reject_memory_candidate(
+                state,
+                candidate_id=str(arguments.get("candidate_id") or "").strip(),
+            )
+            self._sync_context_state(context.state, state, current_seq)
+            return ToolResult(message)
 
         if action == "list":
             entries = MemoryService.list_memory_entries(state, scope=scope, work_dir=context.work_dir)
@@ -122,6 +184,9 @@ class ManageMemoryTool(BaseTool):
                 current_seq=current_seq,
                 reason=reason,
                 tags=tags if isinstance(tags, list) else [],
+                category=category,
+                evidence_refs=evidence_refs if isinstance(evidence_refs, list) else [],
+                confidence=confidence,
             )
             self._sync_context_state(context.state, state, current_seq)
             return ToolResult(message)

@@ -4,7 +4,7 @@ from typing import Iterable
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QGroupBox,
-    QHBoxLayout, QSpinBox, QDoubleSpinBox, QComboBox,
+    QHBoxLayout, QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox,
 )
 
 from core.config.schema import (
@@ -20,7 +20,7 @@ from ui.utils.form_builder import FormSection
 
 
 class AgentPage(QWidget):
-    page_title = "Agent"
+    page_title = "策略"
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class AgentPage(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        layout.addWidget(build_page_header("Agent", "配置 Agent 运行轮次、重试策略与上下文压缩。工具权限已移至独立权限面板。"))
+        layout.addWidget(build_page_header("策略", "配置运行轮次、重试策略与上下文压缩。工具权限已移至独立权限面板。"))
 
         runtime_group = QGroupBox("运行策略")
         runtime_layout = QVBoxLayout(runtime_group)
@@ -57,6 +57,12 @@ class AgentPage(QWidget):
         turns_row.addWidget(self.max_turns_spin)
         turns_row.addStretch(1)
         runtime_layout.addLayout(turns_row)
+        self.force_agent_complete_checkbox = QCheckBox("Force agent__complete")
+        self.force_agent_complete_checkbox.setChecked(bool(agent.force_agent_complete))
+        self.force_agent_complete_checkbox.setToolTip(
+            "When enabled, work modes keep running until agent__complete is called, even after a plain text answer."
+        )
+        runtime_layout.addWidget(self.force_agent_complete_checkbox)
 
         hint = QLabel("该设置为全局默认值；能力或运行模式可按需提供更具体的轮次限制。")
         hint.setWordWrap(True)
@@ -118,11 +124,8 @@ class AgentPage(QWidget):
             "说明：自动压缩分两层配置。本页只控制何时触发自动压缩；"
             "压缩模型、系统提示词和工具详情选项由“能力 → 上下文压缩”统一配置。"
         )
+        comp_hint.setObjectName("settings_hint")
         comp_hint.setWordWrap(True)
-        comp_hint.setStyleSheet(
-            "QLabel { padding: 8px 10px; border-radius: 6px; "
-            "background: rgba(59, 130, 246, 0.10); color: palette(text); }"
-        )
         comp.form.addRow(comp_hint)
         self.comp_max_active_messages = comp.add_spin(
             "活跃消息上限", value=int(pol.max_active_messages or 20), range=(5, 200),
@@ -138,7 +141,10 @@ class AgentPage(QWidget):
         layout.addStretch()
 
     def collect_agent(self) -> AgentRuntimeConfig:
-        return AgentRuntimeConfig(max_turns=int(self.max_turns_spin.value()))
+        return AgentRuntimeConfig(
+            max_turns=int(self.max_turns_spin.value()),
+            force_agent_complete=bool(self.force_agent_complete_checkbox.isChecked()),
+        )
 
     def collect_retry(self) -> RetryConfig:
         return RetryConfig(

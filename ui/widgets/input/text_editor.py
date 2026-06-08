@@ -24,25 +24,10 @@ class FileCompleterPopup(QListWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("file_completer_popup")
         self.setWindowFlags(Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setStyleSheet(
-            """
-            QListWidget {
-                background-color: #ffffff;
-                border: 1px solid #ccc;
-                border-radius: 4px;
-            }
-            QListWidget::item {
-                padding: 4px 8px;
-            }
-            QListWidget::item:selected {
-                background-color: #007acc;
-                color: white;
-            }
-        """
-        )
         self.hide()
 
     def show_completions(self, files: List[str], point):

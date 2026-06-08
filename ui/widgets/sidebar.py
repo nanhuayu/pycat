@@ -5,12 +5,21 @@ Sidebar widget for conversation list and management - Chinese UI
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
     QLineEdit, QListWidget, QListWidgetItem, QMenu,
-    QMessageBox, QFileDialog, QLabel, QApplication
+    QMessageBox, QFileDialog, QApplication, QStyledItemDelegate, QStyle
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QTimer, QSize
-from PyQt6.QtGui import QAction, QFontMetrics
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QRect
+from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QPainter, QPalette, QPen
 from typing import Dict, Any, List
 from datetime import datetime
+import os
+
+from ui.utils.icon_manager import Icons
+from ui.utils.theme import prepare_context_menu, resolve_theme, theme_colors
+
+
+TITLE_ROLE = Qt.ItemDataRole.UserRole + 1
+META_ROLE = Qt.ItemDataRole.UserRole + 2
+HAS_WORK_DIR_ROLE = Qt.ItemDataRole.UserRole + 3
 
 
 class ConversationItem(QListWidgetItem):
@@ -21,6 +30,7 @@ class ConversationItem(QListWidgetItem):
         self.data = data
         self.title = str(data.get('title', '无标题') or '无标题')
         self.model = str(data.get('model', '') or '')
+        self.work_dir = str(data.get('work_dir', '') or '').strip()
         updated_at = data.get('updated_at') or data.get('created_at')
         self.updated_str = ""
         if isinstance(updated_at, str) and updated_at:
@@ -34,14 +44,101 @@ class ConversationItem(QListWidgetItem):
         session_id = str(data.get('id', '') or '')
         self.setToolTip(
             f"标题: {self.title}\nSession ID: {session_id or '-'}\n"
-            f"模型: {self.model or '未设置'}\n消息: {count} 条\n更新: {self.updated_str or '-'}"
+            f"工作区: {self.work_dir or '-'}\n模型: {self.model or '未设置'}\n消息: {count} 条\n更新: {self.updated_str or '-'}"
         )
-        self.setSizeHint(QSize(0, 34))
+        self.setSizeHint(QSize(0, 44))
+        self.setData(TITLE_ROLE, self.title)
+        self.setData(META_ROLE, self.meta_text())
+        self.setData(HAS_WORK_DIR_ROLE, bool(self.work_dir))
 
-    def refresh_text(self, metrics: QFontMetrics, available_width: int) -> None:
-        width = max(72, int(available_width or 0))
-        elided_title = metrics.elidedText(self.title, Qt.TextElideMode.ElideRight, width)
-        self.setText(elided_title)
+    def meta_text(self) -> str:
+        if self.work_dir:
+            name = os.path.basename(os.path.normpath(self.work_dir)) or self.work_dir
+            return name
+        if self.updated_str:
+            return self.updated_str
+        count = int(self.data.get('message_count', 0) or 0)
+        return f"{count} 条" if count else ""
+
+
+class ConversationItemDelegate(QStyledItemDelegate):
+    """Paint conversation rows without creating one QWidget per row."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def sizeHint(self, option, index):
+        return QSize(0, 44)
+
+    def paint(self, painter: QPainter, option, index):
+        painter.save()
+        rect = option.rect.adjusted(4, 1, -4, -1)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+
+        theme = resolve_theme(self.parent() if isinstance(self.parent(), QWidget) else None)
+        colors = theme_colors(theme)
+        is_dark = theme == "dark"
+        window = QColor(colors["window"])
+        text = QColor(colors["text"])
+        muted = QColor(colors["muted"])
+        highlighted_text = QColor(colors["selected_text"])
+
+        if selected:
+            bg = QColor(colors["selected"])
+            title_color = highlighted_text if is_dark else QColor(colors["selected_text"])
+            meta_color = QColor(colors["selected_meta"])
+            border_color = QColor(colors["selected_border"])
+        elif hovered:
+            bg = QColor("#25252d") if is_dark else QColor("#f5f1ff")
+            title_color = text
+            meta_color = muted
+            border_color = QColor(colors["control_border"] if is_dark else colors["border"])
+        else:
+            bg = window
+            title_color = text
+            meta_color = muted
+            border_color = window
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(bg)
+        painter.drawRoundedRect(rect, 7, 7)
+        if selected or hovered:
+            painter.setPen(QPen(border_color, 1))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), 7, 7)
+
+        title = str(index.data(TITLE_ROLE) or "")
+        meta = str(index.data(META_ROLE) or "")
+        has_work_dir = bool(index.data(HAS_WORK_DIR_ROLE))
+
+        title_font = QFont(option.font)
+        title_font.setPointSize(max(8, option.font.pointSize()))
+        title_font.setWeight(QFont.Weight.DemiBold if selected else QFont.Weight.Medium)
+        meta_font = QFont(option.font)
+        meta_font.setPointSize(max(7, option.font.pointSize() - 2))
+
+        content = rect.adjusted(8, 5, -8, -5)
+        title_rect = QRect(content.left(), content.top(), content.width(), 17)
+        meta_left = content.left()
+        if has_work_dir:
+            if selected:
+                pixmap = Icons.get_colored(Icons.FOLDER, meta_color.name(), scale_factor=0.7).pixmap(13, 13)
+            else:
+                pixmap = Icons.get_colored(Icons.FOLDER, meta_color.name(), scale_factor=0.7).pixmap(13, 13)
+            icon_y = content.top() + 23
+            painter.drawPixmap(content.left(), icon_y, pixmap)
+            meta_left += 17
+        meta_rect = QRect(meta_left, content.top() + 21, max(20, content.right() - meta_left), 15)
+
+        title_metrics = QFontMetrics(title_font)
+        meta_metrics = QFontMetrics(meta_font)
+        painter.setPen(title_color)
+        painter.setFont(title_font)
+        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title_metrics.elidedText(title, Qt.TextElideMode.ElideRight, title_rect.width()))
+        painter.setPen(meta_color)
+        painter.setFont(meta_font)
+        painter.drawText(meta_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, meta_metrics.elidedText(meta, Qt.TextElideMode.ElideRight, meta_rect.width()))
+        painter.restore()
 
 
 class Sidebar(QWidget):
@@ -95,6 +192,9 @@ class Sidebar(QWidget):
         # Conversation list
         self.conversation_list = QListWidget()
         self.conversation_list.setObjectName("conversation_list")
+        self.conversation_list.setItemDelegate(ConversationItemDelegate(self.conversation_list))
+        self.conversation_list.setUniformItemSizes(True)
+        self.conversation_list.setMouseTracking(True)
         self.conversation_list.itemClicked.connect(self._on_item_clicked)
         self.conversation_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.conversation_list.customContextMenuRequested.connect(self._show_context_menu)
@@ -114,14 +214,14 @@ class Sidebar(QWidget):
         layout.addWidget(footer)
     
     def update_conversations(self, conversations: List[Dict[str, Any]]):
+        self.conversation_list.setUpdatesEnabled(False)
         self.conversation_list.clear()
         self._all_conversations = conversations
         
         for conv in conversations:
             item = ConversationItem(conv)
             self.conversation_list.addItem(item)
-        self._refresh_item_texts()
-        QTimer.singleShot(0, self._refresh_item_texts)
+        self.conversation_list.setUpdatesEnabled(True)
     
     def select_conversation(self, conversation_id: str):
         for i in range(self.conversation_list.count()):
@@ -140,15 +240,6 @@ class Sidebar(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._refresh_item_texts()
-
-    def _refresh_item_texts(self):
-        metrics = self.conversation_list.fontMetrics()
-        available_width = max(96, self.conversation_list.viewport().width() - 18)
-        for i in range(self.conversation_list.count()):
-            item = self.conversation_list.item(i)
-            if isinstance(item, ConversationItem):
-                item.refresh_text(metrics, available_width)
     
     def _on_item_clicked(self, item: QListWidgetItem):
         if isinstance(item, ConversationItem):
@@ -159,14 +250,14 @@ class Sidebar(QWidget):
         if not isinstance(item, ConversationItem):
             return
         
-        menu = QMenu(self)
+        menu = prepare_context_menu(QMenu(self), self)
         conversation_id = str(item.data.get('id', '') or '')
 
         copy_id_action = QAction("复制 Session ID", self)
         copy_id_action.triggered.connect(lambda: self._copy_session_id(conversation_id))
         menu.addAction(copy_id_action)
 
-        export_menu = QMenu("导出会话", self)
+        export_menu = prepare_context_menu(QMenu("导出会话", self), self)
         export_md_action = QAction("导出为 Markdown...", self)
         export_md_action.triggered.connect(lambda: self.export_conversation.emit(conversation_id, "markdown"))
         export_menu.addAction(export_md_action)

@@ -74,6 +74,7 @@ class ConversationStreamState:
                 pending["status"] = "completed"
                 pending["summary"] = str(item.get("summary") or "")
                 pending["ended_at"] = item.get("recorded_at")
+                self.pending_tool_invocations.pop(tool_call_id, None)
             elif kind == "tool_end":
                 pending["status"] = "completed"
                 pending["summary"] = str(item.get("summary") or pending.get("summary") or "")
