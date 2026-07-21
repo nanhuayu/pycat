@@ -1,6 +1,5 @@
 import json
 import mimetypes
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -8,14 +7,19 @@ from typing import Any, Dict, List
 from core.content.attachments import encode_image_file_to_data_url
 from core.tools.base import BaseTool, ToolContext, ToolResult
 
+
 class LsTool(BaseTool):
     @property
     def name(self) -> str:
         return "file__list"
 
     @property
+    def display_name(self) -> str:
+        return "列出文件"
+
+    @property
     def description(self) -> str:
-        return "List files and directories under a workspace path."
+        return "List files and directories under a workspace path with a bounded result count."
 
     @property
     def category(self) -> str:
@@ -26,74 +30,50 @@ class LsTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Workspace-relative path. Default: '.'"},
-                "recursive": {"type": "boolean", "description": "List recursively. Default: false"},
-                "max_entries": {"type": "number", "description": "Limit returned entries. Default: 200"},
+                "path": {"type": "string", "description": "Workspace-relative path; default '.'."},
+                "recursive": {"type": "boolean", "description": "Include descendants; default false."},
+                "limit": {"type": "integer", "description": "Maximum entries; default 200, max 2000."},
             },
             "additionalProperties": False,
         }
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
-        path_str = arguments.get("path", ".")
-        recursive = bool(arguments.get("recursive", False))
-        max_entries = int(arguments.get("max_entries", 200) or 200)
-        max_entries = max(1, min(max_entries, 2000))
-
         try:
-            base_path = context.resolve_path(path_str)
-        except Exception as e:
-            return ToolResult(str(e), is_error=True)
-
+            base_path = context.resolve_path(str(arguments.get("path") or "."))
+            limit = max(1, min(int(arguments.get("limit") or 200), 2000))
+        except Exception as exc:
+            return ToolResult(f"Invalid argument: {exc}", is_error=True)
         if not base_path.exists():
             return ToolResult(f"Not found: {base_path}", is_error=True)
 
+        workspace = Path(context.work_dir).resolve()
+        paths = base_path.rglob("*") if base_path.is_dir() and arguments.get("recursive") else (
+            base_path.iterdir() if base_path.is_dir() else iter((base_path,))
+        )
         entries: List[Dict[str, Any]] = []
-        effective_root = Path(context.work_dir).resolve()
-
-        def add_entry(p: Path):
-            try:
-                rel = str(p.relative_to(effective_root)).replace("\\", "/")
-            except Exception:
-                rel = str(p)
-            try:
-                stat = p.stat()
-                size = int(stat.st_size)
-            except Exception:
-                size = None
-            entries.append({
-                "path": rel,
-                "name": p.name,
-                "type": "dir" if p.is_dir() else "file",
-                "size": size,
-            })
-
         try:
-            if base_path.is_dir():
-                if recursive:
-                    for p in base_path.rglob("*"):
-                        add_entry(p)
-                        if len(entries) >= max_entries:
-                            break
-                else:
-                    for p in base_path.iterdir():
-                        add_entry(p)
-                        if len(entries) >= max_entries:
-                            break
-            else:
-                add_entry(base_path)
-        except Exception as e:
-            return ToolResult(f"List error: {e}", is_error=True)
-
-        return ToolResult(json.dumps({
-            "root": str(effective_root).replace("\\", "/"),
-            "entries": entries
-        }, ensure_ascii=False, indent=2))
+            for path in sorted(paths, key=lambda item: str(item).lower()):
+                try:
+                    relative = str(path.relative_to(workspace)).replace("\\", "/")
+                except Exception:
+                    relative = str(path)
+                try:
+                    size = int(path.stat().st_size)
+                except Exception:
+                    size = None
+                entries.append({
+                    "path": relative,
+                    "type": "dir" if path.is_dir() else "file",
+                    "size": size,
+                })
+                if len(entries) >= limit:
+                    break
+        except Exception as exc:
+            return ToolResult(f"List error: {exc}", is_error=True)
+        return ToolResult(json.dumps({"entries": entries, "truncated": len(entries) >= limit}, ensure_ascii=False, indent=2))
 
 
 class ReadFileTool(BaseTool):
-    """Read a workspace file with automatic pagination for large text files."""
-
-    # When reading without explicit line range, cap at this many lines.
     MAX_LINES_PER_READ = 2000
 
     @property
@@ -101,13 +81,12 @@ class ReadFileTool(BaseTool):
         return "file__read"
 
     @property
+    def display_name(self) -> str:
+        return "读取文件"
+
+    @property
     def description(self) -> str:
-        return (
-            "Read a workspace file. Text files support line ranges; image files can be returned as multimodal content blocks. "
-            f"When no line range is specified, output is capped at {self.MAX_LINES_PER_READ} lines. "
-            "If the file is larger, it will be truncated and you will receive a hint with the total line count "
-            "so you can call file__read again with start_line/end_line to read the rest."
-        )
+        return "Read a workspace text or image file; text can be limited to an inclusive line range."
 
     @property
     def category(self) -> str:
@@ -118,108 +97,59 @@ class ReadFileTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Workspace-relative file path"},
-                "start_line": {"type": "integer", "description": "Optional start line (1-based, inclusive)"},
-                "end_line": {"type": "integer", "description": "Optional end line (1-based, inclusive)"},
-                "mode": {"type": "string", "description": "Optional read mode: auto, text, or image. Default: auto"},
+                "path": {"type": "string", "description": "Workspace-relative file path."},
+                "start_line": {"type": "integer", "description": "Optional 1-based start line."},
+                "end_line": {"type": "integer", "description": "Optional inclusive end line."},
             },
             "required": ["path"],
             "additionalProperties": False,
         }
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
-        path_str = str(arguments.get("path", "") or "").strip()
-        start_line = arguments.get("start_line")
-        end_line = arguments.get("end_line")
-        mode = str(arguments.get("mode", "auto") or "auto").strip().lower()
-
-        if not path_str:
-            return ToolResult("Missing 'path'", is_error=True)
-
+        path_text = str(arguments.get("path") or "").strip()
+        if not path_text:
+            return ToolResult("path is required.", is_error=True)
         try:
-            file_path = context.resolve_path(path_str)
-        except Exception as e:
-            return ToolResult(str(e), is_error=True)
-
+            file_path = context.resolve_path(path_text)
+        except Exception as exc:
+            return ToolResult(str(exc), is_error=True)
         if not file_path.is_file():
             return ToolResult(f"Not a file: {file_path}", is_error=True)
 
         try:
-            file_size = file_path.stat().st_size
+            size = file_path.stat().st_size
             mime_type, _ = mimetypes.guess_type(str(file_path))
-            is_image = str(mime_type or "").startswith("image/")
-
-            if mode in {"auto", "image"} and is_image:
-                if file_size > 20 * 1024 * 1024:
-                    return ToolResult("Image file too large (>20MB).", is_error=True)
+            if str(mime_type or "").startswith("image/"):
+                if size > 20 * 1024 * 1024:
+                    return ToolResult("Image file is larger than 20 MB.", is_error=True)
                 image_url = encode_image_file_to_data_url(str(file_path))
                 if not image_url:
-                    return ToolResult(f"Read error: failed to encode image {file_path}", is_error=True)
-                rel_path = str(file_path.relative_to(Path(context.work_dir).resolve())).replace("\\", "/")
-                return ToolResult(
-                    [
-                        {
-                            "type": "text",
-                            "text": f"Image file: {rel_path}\nMime-Type: {mime_type or 'image/png'}\nSize: {file_size} bytes",
-                        },
-                        {
-                            "type": "image",
-                            "mimeType": mime_type or "image/png",
-                            "data": image_url,
-                        },
-                    ]
-                )
+                    return ToolResult(f"Failed to encode image: {path_text}", is_error=True)
+                return ToolResult([
+                    {"type": "text", "text": f"Image: {path_text}\nMime-Type: {mime_type}\nSize: {size} bytes"},
+                    {"type": "image", "mimeType": mime_type or "image/png", "data": image_url},
+                ])
 
-            if mode == "image" and not is_image:
-                return ToolResult(f"File is not an image: {file_path}", is_error=True)
-
-            # Read entire file (Python handles buffering generally well for moderate files)
-            # For massive files, we should optimize, but for now this is consistent with Roo Code logic
-            # which often reads whole file then slices.
-            # Roo Code has a limit of 10MB or so.
-            if file_size > 10 * 1024 * 1024:
-                return ToolResult("File too large (>10MB). Use grep or read specific lines.", is_error=True)
-
+            if size > 10 * 1024 * 1024:
+                return ToolResult("File is larger than 10 MB; use file__search or a smaller source.", is_error=True)
             text = file_path.read_text(encoding="utf-8", errors="replace")
-            lines = text.splitlines(keepends=True)  # Keep ends to preserve structure
-            total_lines = len(lines)
-
-            # Slice mode (explicit range requested by LLM)
-            if start_line is not None or end_line is not None:
-                start = int(start_line) if start_line is not None else 1
-                end = int(end_line) if end_line is not None else total_lines
-
-                start = max(1, start)
-                end = min(total_lines, end)
-
+            lines = text.splitlines(keepends=True)
+            total = len(lines)
+            if arguments.get("start_line") is not None or arguments.get("end_line") is not None:
+                start = max(1, int(arguments.get("start_line") or 1))
+                end = min(total, int(arguments.get("end_line") or total))
                 if start > end:
-                    return ToolResult(f"Invalid range: start_line ({start}) > end_line ({end})", is_error=True)
-
-                # Adjust to 0-based
-                sliced_lines = lines[start - 1 : end]
-                content = "".join(sliced_lines)
-
-                return ToolResult(f"Lines {start}-{end} of {total_lines}:\n{content}")
-
-            # No range specified -> apply automatic pagination
-            if total_lines > self.MAX_LINES_PER_READ:
-                preview_lines = lines[: self.MAX_LINES_PER_READ]
-                preview = "".join(preview_lines)
-                next_start = self.MAX_LINES_PER_READ + 1
-                next_end = min(total_lines, self.MAX_LINES_PER_READ * 2)
-                hint = (
-                    f"To continue reading, call file__read with "
-                    f"start_line={next_start}, end_line={next_end}"
-                )
+                    return ToolResult(f"Invalid line range: {start}-{end}", is_error=True)
+                return ToolResult(f"Lines {start}-{end} of {total}:\n{''.join(lines[start - 1:end])}")
+            if total > self.MAX_LINES_PER_READ:
+                body = "".join(lines[: self.MAX_LINES_PER_READ])
                 return ToolResult(
-                    f"Lines 1-{self.MAX_LINES_PER_READ} of {total_lines}:\n{preview}\n\n"
-                    f"... [truncated: {total_lines} total lines] ...\n\n"
-                    f"{hint}"
+                    f"Lines 1-{self.MAX_LINES_PER_READ} of {total}:\n{body}\n\n"
+                    f"Continue with start_line={self.MAX_LINES_PER_READ + 1}."
                 )
-
             return ToolResult(text)
-        except Exception as e:
-            return ToolResult(f"Read error: {e}", is_error=True)
+        except Exception as exc:
+            return ToolResult(f"Read error: {exc}", is_error=True)
 
 
 class GrepTool(BaseTool):
@@ -228,80 +158,63 @@ class GrepTool(BaseTool):
         return "file__search"
 
     @property
+    def display_name(self) -> str:
+        return "搜索文件"
+
+    @property
     def description(self) -> str:
-        return "Search for text or regex matches in workspace text files."
+        return "Search workspace text files using literal text or an explicit regular expression."
 
     @property
     def category(self) -> str:
-        return "search"
-
+        return "read"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
         return {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Workspace-relative directory. Default: '.'"},
-                "query": {"type": "string", "description": "Text or regex query to search for"},
-                "regex": {"type": "boolean", "description": "Treat query as a regex. Default: true"},
-                "include_pattern": {"type": "string", "description": "Optional glob include pattern, e.g. '**/*.py'"},
-                "max_results": {"type": "number", "description": "Max matches (default: 50)"},
+                "query": {"type": "string", "description": "Text or regular expression to find."},
+                "path": {"type": "string", "description": "Workspace-relative directory; default '.'."},
+                "glob": {"type": "string", "description": "Optional include glob such as '**/*.py'."},
+                "regex": {"type": "boolean", "description": "Interpret query as regex; default false."},
+                "limit": {"type": "integer", "description": "Maximum matches; default 50, max 500."},
             },
             "required": ["query"],
             "additionalProperties": False,
         }
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
-        root_str = arguments.get("path", ".")
-        query = str(arguments.get("query", "") or "")
-        regex = bool(arguments.get("regex", True))
-        include = arguments.get("include_pattern")
-        max_matches = int(arguments.get("max_results", 50) or 50)
-        max_matches = max(1, min(max_matches, 500))
-
+        query = str(arguments.get("query") or "")
         if not query:
-            return ToolResult("Missing 'query'", is_error=True)
-
+            return ToolResult("query is required.", is_error=True)
         try:
-            root_path = context.resolve_path(root_str)
-        except Exception as e:
-            return ToolResult(str(e), is_error=True)
+            root = context.resolve_path(str(arguments.get("path") or "."))
+            pattern = re.compile(query if arguments.get("regex") else re.escape(query))
+            limit = max(1, min(int(arguments.get("limit") or 50), 500))
+        except re.error as exc:
+            return ToolResult(f"Invalid regex: {exc}", is_error=True)
+        except Exception as exc:
+            return ToolResult(f"Invalid argument: {exc}", is_error=True)
+        if not root.is_dir():
+            return ToolResult(f"Not a directory: {root}", is_error=True)
 
-        if not root_path.exists() or not root_path.is_dir():
-            return ToolResult(f"Not a directory: {root_path}", is_error=True)
-
-        if not await context.ask_approval(f"Search content in {root_str} for '{query}'?"):
-            return ToolResult("User denied content search", is_error=True)
-
-        try:
-            rx = re.compile(query if regex else re.escape(query))
-        except Exception as e:
-            return ToolResult(f"Invalid regex: {e}", is_error=True)
-
-        glob_pattern = include if isinstance(include, str) and include.strip() else "**/*"
+        workspace = Path(context.work_dir).resolve()
         matches: List[Dict[str, Any]] = []
-        effective_root = Path(context.work_dir).resolve()
-
-        for p in root_path.glob(glob_pattern):
-            if len(matches) >= max_matches:
-                break
-            if not p.is_file():
+        for path in root.glob(str(arguments.get("glob") or "**/*")):
+            if not path.is_file():
                 continue
             try:
-                content = p.read_text(encoding="utf-8", errors="ignore")
+                lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
             except Exception:
                 continue
-            for i, line in enumerate(content.splitlines(), 1):
-                if rx.search(line):
+            for line_number, line in enumerate(lines, 1):
+                if pattern.search(line):
                     try:
-                        rel = str(p.relative_to(effective_root)).replace("\\", "/")
+                        relative = str(path.relative_to(workspace)).replace("\\", "/")
                     except Exception:
-                        rel = str(p)
-                    matches.append({"path": rel, "line": i, "text": line[:300]})
-                    if len(matches) >= max_matches:
-                        break
-        
-        return ToolResult(json.dumps({
-            "matches": matches, 
-            "count": len(matches)
-        }, ensure_ascii=False, indent=2))
+                        relative = str(path)
+                    matches.append({"path": relative, "line": line_number, "text": line[:300]})
+                    if len(matches) >= limit:
+                        return ToolResult(json.dumps({"matches": matches, "truncated": True}, ensure_ascii=False, indent=2))
+        return ToolResult(json.dumps({"matches": matches, "truncated": False}, ensure_ascii=False, indent=2))

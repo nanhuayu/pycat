@@ -1,24 +1,50 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict
 
-from core.context.archive_view_service import ArchiveViewService, normalize_summary_mode
-from core.context.archive_store import SessionArchiveStore, normalize_archive_kind
-from core.content.view_protocol import ContentViewLabel, char_view_value, line_view_value, summary_view_value
+from core.content.archive_store import SessionArchiveStore, normalize_archive_kind
+from core.content.archive_view_service import ArchiveViewService
+from core.context.compression import MIN_LLM_COMPRESSION_CHARS
 from core.tools.base import BaseTool, ToolContext, ToolResult
 
 
-class ContentListTool(BaseTool):
+ARCHIVE_CONTENT_CHARS = 8000
+
+
+def _session_ids(context: ToolContext) -> list[str | None]:
+    values: list[str | None] = []
+    current = getattr(getattr(context, "conversation", None), "id", None)
+    if current:
+        values.append(str(current))
+    settings = getattr(getattr(context, "conversation", None), "settings", {}) or {}
+    parent = settings.get("parent_session_id") if isinstance(settings, dict) else None
+    if parent and str(parent) not in values:
+        values.append(str(parent))
+    return values or [None]
+
+
+def _find_record(context: ToolContext, content_id: str):
+    for session_id in _session_ids(context):
+        store = SessionArchiveStore(context.work_dir, conversation_id=session_id)
+        record = store.read_record(content_id)
+        if record is not None:
+            return store, record, session_id
+    return None, None, None
+
+
+class ArchiveListTool(BaseTool):
     @property
     def name(self) -> str:
-        return "content__list"
+        return "archive__list"
+
+    @property
+    def display_name(self) -> str:
+        return "列出会话归档"
 
     @property
     def description(self) -> str:
-        return (
-            "List PyCat archived content for the current session. "
-            "Use this for tool-call/history archive indexes, not for workspace files."
-        )
+        return "List archived tool or history content for the current session."
 
     @property
     def category(self) -> str:
@@ -32,50 +58,56 @@ class ContentListTool(BaseTool):
                 "kind": {
                     "type": "string",
                     "enum": ["tool_call", "history", "artifact"],
-                    "description": "Optional archive kind filter.",
+                    "description": "Optional archive kind.",
                 },
-                "limit": {"type": "integer", "description": "Maximum records to list. Default: 20."},
+                "limit": {"type": "integer", "description": "Maximum records; default 20, max 50."},
             },
             "additionalProperties": False,
         }
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
-        kind = arguments.get("kind")
-        limit = int(arguments.get("limit") or 20)
-        limit = max(1, min(limit, 100))
-        store = SessionArchiveStore(context.work_dir, conversation_id=getattr(context.conversation, "id", None))
-        records = store.list_records(kind=normalize_archive_kind(kind) if kind else None, limit=limit)
+        try:
+            limit = max(1, min(int(arguments.get("limit") or 20), 50))
+            kind = normalize_archive_kind(arguments.get("kind")) if arguments.get("kind") else None
+        except Exception as exc:
+            return ToolResult(f"Invalid argument: {exc}", is_error=True)
+        records = []
+        seen: set[str] = set()
+        for session_id in _session_ids(context):
+            store = SessionArchiveStore(context.work_dir, conversation_id=session_id)
+            for record in store.list_records(kind=kind, limit=limit):
+                if record.id in seen:
+                    continue
+                seen.add(record.id)
+                records.append(record)
+                if len(records) >= limit:
+                    break
         if not records:
             return ToolResult("No archived content in this session.")
-        lines = ["Archived content:"]
+        lines = [
+            "Archived content:",
+            'Use archive__read(content_id="...", view="content", offset=0) to restore exact text.',
+        ]
         for record in records:
-            views = ["full"]
+            line = f"- content_id={record.id} source={record.source or '-'} chars={record.size}"
             if record.summary:
-                views.append("summary")
-            else:
-                views.append("summary:pending" if record.summary_status == "pending" else "summary:failed")
-            lines.append(
-                f"- {record.id} kind={record.kind} source={record.source or '-'} "
-                f"chars={record.size} digest={record.digest[:16]} views={','.join(views)} "
-                f"title=\"{record.title}\""
-            )
+                line += f" summary={' '.join(record.summary.split())[:360]}"
+            lines.append(line)
         return ToolResult("\n".join(lines))
 
 
-class ContentReadTool(BaseTool):
+class ArchiveReadTool(BaseTool):
     @property
     def name(self) -> str:
-        return "content__read"
+        return "archive__read"
+
+    @property
+    def display_name(self) -> str:
+        return "读取会话归档"
 
     @property
     def description(self) -> str:
-        return (
-            "Read PyCat archived content by content_id. This reads tool-call/history archive records, "
-            "not workspace files. Use file__read for real files. Views: summary, full, lines, chars. "
-            "For view=summary the runtime waits for or creates the internal compress view by default. "
-            "Responses use [type] or [type:desc] labels: [summary], [summary:detailed], [summary:topic], "
-            "[summary:pending], [full], [line:1-200], or [char:0-4000]."
-        )
+        return "Read a fixed summary or an exact 8000-character chunk of archived session content."
 
     @property
     def category(self) -> str:
@@ -86,37 +118,13 @@ class ContentReadTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "content_id": {"type": "string", "description": "Archived content id from content__list or <archive_index>."},
+                "content_id": {"type": "string", "description": "Identifier from archive__list or archive index."},
                 "view": {
                     "type": "string",
-                    "enum": ["summary", "full", "lines", "chars"],
-                    "description": "Read view. Default: summary.",
+                    "enum": ["summary", "content"],
+                    "description": "Derived summary or exact content chunk; default summary.",
                 },
-                "start_line": {"type": "integer", "description": "1-based start line for view=lines."},
-                "end_line": {"type": "integer", "description": "1-based end line for view=lines."},
-                "char_start": {"type": "integer", "description": "0-based start char for view=chars."},
-                "char_end": {"type": "integer", "description": "0-based end char for view=chars."},
-                "summary_mode": {
-                    "type": "string",
-                    "enum": ["balanced", "brief", "detailed", "timeline", "evidence", "topic", "memory_candidates"],
-                    "description": "Summary style for view=summary. Default: balanced.",
-                },
-                "topic": {
-                    "type": "string",
-                    "description": "Optional topic for summary_mode=topic or evidence.",
-                },
-                "wait": {
-                    "type": "boolean",
-                    "description": "For view=summary, wait for runtime compression. Default: true.",
-                },
-                "timeout_ms": {
-                    "type": "integer",
-                    "description": "Maximum wait for summary generation. Default: 15000.",
-                },
-                "refresh": {
-                    "type": "boolean",
-                    "description": "Regenerate the requested summary view. Default: false.",
-                },
+                "offset": {"type": "integer", "description": "0-based character offset for view=content."},
             },
             "required": ["content_id"],
             "additionalProperties": False,
@@ -127,82 +135,90 @@ class ContentReadTool(BaseTool):
         view = str(arguments.get("view") or "summary").strip().lower()
         if not content_id:
             return ToolResult("content_id is required.", is_error=True)
-        store = SessionArchiveStore(context.work_dir, conversation_id=getattr(context.conversation, "id", None))
-        record = store.read_record(content_id)
-        if record is None:
+        if view not in {"summary", "content"}:
+            return ToolResult("view must be summary or content.", is_error=True)
+        store, record, session_id = _find_record(context, content_id)
+        if store is None or record is None:
             return ToolResult(f"Archived content not found: {content_id}", is_error=True)
 
         if view == "summary":
-            wait = bool(arguments.get("wait", True))
-            mode = normalize_summary_mode(arguments.get("summary_mode") or "balanced")
-            topic = str(arguments.get("topic") or "").strip()
-            timeout_ms = int(arguments.get("timeout_ms") or 15_000)
-            timeout_ms = max(500, min(timeout_ms, 120_000))
-            refresh = bool(arguments.get("refresh", False))
+            try:
+                exact = store.read_original(record)
+                images = store.read_images(record)
+            except Exception as exc:
+                return ToolResult(f"Archive read error: {exc}", is_error=True)
+            if len(exact) < MIN_LLM_COMPRESSION_CHARS and not images:
+                return self._result_with_images(
+                    f"[content:0-{len(exact)}]\ncontent_id={content_id}\nexact=true\nnext_offset=none\n{exact}"
+                )
             service = ArchiveViewService(
                 work_dir=context.work_dir,
-                conversation_id=getattr(context.conversation, "id", None),
-                client=getattr(context, "llm_client", None),
-                provider=getattr(context, "provider", None),
+                conversation_id=session_id,
                 conversation=getattr(context, "conversation", None),
+                compressor=self._compressor(context, store),
             )
             result = await service.get_or_create_summary(
                 content_id,
-                mode=mode,
-                topic=topic,
-                wait=wait,
-                timeout_ms=timeout_ms,
-                refresh=refresh,
             )
-            if result.record is None:
-                return ToolResult(result.error or f"Archived content not found: {content_id}", is_error=True)
-            self._sync_context_state(context)
             if result.text:
-                topic_line = f"\ntopic={topic}" if topic else ""
-                return ToolResult(f"{ContentViewLabel.parse(result.label).bracketed}\ncontent_id={result.record.id}{topic_line}\n{result.text}")
-            status = result.status if result.status in {"pending", "failed"} else "pending"
-            return ToolResult(
-                f"{ContentViewLabel.parse(summary_view_value(status)).bracketed}\n"
-                f"content_id={result.record.id}\n"
-                f"Summary is not ready. Use content__read(view=\"full\"), view=\"lines\", or view=\"chars\" for exact archived content."
+                self._sync_state(context)
+                return ToolResult(f"[summary]\ncontent_id={content_id}\n{result.text}")
+            end = min(len(exact), ARCHIVE_CONTENT_CHARS)
+            next_offset = end if end < len(exact) else None
+            return self._result_with_images(
+                f"[content:0-{end}]\ncontent_id={content_id}\nexact=true\n"
+                f"next_offset={next_offset if next_offset is not None else 'none'}\n{exact[:end]}",
+                images,
             )
 
         try:
             text = store.read_original(record)
+            offset = max(0, int(arguments.get("offset") or 0))
         except Exception as exc:
-            return ToolResult(f"Failed to read archived original: {exc}", is_error=True)
-
-        if view == "lines":
-            lines = text.splitlines()
-            total = len(lines)
-            start = max(1, int(arguments.get("start_line") or 1))
-            end = min(total, int(arguments.get("end_line") or min(total, start + 199)))
-            if start > end:
-                return ToolResult(f"Invalid line range: {start}-{end}", is_error=True)
-            body = "\n".join(lines[start - 1:end])
-            return ToolResult(f"{ContentViewLabel.parse(line_view_value(start, end)).bracketed}\ncontent_id={record.id}\nlines={start}-{end} of {total}\n{body}")
-
-        if view == "chars":
-            total = len(text)
-            start = max(0, int(arguments.get("char_start") or 0))
-            end = min(total, int(arguments.get("char_end") or min(total, start + 4000)))
-            if start > end:
-                return ToolResult(f"Invalid char range: {start}-{end}", is_error=True)
-            return ToolResult(f"{ContentViewLabel.parse(char_view_value(start, end)).bracketed}\ncontent_id={record.id}\nchars={start}-{end} of {total}\n{text[start:end]}")
-
-        if view != "full":
-            return ToolResult(f"Unknown view: {view}", is_error=True)
-        return ToolResult(f"{ContentViewLabel.build('full')}\ncontent_id={record.id}\n{text}")
+            return ToolResult(f"Archive read error: {exc}", is_error=True)
+        offset = min(offset, len(text))
+        end = min(len(text), offset + ARCHIVE_CONTENT_CHARS)
+        next_offset = end if end < len(text) else None
+        rendered = (
+            f"[content:{offset}-{end}]\ncontent_id={content_id}\nexact=true\n"
+            f"next_offset={next_offset if next_offset is not None else 'none'}\n{text[offset:end]}"
+        )
+        return self._result_with_images(rendered, store.read_images(record) if offset == 0 else [])
 
     @staticmethod
-    def _sync_context_state(context: ToolContext) -> None:
+    def _result_with_images(text: str, images: list[str] | None = None) -> ToolResult:
+        if not images:
+            return ToolResult(text)
+        blocks: list[dict[str, Any]] = [{"type": "text", "text": text}]
+        for image in images:
+            value = str(image or "").strip()
+            if not value:
+                continue
+            match = re.match(r"^data:([^;,]+);base64,", value, flags=re.IGNORECASE)
+            mime_type = str(match.group(1) if match else "image/png")
+            blocks.append({"type": "image", "mimeType": mime_type, "data": value})
+        return ToolResult(blocks)
+
+    @staticmethod
+    def _compressor(context: ToolContext, store: SessionArchiveStore):
+        runtime = getattr(context, "runtime", None)
+        factory = getattr(runtime, "archive_compressor_factory", None)
+        if factory is None:
+            return None
+        return factory(
+            client=getattr(context, "llm_client", None),
+            provider=getattr(context, "provider", None),
+            store=store,
+            debug_trace=getattr(runtime, "debug_trace", None),
+        )
+
+    @staticmethod
+    def _sync_state(context: ToolContext) -> None:
         try:
-            if context.conversation is None or context.state is None:
-                return
-            state = context.conversation.get_state()
-            current_seq = context.state.get("_current_seq", 0) if isinstance(context.state, dict) else 0
+            current_seq = int(context.state.get("_current_seq", 0) or 0)
+            state = context.conversation.get_state().to_dict()
             context.state.clear()
-            context.state.update(state.to_dict())
+            context.state.update(state)
             context.state["_current_seq"] = current_seq
         except Exception:
             return

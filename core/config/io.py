@@ -4,10 +4,17 @@ import json
 import logging
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from core.config.schema import AppConfig, ProjectConfig
+from models.contracts.config import AppConfig, ProjectConfig
+from core.config.migrations import (
+    SCHEMA_VERSION,
+    migrate_modes_payload,
+    migrate_settings_payload,
+    restore_migrated_capabilities_from_modes,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -85,44 +92,70 @@ def get_user_modes_json_path() -> Path:
     return _get_app_data_dir() / "modes.json"
 
 
+def _atomic_write_json(path: Path, data: Dict[str, Any]) -> bool:
+    """Write JSON beside the target and atomically replace it."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data or {}, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            os.replace(temp_name, path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+        return True
+    except Exception as exc:
+        logger.debug("Failed to atomically write %s: %s", path, exc)
+        return False
+
+
 def load_user_modes_dict() -> Dict[str, Any]:
     path = get_user_modes_json_path()
     try:
         if path.exists() and path.is_file():
-            return json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            migrated = migrate_modes_payload(raw)
+            if raw != migrated:
+                _atomic_write_json(path, migrated)
+            return migrated
     except Exception:
         return {}
-    return {}
+    return {"schema_version": SCHEMA_VERSION, "modes": []}
 
 
 def save_user_modes_dict(data: Dict[str, Any]) -> bool:
     path = get_user_modes_json_path()
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data or {}, ensure_ascii=False, indent=2), encoding="utf-8")
-        return True
-    except Exception:
-        return False
+    return _atomic_write_json(path, migrate_modes_payload(data))
 
 
 def load_settings_dict() -> Dict[str, Any]:
     path = get_settings_path()
     try:
         if path.exists() and path.is_file():
-            return json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            migrated, profiles = migrate_settings_payload(raw)
+            modes = load_user_modes_dict()
+            migrated, migrated_modes = restore_migrated_capabilities_from_modes(migrated, modes)
+            if modes != migrated_modes:
+                _atomic_write_json(get_user_modes_json_path(), migrated_modes)
+            if raw != migrated:
+                _atomic_write_json(path, migrated)
+            return migrated
     except Exception:
         return {}
-    return {}
+    return {"schema_version": SCHEMA_VERSION}
 
 
 def save_settings_dict(settings: Dict[str, Any]) -> bool:
     path = get_settings_path()
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(settings or {}, ensure_ascii=False, indent=2), encoding="utf-8")
-        return True
-    except Exception:
-        return False
+    payload, profiles = migrate_settings_payload(settings)
+    modes = load_user_modes_dict()
+    payload, migrated_modes = restore_migrated_capabilities_from_modes(payload, modes)
+    if modes != migrated_modes:
+        _atomic_write_json(get_user_modes_json_path(), migrated_modes)
+    return _atomic_write_json(path, payload)
 
 
 def load_app_config(*, refresh: bool = False) -> AppConfig:
@@ -170,8 +203,10 @@ def load_project_config(work_dir: str) -> ProjectConfig:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         raw = None
-
-    return ProjectConfig.from_modes_json(str(work_dir or ""), raw)
+    migrated = migrate_modes_payload(raw)
+    if raw != migrated:
+        _atomic_write_json(p, migrated)
+    return ProjectConfig.from_modes_json(str(work_dir or ""), migrated)
 
 
 def save_project_config(project: ProjectConfig) -> bool:
@@ -180,8 +215,6 @@ def save_project_config(project: ProjectConfig) -> bool:
         return False
 
     try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(project.to_modes_json(), ensure_ascii=False, indent=2), encoding="utf-8")
-        return True
+        return _atomic_write_json(p, migrate_modes_payload(project.to_modes_json()))
     except Exception:
         return False

@@ -6,7 +6,9 @@ from typing import Any
 __all__ = [
 	"AppBootstrap",
 	"AppBootstrapState",
+	"AppContainer",
 	"AppCoordinator",
+	"AppServices",
 	"AppSettingsUpdate",
 	"AppState",
 	"ConversationSelection",
@@ -21,6 +23,10 @@ def __getattr__(name: str) -> Any:
 		from core.app.bootstrap import AppBootstrap, AppBootstrapState
 
 		return {"AppBootstrap": AppBootstrap, "AppBootstrapState": AppBootstrapState}[name]
+	if name in {"AppContainer", "AppServices"}:
+		from core.app.container import AppContainer, AppServices
+
+		return {"AppContainer": AppContainer, "AppServices": AppServices}[name]
 	if name == "AppCoordinator":
 		from core.app.coordinator import AppCoordinator
 

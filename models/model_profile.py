@@ -1,4 +1,4 @@
-"""Per-model capability profile."""
+"""Per-model capability and request profile."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -39,14 +39,15 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
         return default
 
 
+def _coerce_optional_bool(value: Any) -> bool | None:
+    if value in (None, ""):
+        return None
+    return _coerce_bool(value)
+
+
 @dataclass
 class ModelProfile:
-    """Lightweight per-model capability profile.
-
-    The project still keeps ``Provider.models`` as the legacy/simple model list.
-    ``ModelProfile`` lets new code attach capabilities without forcing a full
-    migration of existing provider settings.
-    """
+    """One selectable provider model and its optional request defaults."""
 
     model_id: str = ""
     display_name: str = ""
@@ -55,12 +56,11 @@ class ModelProfile:
     supports_tools: bool = True
     supports_vision: bool = True
     supports_reasoning: bool = False
-    reasoning_style: str = "none"
+    reasoning_enabled: bool | None = None
     default_temperature: float | None = None
     default_top_p: float | None = None
     reasoning_effort: str = ""
-    thinking_budget_tokens: int | None = None
-    reasoning_config: Dict[str, Any] = field(default_factory=dict)
+    request_overrides: Dict[str, Any] = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
     notes: str = ""
 
@@ -72,12 +72,11 @@ class ModelProfile:
         self.supports_tools = _coerce_bool(self.supports_tools, True)
         self.supports_vision = _coerce_bool(self.supports_vision, True)
         self.supports_reasoning = _coerce_bool(self.supports_reasoning, False)
-        self.reasoning_style = str(self.reasoning_style or "none").strip().lower() or "none"
+        self.reasoning_enabled = _coerce_optional_bool(self.reasoning_enabled)
         self.default_temperature = _coerce_optional_float(self.default_temperature)
         self.default_top_p = _coerce_optional_float(self.default_top_p)
         self.reasoning_effort = str(self.reasoning_effort or "").strip().lower()
-        self.thinking_budget_tokens = _coerce_optional_int(self.thinking_budget_tokens)
-        self.reasoning_config = dict(self.reasoning_config or {}) if isinstance(self.reasoning_config, dict) else {}
+        self.request_overrides = dict(self.request_overrides or {}) if isinstance(self.request_overrides, dict) else {}
         self.tags = [str(tag).strip() for tag in (self.tags or []) if str(tag).strip()]
         self.notes = str(self.notes or "").strip()
 
@@ -94,7 +93,6 @@ class ModelProfile:
             display_name=model_id,
             supports_vision=supports_vision,
             supports_reasoning=supports_reasoning,
-            reasoning_style="reasoning" if supports_reasoning else "none",
         )
 
     @classmethod
@@ -110,12 +108,11 @@ class ModelProfile:
             supports_tools=payload.get("supports_tools", True),
             supports_vision=payload.get("supports_vision", True),
             supports_reasoning=payload.get("supports_reasoning", False),
-            reasoning_style=payload.get("reasoning_style") or payload.get("reasoning_type") or "none",
+            reasoning_enabled=payload.get("reasoning_enabled"),
             default_temperature=payload.get("default_temperature"),
             default_top_p=payload.get("default_top_p"),
             reasoning_effort=payload.get("reasoning_effort") or payload.get("effort") or "",
-            thinking_budget_tokens=payload.get("thinking_budget_tokens") or payload.get("thinking_budget"),
-            reasoning_config=payload.get("reasoning_config") or {},
+            request_overrides=payload.get("request_overrides") or payload.get("request_format") or {},
             tags=payload.get("tags") or [],
             notes=payload.get("notes") or "",
         )
@@ -129,12 +126,11 @@ class ModelProfile:
             "supports_tools": self.supports_tools,
             "supports_vision": self.supports_vision,
             "supports_reasoning": self.supports_reasoning,
-            "reasoning_style": self.reasoning_style,
+            "reasoning_enabled": self.reasoning_enabled,
             "default_temperature": self.default_temperature,
             "default_top_p": self.default_top_p,
             "reasoning_effort": self.reasoning_effort,
-            "thinking_budget_tokens": self.thinking_budget_tokens,
-            "reasoning_config": dict(self.reasoning_config),
+            "request_overrides": dict(self.request_overrides),
             "tags": list(self.tags),
             "notes": self.notes,
         }

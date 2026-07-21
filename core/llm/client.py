@@ -1,13 +1,13 @@
-"""LLM Client — orchestrates request building, HTTP transport, and response parsing.
+"""LLM Client — HTTP transport and response parsing.
 
 Delegates response parsing to ``core.llm.response_handler``.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import time
+import asyncio
 from datetime import datetime
 from typing import Any, Optional, Callable
 import threading
@@ -15,15 +15,40 @@ import threading
 import httpx
 
 from models.provider import Provider
-from models.conversation import Message, Conversation
+from models.conversation import Message
 
 from core.llm.thinking_parser import ThinkingStreamParser
-from core.config import load_app_config, AppConfig
 from core.llm.response_handler import parse_non_stream_response, parse_stream_response
-from core.prompts.assembler import PromptAssembler
+from core.agent.events.debug_trace import DebugTraceContext, ensure_debug_trace
 
 
 logger = logging.getLogger(__name__)
+
+
+class _TeeLogFile:
+    def __init__(self, *files):
+        self._files = [fp for fp in files if fp is not None]
+
+    def write(self, text: str) -> None:
+        for fp in list(self._files):
+            try:
+                fp.write(text)
+            except Exception as exc:
+                logger.debug("Failed to write tee debug stream: %s", exc)
+
+    def flush(self) -> None:
+        for fp in list(self._files):
+            try:
+                fp.flush()
+            except Exception as exc:
+                logger.debug("Failed to flush tee debug stream: %s", exc)
+
+    def close(self) -> None:
+        for fp in list(self._files):
+            try:
+                fp.close()
+            except Exception as exc:
+                logger.debug("Failed to close tee debug stream: %s", exc)
 
 
 def _format_runtime_error(error: Exception) -> str:
@@ -35,23 +60,12 @@ def _format_runtime_error(error: Exception) -> str:
 
 
 class LLMClient:
-    """Handles chat interactions with LLM providers."""
+    """Handles LLM transport, request body sending, and response parsing."""
 
-    def __init__(self, timeout: float | None = None, tool_manager=None, prompt_assembler: PromptAssembler | None = None):
-        if timeout is None:
-            try:
-                timeout = float(load_app_config().llm_timeout_seconds)
-            except Exception as exc:
-                logger.debug("Failed to load timeout from app config, using default: %s", exc)
-                timeout = 600.0
-        self.timeout = float(timeout)
-        if tool_manager is not None:
-            self.tool_manager = tool_manager
-        else:
-            from core.tools.manager import ToolManager
-
-            self.tool_manager = ToolManager()
-        self.prompt_assembler = prompt_assembler or PromptAssembler()
+    def __init__(self, timeout: float | None = None):
+        self.timeout = float(timeout if timeout is not None else 600.0)
+        if self.timeout <= 0:
+            self.timeout = 600.0
 
     def set_timeout(self, timeout: float) -> None:
         try:
@@ -59,23 +73,35 @@ class LLMClient:
         except Exception:
             logger.debug("Ignored invalid LLM timeout update: %r", timeout)
 
-    async def send_message(
+    async def send_request(
         self,
+        *,
         provider: Provider,
-        conversation: Conversation,
+        request_body: dict[str, Any],
         on_token: Optional[Callable[[str], None]] = None,
         on_thinking: Optional[Callable[[str], None]] = None,
-        enable_thinking: bool = True,
+        show_thinking: bool = True,
         debug_log_path: Optional[str] = None,
         cancel_event: Optional[threading.Event] = None,
-        prepared_messages: Optional[list[Message]] = None,
-        prepared_tools: Optional[list[dict]] = None,
+        debug_trace: DebugTraceContext | None = None,
+        debug_turn: int = 0,
+        debug_purpose: str = "main",
+        conversation_id: str = "",
+        model_hint: str = "",
     ) -> Message:
         start_time = time.time()
 
         thinking_parser = ThinkingStreamParser()
         log_fp = None
-        if debug_log_path:
+        trace_log_fp = None
+        combined_log_fp = None
+        trace_context = ensure_debug_trace(debug_trace)
+        llm_trace: DebugTraceContext | None = None
+        refs: dict[str, str] = {}
+        use_legacy_stream_log = bool(debug_log_path) and not bool(
+            trace_context is not None and getattr(trace_context.sink, "capture_stream", False)
+        )
+        if use_legacy_stream_log:
             try:
                 log_fp = open(debug_log_path, "a", encoding="utf-8")
                 log_fp.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} START =====\n")
@@ -85,90 +111,130 @@ class LLMClient:
                 log_fp = None
 
         try:
-            try:
-                app_config = load_app_config()
-            except Exception:
-                app_config = AppConfig()
+            response_format = str(getattr(provider, "api_type", "") or "openai_compatible")
+            headers = provider.get_headers()
+            endpoint = provider.get_chat_endpoint()
 
-            tools = prepared_tools or []
-
-            if prepared_messages is not None:
-                base_messages = prepared_messages
-            else:
-                base_messages = self.prompt_assembler.select_base_messages(conversation, app_config=app_config)
-            api_messages = self.prompt_assembler.build_api_messages(
-                base_messages,
-                provider,
-                conversation=conversation,
-            )
-            request_body = self.prompt_assembler.build_request_body(
-                provider,
-                conversation,
-                api_messages,
-                tools=tools,
-                app_config=app_config,
-            )
-            response_format = "responses" if getattr(provider, "is_openai_responses", False) else "chat"
-
-            if debug_log_path:
-                try:
-                    open(f"debug_request_{int(time.time())}.json", "w", encoding="utf-8").write(
-                        json.dumps(request_body, ensure_ascii=False, indent=2)
+            if trace_context is not None:
+                purpose = debug_purpose or trace_context.default_purpose or "main"
+                llm_trace = trace_context.sink.start_llm(
+                    trace_context,
+                    turn=int(debug_turn or trace_context.turn or 0),
+                    purpose=purpose,
+                    provider=str(getattr(provider, "name", "") or ""),
+                    model=str(request_body.get("model") or model_hint or ""),
+                    response_format=response_format,
+                    include_stream=bool(request_body.get("stream", True)),
+                )
+                refs = dict(llm_trace.refs or {})
+                if refs.get("request"):
+                    trace_context.sink.write_json(
+                        refs["request"],
+                        {
+                            "endpoint": endpoint,
+                            "headers": headers,
+                            "body": request_body,
+                            "provider": {
+                                "id": getattr(provider, "id", ""),
+                                "name": getattr(provider, "name", ""),
+                                "api_type": getattr(provider, "api_type", ""),
+                            },
+                            "conversation_id": str(conversation_id or ""),
+                        },
                     )
-                except Exception as exc:
-                    logger.debug("Failed to write debug request snapshot: %s", exc)
+                if refs.get("stream"):
+                    trace_log_fp = trace_context.sink.open_stream_file(refs["stream"])
+            if trace_log_fp is not None and log_fp is not None:
+                combined_log_fp = _TeeLogFile(log_fp, trace_log_fp)
+            else:
+                combined_log_fp = trace_log_fp or log_fp
 
             timeout_config = httpx.Timeout(self.timeout, connect=60.0)
             async with httpx.AsyncClient(timeout=timeout_config) as client:
                 # ===== Non-stream mode =====
                 if not request_body.get("stream", True):
                     resp = await client.post(
-                        provider.get_chat_endpoint(),
-                        headers=provider.get_headers(),
+                        endpoint,
+                        headers=headers,
                         json=request_body,
                     )
                     msg = parse_non_stream_response(
                         resp,
                         thinking_parser=thinking_parser,
-                        enable_thinking=enable_thinking,
+                        show_thinking=show_thinking,
                         response_format=response_format,
                         on_token=on_token,
                         start_time=start_time,
                     )
-                    self._attach_metadata(msg, provider, request_body, conversation)
+                    self._attach_metadata(msg, provider, request_body, model_hint=model_hint)
+                    self._record_debug_response(
+                        llm_trace,
+                        refs=refs,
+                        msg=msg,
+                        provider=provider,
+                        response_format=response_format,
+                        start_time=start_time,
+                    )
                     return msg
 
                 # ===== Streaming mode =====
                 async with client.stream(
                     "POST",
-                    provider.get_chat_endpoint(),
-                    headers=provider.get_headers(),
+                    endpoint,
+                    headers=headers,
                     json=request_body,
                 ) as response:
                     msg = await parse_stream_response(
                         response,
                         thinking_parser=thinking_parser,
-                        enable_thinking=enable_thinking,
+                        show_thinking=show_thinking,
                         response_format=response_format,
                         on_token=on_token,
                         on_thinking=on_thinking,
                         cancel_event=cancel_event,
-                        log_fp=log_fp,
+                        log_fp=combined_log_fp,
                         start_time=start_time,
                     )
-                    self._attach_metadata(msg, provider, request_body, conversation)
+                    self._attach_metadata(msg, provider, request_body, model_hint=model_hint)
+                    self._record_debug_response(
+                        llm_trace,
+                        refs=refs,
+                        msg=msg,
+                        provider=provider,
+                        response_format=response_format,
+                        start_time=start_time,
+                    )
                     return msg
 
+        except asyncio.CancelledError as e:
+            self._record_debug_error(llm_trace, refs=refs, error=e, start_time=start_time)
+            logger.debug("LLM send_message cancelled: %s", _format_runtime_error(e))
+            raise
         except Exception as e:
+            self._record_debug_error(llm_trace, refs=refs, error=e, start_time=start_time)
             logger.exception("LLM send_message failed: %s", _format_runtime_error(e))
             raise RuntimeError(f"Error sending message: {_format_runtime_error(e)}") from e
+        finally:
+            if combined_log_fp is not None:
+                try:
+                    combined_log_fp.close()
+                except Exception as exc:
+                    logger.debug("Failed to close combined debug log file: %s", exc)
+            else:
+                for fp in (trace_log_fp, log_fp):
+                    if fp is not None:
+                        try:
+                            fp.close()
+                        except Exception as exc:
+                            logger.debug("Failed to close debug log file: %s", exc)
 
     @staticmethod
     def _attach_metadata(
         msg: Message,
         provider: Provider,
         request_body: dict,
-        conversation: Conversation,
+        *,
+        model_hint: str = "",
     ) -> None:
         """Attach provider / model metadata to the response message."""
         try:
@@ -177,8 +243,81 @@ class LLMClient:
                 "provider_name": getattr(provider, "name", ""),
                 "model": request_body.get("model")
                 if isinstance(request_body, dict)
-                else (conversation.model or provider.default_model),
+                else model_hint,
                 "thinking_key": msg.metadata.get("thinking_key", "reasoning_content"),
             })
         except Exception as exc:
             logger.debug("Failed to attach LLM response metadata: %s", exc)
+
+    @staticmethod
+    def _record_debug_response(
+        debug_trace: DebugTraceContext | None,
+        *,
+        refs: dict[str, str],
+        msg: Message,
+        provider: Provider,
+        response_format: str,
+        start_time: float,
+    ) -> None:
+        if debug_trace is None or not debug_trace.enabled:
+            return
+        status = "error" if bool((getattr(msg, "metadata", {}) or {}).get("runtime_error")) else "completed"
+        duration_ms = int((time.time() - start_time) * 1000)
+        if refs.get("response"):
+            debug_trace.sink.write_json(
+                refs["response"],
+                {
+                    "status": status,
+                    "provider": {
+                        "id": getattr(provider, "id", ""),
+                        "name": getattr(provider, "name", ""),
+                        "api_type": getattr(provider, "api_type", ""),
+                    },
+                    "response_format": response_format,
+                    "duration_ms": duration_ms,
+                    "message": msg.to_dict(),
+                },
+            )
+        tool_calls = list(getattr(msg, "tool_calls", None) or [])
+        debug_trace.sink.finish_llm(
+            debug_trace,
+            status=status,
+            duration_ms=duration_ms,
+            refs=refs,
+            summary=str(getattr(msg, "summary", "") or getattr(msg, "content", "") or "")[:220],
+            data={
+                "tokens": int(getattr(msg, "tokens", 0) or 0),
+                "tool_calls": len(tool_calls),
+                "response_time_ms": int(getattr(msg, "response_time_ms", 0) or 0),
+            },
+        )
+
+    @staticmethod
+    def _record_debug_error(
+        debug_trace: DebugTraceContext | None,
+        *,
+        refs: dict[str, str],
+        error: Exception,
+        start_time: float,
+    ) -> None:
+        if debug_trace is None or not debug_trace.enabled:
+            return
+        duration_ms = int((time.time() - start_time) * 1000)
+        if refs.get("response"):
+            debug_trace.sink.write_json(
+                refs["response"],
+                {
+                    "status": "error",
+                    "duration_ms": duration_ms,
+                    "error": _format_runtime_error(error),
+                    "error_type": type(error).__name__,
+                },
+            )
+        debug_trace.sink.finish_llm(
+            debug_trace,
+            status="error",
+            duration_ms=duration_ms,
+            refs=refs,
+            summary=_format_runtime_error(error)[:220],
+            data={"error_type": type(error).__name__},
+        )

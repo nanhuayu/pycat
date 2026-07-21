@@ -6,23 +6,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 
-SUMMARY_MODES = {"balanced", "brief", "detailed", "timeline", "evidence", "topic", "memory_candidates"}
-
-
-class ArchivePolicy(Enum):
-    INLINE = "inline"
-    ARCHIVE = "archive"
-    NEVER_ARCHIVE = "never_archive"
-
-
-class ToolResultViewPolicy(Enum):
-    INLINE = "inline"
-    FULL_OR_SUMMARY = "full_or_summary"
-    LINE_OR_SUMMARY = "line_or_summary"
-    SUMMARY = "summary"
-    NEVER_ARCHIVE = "never_archive"
-
-
 class ContentExactness(Enum):
     EXACT = "exact"
     DERIVED = "derived"
@@ -63,20 +46,6 @@ class ContentViewLabel:
             kind, desc = text.split(":", 1)
             return cls(kind.strip(), desc.strip())
         return cls(text.strip(), "")
-
-
-def normalize_summary_mode(mode: object) -> str:
-    raw = str(mode or "balanced").strip().lower()
-    return raw if raw in SUMMARY_MODES else "balanced"
-
-
-def summary_view_value(mode: object) -> str:
-    return ContentViewLabel("summary", normalize_summary_mode(mode)).value
-
-
-def summary_view_label(mode: object) -> str:
-    return ContentViewLabel("summary", normalize_summary_mode(mode)).bracketed
-
 
 def range_desc(start: object, end: object) -> str:
     return f"{int(start)}-{int(end)}"

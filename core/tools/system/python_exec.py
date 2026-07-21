@@ -80,12 +80,24 @@ class PythonExecTool(BaseTool):
         return "python__exec"
 
     @property
+    def display_name(self) -> str:
+        return "运行 Python"
+
+    @property
     def description(self) -> str:
-        return "Execute Python code locally (no sandbox). Returns stdout/stderr."
+        return "Execute supplied Python code locally without a sandbox and return stdout and stderr."
 
     @property
     def category(self) -> str:
         return "execute"
+
+    @property
+    def risk(self) -> str:
+        return "high"
+
+    def approval_message(self, arguments: Dict[str, Any], context: ToolContext) -> str:
+        preview = str(arguments.get("code") or "")[:160]
+        return f"Run unsandboxed Python code?\n{preview}"
 
 
     @property
@@ -115,11 +127,6 @@ class PythonExecTool(BaseTool):
             cwd_path = context.resolve_path(cwd_str)
         except Exception as e:
             return ToolResult(f"Invalid cwd: {e}", is_error=True)
-
-        # Ask for approval (Critical for exec)
-        approved = await context.ask_approval(f"Execute Python code in {cwd_path}?\nCode preview:\n{code[:100]}...")
-        if not approved:
-            return ToolResult("User denied execution", is_error=True)
 
         try:
             env = dict(os.environ or {})

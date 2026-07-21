@@ -6,6 +6,7 @@ on orchestration.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import time
@@ -24,6 +25,7 @@ from core.llm.http_utils import (
     parse_sse_json,
 )
 from core.llm.token_budget import estimate_tokens
+from core.llm.ollama_codec import parse_message as parse_ollama_message
 
 logger = logging.getLogger(__name__)
 
@@ -57,19 +59,22 @@ def _finalize_message_metadata(
     *,
     detected_thinking_key: str,
     thinking_present: bool,
-    enable_thinking: bool,
+    show_thinking: bool,
     runtime_error: bool = False,
     http_status: int | None = None,
+    reasoning_state: dict[str, Any] | None = None,
 ) -> Message:
     msg.metadata["thinking_key"] = detected_thinking_key
     if thinking_present:
         msg.metadata["thinking_present"] = True
-        if not enable_thinking:
+        if not show_thinking:
             msg.metadata["thinking_hidden"] = True
     if runtime_error:
         msg.metadata["runtime_error"] = True
         if http_status is not None:
             msg.metadata["http_status"] = http_status
+    if reasoning_state:
+        msg.metadata["reasoning_state"] = copy.deepcopy(reasoning_state)
     return msg
 
 
@@ -80,9 +85,13 @@ def _json_dumps_compact(value: Any) -> str:
         return "{}"
 
 
-def _parse_anthropic_content_blocks(payload: Dict[str, Any]) -> tuple[str, List[Dict[str, Any]], int]:
-    """Return visible text, OpenAI-style tool calls, and token usage from Anthropic Messages JSON."""
+def _parse_anthropic_content_blocks(
+    payload: Dict[str, Any],
+) -> tuple[str, str, List[Dict[str, Any]], List[Dict[str, Any]], int]:
+    """Return text, thinking, native reasoning blocks, tool calls, and usage."""
     text_parts: List[str] = []
+    thinking_parts: List[str] = []
+    reasoning_blocks: List[Dict[str, Any]] = []
     tool_calls: List[Dict[str, Any]] = []
 
     for block in payload.get("content", []) or []:
@@ -93,6 +102,12 @@ def _parse_anthropic_content_blocks(payload: Dict[str, Any]) -> tuple[str, List[
             text = str(block.get("text") or "")
             if text:
                 text_parts.append(text)
+        elif block_type in {"thinking", "redacted_thinking"}:
+            reasoning_blocks.append(copy.deepcopy(block))
+            if block_type == "thinking":
+                thinking = str(block.get("thinking") or "")
+                if thinking:
+                    thinking_parts.append(thinking)
         elif block_type == "tool_use":
             name = str(block.get("name") or "").strip()
             if not name:
@@ -116,7 +131,16 @@ def _parse_anthropic_content_blocks(payload: Dict[str, Any]) -> tuple[str, List[
         except Exception:
             continue
 
-    return "".join(text_parts), tool_calls, tokens
+    return "".join(text_parts), "".join(thinking_parts), reasoning_blocks, tool_calls, tokens
+
+
+def _responses_reasoning_items(payload: Dict[str, Any]) -> list[dict[str, Any]]:
+    output = payload.get("output") if isinstance(payload.get("output"), list) else []
+    return [
+        copy.deepcopy(item)
+        for item in output
+        if isinstance(item, dict) and str(item.get("type") or "") == "reasoning"
+    ]
 
 
 def _responses_usage_tokens(payload: Dict[str, Any]) -> int:
@@ -269,7 +293,7 @@ def parse_non_stream_response(
     resp: httpx.Response,
     *,
     thinking_parser: ThinkingStreamParser,
-    enable_thinking: bool,
+    show_thinking: bool,
     response_format: str = "chat",
     on_token: Optional[Callable[[str], None]],
     start_time: float,
@@ -281,6 +305,7 @@ def parse_non_stream_response(
     response_tool_calls: Optional[List[Dict[str, Any]]] = None
     detected_thinking_key = "reasoning_content"
     thinking_present = False
+    reasoning_state: dict[str, Any] | None = None
     runtime_error = False
     http_status: int | None = None
 
@@ -300,8 +325,11 @@ def parse_non_stream_response(
         response_content = format_http_error(resp.status_code, payload, text)
     else:
         payload = resp.json()
-        if response_format == "responses" and isinstance(payload, dict):
+        if response_format in {"responses", "openai_responses"} and isinstance(payload, dict):
             content, thinking, tool_calls, tokens_used, detected_thinking_key = _parse_responses_payload(payload)
+            reasoning_items = _responses_reasoning_items(payload)
+            if reasoning_items:
+                reasoning_state = {"api_type": "openai_responses", "items": reasoning_items}
             visible, embedded_thinking = thinking_parser.feed(content)
             response_content += visible
             if embedded_thinking:
@@ -312,13 +340,32 @@ def parse_non_stream_response(
                 thinking_content += thinking
             if tool_calls:
                 response_tool_calls = tool_calls
-        elif isinstance(payload, dict) and isinstance(payload.get("content"), list):
-            content, tool_calls, tokens_used = _parse_anthropic_content_blocks(payload)
+        elif response_format == "ollama_chat" and isinstance(payload, dict):
+            content, thinking, tool_calls, tokens_used = parse_ollama_message(payload)
             visible, embedded_thinking = thinking_parser.feed(content)
             response_content += visible
             if embedded_thinking:
                 thinking_present = True
                 thinking_content += embedded_thinking
+            if thinking:
+                detected_thinking_key = "thinking"
+                thinking_present = True
+                thinking_content += thinking
+            if tool_calls:
+                response_tool_calls = tool_calls
+        elif isinstance(payload, dict) and isinstance(payload.get("content"), list):
+            content, thinking, reasoning_blocks, tool_calls, tokens_used = _parse_anthropic_content_blocks(payload)
+            if reasoning_blocks:
+                reasoning_state = {"api_type": "anthropic_messages", "items": reasoning_blocks}
+            visible, embedded_thinking = thinking_parser.feed(content)
+            response_content += visible
+            if embedded_thinking:
+                thinking_present = True
+                thinking_content += embedded_thinking
+            if thinking:
+                detected_thinking_key = "thinking"
+                thinking_present = True
+                thinking_content += thinking
             if tool_calls:
                 response_tool_calls = tool_calls
         else:
@@ -370,9 +417,10 @@ def parse_non_stream_response(
         msg,
         detected_thinking_key=detected_thinking_key,
         thinking_present=thinking_present,
-        enable_thinking=enable_thinking,
+        show_thinking=show_thinking,
         runtime_error=runtime_error,
         http_status=http_status,
+        reasoning_state=reasoning_state,
     )
 
 
@@ -380,7 +428,7 @@ async def parse_stream_response(
     response: httpx.Response,
     *,
     thinking_parser: ThinkingStreamParser,
-    enable_thinking: bool,
+    show_thinking: bool,
     response_format: str = "chat",
     on_token: Optional[Callable[[str], None]],
     on_thinking: Optional[Callable[[str], None]],
@@ -395,6 +443,7 @@ async def parse_stream_response(
     response_tool_calls: Optional[List[Dict[str, Any]]] = None
     detected_thinking_key = "reasoning_content"
     thinking_present = False
+    reasoning_state: dict[str, Any] | None = None
     runtime_error = False
     http_status: int | None = None
 
@@ -430,7 +479,7 @@ async def parse_stream_response(
             msg,
             detected_thinking_key=detected_thinking_key,
             thinking_present=False,
-            enable_thinking=enable_thinking,
+            show_thinking=show_thinking,
             runtime_error=runtime_error,
             http_status=http_status,
         )
@@ -442,6 +491,9 @@ async def parse_stream_response(
     responses_tool_calls_by_item: Dict[str, dict] = {}
     responses_current_output_index: Optional[int] = None
     responses_current_item_id = ""
+    responses_reasoning_items: Dict[str, dict[str, Any]] = {}
+    anthropic_reasoning_blocks: Dict[int, dict[str, Any]] = {}
+    ollama_calls: dict[str, dict[str, Any]] = {}
 
     async for data in iter_sse_data_lines(response, cancel_event=cancel_event, log_fp=log_fp):
         try:
@@ -461,7 +513,32 @@ async def parse_stream_response(
                 on_token(response_content)
             break
 
-        if response_format == "responses" and isinstance(chunk_data, dict) and chunk_data.get("type"):
+        if response_format == "ollama_chat" and isinstance(chunk_data, dict):
+            content, thinking, calls, parsed_tokens = parse_ollama_message(chunk_data)
+            if content:
+                visible, embedded_thinking = thinking_parser.feed(content)
+                if visible:
+                    response_content += visible
+                    if on_token:
+                        on_token(visible)
+                if embedded_thinking:
+                    thinking_present = True
+                    thinking_content += embedded_thinking
+                    if show_thinking and on_thinking:
+                        on_thinking(embedded_thinking)
+            if thinking:
+                detected_thinking_key = "thinking"
+                thinking_present = True
+                thinking_content += thinking
+                if show_thinking and on_thinking:
+                    on_thinking(thinking)
+            for call in calls:
+                ollama_calls[str(call.get("id") or len(ollama_calls))] = call
+            if parsed_tokens:
+                tokens_used = parsed_tokens
+            continue
+
+        if response_format in {"responses", "openai_responses"} and isinstance(chunk_data, dict) and chunk_data.get("type"):
             event_type = str(chunk_data.get("type") or "")
 
             if event_type == "response.output_text.delta":
@@ -475,7 +552,7 @@ async def parse_stream_response(
                     if embedded_thinking:
                         thinking_present = True
                         thinking_content += embedded_thinking
-                        if enable_thinking and on_thinking:
+                        if show_thinking and on_thinking:
                             on_thinking(embedded_thinking)
                 continue
 
@@ -485,7 +562,7 @@ async def parse_stream_response(
                 thinking_present = True
                 if thinking:
                     thinking_content += thinking
-                    if enable_thinking and on_thinking:
+                    if show_thinking and on_thinking:
                         on_thinking(thinking)
                 continue
 
@@ -493,6 +570,14 @@ async def parse_stream_response(
                 item = chunk_data.get("item") if isinstance(chunk_data.get("item"), dict) else {}
                 responses_current_output_index = chunk_data.get("output_index") if chunk_data.get("output_index") is not None else responses_current_output_index
                 responses_current_item_id = str(item.get("id") or responses_current_item_id or "")
+                if item.get("type") == "reasoning":
+                    key = _responses_tool_call_key(
+                        chunk_data,
+                        responses_current_output_index,
+                        responses_current_item_id,
+                        len(responses_reasoning_items),
+                    )
+                    responses_reasoning_items[key] = copy.deepcopy(item)
                 if item.get("type") == "function_call":
                     key = _responses_tool_call_key(
                         chunk_data,
@@ -554,6 +639,8 @@ async def parse_stream_response(
                     responses_current_item_id,
                     len(responses_tool_calls_by_item),
                 )
+                if item.get("type") == "reasoning":
+                    responses_reasoning_items[key] = copy.deepcopy(item)
                 _sync_responses_function_call_item(responses_tool_calls_by_item, key, item)
                 continue
 
@@ -561,6 +648,9 @@ async def parse_stream_response(
                 response_payload = chunk_data.get("response") if isinstance(chunk_data.get("response"), dict) else {}
                 if response_payload:
                     content, thinking, tool_calls, parsed_tokens, detected = _parse_responses_payload(response_payload)
+                    native_reasoning = _responses_reasoning_items(response_payload)
+                    if native_reasoning:
+                        reasoning_state = {"api_type": "openai_responses", "items": native_reasoning}
                     detected_thinking_key = detected
                     if not response_content and content:
                         visible, embedded_thinking = thinking_parser.feed(content)
@@ -597,7 +687,17 @@ async def parse_stream_response(
                 index = int(chunk_data.get("index") or 0)
                 anthropic_block_index = index
                 block = chunk_data.get("content_block") if isinstance(chunk_data.get("content_block"), dict) else {}
-                if block.get("type") == "tool_use":
+                block_type = str(block.get("type") or "")
+                if block_type in {"thinking", "redacted_thinking"}:
+                    anthropic_reasoning_blocks[index] = copy.deepcopy(block)
+                    initial_thinking = str(block.get("thinking") or "") if block_type == "thinking" else ""
+                    if initial_thinking:
+                        detected_thinking_key = "thinking"
+                        thinking_present = True
+                        thinking_content += initial_thinking
+                        if show_thinking and on_thinking:
+                            on_thinking(initial_thinking)
+                elif block_type == "tool_use":
                     anthropic_tool_blocks[index] = {
                         "id": str(block.get("id") or ""),
                         "type": "function",
@@ -623,8 +723,22 @@ async def parse_stream_response(
                         if embedded_thinking:
                             thinking_present = True
                             thinking_content += embedded_thinking
-                            if enable_thinking and on_thinking:
+                            if show_thinking and on_thinking:
                                 on_thinking(embedded_thinking)
+                elif delta_type == "thinking_delta":
+                    thinking = str(delta.get("thinking") or "")
+                    block = anthropic_reasoning_blocks.setdefault(index, {"type": "thinking", "thinking": ""})
+                    block["thinking"] = str(block.get("thinking") or "") + thinking
+                    detected_thinking_key = "thinking"
+                    thinking_present = True
+                    if thinking:
+                        thinking_content += thinking
+                        if show_thinking and on_thinking:
+                            on_thinking(thinking)
+                elif delta_type == "signature_delta":
+                    signature = str(delta.get("signature") or "")
+                    block = anthropic_reasoning_blocks.setdefault(index, {"type": "thinking", "thinking": ""})
+                    block["signature"] = str(block.get("signature") or "") + signature
                 elif delta_type == "input_json_delta":
                     partial = str(delta.get("partial_json") or "")
                     if partial:
@@ -683,7 +797,7 @@ async def parse_stream_response(
                 if embedded_thinking:
                     thinking_present = True
                     thinking_content += embedded_thinking
-                    if enable_thinking and on_thinking:
+                    if show_thinking and on_thinking:
                         on_thinking(embedded_thinking)
 
             # Thinking fields
@@ -698,7 +812,7 @@ async def parse_stream_response(
                     break
             if thinking:
                 thinking_content += thinking
-                if enable_thinking and on_thinking:
+                if show_thinking and on_thinking:
                     on_thinking(thinking)
 
     # Stream finished
@@ -720,11 +834,23 @@ async def parse_stream_response(
             tcb for _, tcb in sorted(responses_tool_calls_by_item.items())
             if tcb.get("function", {}).get("name")
         ]
+    if ollama_calls and response_tool_calls is None:
+        response_tool_calls = list(ollama_calls.values())
     if tool_calls_buffer:
         response_tool_calls = [
             tcb for tcb in tool_calls_buffer
             if tcb.get("function", {}).get("name")
         ]
+    if reasoning_state is None and responses_reasoning_items:
+        reasoning_state = {
+            "api_type": "openai_responses",
+            "items": [item for _, item in sorted(responses_reasoning_items.items())],
+        }
+    if anthropic_reasoning_blocks:
+        reasoning_state = {
+            "api_type": "anthropic_messages",
+            "items": [item for _, item in sorted(anthropic_reasoning_blocks.items())],
+        }
 
     response_time_ms = int((time.time() - start_time) * 1000)
     if tokens_used == 0:
@@ -742,7 +868,8 @@ async def parse_stream_response(
         msg,
         detected_thinking_key=detected_thinking_key,
         thinking_present=thinking_present,
-        enable_thinking=enable_thinking,
+        show_thinking=show_thinking,
         runtime_error=runtime_error,
         http_status=http_status,
+        reasoning_state=reasoning_state,
     )

@@ -1,125 +1,125 @@
 from __future__ import annotations
 
-from .types import CapabilityConfig, CapabilitiesConfig
+from models.contracts.capability import CapabilitiesConfig, CapabilityConfig
 
 
-DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT = """你是一个专业的【提示词优化器】。你的任务是把用户提供的提示词改写得更清晰、更可执行、对大模型更友好。
+DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT = """你是提示词优化器。保持原意、变量、链接、代码块和结构化片段不变，把输入改写得清晰、具体、可执行。使用与原文相同的语言，只输出优化后的提示词正文；信息不足时在末尾列出少量待确认问题。"""
 
-要求：
-- 保持原意，不要编造事实或添加用户未提供的信息。
-- 尽量用结构化方式表达：角色/目标/上下文/约束/输出格式/示例（如适用）。
-- 如果原提示词包含变量、占位符、链接、代码块、JSON/YAML 片段，必须保留并避免破坏其语法。
-- 语言与用户原提示词保持一致（中文就用中文，英文就用英文）。
-- 只输出【优化后的提示词正文】，不要输出解释、步骤、标题、Markdown 包装或额外 commentary。
+TITLE_PROMPT = """Generate a short, specific conversation title in the user's language. Return the title only, without punctuation or commentary."""
 
-如果原提示词信息不足以满足目标：
-- 仍然输出一个尽可能好的版本；
-- 在提示词末尾追加一个待确认问题小节（尽量少，1-5 条），用于让用户补充关键缺失信息。
+COMPRESS_PROMPT = """Condense the supplied conversation while preserving user requirements, decisions, completed work, current state, references, and next steps. Do not add facts. Return concise structured text only."""
 
-开始。
-"""
+SUMMARIZE_PROMPT = """Summarize the supplied text. Preserve important facts, decisions, constraints, risks, references, and actionable next steps. Follow the requested focus when present and do not call tools."""
 
-SUMMARY_SYSTEM_PROMPT = """You are a summarization engine.
+MEMORY_ADVISE_PROMPT = """You are PyCat's read-only Memory Advisor. Use only the supplied memory catalog and return strict JSON. Every advice item must cite supplied source_ids. Return {\"advice\": []} when no stored memory is clearly useful."""
 
-Hard constraints:
-- This is a summarization-only request: DO NOT call any tools or functions.
-- Output text only (no tool calls will be processed).
-- Treat this as a system maintenance operation; ignore this summarization request itself when inferring the user's intent.
+MEMORY_CURATE_PROMPT = """You are PyCat's Memory Curator. Propose only concise, durable facts supported by supplied completed milestones or final artifacts. Exclude transient status, secrets, guesses, raw logs, and long reports. Return strict JSON with a candidates array; use refs from the supplied allowed refs only."""
 
-Output goals:
-- Concise but information-dense summary so work can continue seamlessly.
-- Preserve key decisions, constraints, completed work, current state, and next steps.
-- Use clear structure (e.g., Overview / Requirements / Done / TODO / Next).
-"""
+MEMORY_ADVISE_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "advice": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "source_ids": {"type": "array", "items": {"type": "string"}},
+                    "verify": {"type": "string"},
+                },
+                "required": ["text", "source_ids"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["advice"],
+    "additionalProperties": False,
+}
 
-
-TRANSLATE_SYSTEM_PROMPT = """你是一个专业翻译助手。
-保持原文含义、术语和格式，按用户指定目标语言输出；不要添加无关解释。"""
-
-TITLE_EXTRACT_SYSTEM_PROMPT = """你是一个标题提取器。
-根据用户消息或对话开头生成简短、具体、无标点冗余的中文标题。"""
-
-TEXT_SUMMARY_SYSTEM_PROMPT = """你是文本总结助手。
-适合处理单个文件、单段长文本或单个工具结果文件。
-提取主旨、关键论点、事实、风险和待办，优先保留可执行信息。
-如输入是文件路径，请先读取文件再总结；不要修改文件。"""
+MEMORY_CURATE_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "candidates": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "maxLength": 600},
+                    "scope": {"type": "string", "enum": ["session", "workspace", "global"]},
+                    "category": {
+                        "type": "string",
+                        "enum": ["preference", "fact", "decision", "convention", "command", "gotcha"],
+                    },
+                    "reason": {"type": "string", "maxLength": 600},
+                    "refs": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
+                },
+                "required": ["content", "scope", "category", "refs"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["candidates"],
+    "additionalProperties": False,
+}
 
 
 def default_capabilities_config() -> CapabilitiesConfig:
-    """Return built-in capability definitions."""
-    capabilities = (
-        # --- Text-only utilities (no tool categories; runtime uses chat mode) ---
-        CapabilityConfig(
-            id="prompt_optimize",
-            name="提示词优化",
-            kind="prompt_optimize",
-            visibility="internal",
-            execution_mode="direct_llm",
-            system_prompt=DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT.strip(),
-            options={"input_label": "原始提示词", "output_label": "优化后提示词"},
-        ),
-        CapabilityConfig(
-            id="title",
-            name="标题提取",
-            kind="title",
-            visibility="internal",
-            execution_mode="direct_llm",
-            system_prompt=TITLE_EXTRACT_SYSTEM_PROMPT.strip(),
-            options={"max_chars": 30},
-        ),
-        CapabilityConfig(
-            id="translate",
-            name="翻译",
-            kind="translate",
-            visibility="agent_tool",
-            execution_mode="direct_llm",
-            system_prompt=TRANSLATE_SYSTEM_PROMPT.strip(),
-            options={"target_language": "中文", "preserve_format": True},
-        ),
-        # --- Context compression (text-in, text-out; no tool categories) ---
-        CapabilityConfig(
-            id="compress",
-            name="上下文压缩",
-            kind="compress",
-            visibility="internal",
-            execution_mode="direct_llm",
-            system_prompt=SUMMARY_SYSTEM_PROMPT.strip(),
-            options={"include_tool_details": False, "keep_last_messages": 6},
-        ),
-        # --- Single-source summarization (read tool category; runtime uses agent mode) ---
-        CapabilityConfig(
-            id="summarize",
-            name="长文总结",
-            kind="summarize",
-            visibility="agent_tool",
-            execution_mode="tool_limited_loop",
-            system_prompt=TEXT_SUMMARY_SYSTEM_PROMPT.strip(),
-            allowed_tool_categories=("read",),
-            options={"outline_first": True, "max_turns": 8},
-        ),
-        CapabilityConfig(
-            id="extract_facts",
-            name="事实抽取",
-            kind="extract_facts",
-            visibility="agent_tool",
-            execution_mode="direct_llm",
-            system_prompt="Extract stable facts, constraints, decisions, references, and open questions from the input. Return concise structured text.",
-        ),
-        CapabilityConfig(
-            id="classify_risk",
-            name="风险分类",
-            kind="classify_risk",
-            visibility="agent_tool",
-            execution_mode="direct_llm",
-            system_prompt="Classify the operational, permission, privacy, and correctness risks in the input. Return risk level, rationale, and mitigation.",
-        ),
-        CapabilityConfig(
-            id="rewrite_query",
-            name="查询改写",
-            kind="rewrite_query",
-            visibility="agent_tool",
-            execution_mode="direct_llm",
-            system_prompt="Rewrite the user's research/search need into precise search queries. Preserve intent and return compact query suggestions.",
-        ),
+    return CapabilitiesConfig(
+        capabilities=(
+            CapabilityConfig(
+                id="prompt_optimize",
+                name="提示词优化",
+                exposure="internal",
+                prompt=DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT.strip(),
+            ),
+            CapabilityConfig(
+                id="title",
+                name="标题提取",
+                exposure="internal",
+                prompt=TITLE_PROMPT.strip(),
+            ),
+            CapabilityConfig(
+                id="compress",
+                name="上下文压缩",
+                exposure="internal",
+                prompt=COMPRESS_PROMPT.strip(),
+            ),
+            CapabilityConfig(
+                id="memory_advise",
+                name="Memory advice",
+                exposure="internal",
+                runtime="single_turn",
+                description="Provide source-backed advice from already stored memory.",
+                prompt=MEMORY_ADVISE_PROMPT,
+                output_schema=MEMORY_ADVISE_OUTPUT_SCHEMA,
+            ),
+            CapabilityConfig(
+                id="memory_curate",
+                name="Memory curation",
+                exposure="internal",
+                runtime="single_turn",
+                description="Propose reviewable durable-memory candidates from completed work.",
+                prompt=MEMORY_CURATE_PROMPT,
+                output_schema=MEMORY_CURATE_OUTPUT_SCHEMA,
+            ),
+            CapabilityConfig(
+                id="summarize",
+                name="文本总结",
+                exposure="tool",
+                runtime="single_turn",
+                description="Summarize supplied text; read files or archives first and pass their content here.",
+                prompt=SUMMARIZE_PROMPT.strip(),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string", "description": "Text to summarize."},
+                        "focus": {"type": "string", "description": "Optional aspect to emphasize."},
+                    },
+                    "required": ["text"],
+                    "additionalProperties": False,
+                },
+            ),
+        )
     )
-    return CapabilitiesConfig(capabilities=capabilities)

@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, TextIO
 
-from core.runtime.events import TurnEvent, TurnEventKind
+from models.contracts.agent import RunEvent, RunEventKind
 
 
 def _json_default(value: Any) -> Any:
@@ -18,7 +18,7 @@ def _json_default(value: Any) -> Any:
 
 @dataclass
 class CliOutput:
-    """Terminal output adapter for TurnEngine events."""
+    """Terminal output adapter for runtime events."""
 
     mode: str = "text"
     stream: TextIO | None = None
@@ -35,7 +35,7 @@ class CliOutput:
     def json_mode(self) -> bool:
         return str(self.mode or "text").lower() == "json"
 
-    def event(self, event: TurnEvent) -> None:
+    def event(self, event: RunEvent) -> None:
         if self.json_mode:
             self.write_json({
                 "type": "event",
@@ -47,15 +47,15 @@ class CliOutput:
             })
             return
 
-        if event.kind == TurnEventKind.TOOL_START:
+        if event.kind == RunEventKind.TOOL_START:
             self._finish_token_line()
             name = event.tool_name or "tool"
             print(f"[tool:start] {name}", file=self.err_stream)
-        elif event.kind == TurnEventKind.TOOL_END:
+        elif event.kind == RunEventKind.TOOL_END:
             self._finish_token_line()
             name = event.tool_name or "tool"
             print(f"[tool:end] {name}", file=self.err_stream)
-        elif event.kind == TurnEventKind.ERROR:
+        elif event.kind == RunEventKind.ERROR:
             self._finish_token_line()
             print(f"[error] {event.detail or event.data}", file=self.err_stream)
 

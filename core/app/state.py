@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.tools.catalog import ToolSelectionPolicy
+from models.contracts.tooling import ToolSelectionPolicy
+from models.contracts.mcp import McpServerConfig
+from models.contracts.mode import ModeConfig
 from models.provider import Provider
+from models.search_config import SearchConfig
 
 
 @dataclass(frozen=True)
@@ -14,8 +17,6 @@ class ConversationSelection:
     api_type: str = ""
     model: str = ""
     primary_model_ref: str = ""
-    secondary_model_ref: str = ""
-    fallback_model_ref: str = ""
     mode_slug: str = "chat"
     work_dir: str = ""
     show_thinking: bool = True
@@ -29,15 +30,15 @@ class ConversationSettingsUpdate:
     api_type: str = ""
     model: str = ""
     primary_model_ref: str = ""
-    secondary_model_ref: str = ""
-    fallback_model_ref: str = ""
     mode_slug: str = "chat"
-    system_prompt: str = ""
+    session_instructions: str = ""
     max_context_messages: int | None = None
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
     stream: bool | None = None
+    reasoning_enabled: bool | None = None
+    reasoning_effort: str = ""
     show_thinking: bool = True
     memory_sources: tuple[str, ...] = ("session", "workspace", "global")
     tool_selection: ToolSelectionPolicy | None = None
@@ -50,6 +51,9 @@ class ConversationSettingsUpdate:
 class AppSettingsUpdate:
     providers: tuple[Provider, ...] = field(default_factory=tuple)
     settings_patch: dict[str, Any] = field(default_factory=dict)
+    mcp_servers: tuple[McpServerConfig, ...] = field(default_factory=tuple)
+    modes: tuple[ModeConfig, ...] = field(default_factory=tuple)
+    search_config: SearchConfig | None = None
 
 
 @dataclass(frozen=True)

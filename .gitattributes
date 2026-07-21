@@ -1,0 +1,36 @@
+# Auto detect text files and use LF in repo, CRLF on checkout (Windows default)
+* text=auto
+
+# Explicitly mark these as text with LF in repo (keep CRLF on Windows checkout)
+*.py text
+*.md text
+*.txt text
+*.json text
+*.yaml text
+*.yml text
+*.toml text
+*.cfg text
+*.ini text
+*.bat text
+*.ps1 text
+*.cfg text
+*.css text
+*.html text
+*.js text
+*.svg text
+*.gitignore text
+
+# Binary files - never touch
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.ttf binary
+*.otf binary
+*.pdf binary

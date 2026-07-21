@@ -2,21 +2,17 @@ from core.config.app_settings import (
     get_app_settings,
     load_settings_from_disk,
     set_cached_settings,
-    get_default_max_context_messages,
-    get_prompt_optimizer_system_prompt,
     is_agent_auto_compress_enabled,
     get_compression_policy_overrides,
 )
 
-from core.config.schema import (
+from models.contracts.config import (
     AppConfig,
     ProjectConfig,
     ContextConfig,
     PromptsConfig,
-    PromptOptimizerConfig,
     CompressionPolicyConfig,
     AgentRuntimeConfig,
-    PermissionsConfig,
     ShellConfig,
 )
 
@@ -42,8 +38,6 @@ __all__ = [
     "get_app_settings",
     "load_settings_from_disk",
     "set_cached_settings",
-    "get_default_max_context_messages",
-    "get_prompt_optimizer_system_prompt",
     "is_agent_auto_compress_enabled",
     "get_compression_policy_overrides",
 
@@ -51,10 +45,8 @@ __all__ = [
     "ProjectConfig",
     "ContextConfig",
     "PromptsConfig",
-    "PromptOptimizerConfig",
     "CompressionPolicyConfig",
     "AgentRuntimeConfig",
-    "PermissionsConfig",
     "ShellConfig",
 
     "load_app_config",

@@ -1,26 +1,28 @@
-
+﻿
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import uuid
 import json
+import hashlib
 
 if TYPE_CHECKING:
-    from models.state import SessionState
+    from models.contracts.session_state import SessionState
 
 
 logger = logging.getLogger(__name__)
 
 
 def tool_call_name(tool_call: Dict[str, Any] | None) -> str:
-    func = (tool_call or {}).get('function', {})
-    return str(func.get('name', '') or '').strip()
+    data = tool_call or {}
+    func = data.get('function', {}) if isinstance(data.get('function'), dict) else {}
+    return str(func.get('name') or data.get('name') or data.get('tool_name') or '').strip()
 
 
 def is_subtask_tool_call(tool_call: Dict[str, Any] | None) -> bool:
     name = tool_call_name(tool_call)
-    return name.startswith('subagent__') or name.startswith('capability__')
+    return name == 'agent__run' or name.startswith('subagent__') or name.startswith('capability__')
 
 
 def normalize_tool_result(value: Any) -> Dict[str, Any]:
@@ -91,16 +93,11 @@ def normalize_subtask_run(value: Any) -> Dict[str, Any]:
 def normalize_tool_call(tool_call: Any) -> Dict[str, Any]:
     original = tool_call if isinstance(tool_call, dict) else {}
     tc = dict(original)
-    legacy_subtask = tc.get('subtask')
-    tc.pop('subtask', None)
-    tc.pop('subtask_id', None)
     if 'result' in original:
         result = normalize_tool_result(original.get('result'))
         if is_subtask_tool_call(tc) and not isinstance(result.get('run'), dict):
             result['type'] = 'subtask_run'
         tc['result'] = result
-    elif isinstance(legacy_subtask, dict):
-        tc['result'] = normalize_tool_result({'type': 'subtask_run', 'run': legacy_subtask})
     return tc
 
 
@@ -129,17 +126,49 @@ def get_tool_call_result(tool_call: Dict[str, Any] | None) -> Dict[str, Any]:
         return normalize_tool_result('')
     result = normalize_tool_result(tool_call.get('result'))
     tool_call['result'] = result
-    tool_call.pop('subtask', None)
-    tool_call.pop('subtask_id', None)
     return result
 
 
 def set_tool_call_result(tool_call: Dict[str, Any], result_payload: Any) -> Dict[str, Any]:
     result = normalize_tool_result(result_payload)
     tool_call['result'] = result
-    tool_call.pop('subtask', None)
-    tool_call.pop('subtask_id', None)
     return result
+
+
+def is_state_checkpoint_snapshot(value: Any) -> bool:
+    return isinstance(value, dict) and str(value.get("_snapshot_kind") or "") == "checkpoint"
+
+
+def state_checkpoint_from_dict(state: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(state or {})
+    archive_index = payload.get("archive_index") if isinstance(payload.get("archive_index"), dict) else {}
+    archive_digest = hashlib.sha1(
+        json.dumps(
+            [
+                {
+                    "id": str((record or {}).get("id") or key),
+                    "digest": str((record or {}).get("digest") or ""),
+                    "updated_seq": int((record or {}).get("updated_seq", 0) or 0),
+                }
+                for key, record in archive_index.items()
+                if isinstance(record, dict)
+            ],
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8", errors="replace")
+    ).hexdigest()[:16]
+    work_trace = payload.get("work_trace") if isinstance(payload.get("work_trace"), dict) else {}
+    return {
+        "_snapshot_kind": "checkpoint",
+        "state_version": int(payload.get("state_version", 0) or 0),
+        "last_updated_seq": int(payload.get("last_updated_seq", 0) or 0),
+        "last_maintenance_seq": int(payload.get("last_maintenance_seq", 0) or 0),
+        "summary_digest": hashlib.sha1(str(payload.get("summary") or "").encode("utf-8", errors="replace")).hexdigest()[:16],
+        "archive_count": len(archive_index),
+        "archive_digest": archive_digest,
+        "work_trace_updated_seq": int(work_trace.get("updated_seq", 0) or 0),
+    }
 
 
 @dataclass
@@ -158,16 +187,15 @@ class Message:
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     # === Event Sourcing: Global sequence ID for time-travel/rollback ===
-    seq_id: int = 0  # Assigned by Conversation.next_seq_id()
+    seq_id: int = 0  # Assigned when Conversation.add_message() persists the message.
     
     # === State Snapshot (for rollback) ===
     # Attached at key points (after tool execution, assistant response complete)
     # When rolling back, restore state from the last message with a snapshot
     state_snapshot: Optional[Dict[str, Any]] = None  # Serialized SessionState
     
-    # === Legacy: Non-destructive history fields (kept for backward compatibility) ===
-    condense_parent: Optional[str] = None  # ID of the summary message that "condensed" this message
-    truncation_parent: Optional[str] = None # ID of the truncation marker (future use)
+    # ID of the archived content record that contains this message's exact prior context.
+    archived_content_id: Optional[str] = None
     
     # Per-message condensation (Agent Mode optimization)
     summary: Optional[str] = None # Concise summary of this message (for token saving in future turns)
@@ -190,9 +218,8 @@ class Message:
             'response_time_ms': self.response_time_ms,
             'metadata': metadata,
             'seq_id': self.seq_id,
-            'condense_parent': self.condense_parent,
-            'truncation_parent': self.truncation_parent,
-            'summary': self.summary
+            'archived_content_id': self.archived_content_id,
+            'summary': self.summary,
         }
         # Only serialize state_snapshot if present (to save space)
         if self.state_snapshot:
@@ -290,9 +317,8 @@ class Message:
             metadata=metadata,
             seq_id=data.get('seq_id', 0),
             state_snapshot=data.get('state_snapshot'),
-            condense_parent=data.get('condense_parent'),
-            truncation_parent=data.get('truncation_parent'),
-            summary=data.get('summary')
+            archived_content_id=data.get('archived_content_id'),
+            summary=data.get('summary'),
         )
 
 
@@ -313,9 +339,6 @@ class Conversation:
     mode: str = "chat" # "chat" or "agent"
     llm_config: Dict[str, Any] = field(default_factory=dict)
     
-    # === Schema version for migration (v1=legacy condense_parent, v2=state-based) ===
-    version: int = 2
-    
     # === SessionState: Centralized state management ===
     # Lazy-loaded to avoid circular import; use get_state() method
     _state_dict: Dict[str, Any] = field(default_factory=dict)
@@ -324,11 +347,33 @@ class Conversation:
     _seq_counter: int = 0
 
     def __post_init__(self) -> None:
+        if not isinstance(self.settings, dict):
+            self.settings = {}
+        self.settings.pop("secondary_model_ref", None)
+        self.settings.pop("fallback_model_ref", None)
+        self._normalize_message_sequences()
         self._sync_llm_config_projection()
+
+    def _normalize_message_sequences(self) -> None:
+        try:
+            stored_seq_counter = max(0, int(self._seq_counter or 0))
+        except Exception:
+            stored_seq_counter = 0
+        last_message_seq = 0
+        for message in self.messages:
+            try:
+                incoming_seq = int(message.seq_id or 0)
+            except Exception:
+                incoming_seq = 0
+            if incoming_seq <= last_message_seq:
+                incoming_seq = last_message_seq + 1
+                message.seq_id = incoming_seq
+            last_message_seq = incoming_seq
+        self._seq_counter = max(stored_seq_counter, last_message_seq)
 
     def _sync_llm_config_projection(self) -> None:
         try:
-            from core.llm.llm_config import LLMConfig
+            from models.llm_config import LLMConfig
 
             cfg = LLMConfig.from_conversation(self)
             cfg.apply_to_conversation(self)
@@ -340,7 +385,6 @@ class Conversation:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
-            'version': self.version,
             'id': self.id,
             'title': self.title,
             'messages': [msg.to_dict() for msg in self.messages],
@@ -360,7 +404,7 @@ class Conversation:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Conversation':
-        """Create from dictionary with backward compatibility"""
+        """Create from current dictionary schema."""
         messages = [Message.from_dict(m) for m in data.get('messages', [])]
         
         created_at = data.get('created_at')
@@ -375,25 +419,28 @@ class Conversation:
         elif updated_at is None:
             updated_at = datetime.now()
         
-        # Version detection: missing version field means legacy v1 format
-        version = data.get('version', 1)
-        
-        # Load state dict (empty for v1 legacy data)
         state_dict = data.get('state', {})
         
-        # Load or compute seq_counter
-        seq_counter = data.get('_seq_counter', 0)
-        if seq_counter == 0 and messages:
-            # Migration: assign seq_id to messages that don't have one
-            max_seq = max((m.seq_id for m in messages), default=0)
-            if max_seq == 0:
-                # All messages lack seq_id, assign sequentially
-                for i, msg in enumerate(messages, start=1):
-                    msg.seq_id = i
-                seq_counter = len(messages)
-            else:
-                seq_counter = max_seq
+        try:
+            seq_counter = max(0, int(data.get('_seq_counter', 0) or 0))
+        except Exception:
+            seq_counter = 0
         
+        settings = dict(data.get('settings') or {})
+        legacy_instructions = str(
+            settings.pop('system_prompt', '')
+            or settings.pop('custom_instructions', '')
+            or settings.pop('system_prompt_override', '')
+            or ''
+        ).strip()
+        if legacy_instructions and not str(settings.get('session_instructions') or '').strip():
+            settings['session_instructions'] = legacy_instructions
+
+        llm_config = dict(data.get('llm_config') or {})
+        legacy_override = str(llm_config.pop('system_prompt_override', '') or '').strip()
+        if legacy_override and not str(settings.get('session_instructions') or '').strip():
+            settings['session_instructions'] = legacy_override
+
         conv = cls(
             id=data.get('id', str(uuid.uuid4())),
             title=data.get('title', 'Imported Chat'),
@@ -405,10 +452,9 @@ class Conversation:
             updated_at=updated_at,
             total_tokens=data.get('total_tokens', 0),
             work_dir=data.get('work_dir', ''),
-            settings=data.get('settings', {}),
+            settings=settings,
             mode=data.get('mode', 'chat'),
-            llm_config=data.get('llm_config', {}),
-            version=version,
+            llm_config=llm_config,
             _state_dict=state_dict,
             _seq_counter=seq_counter
         )
@@ -434,7 +480,12 @@ class Conversation:
             logger.debug("Ignoring transient tool message; use attach_tool_result() instead")
             return
 
-        # Normal append
+        incoming_seq = int(getattr(message, 'seq_id', 0) or 0)
+        if incoming_seq <= self._seq_counter:
+            message.seq_id = self.next_seq_id()
+        else:
+            self._seq_counter = incoming_seq
+
         self.messages.append(message)
         if message.tokens:
             self.total_tokens += message.tokens
@@ -504,11 +555,12 @@ class Conversation:
                 tc['result_metadata'] = dict(result.get('metadata') or {})
                 if images:
                     tc['result_images'] = list(images)
-                if state_snapshot and isinstance(state_snapshot, dict):
+                if state_snapshot and isinstance(state_snapshot, dict) and not is_state_checkpoint_snapshot(state_snapshot):
                     try:
                         self._state_dict = state_snapshot.copy()
                     except Exception as exc:
                         logger.debug("Failed to copy merged tool state snapshot: %s", exc)
+                if state_snapshot and isinstance(state_snapshot, dict):
                     try:
                         msg.state_snapshot = state_snapshot
                     except Exception as exc:
@@ -580,15 +632,13 @@ class Conversation:
         return self._seq_counter
 
     def add_message_with_seq(self, message: Message) -> Message:
-        """Add a message with automatic seq_id assignment"""
-        if message.seq_id == 0:
-            message.seq_id = self.next_seq_id()
+        """Compatibility wrapper for the canonical add_message path."""
         self.add_message(message)
         return message
 
     def get_llm_config(self):
         """Return the normalized LLM request config for this conversation."""
-        from core.llm.llm_config import LLMConfig
+        from models.llm_config import LLMConfig
 
         cfg = LLMConfig.from_conversation(self)
         try:
@@ -599,7 +649,7 @@ class Conversation:
 
     def set_llm_config(self, config):
         """Persist a normalized LLM request config onto this conversation."""
-        from core.llm.llm_config import LLMConfig
+        from models.llm_config import LLMConfig
 
         if isinstance(config, LLMConfig):
             cfg = config
@@ -616,7 +666,7 @@ class Conversation:
     
     def get_state(self) -> 'SessionState':
         """Get the SessionState object (lazy-loaded to avoid circular import)"""
-        from models.state import SessionState
+        from models.contracts.session_state import SessionState
         return SessionState.from_dict(self._state_dict)
 
     def set_state(self, state: 'SessionState'):
@@ -656,10 +706,10 @@ class Conversation:
         self._seq_counter = target_seq_id
         
         # 3. Find and restore the latest state snapshot
-        from models.state import SessionState
+        from models.contracts.session_state import SessionState
         restored = False
         for msg in reversed(self.messages):
-            if msg.state_snapshot:
+            if msg.state_snapshot and not is_state_checkpoint_snapshot(msg.state_snapshot):
                 self._state_dict = msg.state_snapshot.copy()
                 restored = True
                 break
@@ -680,7 +730,14 @@ class Conversation:
         """
         for msg in self.messages:
             if msg.id == message_id:
-                msg.state_snapshot = self._state_dict.copy()
+                try:
+                    msg.state_snapshot = state_checkpoint_from_dict(self._state_dict)
+                except Exception:
+                    msg.state_snapshot = {
+                        "_snapshot_kind": "checkpoint",
+                        "state_version": 0,
+                        "last_updated_seq": 0,
+                    }
                 self.updated_at = datetime.now()
                 return True
         return False

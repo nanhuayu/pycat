@@ -1,30 +1,40 @@
+"""Load, merge, and persist compact Capability definitions."""
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+from dataclasses import replace
 from pathlib import Path
-from typing import Mapping
+from collections.abc import Mapping
 
 from .defaults import default_capabilities_config
-from .types import (
-    BUILTIN_CAPABILITY_VISIBILITY_DEFAULTS,
-    CapabilitiesConfig,
-    CapabilityConfig,
-    LEGACY_CAPABILITY_ID_ALIASES,
-    REMOVED_BUILTIN_CAPABILITY_IDS,
-)
+from models.contracts.capability import CapabilitiesConfig, CapabilityConfig
+from core.config.migrations import migrate_capabilities_payload
+
+
+def merge_capability(base: CapabilityConfig, override: CapabilityConfig) -> CapabilityConfig:
+    return replace(
+        base,
+        name=override.name or base.name,
+        enabled=override.enabled,
+        exposure=override.exposure or base.exposure,
+        runtime=override.runtime or base.runtime,
+        model_target=override.model_target if override.model_target.model_ref else base.model_target,
+        description=override.description or base.description,
+        prompt=override.prompt or base.prompt,
+        input_schema=override.input_schema or base.input_schema,
+        output_schema=override.output_schema or base.output_schema,
+        allowed_tool_categories=override.allowed_tool_categories or base.allowed_tool_categories,
+        max_turns=override.max_turns if override.max_turns is not None else base.max_turns,
+    )
 
 
 class CapabilitiesManager:
-    """Loads built-in and user-defined capabilities.
-
-    The manager is deliberately small: it only merges configuration and offers
-    lookups. Runtime execution remains owned by prompt optimizer, context
-    maintenance, task executor, or future capability runners.
-    """
-
     def __init__(self, config_path: str | Path | None = None) -> None:
         self.config_path = Path(config_path) if config_path else None
         self._config = default_capabilities_config()
+        self.migrated_profiles: list[dict] = []
 
     @property
     def config(self) -> CapabilitiesConfig:
@@ -32,25 +42,25 @@ class CapabilitiesManager:
 
     def load(self) -> CapabilitiesConfig:
         config = default_capabilities_config()
+        self.migrated_profiles = []
         if self.config_path and self.config_path.exists():
             try:
-                payload = json.loads(self.config_path.read_text(encoding="utf-8"))
+                raw = json.loads(self.config_path.read_text(encoding="utf-8"))
             except Exception:
-                payload = {}
-            if isinstance(payload, Mapping):
-                config = self.merge(config, CapabilitiesConfig.from_dict(payload))
+                raw = {}
+            if isinstance(raw, Mapping):
+                migrated, profiles = migrate_capabilities_payload(raw)
+                self.migrated_profiles = profiles
+                if raw != migrated:
+                    self._write(migrated)
+                config = self.merge(config, CapabilitiesConfig.from_dict(migrated))
         self._config = config
         return config
 
     def save(self, config: CapabilitiesConfig | None = None) -> None:
-        if not self.config_path:
-            return
         target = config or self._config
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        self.config_path.write_text(
-            json.dumps(target.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        if self.config_path:
+            self._write(target.to_dict())
         self._config = target
 
     def capability(self, capability_id: str) -> CapabilityConfig | None:
@@ -58,46 +68,22 @@ class CapabilitiesManager:
 
     @staticmethod
     def merge(base: CapabilitiesConfig, override: CapabilitiesConfig) -> CapabilitiesConfig:
-        capabilities: dict[str, CapabilityConfig] = {item.id.lower(): item for item in base.capabilities}
+        values = {item.id.lower(): item for item in base.capabilities}
         for item in override.capabilities:
-            item_id = LEGACY_CAPABILITY_ID_ALIASES.get(item.id.strip().lower(), item.id.strip().lower())
-            if item_id in REMOVED_BUILTIN_CAPABILITY_IDS:
-                continue
-            if item_id != item.id:
-                item = CapabilityConfig(
-                    id=item_id,
-                    name=item.name,
-                    kind=item.kind,
-                    visibility=item.visibility,
-                    execution_mode=item.execution_mode,
-                    model_ref=item.model_ref,
-                    system_prompt=item.system_prompt,
-                    description=item.description,
-                    allowed_tool_categories=item.allowed_tool_categories,
-                    input_schema=item.input_schema,
-                    output_schema=item.output_schema,
-                    options=item.options,
-                )
-            base_item = capabilities.get(item_id)
-            if base_item is None:
-                capabilities[item_id] = item
-                continue
-            visibility = item.visibility or base_item.visibility
-            if item_id in BUILTIN_CAPABILITY_VISIBILITY_DEFAULTS and visibility == "agent_tool" and base_item.visibility != "agent_tool":
-                visibility = base_item.visibility
-            capabilities[item_id] = CapabilityConfig(
-                id=item_id or base_item.id,
-                name=item.name or base_item.name,
-                kind=item.kind or base_item.kind,
-                visibility=visibility,
-                execution_mode=item.execution_mode or base_item.execution_mode,
-                model_ref=item.model_ref or base_item.model_ref,
-                system_prompt=item.system_prompt or base_item.system_prompt,
-                description=item.description or base_item.description,
-                allowed_tool_categories=item.allowed_tool_categories or base_item.allowed_tool_categories,
-                input_schema=item.input_schema or base_item.input_schema,
-                output_schema=item.output_schema or base_item.output_schema,
-                options={**(base_item.options or {}), **(item.options or {})},
-            )
+            current = values.get(item.id.lower())
+            values[item.id.lower()] = merge_capability(current, item) if current else item
+        return CapabilitiesConfig(capabilities=tuple(values.values()))
 
-        return CapabilitiesConfig(capabilities=tuple(capabilities.values()))
+    def _write(self, payload: dict) -> None:
+        if not self.config_path:
+            return
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=f".{self.config_path.name}.", suffix=".tmp", dir=str(self.config_path.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            os.replace(temp_name, self.config_path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)

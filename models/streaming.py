@@ -12,8 +12,26 @@ import time
 from typing import Any
 import threading
 
+from models.conversation import Message
+
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ConversationPatch:
+    """UI/runtime patch for synchronizing the foreground conversation.
+
+    The task loop runs on a worker-owned Conversation snapshot. This lightweight
+    patch is the bridge back to the UI Conversation without putting the full
+    transcript inside runtime timeline events.
+    """
+
+    conversation_id: str
+    changed_messages: list[Message] = field(default_factory=list)
+    state: dict[str, Any] | None = None
+    condensed_message_ids: dict[str, str] = field(default_factory=dict)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

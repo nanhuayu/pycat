@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 from .defaults import default_capabilities_config
-from .types import CapabilitiesConfig, CapabilityConfig
+from models.contracts.capability import CapabilitiesConfig, CapabilityConfig
 
 
 def capability_exposed_as_tool(capability: CapabilityConfig) -> bool:
     """Return whether a capability should become a model-visible tool."""
-    return str(getattr(capability, "visibility", "") or "") == "agent_tool"
+    return bool(getattr(capability, "exposed_as_tool", False))
 
 
 def exposed_capability_ids(config: CapabilitiesConfig | None = None) -> list[str]:

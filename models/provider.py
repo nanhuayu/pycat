@@ -1,7 +1,7 @@
 """LLM provider/service connection configuration model."""
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Iterable
 import uuid
 import json
 
@@ -18,9 +18,9 @@ OPENAI_RESPONSES = "openai_responses"
 ANTHROPIC_MESSAGES = "anthropic_messages"
 OLLAMA_CHAT = "ollama_chat"
 
-# Backward-compatible Anthropic symbol name kept for older imports/configs.
 ANTHROPIC_NATIVE = ANTHROPIC_MESSAGES
 DEFAULT_API_TYPE = OPENAI_COMPATIBLE
+PROVIDER_SCHEMA_VERSION = 3
 
 SUPPORTED_API_TYPES = {
     OPENAI_COMPATIBLE,
@@ -94,12 +94,9 @@ class Provider:
     api_type: str = DEFAULT_API_TYPE
     api_base: str = "https://api.openai.com/v1"
     api_key: str = ""
-    models: List[str] = field(default_factory=list)
-    model_profiles: List[ModelProfile] = field(default_factory=list)
-    default_model: str = ""
+    models: List[ModelProfile] = field(default_factory=list)
     custom_headers: Dict[str, str] = field(default_factory=dict)
-    request_format: Dict[str, Any] = field(default_factory=dict)
-    supports_thinking: bool = False
+    supports_reasoning: bool = False
     supports_vision: bool = True
     enabled: bool = True
 
@@ -109,27 +106,22 @@ class Provider:
     def normalize_inplace(self) -> None:
         self.name = normalize_provider_name(self.name)
         self.api_type = normalize_api_type(getattr(self, "api_type", DEFAULT_API_TYPE))
-        self.models = self._normalize_model_ids(getattr(self, "models", []) or [])
-        self.model_profiles = self._normalize_model_profiles(getattr(self, "model_profiles", []) or [])
+        self.models = self._normalize_models(getattr(self, "models", []) or [])
 
-    @staticmethod
-    def _normalize_model_ids(values: Any) -> List[str]:
-        out: List[str] = []
-        seen: set[str] = set()
-        for value in values or []:
-            text = str(value or "").strip()
-            if not text or text in seen:
-                continue
-            out.append(text)
-            seen.add(text)
-        return out
-
-    @staticmethod
-    def _normalize_model_profiles(values: Any) -> List[ModelProfile]:
+    def _normalize_models(self, values: Iterable[Any]) -> List[ModelProfile]:
         out: List[ModelProfile] = []
         seen: set[str] = set()
         for value in values or []:
-            profile = value if isinstance(value, ModelProfile) else ModelProfile.from_dict(value)
+            if isinstance(value, ModelProfile):
+                profile = ModelProfile.from_dict(value.to_dict())
+            elif isinstance(value, dict):
+                profile = ModelProfile.from_dict(value)
+            else:
+                profile = ModelProfile.from_model_id(
+                    str(value or "").strip(),
+                    supports_vision=bool(self.supports_vision),
+                    supports_reasoning=bool(self.supports_reasoning),
+                )
             if not profile.model_id or profile.model_id in seen:
                 continue
             out.append(profile)
@@ -161,57 +153,62 @@ class Provider:
         return self.api_type != OLLAMA_CHAT
 
     def format_model_ref(self, model_name: str = "") -> str:
-        return build_model_ref(self.name, model_name or self.default_model)
+        return build_model_ref(self.name, model_name)
 
-    def get_model_profiles(self) -> List[ModelProfile]:
-        """Return explicit profiles plus generated legacy profiles."""
-        out: List[ModelProfile] = []
-        seen: set[str] = set()
-        for profile in self.model_profiles:
-            if profile.model_id and profile.model_id not in seen:
-                out.append(profile)
-                seen.add(profile.model_id)
+    def get_models(self) -> List[ModelProfile]:
+        return [ModelProfile.from_dict(profile.to_dict()) for profile in self.models]
 
-        legacy_ids = []
-        if self.default_model:
-            legacy_ids.append(self.default_model)
-        legacy_ids.extend(self.models)
-        for model_id in legacy_ids:
-            if not model_id or model_id in seen:
-                continue
-            out.append(
-                ModelProfile.from_model_id(
-                    model_id,
-                    supports_vision=bool(self.supports_vision),
-                    supports_reasoning=bool(self.supports_thinking),
-                )
-            )
-            seen.add(model_id)
-        return out
+    def model_ids(self) -> List[str]:
+        return [profile.model_id for profile in self.models if profile.model_id]
 
     def find_model_profile(self, model_id: str = "") -> ModelProfile | None:
-        target = str(model_id or self.default_model or "").strip()
+        target = str(model_id or "").strip()
         if not target:
             return None
-        for profile in self.get_model_profiles():
+        for profile in self.models:
             if profile.model_id == target:
                 return profile
         return None
 
+    def effective_model_profile(self, model_id: str = "") -> ModelProfile:
+        """Return explicit model metadata or a provider-backed default profile."""
+
+        target = str(model_id or "").strip()
+        explicit = self.find_model_profile(target)
+        if explicit is not None:
+            return ModelProfile.from_dict(explicit.to_dict())
+        return ModelProfile.from_model_id(
+            target,
+            supports_vision=bool(self.supports_vision),
+            supports_reasoning=bool(self.supports_reasoning),
+        )
+
+    def upsert_model(self, profile: ModelProfile) -> None:
+        normalized = ModelProfile.from_dict(profile.to_dict())
+        if not normalized.model_id:
+            raise ValueError("Model ID is required")
+        for index, existing in enumerate(self.models):
+            if existing.model_id == normalized.model_id:
+                self.models[index] = normalized
+                return
+        self.models.append(normalized)
+
+    def remove_model(self, model_id: str) -> None:
+        target = str(model_id or "").strip()
+        self.models = [profile for profile in self.models if profile.model_id != target]
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
+            'schema_version': PROVIDER_SCHEMA_VERSION,
             'id': self.id,
             'name': self.name,
             'api_type': self.api_type,
             'api_base': self.api_base,
             'api_key': self.api_key,
-            'models': self.models,
-            'model_profiles': [profile.to_dict() for profile in self.model_profiles],
-            'default_model': self.default_model,
+            'models': [profile.to_dict() for profile in self.models],
             'custom_headers': self.custom_headers,
-            'request_format': self.request_format,
-            'supports_thinking': self.supports_thinking,
+            'supports_reasoning': self.supports_reasoning,
             'supports_vision': self.supports_vision,
             'enabled': self.enabled
         }
@@ -219,19 +216,64 @@ class Provider:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Provider':
         """Create from dictionary"""
+        supports_reasoning = data.get('supports_reasoning', data.get('supports_thinking', False))
+        supports_vision = data.get('supports_vision', True)
+        raw_models = list(data.get('models', []) or [])
+        schema_version = int(data.get('schema_version', 1) or 1)
+        if schema_version < PROVIDER_SCHEMA_VERSION:
+            explicit = {
+                profile.model_id: profile
+                for profile in (
+                    ModelProfile.from_dict(item)
+                    for item in (data.get('model_profiles', []) or [])
+                )
+                if profile.model_id
+            }
+            legacy_request = data.get('request_format') if isinstance(data.get('request_format'), dict) else {}
+            selected_ids: list[str] = []
+
+            def select(model_id: object) -> None:
+                value = str(model_id or "").strip()
+                if value and value not in selected_ids:
+                    selected_ids.append(value)
+
+            select(data.get('default_model'))
+            for item in raw_models:
+                model_id = str(item or "").strip() if not isinstance(item, dict) else str(item.get('model_id') or "").strip()
+                if model_id in explicit:
+                    select(model_id)
+            for model_id in explicit:
+                select(model_id)
+            if not selected_ids and raw_models:
+                first = raw_models[0]
+                select(first.get('model_id') if isinstance(first, dict) else first)
+
+            migrated_models: list[ModelProfile] = []
+            for model_id in selected_ids:
+                profile = explicit.get(model_id) or ModelProfile.from_model_id(
+                    model_id,
+                    supports_vision=bool(supports_vision),
+                    supports_reasoning=bool(supports_reasoning),
+                )
+                if legacy_request:
+                    payload = profile.to_dict()
+                    payload['request_overrides'] = {
+                        **legacy_request,
+                        **dict(payload.get('request_overrides') or {}),
+                    }
+                    profile = ModelProfile.from_dict(payload)
+                migrated_models.append(profile)
+            raw_models = migrated_models
         return cls(
             id=data.get('id', str(uuid.uuid4())),
             name=data.get('name', 'Provider'),
             api_type=data.get('api_type', DEFAULT_API_TYPE),
             api_base=data.get('api_base', 'https://api.openai.com/v1'),
             api_key=data.get('api_key', ''),
-            models=data.get('models', []),
-            model_profiles=data.get('model_profiles', []),
-            default_model=data.get('default_model', ''),
+            models=raw_models,
             custom_headers=data.get('custom_headers', {}),
-            request_format=data.get('request_format', {}),
-            supports_thinking=data.get('supports_thinking', False),
-            supports_vision=data.get('supports_vision', True),
+            supports_reasoning=supports_reasoning,
+            supports_vision=supports_vision,
             enabled=data.get('enabled', True)
         )
 

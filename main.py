@@ -29,7 +29,7 @@ def main():
     from PyQt6.QtCore import Qt, qInstallMessageHandler
     from PyQt6.QtGui import QFont, QIcon
 
-    from ui.main_window import MainWindow
+    from gui.main_window import MainWindow
 
     # Enable high DPI scaling
     QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -43,7 +43,7 @@ def main():
     # Set application info
     app.setApplicationName("PyCat Agent")
     app.setOrganizationName("PyCat")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("0.1.0")
     
     # Set application icon
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pycat.ico")

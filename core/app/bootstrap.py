@@ -4,9 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from models.provider import Provider
-from services.app_settings_service import AppSettingsService
-from services.conversation_service import ConversationService
-from services.provider_catalog_service import ProviderCatalogService
 
 
 @dataclass(frozen=True)
@@ -30,9 +27,9 @@ class AppBootstrap:
     def __init__(
         self,
         *,
-        app_settings_service: AppSettingsService,
-        provider_catalog_service: ProviderCatalogService,
-        conv_service: ConversationService,
+        app_settings_service: Any,
+        provider_catalog_service: Any,
+        conv_service: Any,
     ) -> None:
         self._app_settings_service = app_settings_service
         self._provider_catalog_service = provider_catalog_service

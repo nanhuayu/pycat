@@ -8,5 +8,6 @@ mcp
 pathspec
 websockets>=11.0.0
 qrcode>=7.4.0
+jsonschema>=4.22.0
 # duckduckgo-search>=7.0.0
 ddgs>=9.0.0

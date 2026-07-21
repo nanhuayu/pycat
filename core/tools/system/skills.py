@@ -38,10 +38,7 @@ class LoadSkillTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return (
-            "Load the full SKILL.md entrypoint for a named skill and return its instructions, "
-            "metadata, and available supporting resources. Use this after deciding a skill is relevant."
-        )
+        return "Load a relevant named skill's SKILL.md entrypoint with its metadata and supporting-resource paths."
 
     @property
     def category(self) -> str:
@@ -119,10 +116,7 @@ class ReadSkillResourceTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return (
-            "Read a supporting file referenced by a skill, such as a file under references/, templates/, or scripts/. "
-            "Use this after skill__load when you need more detailed instructions or templates."
-        )
+        return "Read one supporting resource referenced by a loaded skill, optionally limited to an inclusive line range."
 
     @property
     def category(self) -> str:

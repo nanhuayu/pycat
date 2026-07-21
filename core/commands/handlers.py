@@ -1,4 +1,4 @@
-"""Built-in command handlers.
+﻿"""Built-in command handlers.
 
 Extracted from ``CommandRegistry`` to keep it focused on
 registration / lookup / dispatch.
@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from core.state.services.artifact_service import ArtifactService
-from models.state import MemoryRecord
+from core.state.artifact import ArtifactService
+from models.contracts.session_state import MemoryRecord
 from core.commands.types import CommandAction, CommandResult, PromptInvocation
 def cmd_help(args: str, ctx: Dict[str, Any], *, list_commands) -> str:
     """Show available commands."""

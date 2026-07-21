@@ -77,10 +77,9 @@ async def iter_sse_data_lines(
 ) -> AsyncIterator[str]:
     """Iterate JSON payloads from an SSE stream.
 
-    Supports both OpenAI Chat Completions style frames (``data: {...}``) and
-    Responses API frames (``event: ...`` + ``data: {...}``). If an event name is
-    present and the JSON payload has no ``type`` field, the event name is added
-    as ``type`` so downstream parsers can use one code path.
+    Supports OpenAI/Anthropic SSE frames and newline-delimited JSON used by
+    Ollama. If an event name is present and the JSON payload has no ``type``
+    field, the event name is added as ``type`` for downstream parsing.
     """
 
     buffer = ""
@@ -144,6 +143,10 @@ async def iter_sse_data_lines(
                 continue
 
             if not line.startswith("data:"):
+                candidate = line.strip()
+                if candidate.startswith("{") and candidate.endswith("}"):
+                    _write_log(candidate)
+                    yield candidate
                 continue
 
             data = line.split(":", 1)[1].lstrip()
@@ -159,6 +162,10 @@ async def iter_sse_data_lines(
     if payload:
         _write_log(payload)
         yield payload
+    tail = buffer.strip()
+    if tail.startswith("{") and tail.endswith("}"):
+        _write_log(tail)
+        yield tail
 
 
 def parse_sse_json(data: str) -> Any:

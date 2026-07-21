@@ -38,6 +38,22 @@ class McpProxyTool(BaseTool):
     def source(self) -> str:
         return "mcp"
 
+    @property
+    def risk(self) -> str:
+        annotations = self._schema.get("annotations")
+        if not isinstance(annotations, dict):
+            return "high"
+        destructive = annotations.get("destructiveHint", annotations.get("destructive_hint"))
+        read_only = annotations.get("readOnlyHint", annotations.get("read_only_hint"))
+        if destructive is True:
+            return "high"
+        if read_only is True:
+            return "low"
+        return "medium" if destructive is False else "high"
+
+    def approval_message(self, arguments: Dict[str, Any], context: ToolContext) -> str:
+        return f"Call MCP tool {self.name}?"
+
 
     @property
     def input_schema(self) -> Dict[str, Any]:

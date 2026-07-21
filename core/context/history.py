@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+from typing import List, Optional
+
+from core.context.sections import normalize_user_message
+from models.conversation import Message
+
+
+CONTROL_MESSAGE_PREFIXES = (
+    "[AUTO-CONTINUE]",
+    "[WARNING]",
+)
+
+
+def is_control_message(message: Message) -> bool:
+    """Return True for runtime-injected user control traffic."""
+    if message.role != "user":
+        return False
+    content = (message.content or "").strip()
+    return any(content.startswith(prefix) for prefix in CONTROL_MESSAGE_PREFIXES)
+
+
+def build_turn_blocks(messages: List[Message]) -> List[List[Message]]:
+    """Group active messages into user-led interaction blocks."""
+    blocks: List[List[Message]] = []
+    current: List[Message] = []
+    for msg in messages:
+        if msg.role == "user":
+            if current:
+                blocks.append(current)
+            current = [msg]
+            continue
+        if not current:
+            current = [msg]
+            continue
+        current.append(msg)
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def flatten_turn_blocks(blocks: List[List[Message]]) -> List[Message]:
+    flattened: List[Message] = []
+    for block in blocks:
+        flattened.extend(block)
+    return flattened
+
+
+def count_user_turn_blocks(messages: List[Message]) -> int:
+    """Count real user-led turn blocks after removing condensed/control entries."""
+    return sum(1 for block in build_turn_blocks(get_effective_history(messages)) if any(msg.role == "user" for msg in block))
+
+
+def get_effective_history(messages: List[Message], keep_last_turns: Optional[int] = None) -> List[Message]:
+    """Return messages suitable for sending to the LLM."""
+    effective: List[Message] = []
+    for msg in messages:
+        if msg.archived_content_id:
+            continue
+        if msg.role == "system":
+            continue
+        if msg.role == "tool":
+            continue
+        normalized = normalize_user_message(msg) if msg.role == "user" else msg
+        if normalized.role == "user" and not (normalized.content or "").strip():
+            continue
+        if is_control_message(normalized):
+            continue
+        effective.append(normalized)
+
+    blocks = build_turn_blocks(effective)
+    if keep_last_turns and keep_last_turns > 0:
+        user_block_indexes = [
+            index for index, block in enumerate(blocks)
+            if any(msg.role == "user" for msg in block)
+        ]
+        if len(user_block_indexes) > keep_last_turns:
+            blocks = blocks[user_block_indexes[-keep_last_turns]:]
+
+    effective = flatten_turn_blocks(blocks)
+    if not any(m.role == "user" for m in effective):
+        for msg in reversed(messages):
+            normalized = normalize_user_message(msg) if msg.role == "user" else msg
+            if normalized.role == "user" and not is_control_message(normalized):
+                if (normalized.content or "").strip():
+                    effective.append(normalized)
+                break
+    return effective
+
+
+def apply_context_window(messages: List[Message], max_messages: int) -> List[Message]:
+    """Keep only the last N messages while preferring whole turn blocks."""
+    if not isinstance(max_messages, int) or max_messages <= 0:
+        return messages
+    if len(messages) <= max_messages:
+        return messages
+
+    blocks = build_turn_blocks(messages)
+    selected: List[List[Message]] = []
+    used = 0
+    for block in reversed(blocks):
+        block_size = len(block)
+        if selected and used + block_size > max_messages:
+            break
+        if not selected and block_size > max_messages:
+            selected.append(block[-max_messages:])
+            used = max_messages
+            break
+        selected.append(block)
+        used += block_size
+
+    result = flatten_turn_blocks(list(reversed(selected)))
+    if not any(m.role == "user" for m in result):
+        for msg in reversed(messages):
+            if msg.role == "user":
+                result.insert(0, msg)
+                break
+    return result

@@ -12,15 +12,16 @@ class AskQuestionsTool(BaseTool):
         return "user__ask"
 
     @property
+    def display_name(self) -> str:
+        return "询问用户"
+
+    @property
     def description(self) -> str:
-        return (
-            "Ask the user one or more follow-up questions with selectable options "
-            "and optional freeform input, then return the structured answers."
-        )
+        return "Ask the user up to three concise questions with optional choices and free-text input."
 
     @property
     def category(self) -> str:
-        return "manage"
+        return "state"
 
     @property
     def input_schema(self) -> Dict[str, Any]:
@@ -30,14 +31,12 @@ class AskQuestionsTool(BaseTool):
                 "questions": {
                     "type": "array",
                     "minItems": 1,
+                    "maxItems": 3,
                     "items": {
                         "type": "object",
                         "properties": {
-                            "header": {"type": "string", "description": "Unique short identifier for the question."},
-                            "question": {"type": "string", "description": "Question shown to the user."},
-                            "multi_select": {"type": "boolean", "description": "Allow multiple selections."},
-                            "allow_freeform_input": {"type": "boolean", "description": "Allow custom text input."},
-                            "message": {"type": "string", "description": "Optional supporting context shown under the question."},
+                            "id": {"type": "string", "description": "Short unique answer key."},
+                            "text": {"type": "string", "description": "Question shown to the user."},
                             "options": {
                                 "type": "array",
                                 "items": {
@@ -45,14 +44,14 @@ class AskQuestionsTool(BaseTool):
                                     "properties": {
                                         "label": {"type": "string"},
                                         "description": {"type": "string"},
-                                        "recommended": {"type": "boolean"},
                                     },
                                     "required": ["label"],
                                     "additionalProperties": False,
                                 },
                             },
+                            "multiple": {"type": "boolean", "description": "Allow multiple choices."},
                         },
-                        "required": ["header", "question"],
+                        "required": ["id", "text"],
                         "additionalProperties": False,
                     },
                 }
@@ -63,55 +62,30 @@ class AskQuestionsTool(BaseTool):
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         raw_questions = arguments.get("questions")
-        if not isinstance(raw_questions, list) or not raw_questions:
-            return ToolResult("Missing 'questions'", is_error=True)
-
+        if not isinstance(raw_questions, list) or not 1 <= len(raw_questions) <= 3:
+            return ToolResult("questions must contain 1 to 3 items.", is_error=True)
         answers: dict[str, Any] = {}
-        for index, raw_question in enumerate(raw_questions):
-            question = self._normalize_question(raw_question, index)
-            if question is None:
-                return ToolResult(f"Invalid question at index {index}", is_error=True)
-            answers[question["header"]] = await context.ask_question(question)
-
-        return ToolResult(json.dumps({"answers": answers}, ensure_ascii=False))
-
-    @staticmethod
-    def _normalize_question(raw_question: Any, index: int) -> dict[str, Any] | None:
-        if not isinstance(raw_question, dict):
-            return None
-
-        header = str(raw_question.get("header") or "").strip() or f"question_{index + 1}"
-        question_text = str(raw_question.get("question") or "").strip()
-        if not question_text:
-            return None
-
-        options = []
-        for option in raw_question.get("options") or []:
-            if isinstance(option, dict):
-                label = str(option.get("label") or "").strip()
-                if not label:
+        seen: set[str] = set()
+        for index, raw in enumerate(raw_questions):
+            if not isinstance(raw, dict):
+                return ToolResult(f"Invalid question at index {index}.", is_error=True)
+            question_id = str(raw.get("id") or "").strip()
+            text = str(raw.get("text") or "").strip()
+            if not question_id or not text or question_id in seen:
+                return ToolResult(f"Question {index + 1} requires a unique id and text.", is_error=True)
+            seen.add(question_id)
+            options = []
+            for option in raw.get("options") or []:
+                if not isinstance(option, dict):
                     continue
-                options.append(
-                    {
-                        "label": label,
-                        "description": str(option.get("description") or "").strip(),
-                        "recommended": bool(option.get("recommended", False)),
-                    }
-                )
-            else:
-                label = str(option or "").strip()
+                label = str(option.get("label") or "").strip()
                 if label:
-                    options.append({"label": label, "description": "", "recommended": False})
-
-        allow_freeform = bool(raw_question.get("allow_freeform_input", True))
-        if not options and not allow_freeform:
-            return None
-
-        return {
-            "header": header,
-            "question": question_text,
-            "multi_select": bool(raw_question.get("multi_select", False)),
-            "allow_freeform_input": allow_freeform,
-            "message": str(raw_question.get("message") or "").strip(),
-            "options": options,
-        }
+                    options.append({"label": label, "description": str(option.get("description") or "").strip()})
+            answer = await context.ask_question({
+                "id": question_id,
+                "text": text,
+                "options": options,
+                "multiple": bool(raw.get("multiple")),
+            })
+            answers[question_id] = answer
+        return ToolResult(json.dumps({"answers": answers}, ensure_ascii=False))

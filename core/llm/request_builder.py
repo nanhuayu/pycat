@@ -1,20 +1,16 @@
 from __future__ import annotations
 
+import copy
 import logging
 import json
-import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from models.conversation import Conversation, Message, normalize_tool_result
 from models.provider import Provider
+from models.llm_config import LLMConfig
 from core.content.attachments import encode_image_file_to_data_url
-from core.content.view_protocol import ContentExactness
-from core.prompts.system import PromptManager
-from core.prompts.context_assembler import build_context_messages
-from core.prompts.history import apply_context_window
-from core.config import AppConfig, load_app_config
-from core.llm.llm_config import LLMConfig
+from core.llm.ollama_codec import messages_from_openai as _openai_messages_to_ollama
 
 logger = logging.getLogger(__name__)
 _ANTHROPIC_SYSTEM_ROLE = "system"
@@ -26,6 +22,7 @@ _RUNTIME_ERROR_PREFIXES = (
 )
 _ASSISTANT_ROLE_PREFIX_RE = re.compile(r"^\s*(?:assistant\s*:\s*)+", re.IGNORECASE)
 _USER_ROLE_PREFIX_RE = re.compile(r"^\s*user\s*:\s*", re.IGNORECASE)
+_REASONING_ITEMS_KEY = "_pycat_reasoning_items"
 _TOOL_TRANSCRIPT_MARKER_RE = re.compile(
     r"(?:^|\s)tool\s+"
     r"[a-z0-9_]+(?:__[a-z0-9_]+|_[a-z0-9_]+)?"
@@ -40,8 +37,17 @@ def _normalize_image_url(image: str) -> str:
     return encode_image_file_to_data_url(image) or ""
 
 
-def _build_multimodal_content(text_content: Any, images: list[str], provider: Provider) -> Any:
-    if not images or not provider.supports_vision:
+def _build_multimodal_content(
+    text_content: Any,
+    images: list[str],
+    provider: Provider,
+    *,
+    supports_vision: bool | None = None,
+) -> Any:
+    vision_enabled = bool(provider.supports_vision) if supports_vision is None else bool(supports_vision)
+    if not images or not vision_enabled:
+        if images and not vision_enabled:
+            logger.warning("Images omitted because the selected model does not support vision")
         return text_content
 
     content_list: list[dict[str, Any]] = []
@@ -58,17 +64,27 @@ def _build_multimodal_content(text_content: Any, images: list[str], provider: Pr
     return content_list or text_content
 
 
-def _build_message_content(msg: Message, provider: Provider) -> Any:
+def _build_message_content(msg: Message, provider: Provider, *, supports_vision: bool | None = None) -> Any:
     text_content = msg.summary if msg.summary else msg.content
     if isinstance(text_content, str):
         if msg.role == "assistant":
             text_content = _clean_assistant_content_for_api(text_content, trim_tool_transcript=False)
         elif msg.role == "user" and msg.summary:
             text_content = _USER_ROLE_PREFIX_RE.sub("", text_content).strip()
-    return _build_multimodal_content(text_content, list(getattr(msg, "images", []) or []), provider)
+    return _build_multimodal_content(
+        text_content,
+        list(getattr(msg, "images", []) or []),
+        provider,
+        supports_vision=supports_vision,
+    )
 
 
-def _build_assistant_tool_call_content(msg: Message, provider: Provider) -> Any:
+def _build_assistant_tool_call_content(
+    msg: Message,
+    provider: Provider,
+    *,
+    supports_vision: bool | None = None,
+) -> Any:
     """Return assistant text for replaying a tool-call turn.
 
     Per-message summaries are archive notes, not provider-native assistant
@@ -78,7 +94,12 @@ def _build_assistant_tool_call_content(msg: Message, provider: Provider) -> Any:
     content = msg.content
     if isinstance(content, str):
         content = _clean_assistant_content_for_api(content, trim_tool_transcript=True)
-    return _build_multimodal_content(content, list(getattr(msg, "images", []) or []), provider)
+    return _build_multimodal_content(
+        content,
+        list(getattr(msg, "images", []) or []),
+        provider,
+        supports_vision=supports_vision,
+    )
 
 
 def _clean_assistant_content_for_api(text: str, *, trim_tool_transcript: bool) -> str:
@@ -95,116 +116,68 @@ def _clean_assistant_content_for_api(text: str, *, trim_tool_transcript: bool) -
     return clean
 
 
-def _tool_result_content_for_api(result: Any, *, conversation: Conversation | None = None) -> str:
+def _tool_result_content_for_api(
+    result: Any,
+    *,
+    tool_result_renderer: Callable[[Any], str] | None = None,
+) -> str:
+    if tool_result_renderer is not None:
+        return tool_result_renderer(result)
+    return _default_tool_result_content(result)
+
+
+def _default_tool_result_content(result: Any) -> str:
     payload = normalize_tool_result(result)
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-    metadata = _fresh_archive_metadata(metadata, conversation=conversation)
-    strategy = str(metadata.get("tool_result_strategy") or "").strip()
-    summary = str(payload.get("summary") or metadata.get("tool_result_summary") or "").strip()
-    content_id = str(metadata.get("content_id") or metadata.get("archive_content_id") or "").strip()
-    archive_ref = str(metadata.get("archive_ref") or "").strip()
-    digest = str(metadata.get("tool_result_digest") or "").strip()
-    total_chars = metadata.get("tool_result_chars")
-    archive_status = str(metadata.get("tool_result_summary_status") or metadata.get("archive_status") or "").strip()
-    view_exactness = str(metadata.get("tool_result_exactness") or "").strip().lower()
-    view_label = str(metadata.get("tool_result_view") or "").strip().lower()
-    view_kind = str(metadata.get("tool_result_view_kind") or "").strip().lower()
-    view_desc = str(metadata.get("tool_result_view_desc") or "").strip().lower()
     content = payload.get("content")
-    if (
-        strategy
-        and strategy != "inline"
-        and view_exactness == ContentExactness.EXACT.value
-        and isinstance(content, str)
-        and len(content) <= 12_000
-        and view_kind in {"full", "line", "char"}
-    ):
-        return content
-    if strategy and strategy != "inline" and (summary or content_id or archive_ref):
-        lines = ["[Tool result archived]"]
-        if summary:
-            prefix = "Summary"
-            if view_kind == "summary":
-                summary_desc = view_desc or view_label.removeprefix("summary:") or "balanced"
-                prefix = f"Summary (summary:{summary_desc})"
-            lines.append(f"{prefix}: {summary}")
-        if content_id:
-            lines.append(f"Content id: {content_id}")
-            lines.append("Use content__read(content_id, view=\"summary\"|\"full\"|\"lines\"|\"chars\") for exact archived content.")
-        if archive_ref:
-            lines.append(f"Archive ref: {archive_ref}")
-        if archive_status:
-            lines.append(f"Summary status: {archive_status}")
-        if digest:
-            lines.append(f"Digest: {digest[:16]}")
-        if total_chars:
-            lines.append(f"Original size: {total_chars} chars")
-        return "\n".join(lines)
+    summary = str(metadata.get("tool_result_summary") or payload.get("summary") or "").strip()
+    replay_view = str(metadata.get("tool_result_replay_view") or "").strip()
+    if replay_view in {"summary", "ccr"}:
+        archived = _render_archived_tool_result(payload, metadata, summary=summary)
+        if archived:
+            return archived
     if isinstance(content, str):
         return content
     if content is None:
         return ""
     try:
-        serialized = json.dumps(content, ensure_ascii=False)
+        return json.dumps(content, ensure_ascii=False)
     except Exception:
-        serialized = str(content)
-    return serialized
+        return str(content)
 
 
-def _fresh_archive_metadata(metadata: dict[str, Any], *, conversation: Conversation | None = None) -> dict[str, Any]:
+def _render_archived_tool_result(payload: dict[str, Any], metadata: dict[str, Any], *, summary: str) -> str:
     content_id = str(metadata.get("content_id") or metadata.get("archive_content_id") or "").strip()
-    archive_ref = str(metadata.get("archive_ref") or "").strip()
-    if not content_id and isinstance(metadata.get("archive_record"), dict):
-        content_id = str(metadata["archive_record"].get("id") or "").strip()
-    if not content_id:
-        return metadata
-
-    work_dir = str(getattr(conversation, "work_dir", "") or "").strip()
-    conversation_id = getattr(conversation, "id", None)
-    if not work_dir and archive_ref:
-        marker = "/.pycat/sessions/"
-        normalized = archive_ref.replace("\\", "/")
-        if marker in normalized:
-            work_dir = normalized.split(marker, 1)[0]
-    if not work_dir:
-        return metadata
-
-    try:
-        from core.context.archive_store import SessionArchiveStore
-
-        record = SessionArchiveStore(work_dir, conversation_id=conversation_id).read_record(content_id)
-    except Exception:
-        record = None
-    if record is None:
-        return metadata
-
-    fresh = dict(metadata)
-    fresh["content_id"] = record.id
-    fresh["archive_ref"] = record.original_ref
-    fresh["archive_status"] = record.status
-    fresh["tool_result_summary_status"] = record.summary_status
-    fresh["archive_record"] = record.to_dict()
-    if record.summary:
-        fresh["tool_result_summary"] = record.summary
-        fresh["tool_result_compression_required"] = False
-    return fresh
+    total_chars = metadata.get("tool_result_chars") or metadata.get("archive_size")
+    source = str(metadata.get("name") or "tool").strip() or "tool"
+    if not summary:
+        summary = str(metadata.get("tool_result_summary") or payload.get("summary") or "").strip()
+    if not (summary or content_id):
+        return ""
+    lines = ["[tool_result:archived]", f"source={source}"]
+    if total_chars:
+        lines.append(f"chars={total_chars}")
+    if content_id:
+        lines.append(f"content_id={content_id}")
+    if summary:
+        lines.append(f"summary={summary[:500]}")
+    if content_id:
+        lines.append(
+            f'Use archive__read(content_id="{content_id}", view="content", offset=0) '
+            "to restore exact content."
+        )
+    return "\n".join(lines)
 
 
-def _provider_declares_reasoning_support(provider: Provider) -> bool:
-    request_format = getattr(provider, "request_format", None)
-    if isinstance(request_format, dict):
-        for key in ("thinking", "reasoning", "reasoning_content", "thinking_content"):
-            if key in request_format:
-                return True
-    return bool(getattr(provider, "supports_thinking", False))
-
-
-def _conversation_show_thinking(conversation: Conversation | None) -> bool | None:
-    if conversation is None:
-        return None
-    settings = getattr(conversation, "settings", {}) or {}
-    value = settings.get("show_thinking")
-    return value if isinstance(value, bool) else None
+def _effective_model_profile(
+    provider: Provider,
+    conversation: Conversation | None = None,
+    llm_config: LLMConfig | None = None,
+):
+    request_cfg = llm_config or (
+        LLMConfig.from_conversation(conversation) if conversation is not None else LLMConfig()
+    )
+    return provider.effective_model_profile(request_cfg.resolved_model())
 
 
 def _assistant_has_reasoning(msg: Message) -> bool:
@@ -212,6 +185,23 @@ def _assistant_has_reasoning(msg: Message) -> bool:
         return True
     metadata = getattr(msg, "metadata", {}) or {}
     return isinstance(metadata, dict) and bool(metadata.get("thinking_present"))
+
+
+def _attach_reasoning_replay(payload: dict[str, Any], msg: Message, provider: Provider) -> None:
+    metadata = getattr(msg, "metadata", {}) or {}
+    state = metadata.get("reasoning_state") if isinstance(metadata, dict) else None
+    if isinstance(state, dict) and str(state.get("api_type") or "") == str(provider.api_type or ""):
+        items = state.get("items")
+        if isinstance(items, list) and items:
+            payload[_REASONING_ITEMS_KEY] = copy.deepcopy(items)
+            return
+    if not _assistant_has_reasoning(msg):
+        return
+    if provider.is_ollama_chat:
+        payload["thinking"] = msg.thinking or ""
+    elif provider.is_chat_completions_like:
+        key = str(metadata.get("thinking_key") or "reasoning_content")
+        payload[key] = msg.thinking or ""
 
 
 def _is_runtime_error_message(msg: Message) -> bool:
@@ -230,14 +220,10 @@ def _is_runtime_error_message(msg: Message) -> bool:
 def _should_replay_reasoning(
     messages: List[Message],
     provider: Provider,
-    conversation: Conversation | None = None,
 ) -> bool:
-    if provider.is_anthropic_native:
+    if not provider.is_chat_completions_like:
         return False
-    if any(m.role == "assistant" and _assistant_has_reasoning(m) for m in messages):
-        return True
-    show_thinking = _conversation_show_thinking(conversation)
-    return bool(show_thinking) and _provider_declares_reasoning_support(provider)
+    return any(m.role == "assistant" and _assistant_has_reasoning(m) for m in messages)
 
 
 def _tool_call_names(tool_calls: Any) -> list[str]:
@@ -252,7 +238,11 @@ def _tool_call_names(tool_calls: Any) -> list[str]:
     return names
 
 
-def _tool_call_summary_lines(tool_calls: Any, *, conversation: Conversation | None = None) -> list[str]:
+def _tool_call_summary_lines(
+    tool_calls: Any,
+    *,
+    tool_result_renderer: Callable[[Any], str] | None = None,
+) -> list[str]:
     lines: list[str] = []
     for tool_call in tool_calls or []:
         if not isinstance(tool_call, dict):
@@ -260,7 +250,10 @@ def _tool_call_summary_lines(tool_calls: Any, *, conversation: Conversation | No
         func = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
         name = str(func.get("name") or "unknown_tool").strip() or "unknown_tool"
         summary = str(tool_call.get("result_summary") or "").strip()
-        result = _tool_result_content_for_api(tool_call.get("result"), conversation=conversation).strip()
+        result = _tool_result_content_for_api(
+            tool_call.get("result"),
+            tool_result_renderer=tool_result_renderer,
+        ).strip()
         if not summary and result:
             summary = result.splitlines()[0].strip()[:220]
         if summary:
@@ -270,7 +263,11 @@ def _tool_call_summary_lines(tool_calls: Any, *, conversation: Conversation | No
     return lines
 
 
-def _recover_assistant_as_user(msg: Message, *, conversation: Conversation | None = None) -> Message | None:
+def _recover_assistant_as_user(
+    msg: Message,
+    *,
+    tool_result_renderer: Callable[[Any], str] | None = None,
+) -> Message | None:
     sections: list[str] = []
 
     content = str(getattr(msg, "content", "") or "").strip()
@@ -289,7 +286,10 @@ def _recover_assistant_as_user(msg: Message, *, conversation: Conversation | Non
             f"Requested tools:\n{bullet_lines}{more}"
         )
 
-    tool_summaries = _tool_call_summary_lines(getattr(msg, "tool_calls", None), conversation=conversation)
+    tool_summaries = _tool_call_summary_lines(
+        getattr(msg, "tool_calls", None),
+        tool_result_renderer=tool_result_renderer,
+    )
     if tool_summaries:
         joined = "\n".join(tool_summaries[:8])
         more = "\n- ..." if len(tool_summaries) > 8 else ""
@@ -336,8 +336,9 @@ def _sanitize_reasoning_history(
     provider: Provider,
     *,
     conversation: Conversation | None = None,
+    tool_result_renderer: Callable[[Any], str] | None = None,
 ) -> List[Message]:
-    if not _should_replay_reasoning(messages, provider, conversation=conversation):
+    if not _should_replay_reasoning(messages, provider):
         return messages
 
     sanitized: List[Message] = []
@@ -345,7 +346,7 @@ def _sanitize_reasoning_history(
         if msg.role == "assistant" and not _assistant_has_reasoning(msg):
             if _is_runtime_error_message(msg):
                 continue
-            recovered = _recover_assistant_as_user(msg, conversation=conversation)
+            recovered = _recover_assistant_as_user(msg, tool_result_renderer=tool_result_renderer)
             if recovered is not None:
                 sanitized.append(recovered)
             continue
@@ -357,51 +358,23 @@ def _sanitize_reasoning_history(
 
     return sanitized
 
-
-def select_base_messages(conversation: Conversation, *, app_config: AppConfig | None = None) -> List[Message]:
-    cfg = app_config
-    if cfg is None:
-        try:
-            cfg = load_app_config()
-        except Exception:
-            cfg = AppConfig()
-
-    keep_last_turns = int(
-        getattr(getattr(cfg, "context", None), "compression_policy", None).keep_last_n
-        if getattr(getattr(cfg, "context", None), "compression_policy", None)
-        else 3
-    )
-    messages = build_context_messages(
-        conversation,
-        app_config=cfg,
-        keep_last_turns=keep_last_turns,
-        default_work_dir=getattr(conversation, "work_dir", ".") or ".",
-    )
-
-    synthetic_prefix: List[Message] = []
-    recent_history = list(messages)
-    while recent_history and bool(getattr(recent_history[0], "metadata", {}).get("synthetic")):
-        synthetic_prefix.append(recent_history.pop(0))
-
-    settings = conversation.settings or {}
-    max_ctx = settings.get("max_context_messages")
-    if isinstance(max_ctx, int) and max_ctx > 0:
-        return synthetic_prefix + apply_context_window(recent_history, max_ctx)
-
-    default_max_ctx = int(getattr(getattr(cfg, "context", None), "default_max_context_messages", 0) or 0)
-    if default_max_ctx > 0:
-        return synthetic_prefix + apply_context_window(recent_history, default_max_ctx)
-                
-    return messages
-
-
 def build_api_messages(
     messages: List[Message],
     provider: Provider,
     *,
     conversation: Conversation | None = None,
+    tool_result_renderer: Callable[[Any], str] | None = None,
 ) -> List[Dict[str, Any]]:
-    messages = _sanitize_reasoning_history(messages, provider, conversation=conversation)
+    profile = _effective_model_profile(provider, conversation)
+    supports_vision = bool(
+        getattr(profile, "supports_vision", getattr(provider, "supports_vision", True))
+    )
+    messages = _sanitize_reasoning_history(
+        messages,
+        provider,
+        conversation=conversation,
+        tool_result_renderer=tool_result_renderer,
+    )
     api_messages: List[Dict[str, Any]] = []
 
     # Safety check: warn if no user messages in input
@@ -412,8 +385,17 @@ def build_api_messages(
     for msg in messages:
         if msg.role == "tool":
             continue
+        if msg.role == "assistant" and _is_runtime_error_message(msg):
+            continue
 
-        message_payload = {"role": msg.role, "content": _build_message_content(msg, provider)}
+        message_payload = {
+            "role": msg.role,
+            "content": _build_message_content(
+                msg,
+                provider,
+                supports_vision=supports_vision,
+            ),
+        }
 
         if msg.tool_calls and msg.role == "assistant":
             tool_calls_with_results: List[Dict[str, Any]] = []
@@ -426,9 +408,14 @@ def build_api_messages(
                 result = tc.get("result")
                 result_images = list(tc.get("result_images") or [])
                 if result is not None:
-                    result = _tool_result_content_for_api(result, conversation=conversation)
+                    result = _tool_result_content_for_api(result, tool_result_renderer=tool_result_renderer)
                 if result_images:
-                    result = _build_multimodal_content(result, result_images, provider)
+                    result = _build_multimodal_content(
+                        result,
+                        result_images,
+                        provider,
+                        supports_vision=supports_vision,
+                    )
                 if result is None:
                     continue
 
@@ -444,13 +431,15 @@ def build_api_messages(
             if tool_calls_with_results:
                 assistant_payload: Dict[str, Any] = {
                     "role": "assistant",
-                    "content": _build_assistant_tool_call_content(msg, provider),
+                    "content": _build_assistant_tool_call_content(
+                        msg,
+                        provider,
+                        supports_vision=supports_vision,
+                    ),
                     "tool_calls": [tc["clean"] for tc in tool_calls_with_results],
                 }
 
-                if _assistant_has_reasoning(msg):
-                    key = msg.metadata.get("thinking_key") or "reasoning_content"
-                    assistant_payload[key] = msg.thinking or ""
+                _attach_reasoning_replay(assistant_payload, msg, provider)
 
                 api_messages.append(assistant_payload)
                 for tc in tool_calls_with_results:
@@ -463,9 +452,8 @@ def build_api_messages(
                     )
                 continue
 
-        if msg.role == "assistant" and _assistant_has_reasoning(msg):
-            key = msg.metadata.get("thinking_key") or "reasoning_content"
-            message_payload[key] = msg.thinking or ""
+        if msg.role == "assistant":
+            _attach_reasoning_replay(message_payload, msg, provider)
 
         api_messages.append(message_payload)
 
@@ -554,6 +542,17 @@ def _openai_messages_to_anthropic(api_messages: List[Dict[str, Any]]) -> tuple[s
 
         anthropic_role = "assistant" if role == "assistant" else "user"
         blocks = _anthropic_content_blocks(content)
+        if anthropic_role == "assistant":
+            reasoning_items = msg.get(_REASONING_ITEMS_KEY)
+            if isinstance(reasoning_items, list):
+                native_blocks = [
+                    copy.deepcopy(item)
+                    for item in reasoning_items
+                    if isinstance(item, dict)
+                    and str(item.get("type") or "") in {"thinking", "redacted_thinking"}
+                ]
+                if native_blocks:
+                    blocks = native_blocks + blocks
         tool_calls = msg.get("tool_calls")
         if anthropic_role == "assistant" and isinstance(tool_calls, list):
             for call in tool_calls:
@@ -567,8 +566,6 @@ def _openai_messages_to_anthropic(api_messages: List[Dict[str, Any]]) -> tuple[s
                 args: Any = {}
                 if isinstance(raw_args, str):
                     try:
-                        import json
-
                         args = json.loads(raw_args or "{}")
                     except Exception:
                         args = {}
@@ -679,6 +676,13 @@ def _openai_messages_to_responses_input(api_messages: List[Dict[str, Any]]) -> t
             continue
 
         if role == "assistant":
+            reasoning_items = msg.get(_REASONING_ITEMS_KEY)
+            if isinstance(reasoning_items, list):
+                input_items.extend(
+                    copy.deepcopy(item)
+                    for item in reasoning_items
+                    if isinstance(item, dict) and str(item.get("type") or "") == "reasoning"
+                )
             text = _responses_text_from_content(content)
             if text:
                 input_items.append({"role": "assistant", "content": text})
@@ -717,81 +721,131 @@ def _openai_messages_to_responses_input(api_messages: List[Dict[str, Any]]) -> t
     return "\n\n".join(part for part in instructions_parts if part.strip()).strip(), input_items
 
 
+def _resolve_reasoning_settings(
+    *,
+    profile: Any,
+    request_cfg: LLMConfig,
+    reasoning_enabled: bool | None,
+    reasoning_effort: str | None,
+) -> tuple[bool | None, str]:
+    enabled = reasoning_enabled
+    if enabled is None:
+        enabled = request_cfg.reasoning_enabled
+    if enabled is None:
+        profile_enabled = getattr(profile, "reasoning_enabled", None)
+        enabled = profile_enabled if isinstance(profile_enabled, bool) else None
+
+    effort = str(reasoning_effort or "").strip().lower()
+    if not effort:
+        effort = str(request_cfg.reasoning_effort or "").strip().lower()
+    if enabled is False:
+        if effort:
+            raise ValueError("reasoning_effort must be empty when reasoning is disabled")
+        return False, ""
+    if not effort:
+        effort = str(getattr(profile, "reasoning_effort", "") or "").strip().lower()
+    return enabled, effort
+
+
+def _apply_reasoning_settings(
+    body: Dict[str, Any],
+    *,
+    provider: Provider,
+    enabled: bool | None,
+    effort: str,
+) -> None:
+    if provider.is_openai_responses:
+        if enabled is False:
+            body["reasoning"] = {"effort": "none"}
+            return
+        if effort:
+            body["reasoning"] = {"effort": effort}
+        return
+
+    if provider.is_anthropic_native:
+        if enabled is not None or effort:
+            body["thinking"] = {"type": "adaptive" if enabled is not False else "disabled"}
+        if effort:
+            body["output_config"] = {"effort": effort}
+        return
+
+    if provider.is_ollama_chat:
+        if effort:
+            body["think"] = effort
+        elif enabled is not None:
+            body["think"] = bool(enabled)
+        return
+
+    if effort:
+        body["reasoning_effort"] = effort
+
+
 def build_request_body(
     provider: Provider,
     conversation: Conversation,
     api_messages: List[Dict[str, Any]],
     tools: Optional[List[Dict[str, Any]]] = None,
     *,
-    app_config: AppConfig | None = None,
     llm_config: LLMConfig | None = None,
+    reasoning_enabled: bool | None = None,
+    reasoning_effort: str | None = None,
 ) -> Dict[str, Any]:
     request_cfg = llm_config or LLMConfig.from_conversation(conversation)
     payload_messages = list(api_messages)
+    model = request_cfg.resolved_model()
+    if not model:
+        raise ValueError("No model selected for this conversation")
+    profile = provider.effective_model_profile(model)
 
     stream_enabled = request_cfg.resolved_stream(default=True)
     temperature = request_cfg.temperature
     if not isinstance(temperature, (int, float)):
-        temperature = 0.7
+        profile_temperature = getattr(profile, "default_temperature", None)
+        temperature = float(profile_temperature) if isinstance(profile_temperature, (int, float)) else None
     top_p = request_cfg.top_p
-    max_tokens = int(request_cfg.max_tokens or 0)
+    if not isinstance(top_p, (int, float)):
+        profile_top_p = getattr(profile, "default_top_p", None)
+        top_p = float(profile_top_p) if isinstance(profile_top_p, (int, float)) else None
+    max_tokens = int(request_cfg.max_tokens or getattr(profile, "max_output_tokens", 0) or 0)
+    supports_tools = bool(getattr(profile, "supports_tools", True))
+    request_tools = tools if supports_tools else []
+    effective_reasoning_enabled, effective_reasoning_effort = _resolve_reasoning_settings(
+        profile=profile,
+        request_cfg=request_cfg,
+        reasoning_enabled=reasoning_enabled,
+        reasoning_effort=reasoning_effort,
+    )
 
-    # Respect a pre-assembled system message if the caller already prepared one.
-    system_msg_index = -1
-    for i, msg in enumerate(payload_messages):
-        if msg.get("role") == "system":
-            system_msg_index = i
-            break
-
-    if system_msg_index < 0:
-        if request_cfg.system_prompt_override.strip():
-            system_prompt_content = request_cfg.system_prompt_override.strip()
-        else:
-            work_dir = getattr(conversation, "work_dir", ".")
-            prompt_manager = PromptManager(work_dir)
-            cfg = app_config
-            if cfg is None:
-                try:
-                    cfg = load_app_config()
-                except Exception:
-                    cfg = AppConfig()
-
-            system_prompt_content = prompt_manager.get_system_prompt(
-                conversation,
-                tools or [],
-                provider,
-                app_config=cfg,
-            )
-
-        # Insert new system message at the beginning
-        payload_messages.insert(0, {
-            "role": "system",
-            "content": system_prompt_content
-        })
-    
     if provider.is_anthropic_native:
         system_content, anthropic_messages = _openai_messages_to_anthropic(payload_messages)
         body: Dict[str, Any] = {
-            "model": request_cfg.resolved_model(provider),
+            "model": model,
             "messages": anthropic_messages,
-            "temperature": temperature,
             "stream": stream_enabled,
             "max_tokens": max_tokens if max_tokens > 0 else 4096,
         }
+        if isinstance(temperature, (int, float)):
+            body["temperature"] = float(temperature)
         if system_content:
             body["system"] = system_content
-        anthropic_tools = _openai_tools_to_anthropic(tools)
+        anthropic_tools = _openai_tools_to_anthropic(request_tools)
         if anthropic_tools:
             body["tools"] = anthropic_tools
         if isinstance(top_p, (int, float)):
             body["top_p"] = float(top_p)
+        _apply_reasoning_settings(
+            body,
+            provider=provider,
+            enabled=effective_reasoning_enabled,
+            effort=effective_reasoning_effort,
+        )
         _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
         return body
 
     if provider.is_openai_responses:
         instructions, responses_input = _openai_messages_to_responses_input(payload_messages)
         body = {
-            "model": request_cfg.resolved_model(provider),
+            "model": model,
             "input": responses_input,
             "stream": stream_enabled,
         }
@@ -799,7 +853,7 @@ def build_request_body(
             body["instructions"] = instructions
         if max_tokens > 0:
             body["max_output_tokens"] = max_tokens
-        responses_tools = _openai_tools_to_responses(tools)
+        responses_tools = _openai_tools_to_responses(request_tools)
         if responses_tools:
             body["tools"] = responses_tools
             body.setdefault("tool_choice", "auto")
@@ -807,45 +861,108 @@ def build_request_body(
             body["temperature"] = float(temperature)
         if isinstance(top_p, (int, float)):
             body["top_p"] = float(top_p)
+        _apply_reasoning_settings(
+            body,
+            provider=provider,
+            enabled=effective_reasoning_enabled,
+            effort=effective_reasoning_effort,
+        )
+        _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
+        return body
+
+    if provider.is_ollama_chat:
+        body = {
+            "model": model,
+            "messages": _openai_messages_to_ollama(payload_messages),
+            "stream": stream_enabled,
+        }
+        options: dict[str, Any] = {}
+        if isinstance(temperature, (int, float)):
+            options["temperature"] = float(temperature)
+        if isinstance(top_p, (int, float)):
+            options["top_p"] = float(top_p)
+        if max_tokens > 0:
+            options["num_predict"] = max_tokens
+        if options:
+            body["options"] = options
+        if request_tools:
+            body["tools"] = request_tools
+        _apply_reasoning_settings(
+            body,
+            provider=provider,
+            enabled=effective_reasoning_enabled,
+            effort=effective_reasoning_effort,
+        )
         _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
         return body
 
     body = {
-        "model": request_cfg.resolved_model(provider),
-        "messages": payload_messages,
-        "temperature": temperature,
+        "model": model,
+        "messages": [
+            {key: value for key, value in message.items() if key != _REASONING_ITEMS_KEY}
+            for message in payload_messages
+        ],
         "stream": stream_enabled,
     }
+    if isinstance(temperature, (int, float)):
+        body["temperature"] = float(temperature)
 
     if max_tokens > 0:
         body["max_tokens"] = max_tokens
     
-    if tools:
-        body["tools"] = tools
+    if request_tools:
+        body["tools"] = request_tools
         # OpenAI-compatible default: let the model decide when to call tools.
         body.setdefault("tool_choice", "auto")
 
     if isinstance(top_p, (int, float)):
         body["top_p"] = float(top_p)
 
+    _apply_reasoning_settings(
+        body,
+        provider=provider,
+        enabled=effective_reasoning_enabled,
+        effort=effective_reasoning_effort,
+    )
     _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
     return body
 
 
 def _merge_request_extras(body: Dict[str, Any], *, request_cfg: LLMConfig, provider: Provider) -> None:
-    extras = getattr(request_cfg, "extras", None)
-    if isinstance(extras, dict) and extras:
-        protected = {"model", "messages", "input", "instructions"}
-        for k, v in extras.items():
-            if k in protected or k in body:
+    protected = {
+        "model",
+        "messages",
+        "input",
+        "instructions",
+        "tools",
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "max_output_tokens",
+        "stream",
+        "reasoning",
+        "reasoning_effort",
+        "thinking",
+        "think",
+        "output_config",
+        "options",
+    }
+    profile = provider.effective_model_profile(request_cfg.resolved_model())
+    layers = (
+        getattr(profile, "request_overrides", None),
+        getattr(request_cfg, "extras", None),
+    )
+    for extras in layers:
+        if not isinstance(extras, dict):
+            continue
+        for key, value in extras.items():
+            name = str(key or "").strip()
+            if name == "options" and provider.is_ollama_chat and isinstance(value, dict):
+                options = body.setdefault("options", {})
+                if isinstance(options, dict):
+                    for option_name, option_value in value.items():
+                        options.setdefault(str(option_name), option_value)
                 continue
-            body[k] = v
-
-    # Provider-level extras are merged (without overriding core keys).
-    provider_extras = getattr(provider, "request_format", None)
-    if isinstance(provider_extras, dict) and provider_extras:
-        protected = {"model", "messages", "input", "instructions"}
-        for k, v in provider_extras.items():
-            if k in protected or k in body:
+            if not name or name in protected:
                 continue
-            body[k] = v
+            body[name] = value

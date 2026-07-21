@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from core.config import ShellConfig, load_app_config
+from models.contracts.config import ShellConfig
 
 
 logger = logging.getLogger(__name__)
@@ -125,14 +125,6 @@ def is_dangerous_command(command: str) -> bool:
     return any(re.search(pattern, cmd_lower) for pattern in _DANGEROUS_PATTERNS)
 
 
-def load_shell_config() -> ShellConfig:
-    try:
-        return load_app_config().shell
-    except Exception as exc:
-        logger.debug("Failed to load shell config from app settings: %s", exc)
-        return ShellConfig()
-
-
 def _windows_path_to_wsl(path: Path) -> str:
     text = str(path.resolve())
     if len(text) >= 2 and text[1] == ":":
@@ -143,7 +135,7 @@ def _windows_path_to_wsl(path: Path) -> str:
 
 
 def build_shell_command(command: str, cwd: Path, *, shell_config: ShellConfig | None = None) -> list[str]:
-    config = shell_config or load_shell_config()
+    config = shell_config or ShellConfig()
     backend = str(getattr(config, "backend", "cmd") or "cmd").strip().lower() or "cmd"
 
     if backend == "powershell":
@@ -189,13 +181,13 @@ class CommandExecutionResult:
             return (
                 f"Command started in background in '{cwd}' via {self.backend or 'default shell'}. "
                 f"process_id={self.process_id}, pid={self.pid}. "
-                "Use shell__status, shell__logs, shell__wait, or shell__kill to manage it."
+                "Use shell__read to inspect it or shell__kill to terminate it."
             )
 
         if self.timed_out:
             return (
                 f"Command timed out after execution in '{cwd}' via {self.backend or 'default shell'}. "
-                "Use 'background: true' for long-running commands."
+                "Use shell__start for long-running commands."
             )
 
         parts = [f"Command executed in '{cwd}' via {self.backend or 'default shell'}. Exit code: {self.exit_code}"]
@@ -367,8 +359,11 @@ _BACKGROUND_MANAGER = BackgroundProcessManager()
 class CommandExecutor:
     """Thin wrapper around subprocess for consistent command execution behavior."""
 
+    def __init__(self, shell_config: ShellConfig | None = None) -> None:
+        self.shell_config = shell_config or ShellConfig()
+
     def execute(self, request: CommandExecutionRequest) -> CommandExecutionResult:
-        shell_config = load_shell_config()
+        shell_config = self.shell_config
         if request.background:
             snapshot = _BACKGROUND_MANAGER.start(request, shell_config=shell_config)
             return CommandExecutionResult(
@@ -407,7 +402,7 @@ class CommandExecutor:
         return _BACKGROUND_MANAGER.status(process_id)
 
     def read_logs(self, process_id: str, tail_bytes: int = _DEFAULT_LOG_TAIL_BYTES) -> str:
-        return _BACKGROUND_MANAGER.read_logs(process_id, tail_bytes=tail_bytes, shell_config=load_shell_config())
+        return _BACKGROUND_MANAGER.read_logs(process_id, tail_bytes=tail_bytes, shell_config=self.shell_config)
 
     def wait(self, process_id: str, timeout_sec: int | None = None) -> BackgroundProcessSnapshot:
         return _BACKGROUND_MANAGER.wait(process_id, timeout_sec=timeout_sec)

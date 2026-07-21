@@ -10,7 +10,7 @@ import base64
 import logging
 import os
 from dataclasses import dataclass
-from typing import List
+from typing import Any, List, Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,25 @@ class ProcessedAttachments:
     """Result of processing raw attachment paths."""
     encoded_images: List[str]      # data:mime;base64,... strings
     file_content_suffix: str       # text to append to user message
+
+
+def extract_composer_text(content: Any, metadata: Mapping[str, Any] | None = None) -> str:
+    """Return the typed prompt without persisted text-attachment bodies."""
+
+    meta = metadata if isinstance(metadata, Mapping) else {}
+    original = meta.get("composer_text")
+    if isinstance(original, str):
+        return original.strip()
+
+    text = str(content or "")
+    markers = [
+        index
+        for marker in ("\n\n--- File:", "\n[File:")
+        if (index := text.find(marker)) >= 0
+    ]
+    if markers:
+        text = text[: min(markers)]
+    return text.strip()
 
 
 def process_attachments(attachments: List[dict]) -> ProcessedAttachments:

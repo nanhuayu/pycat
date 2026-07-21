@@ -1,67 +1,74 @@
 from __future__ import annotations
 
-from core.channel.protocol import (
+from core.channel.bindings import ChannelConversationBindingStore
+from core.channel.catalog import (
+    ChannelCatalog,
+    ChannelDefinition,
+    ChannelFieldDefinition,
+    ChannelInstance,
+    build_channel_catalog,
+)
+from core.channel.connection import (
+    ChannelConnectionHandle,
+    ChannelConnectionSnapshot,
+    ChannelConnectionState,
+    ChannelRequiredAction,
+)
+from core.channel.envelope import (
     ChannelEnvelope,
     ChannelInbound,
     ChannelOrigin,
-    ChannelQueue,
-    build_channel_prompt_section,
     channel_metadata,
     channel_origin_from_message,
+    channel_value,
     message_from_channel,
     parse_channel_message,
     wrap_channel_message,
 )
-from core.channel.sources import ChannelRuntimeBackend, FeishuChannelBackend, QQBotChannelBackend, WeChatChannelBackend
-from core.channel.models import (
-    ChannelConnectionSnapshot,
-    ChannelConversationBindingStore,
-    ChannelConversationSummary,
-    ChannelRuntimeEvent,
-)
-from core.channel.registry import (
-    ChannelDefinition,
-    ChannelFieldDefinition,
-    ChannelInstance,
-    ChannelManager,
-    default_channel_manager,
-    get_default_channel_definitions,
-)
+from core.channel.events import ChannelEvent
+from core.channel.host import ChannelHost
+from core.channel.platforms import ChannelPlatformBackend
+from core.channel.prompt import build_channel_prompt_section
+from core.channel.queue import ChannelQueue
+from core.channel.sessions import ChannelConversationSummary
+from models.contracts.channel import ChannelConfig
 
 if False:  # pragma: no cover
-    from core.channel.runtime import ChannelRuntimeService
+    from core.channel.gateway import ChannelGateway
 
 
 def __getattr__(name: str):
-    if name == "ChannelRuntimeService":
-        from core.channel.runtime import ChannelRuntimeService
+    if name == "ChannelGateway":
+        from core.channel.gateway import ChannelGateway
 
-        return ChannelRuntimeService
+        return ChannelGateway
     raise AttributeError(name)
 
 __all__ = [
     "ChannelEnvelope",
+    "ChannelCatalog",
+    "ChannelConfig",
+    "ChannelConnectionHandle",
     "ChannelConnectionSnapshot",
+    "ChannelConnectionState",
     "ChannelConversationBindingStore",
     "ChannelConversationSummary",
-    "ChannelRuntimeBackend",
+    "ChannelPlatformBackend",
     "ChannelDefinition",
     "ChannelFieldDefinition",
-    "FeishuChannelBackend",
-    "QQBotChannelBackend",
+    "ChannelHost",
     "ChannelInbound",
     "ChannelInstance",
-    "ChannelManager",
     "ChannelOrigin",
     "ChannelQueue",
-    "ChannelRuntimeEvent",
-    "ChannelRuntimeService",
-    "WeChatChannelBackend",
+    "ChannelRequiredAction",
+    "ChannelEvent",
+    "ChannelGateway",
+    "build_channel_catalog",
     "build_channel_prompt_section",
     "channel_metadata",
     "channel_origin_from_message",
-    "default_channel_manager",
-    "get_default_channel_definitions",
+    "channel_value",
     "message_from_channel",
     "parse_channel_message",
     "wrap_channel_message",

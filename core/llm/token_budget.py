@@ -97,7 +97,7 @@ def estimate_conversation_tokens(conversation: Conversation | Sequence[Message] 
         messages = list(conversation or [])
     total = 0
     for message in messages:
-        if getattr(message, "condense_parent", None):
+        if getattr(message, "archived_content_id", None):
             continue
         total += estimate_message_tokens(message)
     return total
@@ -143,8 +143,6 @@ def _resolve_model_profile(
     if resolved_provider is None:
         return None
     resolved_model = str(model_id or "").strip()
-    if not resolved_model:
-        resolved_model = str(getattr(resolved_provider, "default_model", "") or "").strip()
     if not resolved_model:
         return None
     try:
@@ -267,8 +265,7 @@ def resolve_token_budget(
     context_window = profile_window or mode_window or DEFAULT_CONTEXT_WINDOW
 
     reserved_output_tokens = (
-        _coerce_positive_int(getattr(profile, "thinking_budget_tokens", None))
-        or _coerce_positive_int(getattr(profile, "max_output_tokens", None))
+        _coerce_positive_int(getattr(profile, "max_output_tokens", None))
         or DEFAULT_RESERVED_OUTPUT_TOKENS
     )
     reserved_output_tokens = min(reserved_output_tokens, MAX_RESERVED_OUTPUT_TOKENS)
@@ -281,7 +278,7 @@ def resolve_token_budget(
     danger_threshold_tokens = int(effective_prompt_limit * DANGER_THRESHOLD)
 
     provider_name_value = str(getattr(resolved_provider, "name", "") or provider_name or "").strip()
-    model_id_value = str(model_id or getattr(profile, "model_id", "") or getattr(resolved_provider, "default_model", "") or "").strip()
+    model_id_value = str(model_id or getattr(profile, "model_id", "") or "").strip()
     profile_display_name = str(getattr(profile, "display_name", "") or "").strip()
 
     return TokenBudget(
@@ -319,7 +316,7 @@ def build_token_usage_snapshot(
         model_id=model_id,
         mode_context_window_limit=mode_context_window_limit,
     )
-    messages = [msg for msg in getattr(conversation, "messages", []) or [] if not getattr(msg, "condense_parent", None)]
+    messages = [msg for msg in getattr(conversation, "messages", []) or [] if not getattr(msg, "archived_content_id", None)]
     context_tokens = estimate_conversation_tokens(messages)
     assistant_tokens = 0
     for msg in messages:

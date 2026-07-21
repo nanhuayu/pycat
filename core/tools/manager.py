@@ -1,4 +1,4 @@
-"""Unified tool manager with persistent conversation-scoped MCP sessions."""
+﻿"""Unified tool manager with persistent conversation-scoped MCP sessions."""
 
 import logging
 import sys
@@ -19,12 +19,10 @@ except ImportError:
     ClientSession = object
     StdioServerParameters = object
 
-from models.mcp_server import McpServerConfig
-from services.storage_service import StorageService
-from services.search_service import SearchService
+from models.contracts.mcp import McpServerConfig
 
 from core.tools.registry import ToolRegistry
-from core.tools.catalog import ToolAvailabilityContext, ToolDescriptor, ToolSelectionPolicy
+from models.contracts.tooling import ToolAvailabilityContext, ToolDescriptor, ToolSelectionPolicy
 from core.tools.mcp.proxies import McpProxyTool
 from core.tools.mcp.naming import MCP_TOOL_PUBLIC_PREFIX, build_mcp_tool_name, is_mcp_tool_name, parse_mcp_tool_name
 from core.tools.system.search import FetchUrlTool, WebSearchTool
@@ -36,25 +34,20 @@ from core.tools.system.file_ops import WriteToFileTool, EditFileTool, DeleteFile
 from core.tools.system.shell_exec import (
     ExecuteCommandTool,
     ShellStartTool,
-    ShellStatusTool,
-    ShellLogsTool,
-    ShellWaitTool,
+    ShellReadTool,
     ShellKillTool,
 )
 from core.tools.system.patch import PatchTool
-from core.tools.system.multi_agent import (
-    AgentRunTool,
-    AttemptCompletionTool,
-    SwitchModeTool,
-)
+from core.tools.system.multi_agent import AgentCompleteTool, AgentRunTool
 from core.tools.system.artifact_tools import ManageArtifactTool
 from core.tools.system.todo_tools import ManageTodoTool
 from core.tools.system.memory_tools import ManageMemoryTool
-from core.tools.system.content_tools import ContentListTool, ContentReadTool
+from core.tools.system.content_tools import ArchiveListTool, ArchiveReadTool
 from core.tools.system.ask_questions import AskQuestionsTool
 from core.tools.system.skills import LoadSkillTool, ReadSkillResourceTool
-from core.tools.system.capability_tools import CAPABILITY_TOOL_PREFIX, build_capability_tools
-from core.config.schema import ToolPermissionConfig, ToolPolicy
+from core.capabilities.tool_adapter import CAPABILITY_TOOL_PREFIX, build_capability_tools
+from models.contracts.capability import CapabilitiesConfig
+from models.contracts.tooling import ToolPermissionConfig, ToolPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +75,22 @@ class ToolManager:
     """Unified tool manager.
 
     Owns built-in tools, search tools, and MCP-backed tools.
-    Lifecycle is managed by ``AppContainer`` — do not instantiate directly
-    outside of the container or ``LLMClient`` fallback path.
+    Lifecycle is managed by ``AppContainer``. Tests that need a manager should
+    use an explicit fake storage/search service factory.
     """
 
-    def __init__(self):
-        self.storage = StorageService()
+    def __init__(
+        self,
+        *,
+        mcp_servers: Any,
+        search_config: Any,
+        search_service: Any,
+        capabilities: CapabilitiesConfig | None = None,
+    ):
+        self.mcp_servers = mcp_servers
+        self.search_config = search_config
         self.servers: List[McpServerConfig] = []
+        self.capabilities = capabilities or CapabilitiesConfig()
         
         # Initialize Registry
         self.registry = ToolRegistry()
@@ -96,12 +98,9 @@ class ToolManager:
         # Register System Tools
         self._register_default_system_tools()
         
-        # Search Service
-        self.search_service = SearchService(self.storage.load_search_config())
+        self.search_service = search_service
         self.registry.register(WebSearchTool(self.search_service))
         
-        # Helper for legacy
-        self._workspace_root = Path(os.getcwd()).resolve()
         self._mcp_schema_cache: Dict[str, Tuple[str, List[Dict[str, Any]]]] = {}
         self._persistent_sessions: Dict[Tuple[str, str], _PersistentMcpSession] = {}
         self._mcp_loop: Optional[asyncio.AbstractEventLoop] = None
@@ -115,16 +114,15 @@ class ToolManager:
             PythonExecTool(),
             WriteToFileTool(), EditFileTool(), DeleteFileTool(),
             ExecuteCommandTool(),
-            ShellStartTool(), ShellStatusTool(), ShellLogsTool(), ShellWaitTool(), ShellKillTool(),
+            ShellStartTool(), ShellReadTool(), ShellKillTool(),
             PatchTool(),
-            ContentListTool(), ContentReadTool(),
+            ArchiveListTool(), ArchiveReadTool(),
             ManageMemoryTool(),
             ManageTodoTool(),
             AskQuestionsTool(),
             ManageArtifactTool(),
             LoadSkillTool(), ReadSkillResourceTool(),
-            AgentRunTool(),
-            AttemptCompletionTool(), SwitchModeTool(),
+            AgentRunTool(), AgentCompleteTool(),
         ]
         for tool in tools:
             self.registry.register(tool)
@@ -134,11 +132,13 @@ class ToolManager:
     def _refresh_capability_tools(self) -> None:
         """Register dynamic capability tools with the ``capability__`` prefix."""
         self.registry.unregister_prefix(CAPABILITY_TOOL_PREFIX)
-        for tool in build_capability_tools():
+        for tool in build_capability_tools(self.capabilities):
             self.registry.register(tool)
 
-    def refresh_capability_tools(self) -> None:
+    def refresh_capability_tools(self, capabilities: CapabilitiesConfig | None = None) -> None:
         """Re-register capability tools after configuration changes."""
+        if capabilities is not None:
+            self.capabilities = capabilities
         self._refresh_capability_tools()
 
     def refresh_search_config(self):
@@ -147,7 +147,7 @@ class ToolManager:
         Called after settings dialog saves new search configuration.
         """
         try:
-            new_config = self.storage.load_search_config()
+            new_config = self.search_config.load()
             self.search_service.update_config(new_config)
             logger.info("Search config refreshed: provider=%s", new_config.provider)
         except Exception as e:
@@ -179,7 +179,7 @@ class ToolManager:
         # 1. Search Tool is always registered so it participates in the same
         # registry/permission model as other tools. Request-time capability and
         # provider availability only decide whether it is exposed to the model.
-        self.registry.register(WebSearchTool(self.search_service, list(tool_selection.prepared_queries) or None))
+        self.registry.register(WebSearchTool(self.search_service))
 
         # 2. MCP Tools
         wants_mcp = tool_selection.allowed_categories is None or "mcp" in tool_selection.allowed_categories
@@ -211,8 +211,13 @@ class ToolManager:
             if name not in selected_tools or descriptor is None:
                 continue
             if isinstance(fn, dict):
+                if name == "agent__run":
+                    fn["parameters"] = AgentRunTool.input_schema_for_work_dir(
+                        availability_context.work_dir
+                    )
                 fn["x_pycat_category"] = descriptor.category
                 fn["x_pycat_source"] = descriptor.source
+                fn["x_pycat_risk"] = descriptor.risk
             filtered_schemas.append(schema)
 
         return filtered_schemas
@@ -239,6 +244,8 @@ class ToolManager:
             if tool.name == "web__search":
                 available = bool(availability.search_available)
                 source = "search"
+            elif tool.name == "agent__complete" and availability.completion_policy:
+                available = availability.completion_policy == "explicit"
             elif is_mcp_tool_name(tool.name):
                 available = bool(availability.mcp_available)
                 source = "mcp"
@@ -246,7 +253,7 @@ class ToolManager:
             descriptors[descriptor.name] = descriptor
 
         if include_dynamic:
-            for srv in self.storage.load_mcp_servers():
+            for srv in self.mcp_servers.load():
                 if not srv.enabled:
                     continue
                 for tool_name in srv.cached_tools or []:
@@ -260,6 +267,7 @@ class ToolManager:
                             category="mcp",
                             source="mcp",
                             available=bool(availability.mcp_available),
+                            risk="high",
                             metadata={"server": srv.name},
                         ),
                     )
@@ -267,7 +275,7 @@ class ToolManager:
 
     async def _refresh_mcp_tools_impl(self):
         """Register MCP tool proxies using cached schemas where possible."""
-        self.servers = self.storage.load_mcp_servers()
+        self.servers = self.mcp_servers.load()
         self.registry.unregister_prefix(MCP_TOOL_PUBLIC_PREFIX)
         active_servers: Dict[str, str] = {}
         
@@ -289,7 +297,7 @@ class ToolManager:
                 discovered_names = [str(s.get("name", "")) for s in schemas if s.get("name")]
                 if discovered_names != list(config.cached_tools or []):
                     config.cached_tools = discovered_names
-                    self.storage.save_mcp_servers(self.servers)
+                    self.mcp_servers.save(self.servers)
 
                 for schema in schemas:
                     proxy = McpProxyTool(self, config, schema["name"], schema)
@@ -382,11 +390,17 @@ class ToolManager:
 
         schemas: List[Dict[str, Any]] = []
         for tool in result.tools:
+            annotations = getattr(tool, "annotations", None)
+            if hasattr(annotations, "model_dump"):
+                annotations = annotations.model_dump(exclude_none=True)
+            elif not isinstance(annotations, dict):
+                annotations = None
             schemas.append(
                 {
                     "name": tool.name,
                     "description": tool.description,
                     "parameters": tool.inputSchema,
+                    "annotations": annotations,
                 }
             )
         return schemas
@@ -441,7 +455,7 @@ class ToolManager:
 
         config = next((c for c in self.servers if c.name == server_name), None)
         if not config:
-            self.servers = self.storage.load_mcp_servers()
+            self.servers = self.mcp_servers.load()
             config = next((c for c in self.servers if c.name == server_name), None)
 
         if not config:

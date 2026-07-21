@@ -1,199 +1,86 @@
+"""Build the small, stable instruction layer for one model request."""
 from __future__ import annotations
 
-import os
-import platform
-from html import escape
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
+from core.modes.manager import resolve_mode_config
+from models.contracts.config import AppConfig
+from models.contracts.mode import normalize_mode_slug
 from models.conversation import Conversation
 from models.provider import Provider
 
-from core.context.file_context import get_file_tree
-from core.channel import build_channel_prompt_section
-from core.config.schema import AppConfig
-from core.modes.manager import resolve_mode_config
-from core.modes.types import normalize_mode_slug
-from core.prompts.project_instructions import ProjectInstructionService
-from core.skills import (
-    SkillsManager,
-    check_skill_execution_availability,
-    resolve_skill_invocation_spec,
-)
-from core.tools.catalog import TOOL_CATEGORY_LABELS, normalize_tool_category
+
+GLOBAL_PRINCIPLES = """You are PyCat, a precise desktop assistant.
+
+- Follow the user's current request and distinguish facts from assumptions.
+- Use only tools present in the request. Inspect relevant context before changing files, and verify consequential work.
+- Tool failures are evidence: explain the boundary and choose a different valid path instead of repeating the same call.
+- Treat `Current Time` in `<environment_info>` as authoritative. For today/latest news, weather, prices, schedules, or other time-sensitive facts, refresh with available tools, check source publication/update dates, and never label prior-day results as today; state when live verification is unavailable.
+- `web__search` discovers sources; `web__fetch` reads a specific URL. Interactive browser challenges require a separately configured browser tool or another source.
+- `archive__read` reads PyCat session archives; `file__read` reads workspace files.
+- Delegate only focused work to `agent__run`. A sub-agent never gains permissions its parent does not have.
+- State results, important verification, and any remaining limitation plainly."""
 
 
-DEFAULT_SYSTEM_PROMPT = (
-    "You are a helpful and precise assistant. Follow the user's instructions carefully and ask clarifying questions when needed."
-)
-
-DEFAULT_AGENT_TOOL_GUIDELINES = (
-    "## Tool Usage\n"
-    "- Use the provided tools to interact with the system.\n"
-    "- Always check command outputs and handle errors.\n"
-    "- If a tool fails, analyze the error and try a different approach.\n"
-    "- Use `shell__run` for short bounded commands. Use `shell__start` plus `shell__status`, `shell__logs`, `shell__wait`, or `shell__kill` for long-running commands.\n"
-    "- Use `state__todo` for explicit current-task status, `state__artifact` for plans/explorations/reports/notes, and `state__memory` for durable memory. Runtime summary/compression is internal.\n"
-    "- Complex Task Protocol: for multi-step work, web/search/browser research, multi-source reading, code edits, debugging, planning, or requested timeline/report/document output, the first state-maintenance call should be `state__todo(action=\"set\", items=[...])` with concrete visible milestones, acceptance criteria where useful, and exactly one `in_progress` item. Do not create ceremonial todos for one-step work.\n"
-    "- Good todos are user-visible milestones and acceptance checkpoints, not implementation noise. Good: `analyze root cause`, `implement archive summary`, `verify CLI flow`. Bad: `search web`, `read file`, `run formatter`, `grep code`.\n"
-    "- Keep todos current when they exist: update completed milestones and the current in-progress item with `state__todo(action=\"update\", items=[...])`. Use `blocked` with `blocked_reason` for real blockers. Completed/cancelled todos are compacted into recent history; do not recreate equivalent completed todos unless the user asks for new work or scope changes.\n"
-    "- The todo list is rendered live to the user. Do not repeat the full todo list after a `state__todo` call; acknowledge the state change briefly and continue with concrete work.\n"
-    "- State priority: artifacts are the source of truth for plans/reports/documents; todos are only live progress; memory is only durable reusable facts. If a final report or approved plan already satisfies the request, read/update the artifact or finish instead of rebuilding the same todo list.\n"
-    "- Use canonical artifacts: `plan` (kind=plan, status=draft/approved/final), `exploration` (kind=exploration), and `report` (kind=report). Create/update a `plan` artifact for non-trivial execution plans, an `exploration` artifact for multi-source findings, and a final `report` artifact before completion when the user requested a report, timeline, document, or substantial summary.\n"
-    "- Artifact metadata is mandatory for substantial artifacts: keep `abstract`, `status`, `references`, `related`, and stable `frontmatter` current. The prompt normally contains only artifact indexes and abstracts; read the artifact before relying on exact content.\n"
-    "- Artifact indexes/abstracts may be injected without full content. If an existing artifact appears relevant to the current request, read it with `state__artifact(action=\"read\")` before new broad search or duplication, then update or append as appropriate. Put file paths, URLs, or symbol locations in `references`/`related`, and use `frontmatter` for stable Markdown metadata such as created, tags, source, and status.\n"
-    "- Read boundary: `file__read` reads real workspace files only and never summarizes. `content__read` reads PyCat archived tool-call/history content by content_id; `view=\"summary\"` waits for or creates the internal compress view by default. `capability__summarize` is for explicit one-file/one-text summaries, not runtime automatic compression.\n"
-    "- Content labels use `[type]` or `[type:desc]`: `[full]`, `[line:1-200]`, and `[char:0-4000]` are exact original content views; `[summary]` is the default balanced derived view, and `[summary:detailed]`/`[summary:*]` are specialized derived views from internal `compress`. `[summary:pending]` means only the summary view is not ready; recover exact content with `content__read(view=\"full\"|\"lines\"|\"chars\")`.\n"
-    "- Default context strategy: index + summary + relevant snippets + on-demand read. If archived tool/history content is large, do not expect raw content in prompt; use content_id/digest and `content__read(view=\"summary\"|\"lines\"|\"chars\"|\"full\", summary_mode=\"balanced\"|\"brief\"|\"detailed\"|\"timeline\"|\"topic\"|\"memory_candidates\")`.\n"
-    "- When a tool result says output was archived, use `content__read` with the returned content_id before retrying equivalent extraction. Use `file__read` only for actual workspace paths.\n"
-    "- Memory is only for durable, reusable facts and preferences. Before writing workspace/global memory, inspect existing memory with `state__memory(action=\"list\"|\"view\")` to avoid duplicates. Runtime compression may expose candidates via `state__memory(action=\"list_candidates\")`; promote only stable decisions, verified commands, repo conventions, or durable preferences. Never save long plans, tool dumps, transient todos, secrets, or temporary reports as memory facts.\n"
-    "- `agent__complete` is a built-in tool for finishing work; do not treat it as a skill or document name.\n"
-    "- If another mode is a better fit, use `agent__switch`; if focused work should continue independently, use `agent__run`.\n"
-    "- Use `capability__summarize` for one file or one long text, `agent__run(agent_id=\"read_analyze\")` for multi-file/cross-source analysis, and `agent__run(agent_id=\"search\")` for research."
-)
-
-DEFAULT_PLAN_WORKFLOW = (
-    "## Workflow: Plan\n"
-    "- Discover context first using read/search/delegated read-only analysis; do not edit files or run implementation commands in plan mode.\n"
-    "- Maintain `state__artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` as the primary deliverable.\n"
-    "- Write plans with these sections in order: Summary, Scope, Phases, Steps, Relevant Files, Verification, Decisions, Risks/Open Questions.\n"
-    "- Keep each phase small and actionable; include specific files, symbols, and expected checks.\n"
-    "- Ask clarifying questions when requirements or trade-offs are unresolved.\n"
-    "- Mark the plan `status=\"approved\"` only after user alignment; implementation should read the approved plan before editing."
-)
-
-DEFAULT_EXPLORE_WORKFLOW = (
-    "## Workflow: Explore\n"
-    "- Stay read-only: search broadly, inspect narrowly, and return evidence-backed findings.\n"
-    "- Use `state__artifact(name=\"exploration\", kind=\"exploration\", status=\"draft\")` for reusable findings when exploration spans multiple files.\n"
-    "- Report concrete file paths, symbols, patterns, existing design conventions, risks, and open questions.\n"
-    "- Summaries should end with Suggested Next Steps, but not implementation details or edits.\n"
-    "- Do not create implementation plans unless requested; hand off to Plan or Agent when changes are needed."
-)
-
-DEFAULT_IMPLEMENT_WORKFLOW = (
-    "## Workflow: Implement\n"
-    "- If a `plan` artifact exists, read it first and treat an approved/final plan as the execution source of truth.\n"
-    "- Maintain todo for concrete visible milestones when the task spans multiple substantial steps; keep one `in_progress` item and mark items complete after finishing them.\n"
-    "- Before any non-trivial edit, confirm the target files and the acceptance criteria from the plan or exploration notes.\n"
-    "- After edits, verify with targeted tests or diagnostics.\n"
-    "- Save verification notes or final summaries in `state__artifact(name=\"report\", kind=\"report\", status=\"final\")` when the result is substantial.\n"
-    "- Use `state__memory` only for durable facts; do not store transient progress, drafts, or large tool outputs there."
-)
+def _mode(conversation: Conversation, default_work_dir: str):
+    mode_slug = normalize_mode_slug(str(getattr(conversation, "mode", "chat") or "chat"))
+    work_dir = str(getattr(conversation, "work_dir", "") or default_work_dir or ".")
+    try:
+        return mode_slug, resolve_mode_config(mode_slug, work_dir=work_dir)
+    except Exception:
+        return mode_slug, None
 
 
-def _normalize_string_tuple(values: Any) -> tuple[str, ...]:
-    if isinstance(values, str):
-        candidates = [part.strip() for part in values.split(",")]
-    elif isinstance(values, (list, tuple, set)):
-        candidates = [str(item).strip() for item in values]
-    else:
-        candidates = []
-
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for item in candidates:
-        if not item or item in seen:
-            continue
-        seen.add(item)
-        normalized.append(item)
-    return tuple(normalized)
+def _join(parts: list[str]) -> str:
+    return "\n\n".join(str(part or "").strip() for part in parts if str(part or "").strip())
 
 
-def _truncate_skill_catalog_value(value: str, *, limit: int = 250) -> str:
-    text = " ".join(str(value or "").split())
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 3)].rstrip() + "..."
+def _completion_contract(mode) -> str:
+    if str(getattr(mode, "completion_policy", "text") or "text") == "explicit":
+        return (
+            "Completion: ordinary assistant text is progress, not completion. "
+            "When the task is fully finished, call agent__complete with the final result."
+        )
+    return "Completion: a normal assistant response without tool calls completes the run."
 
 
-def _xml_attr(value: Any) -> str:
-    return escape(str(value or ""), quote=True)
+def _tool_names(tools: List[Dict]) -> set[str]:
+    names: set[str] = set()
+    for tool in tools or []:
+        function = tool.get("function") if isinstance(tool, dict) else None
+        name = str(function.get("name") or "").strip() if isinstance(function, dict) else ""
+        if name:
+            names.add(name)
+    return names
 
 
-def _enabled_channel_sources(config: AppConfig) -> tuple[str, ...]:
-    seen: set[str] = set()
-    sources: list[str] = []
-    for channel in getattr(config, "channels", []) or []:
-        if not bool(getattr(channel, "enabled", False)):
-            continue
-        source = str(getattr(channel, "source", "") or "").strip()
-        if not source or source in seen:
-            continue
-        seen.add(source)
-        sources.append(source)
-    return tuple(sources)
-def build_mode_profile_section(mode_slug: str, mode_cfg: Optional[Any]) -> str:
-    lines = ["<mode_profile>", f"slug: {mode_slug}"]
-
-    if mode_cfg is not None:
-        if (mode_cfg.name or "").strip():
-            lines.append(f"name: {mode_cfg.name}")
-        if (mode_cfg.description or "").strip():
-            lines.append(f"description: {mode_cfg.description}")
-        if (mode_cfg.when_to_use or "").strip():
-            lines.append(f"when_to_use: {mode_cfg.when_to_use}")
-        allowed_tool_categories = sorted(mode_cfg.tool_category_names())
-        if allowed_tool_categories:
-            lines.append(f"allowed_tool_categories: {', '.join(allowed_tool_categories)}")
-
-    lines.append("</mode_profile>")
-    return "\n".join(lines)
-
-
-def build_mode_workflow_guidance(mode_slug: str) -> str:
-    slug = normalize_mode_slug(mode_slug)
-    guidance: dict[str, list[str]] = {
-        "agent": [
-            DEFAULT_IMPLEMENT_WORKFLOW,
-            "Maintain the current todo list with `state__todo` when scope changes or steps complete.",
-            "Create or update a short working plan with `state__artifact(name=\"plan\", kind=\"plan\", status=\"draft\")` for multi-step execution.",
-            "Store durable facts such as important paths, commands, or decisions with `state__memory` instead of repeating them in chat.",
-            "Use `agent__switch` if the request clearly belongs to another mode, or `agent__run` if a separate delegated run is better.",
-            "Use `agent__complete` only when the task is actually complete and you can summarize the result clearly.",
-        ],
-        "plan": [
-            DEFAULT_PLAN_WORKFLOW,
-            "Create and maintain a plan artifact as the primary artifact for architecture work.",
-            "Use `state__todo` to track open design questions and decision checkpoints.",
-            "Persist only confirmed constraints or decisions into memory.",
-            "Switch to a more appropriate mode if the task stops being architecture work, and call `agent__complete` once the design output is ready.",
-        ],
-        "explore": [
-            DEFAULT_EXPLORE_WORKFLOW,
-            "Prefer broad-to-narrow workspace search, then read the smallest necessary file ranges.",
-            "Use `related` and `references` when saving exploration artifacts so later implementation can recover evidence quickly.",
-            "Switch to plan or agent mode rather than editing directly.",
-        ],
-    }
-    items = guidance.get(slug)
-    if not items:
+def _tool_usage_rules(tools: List[Dict]) -> str:
+    visible = _tool_names(tools)
+    rules: list[str] = []
+    if "state__todo" in visible:
+        rules.append(
+            "- state__todo: When work genuinely benefits from tracking, define 2-4 outcome milestones, "
+            "keep exactly one in_progress, and update status as work changes; use your judgment for whether tracking helps."
+        )
+    if "state__artifact" in visible:
+        rules.append(
+            "- state__artifact: Put long plans, reports, and durable working material in an Artifact; read a relevant "
+            "existing Artifact before replacing it."
+        )
+    if "state__memory" in visible:
+        rules.append(
+            "- state__memory: Save only short, stable, reusable information; never save progress, reports, raw outputs, or secrets."
+        )
+    if not rules:
         return ""
-    lines = ["## State Workflow"]
-    for item in items:
-        text = str(item or "").strip()
-        if not text:
-            continue
-        if text.startswith("## "):
-            lines.append(text)
-        else:
-            lines.append(f"- {text}")
-    return "\n".join(lines)
-
-
-def build_environment_section(work_dir: str, max_depth: int = 2) -> str:
-    os_info = platform.system() + " " + platform.release()
-    file_tree = get_file_tree(work_dir, max_depth=max_depth)
-    parts = [
-        "<environment_info>",
-        f"OS: {os_info}",
-        f"WorkDir: {os.path.abspath(work_dir)}",
-        "</environment_info>",
-        "",
-        "<workspace_info>",
-        file_tree or "(empty)",
-        "</workspace_info>",
-    ]
-    return "\n".join(parts).strip()
+    return "\n".join(
+        [
+            "<tool_usage_rules>",
+            "The complete tool catalog is provided separately in the request tools field.",
+            *rules,
+            "</tool_usage_rules>",
+        ]
+    )
 
 
 def resolve_base_system_prompt_text(
@@ -201,245 +88,47 @@ def resolve_base_system_prompt_text(
     conversation: Conversation,
     app_config: AppConfig,
     default_work_dir: str = ".",
-    include_conversation_override: bool = True,
+    include_conversation_override: bool = False,
 ) -> str:
-    settings = conversation.settings or {}
-    mode_slug = normalize_mode_slug(str(getattr(conversation, "mode", "chat") or "chat"))
-    work_dir = getattr(conversation, "work_dir", None) or default_work_dir
-
-    try:
-        mode_cfg = resolve_mode_config(mode_slug, work_dir=str(work_dir))
-    except Exception:
-        mode_cfg = None
-
-    if include_conversation_override:
-        conv_custom = ((settings.get("system_prompt") or "").strip() or (settings.get("custom_instructions") or "").strip())
-        if conv_custom:
-            return conv_custom
-
-    prompt_cfg = app_config.prompts
-    if mode_cfg is not None and (mode_cfg.role_definition or "").strip():
-        return mode_cfg.role_definition.strip()
-    if (prompt_cfg.default_system_prompt or "").strip():
-        return prompt_cfg.default_system_prompt.strip()
-    if (prompt_cfg.base_role_definition or "").strip():
-        return prompt_cfg.base_role_definition.strip()
-    return DEFAULT_SYSTEM_PROMPT
-
-
-def build_state_section(conversation: Conversation) -> str:
-    try:
-        state = conversation.get_state()
-        return state.to_prompt_view(include_artifacts=False, include_memory_facts=False) or ""
-    except Exception:
-        return ""
-
-
-def build_available_tools_section(tools: List[Dict[str, Any]], *, max_description_chars: int = 180) -> str:
-    """Build a compact, catalog-aligned summary of request-time tools.
-
-    The authoritative tool schemas are still sent through the API request body;
-    this section is only a short navigation aid for the model. It avoids dumping
-    full JSON schemas or long MCP descriptions into the system prompt.
-    """
-    if not tools:
-        return ""
-
-    grouped: dict[str, list[tuple[str, str]]] = {}
-    for tool in tools:
-        fn = tool.get("function", {}) if isinstance(tool, dict) else {}
-        name = str(fn.get("name") or "").strip()
-        if not name:
-            continue
-        description = " ".join(str(fn.get("description") or "").split())
-        if len(description) > max_description_chars:
-            description = description[: max_description_chars - 1].rstrip() + "…"
-        category = normalize_tool_category(fn.get("x_pycat_category"))
-        grouped.setdefault(category, []).append((name, description))
-
-    if not grouped:
-        return ""
-    lines = ["<available_tools>", "Tool schemas are available in the request body; use only names listed here."]
-    category_order = {name: index for index, name in enumerate(TOOL_CATEGORY_LABELS.keys())}
-    for category in sorted(grouped.keys(), key=lambda c: category_order.get(c, 999)):
-        label = TOOL_CATEGORY_LABELS.get(category, category)
-        items = sorted(grouped[category], key=lambda item: item[0])
-        lines.append(f"[{category}] {label}")
-        for name, description in items:
-            suffix = f": {description}" if description else ""
-            lines.append(f"- {name}{suffix}")
-    lines.append("</available_tools>")
-    return "\n".join(lines)
+    """Return stable/global/Mode instructions for read-only UI previews."""
+    del include_conversation_override
+    _, mode = _mode(conversation, default_work_dir)
+    return _join(
+        [
+            GLOBAL_PRINCIPLES,
+            app_config.prompts.global_instructions,
+            str(getattr(mode, "prompt", "") or ""),
+            _completion_contract(mode),
+        ]
+    )
 
 
 def build_system_prompt(
     *,
     conversation: Conversation,
-    tools: List[Dict[str, Any]],
+    tools: List[Dict],
     provider: Provider,
     app_config: AppConfig,
     default_work_dir: str = ".",
+    channel_prompt_section: str = "",
+    project_instruction_section: str = "",
+    skill_prompt_section: str = "",
 ) -> str:
-    settings = conversation.settings or {}
-
-    prompt_cfg = app_config.prompts
-    mode_slug = normalize_mode_slug(str(getattr(conversation, "mode", "chat") or "chat"))
-
-    work_dir = getattr(conversation, "work_dir", None) or default_work_dir
-
-    try:
-        mode_cfg = resolve_mode_config(mode_slug, work_dir=str(work_dir))
-    except Exception:
-        mode_cfg = None
-
-    conv_custom = ((settings.get("system_prompt") or "").strip() or (settings.get("custom_instructions") or "").strip())
-
-    parts: list[str] = []
-
-    role_def: Optional[str] = None
-    mode_custom: Optional[str] = None
-
-    if mode_cfg is not None:
-        role_def = (mode_cfg.role_definition or "").strip() or None
-        mode_custom = (mode_cfg.custom_instructions or "").strip() or None
-
-    parts.append(build_mode_profile_section(mode_slug, mode_cfg))
-
-    # System prompt precedence:
-    # 1) mode.roleDefinition
-    # 2) app.prompts.default_system_prompt
-    # 3) app.prompts.base_role_definition (legacy)
-    # 4) built-in
-    if role_def:
-        parts.append(role_def)
-    elif (prompt_cfg.default_system_prompt or "").strip():
-        parts.append(prompt_cfg.default_system_prompt.strip())
-    elif (prompt_cfg.base_role_definition or "").strip():
-        parts.append(prompt_cfg.base_role_definition.strip())
-    else:
-        parts.append(DEFAULT_SYSTEM_PROMPT)
-
-    if (prompt_cfg.agent_tool_guidelines or "").strip():
-        parts.append(prompt_cfg.agent_tool_guidelines.strip())
-    else:
-        parts.append(DEFAULT_AGENT_TOOL_GUIDELINES)
-
-    available_tools_section = build_available_tools_section(tools)
-    if available_tools_section:
-        parts.append(available_tools_section)
-
-    project_instructions = ProjectInstructionService.build_prompt_section(str(work_dir or "."))
-    if project_instructions:
-        parts.append(project_instructions)
-
-    if bool(prompt_cfg.include_state):
-        state_section = build_state_section(conversation)
-        if state_section:
-            parts.append(state_section)
-
-    enabled_channel_sources = _enabled_channel_sources(app_config)
-    allowed_channel_sources = _normalize_string_tuple(settings.get("allowed_channel_sources")) or enabled_channel_sources
-    trusted_channel_sources = tuple(
-        source for source in _normalize_string_tuple(settings.get("trusted_channel_sources"))
-        if source in allowed_channel_sources
+    """Compose stable principles followed by append-only instruction layers."""
+    del provider
+    settings = conversation.settings if isinstance(conversation.settings, dict) else {}
+    _, mode = _mode(conversation, default_work_dir)
+    session_instructions = str(settings.get("session_instructions") or "").strip()
+    return _join(
+        [
+            GLOBAL_PRINCIPLES,
+            app_config.prompts.global_instructions,
+            str(getattr(mode, "prompt", "") or ""),
+            _completion_contract(mode),
+            _tool_usage_rules(tools),
+            channel_prompt_section,
+            project_instruction_section,
+            session_instructions,
+            skill_prompt_section,
+        ]
     )
-    channel_notice_policy = str(settings.get("channel_notice_policy", "notice") or "notice").strip().lower() or "notice"
-    channel_section = build_channel_prompt_section(
-        getattr(conversation, "messages", []) or [],
-        configured_sources=enabled_channel_sources,
-        allowed_sources=allowed_channel_sources,
-        trusted_sources=trusted_channel_sources,
-        notice_policy=channel_notice_policy,
-    )
-    if channel_section:
-        parts.append(channel_section)
-
-    workflow_guidance = build_mode_workflow_guidance(mode_slug)
-    if workflow_guidance:
-        parts.append(workflow_guidance)
-
-    combined_custom = "\n\n".join(
-        [x for x in [mode_custom, conv_custom] if isinstance(x, str) and x.strip()]
-    ).strip()
-    if combined_custom:
-        parts.append(f"## Custom Instructions\n{combined_custom}")
-
-    latest_skill_run: dict[str, Any] = {}
-    for msg in reversed(getattr(conversation, "messages", []) or []):
-        if getattr(msg, "role", "") != "user":
-            continue
-        metadata = getattr(msg, "metadata", {}) or {}
-        skill_run = metadata.get("skill_run") if isinstance(metadata, dict) else None
-        if isinstance(skill_run, dict):
-            latest_skill_run = skill_run
-        break
-
-    skill_manager = SkillsManager(getattr(conversation, "work_dir", ".") or ".")
-    available_skills = []
-    for skill in skill_manager.list_skills():
-        spec = resolve_skill_invocation_spec(skill)
-        if spec.user_invocable or not spec.disable_model_invocation:
-            available_skills.append(skill)
-    if available_skills:
-        catalog_lines = ["<available_skills>"]
-        for skill in available_skills:
-            spec = resolve_skill_invocation_spec(skill)
-            attrs = [f'name="{skill.name}"']
-            description = _truncate_skill_catalog_value(str(skill.description or "").strip())
-            if description:
-                attrs.append(f'description="{_xml_attr(description)}"')
-            attrs.append(f'user_invocable="{str(spec.user_invocable).lower()}"')
-            attrs.append(f'model_invocable="{str(not spec.disable_model_invocation).lower()}"')
-            attrs.append(f'executor="{_xml_attr(spec.executor)}"')
-            attrs.append(f'execution_mode="{_xml_attr(spec.execution_mode)}"')
-            arg_hint = str(skill.metadata.get("argument-hint") or "").strip()
-            if arg_hint:
-                attrs.append(f'argument_hint="{_xml_attr(_truncate_skill_catalog_value(arg_hint))}"')
-            if skill.tags:
-                attrs.append(f'tags="{_xml_attr(_truncate_skill_catalog_value(", ".join(skill.tags)))}"')
-            catalog_lines.append(f"<skill {' '.join(attrs)} />")
-        catalog_lines.append("</available_skills>")
-        catalog_lines.append(
-            "The catalog above is for progressive skill discovery. If the user's task matches a skill with model_invocable=\"true\" and that skill is not already loaded for this current task, call `skill__load` before answering. For model_invocable=\"false\" skills, only load them after the user explicitly invokes `/{skill-name}` in this turn. Do not repeatedly load the same skill in the same turn. Loaded skill instructions are scoped to the current relevant task; ignore them for later unrelated requests and reload a skill when needed. Skill names are not tool names."
-        )
-        parts.append("\n".join(catalog_lines))
-
-    latest_skill_name = str(latest_skill_run.get("name") or "").strip().lower()
-    loaded_skill = skill_manager.get(latest_skill_name) if latest_skill_name else None
-    if loaded_skill is not None:
-        spec = resolve_skill_invocation_spec(loaded_skill)
-        execution = check_skill_execution_availability(loaded_skill, tools)
-        resource_paths = skill_manager.list_resources(loaded_skill.name)
-        runtime_lines = ["<invoked_skill>"]
-        runtime_lines.append(f"name: {loaded_skill.name}")
-        runtime_lines.append(f"entrypoint: {loaded_skill.source}")
-        runtime_lines.append(f"mode: {spec.mode}")
-        runtime_lines.append(f"executor: {spec.executor}")
-        runtime_lines.append(f"execution_mode: {spec.execution_mode}")
-        runtime_lines.append(f"disable_model_invocation: {spec.disable_model_invocation}")
-        user_input = str(latest_skill_run.get("user_input") or "").strip()
-        if user_input:
-            runtime_lines.append(f"user_input: {user_input}")
-        if spec.preferred_cli:
-            runtime_lines.append(f"preferred_cli: {', '.join(spec.preferred_cli)}")
-        if spec.declared_tools:
-            runtime_lines.append(f"declared_tools: {', '.join(spec.declared_tools)}")
-        runtime_lines.append(f"status: {'executable' if execution.executable else 'unavailable'}")
-        if execution.concrete_tools:
-            runtime_lines.append(f"concrete_tools: {', '.join(execution.concrete_tools)}")
-        if execution.reason:
-            runtime_lines.append(f"reason: {execution.reason}")
-        if execution.missing_tools:
-            runtime_lines.append(f"missing_tools: {', '.join(execution.missing_tools)}")
-        if resource_paths:
-            runtime_lines.append(f"resource_paths: {', '.join(resource_paths[:20])}")
-        runtime_lines.append("rule: Before taking action for an explicitly invoked skill, call `skill__load` to read its SKILL.md entrypoint.")
-        runtime_lines.append("rule: If the loaded skill references supporting files, call `skill__read_resource` only for the specific files you need.")
-        if execution.executable:
-            runtime_lines.append("rule: Use only concrete tool names that appear in <available_tools> or concrete_tools. Skill names are not tool names.")
-        else:
-            runtime_lines.append("rule: Do not invent missing tools. If execution is unavailable, explain the missing capability and stop instead of probing repeatedly.")
-        runtime_lines.append("</invoked_skill>")
-        parts.append("\n".join(runtime_lines))
-
-    return "\n\n".join([p for p in parts if isinstance(p, str) and p.strip()]).strip()

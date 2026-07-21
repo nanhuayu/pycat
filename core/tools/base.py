@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, List, Union, Callable
 
-from core.tools.catalog import ToolDescriptor, normalize_tool_category
+from models.contracts.tooling import RiskLevel, ToolDescriptor, normalize_risk_level, normalize_tool_category
 
 
 @dataclass(frozen=True)
@@ -14,8 +14,8 @@ class PermissionContext:
     source: str = "desktop"
     mode: str = "chat"
     tool_name: str = ""
-    category: str = "extension"
-    risk: str = "normal"
+    category: str = "capability"
+    risk: str = "low"
     agent_id: str = ""
     trace_id: str = ""
     workspace_roots: tuple[str, ...] = ()
@@ -32,6 +32,11 @@ class ToolRuntimeContext:
     tool_call_id: str = ""
     workspace_roots: tuple[str, ...] = ()
     permission: PermissionContext = field(default_factory=PermissionContext)
+    capability_executor: Any = None
+    archive_compressor_factory: Any = None
+    shell_config: Any = None
+    run_policy: Any = None
+    debug_trace: Any = None
 
 
 @dataclass(frozen=True)
@@ -50,16 +55,22 @@ class ToolControlAction:
 
     kind: str
     subtask: ScheduledSubtaskAction | None = None
+    completion_result: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def schedule_subtask(cls, payload: dict[str, Any]) -> "ToolControlAction":
         return cls(kind="schedule_subtask", subtask=ScheduledSubtaskAction(dict(payload or {})))
 
+    @classmethod
+    def complete(cls, result: str) -> "ToolControlAction":
+        return cls(kind="complete", completion_result=str(result or "").strip())
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "kind": self.kind,
             "subtask": self.subtask.to_dict() if self.subtask is not None else None,
+            "completion_result": self.completion_result,
             "metadata": dict(self.metadata or {}),
         }
 
@@ -115,17 +126,6 @@ class ToolContext:
         )
         self.permission = permission or self.runtime.permission
 
-    async def ask_approval(self, message: str) -> bool:
-        if self.approval_callback:
-            import inspect
-            if inspect.iscoroutinefunction(self.approval_callback):
-                return await self.approval_callback(message)
-            result = self.approval_callback(message)
-            if inspect.isawaitable(result):
-                return await result
-            return result
-        return True # Default to auto-approve if no callback provided (for now, or False for security)
-
     async def ask_question(self, question: Dict[str, Any]) -> Dict[str, Any]:
         def _option_labels(payload: Dict[str, Any]) -> List[str]:
             labels: List[str] = []
@@ -150,7 +150,7 @@ class ToolContext:
                     if label:
                         recommended.append(label)
 
-            multi_select = bool(payload.get("multi_select", False))
+            multi_select = bool(payload.get("multiple", False))
             selected = recommended[:] if multi_select else recommended[:1]
             if not selected and labels:
                 selected = labels[:] if multi_select else labels[:1]
@@ -233,12 +233,9 @@ class BaseTool(ABC):
     """Abstract base class for all tools (System & MCP).
 
     Each tool declares:
-        - ``category``: tool selection and permission category, one of ``read``, ``search``,
-            ``edit``, ``execute``, ``manage``, ``delegate``, ``extension``, or ``mcp``.
+        - ``category``: one of the canonical tool selection categories.
+        - ``risk``: the minimum confirmation risk for an invocation.
     """
-
-    # Max output chars before truncation (0 = no limit)
-    max_output_chars: int = 60_000
 
     @property
     @abstractmethod
@@ -253,7 +250,11 @@ class BaseTool(ABC):
     @property
     def category(self) -> str:
         """Canonical permission category."""
-        return "extension"
+        return "capability"
+
+    @property
+    def risk(self) -> RiskLevel:
+        return "low"
 
     @property
     def source(self) -> str:
@@ -263,6 +264,13 @@ class BaseTool(ABC):
     @property
     def display_name(self) -> str:
         return self.name
+
+    def assess_risk(self, arguments: Dict[str, Any], context: ToolContext) -> RiskLevel:
+        """Return invocation risk. Tools may raise their static risk from arguments."""
+        return normalize_risk_level(self.risk)
+
+    def approval_message(self, arguments: Dict[str, Any], context: ToolContext) -> str:
+        return f"Allow {self.display_name} ({self.name})?"
 
     def descriptor(self, *, available: bool = True) -> ToolDescriptor:
         return ToolDescriptor.from_tool(
@@ -282,17 +290,6 @@ class BaseTool(ABC):
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         """Execute the tool logic."""
         pass
-
-    def truncate_output(self, text: str) -> str:
-        """Truncate tool output if it exceeds max_output_chars."""
-        if self.max_output_chars <= 0 or len(text) <= self.max_output_chars:
-            return text
-        half = self.max_output_chars // 2
-        return (
-            text[:half]
-            + f"\n\n... [truncated {len(text) - self.max_output_chars} chars] ...\n\n"
-            + text[-half:]
-        )
 
     def to_openai_tool(self) -> Dict[str, Any]:
         """Convert to OpenAI tool format."""

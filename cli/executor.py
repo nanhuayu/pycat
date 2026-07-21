@@ -5,14 +5,19 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from cli.output import CliOutput
+from core.app.runtime_paths import get_debug_log_path
 from core.app.state import ConversationSelection
 from core.modes.manager import ModeManager
-from core.runtime.policy_factory import RuntimePolicyFactory
-from core.task.types import TaskStatus
+from core.agent.policy import RunPolicyBuilder
+from core.llm.model_selection import (
+    provider_model_ids,
+    resolve_provider_model_ref,
+    select_default_provider_model,
+)
+from models.contracts.agent import RunStatus
 from models.conversation import Conversation, Message
 from models.model_ref import split_model_ref
 from models.provider import Provider, build_model_ref, provider_matches_name
-from services.agent_service import AgentService
 
 
 @dataclass(frozen=True)
@@ -31,7 +36,7 @@ class CliExecutor:
 
     def __init__(self, container: Any | None = None) -> None:
         if container is None:
-            from core.container import AppContainer
+            from core.app.container import AppContainer
 
             container = AppContainer()
         self.container = container
@@ -62,19 +67,19 @@ class CliExecutor:
         conversation.add_message_with_seq(Message(role="user", content=request.prompt))
         self.services.conv_service.ensure_title(conversation)
 
-        policy = RuntimePolicyFactory.build(
+        policy = RunPolicyBuilder.build(
             conversation=conversation,
             app_settings=settings,
             mode_slug=request.mode,
             work_dir=request.work_dir or getattr(conversation, "work_dir", ""),
             source="desktop",
         )
-        debug_log_path = AgentService.get_debug_log_path(settings, self.services.storage)
+        debug_log_path = get_debug_log_path(settings, self.services.repositories.data_dir)
 
         async def approval_callback(_message: str) -> bool:
             return True
 
-        result = await self.services.turn_engine.run(
+        result = await self.services.agent_runtime.run(
             provider=provider,
             conversation=conversation,
             policy=policy,
@@ -90,9 +95,9 @@ class CliExecutor:
 
         final_text = str(getattr(getattr(result, "final_message", None), "content", "") or "")
         error = str(getattr(result, "error", "") or "")
-        status = getattr(getattr(result, "status", TaskStatus.COMPLETED), "value", str(getattr(result, "status", "completed")))
+        status = getattr(getattr(result, "status", RunStatus.COMPLETED), "value", str(getattr(result, "status", "completed")))
         out.final(status=status, message=final_text, error=error, conversation_id=str(getattr(conversation, "id", "") or ""))
-        return 0 if getattr(result, "status", TaskStatus.COMPLETED) == TaskStatus.COMPLETED else 1
+        return 0 if getattr(result, "status", RunStatus.COMPLETED) == RunStatus.COMPLETED else 1
 
     async def chat(self, *, mode: str = "chat", provider: str = "", model: str = "", work_dir: str = "", output_mode: str = "text") -> int:
         conversation_id = ""
@@ -149,10 +154,7 @@ class CliExecutor:
         if normalized == "models":
             rows: list[dict[str, Any]] = []
             for p in bootstrap.providers:
-                models = [profile.model_id for profile in p.get_model_profiles()]
-                if not models and p.default_model:
-                    models = [p.default_model]
-                for model in models:
+                for model in provider_model_ids(p):
                     rows.append({"provider": p.name, "model": model, "ref": build_model_ref(p.name, model)})
             return self._print_rows(out, rows, ["provider", "model", "ref"])
         if normalized == "tools":
@@ -179,20 +181,24 @@ class CliExecutor:
             provider_token, model_token = split_model_ref(model_token)
 
         if not provider_token and not model_token:
-            for key in ("primary_model_ref", "default_model_ref", "model_ref"):
-                ref = str(settings.get(key) or "").strip()
-                if ref:
-                    provider_token, model_token = split_model_ref(ref)
-                    break
+            selection = select_default_provider_model(
+                provider_list,
+                default_model_ref=str(settings.get("default_chat_model") or "").strip(),
+            )
+            return selection.provider, selection.model
+
+        if model_token and not provider_token:
+            selection = resolve_provider_model_ref(provider_list, model_token)
+            if selection.provider is not None:
+                return selection.provider, selection.model
 
         provider = self._find_provider(provider_list, provider_token)
         if provider is None and provider_list:
             provider = provider_list[0]
-        model = model_token or str(getattr(provider, "default_model", "") or "").strip()
+        model = model_token
         if not model and provider is not None:
-            profiles = provider.get_model_profiles()
-            if profiles:
-                model = profiles[0].model_id
+            models = provider_model_ids(provider)
+            model = models[0] if models else ""
         return provider, model
 
     def _load_or_create_conversation(self, request: CliRunRequest) -> Conversation:

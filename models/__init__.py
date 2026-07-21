@@ -6,9 +6,9 @@ Data models package
 from .conversation import Message, Conversation
 from .provider import Provider
 from .streaming import ConversationStreamState
-from .state import SessionState, TodoItem, TodoPriority, TodoStatus
+from models.contracts.session_state import SessionState, TodoItem, TodoStatus
 
 __all__ = [
     'Message', 'Conversation', 'Provider', 'ConversationStreamState',
-    'SessionState', 'TodoItem', 'TodoStatus', 'TodoPriority'
+    'SessionState', 'TodoItem', 'TodoStatus'
 ]

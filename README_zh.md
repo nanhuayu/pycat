@@ -101,7 +101,7 @@ PyCat 是一款面向桌面场景的原生 AI 工作台，将 LLM 聊天、多�
 | **原生桌面体验** | 暗色 / 亮色主题、高 DPI 支持、会话树侧边栏、Markdown 渲染、清晰的信息布局。 |
 | **性能可观测** | 实时 Token 消耗速度（Tokens/sec）、响应延迟、右侧检查面板的运行时间线。 |
 | **轻量构建** | Nuitka `--standalone` 编译生成 ~80 MB 自包含 `.exe`——不需要 Electron、不需要 Node.js、不需要额外运行时。 |
-| **清晰架构** | 分层的 `models → services → core → ui`，以 `ChannelRuntimeContext` 作为 source backend 的唯一门面。 |
+| **清晰架构** | 分层的 `models/contracts → core domains → core.app → gui/cli/channel`，以 `ChannelPlatformHost` 作为频道后端唯一门面。 |
 
 ## 🧩 功能概览
 
@@ -117,7 +117,7 @@ PyCat 是一款面向桌面场景的原生 AI 工作台，将 LLM 聊天、多�
 - **微信**：二维码桥接，支持长轮询超时降噪——无需公网回调。
 - **飞书**：WebSocket 长连接，使用自定义轻量 protobuf codec——不依赖 `lark-oapi` 重型 SDK。
 - **Telegram**：Bot API 长轮询（`getUpdates`）——只需 Bot Token，无需 webhook。
-- 所有频道共享统一的 `ChannelRuntimeContext` 边界，并自动绑定会话到回发目标。
+- 所有频道共享统一的 `ChannelPlatformHost` 边界，并自动绑定会话到回发目标。
 
 ### 扩展能力
 
@@ -142,11 +142,10 @@ PyCat 是一款面向桌面场景的原生 AI 工作台，将 LLM 聊天、多�
 
 项目采用分层架构，便于维护与后续重构：
 
-- **`ui/`**：纯表现层，负责窗口、组件、输入状态采集与交互转发。
-- **`core/`**：运行时核心，负责命令分发、任务循环、prompt 组装、skills、attachments、上下文构建等。
-- **`services/`**：应用服务层，负责会话持久化、Provider 管理、搜索 / MCP 服务编排等。
-- **`models/`**：数据模型层，保存 Conversation、Provider、State 等结构。
-- **`utils/`**：通用辅助逻辑，仅保留真正与业务领域无强耦合的工具代码。
+- **`gui/`**：纯表现层，负责窗口、组件、输入状态采集与交互转发。
+- **`core/`**：领域核心，负责 Agent 编排、上下文、内容、工具、技能、频道、能力与 LLM 集成。
+- **`core/app/`**：组合根、repository 与应用服务，负责持久化、Provider、会话、上下文和搜索。
+- **`models/`**：纯数据模型与跨层 contracts，保存 Conversation、Provider、RunPolicy、SessionState 等结构。
 
 更多说明请参考：
 
@@ -204,33 +203,30 @@ powershell -ExecutionPolicy Bypass -File .\build_nuitka.ps1
 ```text
 pycat/
 ├─ assets/                 # 图标、截图、样式资源
-├─ core/                   # 运行时核心逻辑
-│  ├─ app/                 # AppState、协调器、轻量 store
-│  ├─ channel/             # 频道协议、运行时、sources/
-│  │  └─ sources/          # 平台实现
-│  │     ├─ feishu/        #   飞书 WebSocket + webhook
-│  │     ├─ qqbot/         #   QQ Bot Gateway + OpenAPI
-│  │     ├─ telegram/      #   Telegram Bot API 长轮询
-│  │     └─ wechat/        #   微信二维码桥接 + webhook
-│  ├─ llm/                 # LLM 客户端、请求构建、配置
+├─ core/                   # 领域核心与应用组合
+│  ├─ agent/               # AgentRuntime、run engine、request pipeline、subagent、events
+│  ├─ app/                 # AppContainer、repositories、应用服务、coordinator
+│  ├─ capabilities/        # capability 默认值、merge、executor、tool adapter
+│  ├─ channel/             # channel gateway、backend host、sources、reply
+│  ├─ content/             # archive store、content view、markdown、attachments
+│  ├─ context/             # context sections、providers、maintenance、request replay
+│  ├─ llm/                 # transport client、request payload、response parsing、token budget
+│  ├─ memory/              # 长期短事实与 memory prompt input
 │  ├─ modes/               # 模式注册与默认值
-│  ├─ prompts/             # system prompt 组装
-│  ├─ runtime/             # TurnEngine、RuntimePolicyFactory、事件
-│  ├─ skills/              # 技能系统
-│  ├─ state/               # 会话状态服务
-│  ├─ task/                # 多步任务循环
-│  └─ tools/               # MCP、系统工具、工具注册
-├─ docs/                   # 设计文档、迁移记录、发布说明
+│  ├─ prompts/             # system prompt 与 provider message rendering
+│  ├─ skills/              # discovery、manifest、routing、resources、prompt section
+│  ├─ state/               # todo、artifact、work trace 会话状态操作
+│  └─ tools/               # MCP、系统工具、catalog、permissions、execution adapters
+├─ docs/                   # 架构文档、历史设计资料、发布说明
 │  └─ releases/            # 版本化发布说明
-├─ models/                 # 纯数据模型（无 I/O）
-├─ services/               # 应用服务（持久化、服务商、搜索）
-├─ tests/                  # 单元测试
-├─ ui/                     # PyQt6 表现层
+├─ models/                 # 纯数据模型与 models/contracts
+├─ tests/                  # unit/runtime/channels/gui/cli 测试套件
+├─ gui/                    # PyQt6 表现层
 │  ├─ dialogs/             # 模态对话框
 │  ├─ presenters/          # 消息 / 流式 / 事件 presenter
 │  ├─ runtime/             # Qt 线程桥接
 │  ├─ settings/            # 设置页面
-│  └─ widgets/             # 可复用 UI 组件
+│  └─ widgets/             # 可复用 GUI 组件
 ├─ build_nuitka.ps1        # Windows 打包脚本
 ├─ main.py                 # 应用入口
 └─ requirements.txt        # Python 依赖
@@ -258,7 +254,7 @@ pycat/
 
 PyCat 目前处于早期阶段，还在快速迭代中。欢迎各种形式的贡献——新功能、Bug 修复、文档、UI 打磨、频道接入和测试。
 
-**当前状态：** v0.0.2，145 个单元测试通过，四大频道基础功能就绪，`lark-oapi` 依赖已移除。
+**当前状态：** v0.0.2，403 个单元测试通过，四大频道基础功能就绪，`lark-oapi` 依赖已移除。
 
 > ⚠️ 项目还有很多不完善的地方：功能深度有限、缺少移动端、社区规模小、文档不全。如果你在寻找成熟稳定的产品，建议优先考虑 Cherry Studio 或 Chatbox。如果你对 Python + Nuitka + IM 频道这条技术路线感兴趣，欢迎一起完善。
 
@@ -267,15 +263,15 @@ PyCat 目前处于早期阶段，还在快速迭代中。欢迎各种形式的�
 - 新增频道 source（如 Slack、Discord、钉钉），参照 `core/channel/sources/<source>/` 模式。
 - 打磨 UI 主题或新增 `assets/styles/` 变体。
 - 用新的可复用技能文件扩充技能库。
-- 提升 `core/channel/`、`core/runtime/` 或 `ui/presenters/` 的测试覆盖率。
+- 提升 `core/channel/`、`core/agent/`、`core/context/` 或 `gui/presenters/` 的测试覆盖率。
 - 编写文档或教程。
 
 ### 开始之前：
 
 1. 阅读 `ARCHITECTURE.md` 理解分层规则。
-2. 遵循 `models → services → core → ui` 的依赖方向。
-3. 添加频道时使用 `ChannelRuntimeContext` 作为唯一 API 边界——绝不直接访问 runtime 私有状态。
-4. 提交前运行 `python -m unittest discover -s tests` 和 `python -m compileall core ui models tests`。
+2. 遵循 `models/contracts → core domains → core.app → gui/cli/channel` 的依赖方向。
+3. 添加频道时使用 `ChannelPlatformHost` 作为唯一 API 边界——绝不直接访问 runtime 私有状态。
+4. 提交前运行 `python -m unittest discover -s tests` 和 `python -m compileall core models gui cli tests`。聚焦测试命令见 `docs/testing.md`。
 
 **迭代速度快，期待你的加入。** 🚀
 

@@ -95,7 +95,7 @@ PyCat is a native desktop AI workbench that brings LLM chat, multi-mode agents (
 | **Native desktop UX** | Dark / light themes, high-DPI support, conversation tree sidebar, Markdown rendering, and a clean information layout. |
 | **Performance observability** | Real-time token throughput (Tokens/sec), response latency, and runtime timeline in the right inspection panel. |
 | **Lightweight build** | Nuitka `--standalone` compilation produces a ~80 MB self-contained `.exe` — no Electron, no Node.js, no extra runtime. |
-| **Clean architecture** | Layered `models → services → core → ui` with `ChannelRuntimeContext` as the sole facade for source backends. |
+| **Clean architecture** | Layered `models/contracts → core domains → core.app → gui/cli/channel`, with `ChannelPlatformHost` as the sole facade for channel backends. |
 
 ## 🧩 Feature Overview
 
@@ -111,7 +111,7 @@ PyCat is a native desktop AI workbench that brings LLM chat, multi-mode agents (
 - **WeChat**: QR-code bridge with transient-poll-timeout resilience — no need for a public webhook.
 - **Feishu (Lark)**: WebSocket long-connection using a custom lightweight protobuf codec — no heavy `lark-oapi` SDK dependency.
 - **Telegram**: Bot API long-polling (`getUpdates`) — just a Bot Token, no webhook required.
-- All channels share a unified `ChannelRuntimeContext` boundary and auto-bind conversations to reply targets.
+- All channels share a unified `ChannelPlatformHost` boundary and auto-bind conversations to reply targets.
 
 ### Extensibility
 
@@ -136,11 +136,10 @@ PyCat is a native desktop AI workbench that brings LLM chat, multi-mode agents (
 
 The project follows a layered architecture for maintainability and future refactoring:
 
-- **`ui/`**: presentation layer for windows, widgets, input collection, and interaction forwarding.
-- **`core/`**: runtime core for command dispatching, task loops, prompt assembly, skills, attachments, and context building.
-- **`services/`**: application services for persistence, provider management, search, and MCP orchestration.
-- **`models/`**: data models such as Conversation, Provider, and State.
-- **`utils/`**: general-purpose utilities with minimal business coupling.
+- **`gui/`**: presentation layer for windows, widgets, input collection, and interaction forwarding.
+- **`core/`**: domain core for agent orchestration, context, content, tools, skills, channels, capabilities, and LLM integration.
+- **`core/app/`**: composition root, repositories, and application services for persistence, providers, conversations, context, and search.
+- **`models/`**: pure data models and cross-layer contracts such as Conversation, Provider, RunPolicy, and SessionState.
 
 See also:
 
@@ -198,33 +197,30 @@ The build script will:
 ```text
 pycat/
 ├─ assets/                 # icons, screenshots, style assets
-├─ core/                   # runtime core logic
-│  ├─ app/                 # AppState, coordinator, lightweight store
-│  ├─ channel/             # channel protocol, runtime, sources/
-│  │  └─ sources/          # platform implementations
-│  │     ├─ feishu/        #   Feishu WebSocket + webhook
-│  │     ├─ qqbot/         #   QQ Bot Gateway + OpenAPI
-│  │     ├─ telegram/      #   Telegram Bot API polling
-│  │     └─ wechat/        #   WeChat QR bridge + webhook
-│  ├─ llm/                 # LLM client, request builder, config
+├─ core/                   # domain core and app composition
+│  ├─ agent/               # AgentRuntime, run engine, request pipeline, subagent, events
+│  ├─ app/                 # AppContainer, repositories, application services, coordinator
+│  ├─ capabilities/        # capability defaults, merge, executor, tool adapter
+│  ├─ channel/             # channel gateway, backend host, sources, replies
+│  ├─ content/             # archive store, content views, markdown, attachments
+│  ├─ context/             # context sections, providers, maintenance, request replay
+│  ├─ llm/                 # transport client, request payload, response parsing, token budget
+│  ├─ memory/              # long-term short facts and memory prompt input
 │  ├─ modes/               # mode registry and defaults
-│  ├─ prompts/             # system prompt assembly
-│  ├─ runtime/             # TurnEngine, RuntimePolicyFactory, events
-│  ├─ skills/              # skills system
-│  ├─ state/               # conversation state services
-│  ├─ task/                # multi-step task loops
-│  └─ tools/               # MCP, system tools, tool registry
-├─ docs/                   # design docs, migration notes, releases
+│  ├─ prompts/             # system prompt and provider message rendering
+│  ├─ skills/              # discovery, manifest, routing, resources, prompt section
+│  ├─ state/               # todo, artifact, work trace session state operations
+│  └─ tools/               # MCP, system tools, catalog, permissions, execution adapters
+├─ docs/                   # architecture docs, historical design notes, releases
 │  └─ releases/            # versioned release notes
-├─ models/                 # pure data models (no I/O)
-├─ services/               # application services (persistence, providers, search)
-├─ tests/                  # unit tests
-├─ ui/                     # PyQt6 presentation layer
+├─ models/                 # pure data models and models/contracts
+├─ tests/                  # unit/runtime/channels/gui/cli suites
+├─ gui/                    # PyQt6 presentation layer
 │  ├─ dialogs/             # modal dialogs
 │  ├─ presenters/          # message / streaming / event presenters
 │  ├─ runtime/             # Qt thread bridges
 │  ├─ settings/            # settings pages
-│  └─ widgets/             # reusable UI components
+│  └─ widgets/             # reusable GUI components
 ├─ build_nuitka.ps1        # Windows packaging script
 ├─ main.py                 # application entry point
 └─ requirements.txt        # Python dependencies
@@ -252,7 +248,7 @@ UI styles are mainly located in `assets/styles/`. If you want to move closer to 
 
 PyCat is in early stages and iterating quickly. Contributions of all kinds are welcome — new features, bug fixes, documentation, UI polish, channel integrations, and testing.
 
-**Current status:** v0.0.2, 145 unit tests passing, four channels with basic functionality, `lark-oapi` dependency removed.
+**Current status:** v0.0.2, 403 unit tests passing, four channels with basic functionality, `lark-oapi` dependency removed.
 
 > ⚠️ The project still has many rough edges: limited feature depth, no mobile support, small community, incomplete documentation. If you're looking for a production-ready tool, Cherry Studio or Chatbox are better choices today. If you're interested in the Python + Nuitka + IM channels approach, we'd love your help improving it.
 
@@ -261,15 +257,15 @@ PyCat is in early stages and iterating quickly. Contributions of all kinds are w
 - Add a new channel source (e.g., Slack, Discord, DingTalk) following the `core/channel/sources/<source>/` pattern.
 - Polish the UI theme or add new `assets/styles/` variants.
 - Extend the skills library with new reusable skill files.
-- Improve test coverage for `core/channel/`, `core/runtime/`, or `ui/presenters/`.
+- Improve test coverage for `core/channel/`, `core/agent/`, `core/context/`, or `gui/presenters/`.
 - Write documentation or tutorials.
 
 ### Before you start:
 
 1. Read `ARCHITECTURE.md` to understand the layering rules.
-2. Follow the `models → services → core → ui` dependency direction.
-3. When adding a channel, use `ChannelRuntimeContext` as the sole API boundary — never access runtime private state directly.
-4. Run `python -m unittest discover -s tests` and `python -m compileall core ui models tests` before submitting.
+2. Follow the `models/contracts → core domains → core.app → gui/cli/channel` dependency direction.
+3. When adding a channel, use `ChannelPlatformHost` as the sole API boundary — never access runtime private state directly.
+4. Run `python -m unittest discover -s tests` and `python -m compileall core models gui cli tests` before submitting. See `docs/testing.md` for focused test commands.
 
 **Iterating fast, and we'd love to have you on board.** 🚀
 

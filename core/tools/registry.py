@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Optional
-from core.config.schema import ToolPermissionConfig
+from models.contracts.tooling import ToolPermissionConfig
 from core.tools.base import BaseTool, ToolContext, ToolResult
-from core.tools.catalog import ToolDescriptor, ToolSelectionPolicy
+from models.contracts.tooling import ToolDescriptor, ToolSelectionPolicy
 
 class ToolRegistry:
     def __init__(self):

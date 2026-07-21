@@ -3,12 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Iterable, Optional
 
-from core.config.schema import AppConfig
+from models.contracts.config import AppConfig
 from core.app.state import AppState, ConversationSelection, ConversationSettingsUpdate, EMPTY_APP_STATE
 from core.app.store import Store
 from models.conversation import Conversation
 from models.provider import Provider, build_model_ref, provider_matches_name
-from services.conversation_service import ConversationService
 
 
 class AppCoordinator:
@@ -21,7 +20,7 @@ class AppCoordinator:
     def __init__(
         self,
         *,
-        conv_service: ConversationService,
+        conv_service: Any,
         store: Store[AppState] | None = None,
     ) -> None:
         self._conv_service = conv_service
@@ -168,7 +167,7 @@ class AppCoordinator:
         )
         settings = getattr(conversation, "settings", {}) or {}
         defaults = app_settings or {}
-        model = llm_config.resolved_model(resolved_provider) or getattr(conversation, "model", "") or ""
+        model = llm_config.resolved_model() or getattr(conversation, "model", "") or ""
         api_type = llm_config.resolved_api_type(resolved_provider)
         selected_memory_sources = self._resolve_memory_sources(conversation)
         allowed_channel_sources = self._resolve_allowed_channel_sources(
@@ -274,14 +273,7 @@ class AppCoordinator:
             provider_id=provider_id,
             provider_name=provider_name,
         )
-        resolved_provider = self._conv_service.resolve_provider(
-            provider_list,
-            provider_id=provider_id,
-            provider_name=provider_name,
-        )
         resolved_model = str(model or "").strip()
-        if not resolved_model and resolved_provider is not None:
-            resolved_model = str(getattr(resolved_provider, "default_model", "") or "").strip()
         return build_model_ref(resolved_name, resolved_model)
 
     @staticmethod
