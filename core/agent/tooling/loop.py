@@ -5,17 +5,19 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Callable, Optional
 
 from models.conversation import Conversation, Message
 from models.provider import Provider
 
 from core.agent.run.control_messages import REPETITION_WARNING
+from core.agent.run.control import RunControl, effective_run_policy
+from core.agent.events.conversation import emit_conversation_patch
 from core.agent.events.emitter import EventEmitter
 from core.agent.tooling.repetition import ToolRepetitionDetector
 from models.contracts.agent import RunPolicy, RunEventKind, TurnState, TurnContext, TurnOutcome, TurnOutcomeKind
 from core.tools.base import ToolResult
-from core.agent.events.debug_trace import DebugTraceContext
+from core.observability.debug_trace import DebugTraceContext
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +30,8 @@ class ToolCallCoordinator:
     tool_executor: Any
     subtask_coordinator: Any
     tool_result_to_string: Callable[[ToolResult | str], str]
-    summarize_tool_result: Callable[[str, str], str]
-    build_tool_result_block: Callable[..., Awaitable[dict[str, Any]]]
+    build_tool_result_block: Callable[..., dict[str, Any]]
+    compression_tasks: Any = None
 
     async def execute(
         self,
@@ -46,17 +48,19 @@ class ToolCallCoordinator:
         cancel_event,
         on_event,
         turns_limit: int,
+        run_control: RunControl | None = None,
         debug_trace: DebugTraceContext | None = None,
     ) -> TurnOutcome:
         turn_context.had_tool_work = True
         turn_context.incomplete_responses = 0
         total_tools = len(assistant_msg.tool_calls or [])
-        for tool_call in assistant_msg.tool_calls or []:
+        for tool_index, tool_call in enumerate(assistant_msg.tool_calls or []):
             if cancel_event and cancel_event.is_set():
                 turn_context.state = TurnState.CANCELLED
                 return TurnOutcome(kind=TurnOutcomeKind.CANCELLED, context=turn_context, final_message=assistant_msg)
 
             tool_name, args, tool_call_id = self.tool_executor.parse_tool_call(tool_call)
+            tool_policy, permission_revision = effective_run_policy(policy, run_control)
             trace_args, trace_arg_chars = self._trace_arguments(args)
             tool_trace: DebugTraceContext | None = None
             tool_started_at = time.time()
@@ -67,6 +71,7 @@ class ToolCallCoordinator:
                 "allowed": None,
                 "is_error": False,
                 "total_tools": total_tools,
+                "permission_revision": permission_revision,
             }
             if repetition_detector.record(tool_name, args if isinstance(args, dict) else {}):
                 logger.warning("Tool repetition detected: %s", tool_name)
@@ -103,7 +108,7 @@ class ToolCallCoordinator:
                 turn_context.state = TurnState.TURN_COMPLETE
                 return TurnOutcome(kind=TurnOutcomeKind.CONTINUE, context=turn_context, final_message=assistant_msg)
 
-            allowed = self.tool_executor.is_tool_allowed(tool_name, policy)
+            allowed = self.tool_executor.is_tool_allowed(tool_name, tool_policy)
             if debug_trace is not None:
                 node_id = debug_trace.sink.tool_node_id(tool_call_id=tool_call_id or "", tool_name=tool_name)
                 tool_trace = debug_trace.child(
@@ -159,22 +164,34 @@ class ToolCallCoordinator:
                 approval_callback=approval_callback,
                 questions_callback=questions_callback,
                 llm_client=self.client,
-                policy=policy,
+                policy=tool_policy,
                 tool_call_id=tool_call_id,
                 tool_name=tool_name,
                 debug_trace=tool_trace,
+                compression_tasks=self.compression_tasks,
             )
             tool_result = await self.tool_executor.execute_tool(
                 tool_name=tool_name,
                 tool_args=args,
                 allowed=allowed,
-                policy=policy,
+                policy=tool_policy,
                 context=context,
             )
-            raw_tool_result = tool_result
             result_text = self.tool_result_to_string(tool_result)
             tool_is_error = bool(getattr(tool_result, "is_error", False))
             control_action = getattr(tool_result, "control_action", None)
+            if (
+                control_action is not None
+                and control_action.kind == "complete"
+                and tool_index + 1 < total_tools
+            ):
+                tool_result = ToolResult(
+                    "agent__complete must be the final tool call in an assistant message.",
+                    is_error=True,
+                )
+                result_text = self.tool_result_to_string(tool_result)
+                tool_is_error = True
+                control_action = None
 
             subtask_execution = await self.subtask_coordinator.handle_control_action(
                 action=control_action,
@@ -182,7 +199,7 @@ class ToolCallCoordinator:
                 tool_call_id=tool_call_id,
                 conversation=conversation,
                 provider=provider,
-                policy=policy,
+                policy=tool_policy,
                 approval_callback=approval_callback,
                 questions_callback=questions_callback,
                 cancel_event=cancel_event,
@@ -201,18 +218,7 @@ class ToolCallCoordinator:
 
             self.tool_executor.sync_state(conversation, context)
 
-            def report_archive_prepare() -> None:
-                emitter.emit(
-                    RunEventKind.TOOL_START,
-                    turn=turn_context.turn,
-                    data={
-                        **tool_event_base,
-                        "phase": "organizing",
-                        "allowed": bool(allowed),
-                    },
-                )
-
-            result_block = await self.build_tool_result_block(
+            result_block = self.build_tool_result_block(
                 conversation=conversation,
                 tool_name=tool_name,
                 tool_category=str(getattr(getattr(context, "permission", None), "category", "") or ""),
@@ -220,16 +226,16 @@ class ToolCallCoordinator:
                 result=tool_result,
                 tool_args=args if isinstance(args, dict) else {},
                 parent_message_id=str(getattr(assistant_msg, "id", "") or ""),
-                provider=provider,
-                debug_trace=tool_trace,
-                on_archive_prepare=report_archive_prepare,
             )
+            if hasattr(result_block, "__await__"):
+                result_block = await result_block
             self._write_tool_response(
                 tool_trace,
                 tool_name=tool_name,
                 tool_call_id=tool_call_id,
                 allowed=allowed,
-                raw_result=raw_tool_result,
+                raw_result=tool_result,
+                control_action=control_action,
                 final_is_error=tool_is_error,
                 result_block=result_block,
             )
@@ -265,6 +271,13 @@ class ToolCallCoordinator:
                 metadata=dict(result_block["result"].get("metadata") or {}),
                 images=list(result_block.get("images") or []),
                 state_snapshot=result_block.get("state_snapshot") if isinstance(result_block.get("state_snapshot"), dict) else None,
+            )
+            emit_conversation_patch(
+                emitter,
+                conversation,
+                turn=turn_context.turn,
+                detail="Conversation state synchronized after tool result.",
+                include_messages=False,
             )
             if control_action is not None and control_action.kind == "complete" and not tool_is_error:
                 completion_result = str(control_action.completion_result or "").strip()
@@ -308,6 +321,7 @@ class ToolCallCoordinator:
         tool_call_id: str | None,
         allowed: bool,
         raw_result: ToolResult | str,
+        control_action: Any = None,
         final_is_error: bool | None = None,
         result_block: dict[str, Any],
     ) -> None:
@@ -317,14 +331,12 @@ class ToolCallCoordinator:
         if not response_ref:
             return
         if isinstance(raw_result, ToolResult):
-            control_action = getattr(raw_result, "control_action", None)
             raw_payload: Any = {
                 "content": raw_result.content,
                 "is_error": bool(raw_result.is_error),
-                "control_action": control_action.to_dict() if control_action is not None else None,
             }
         else:
-            raw_payload = {"content": str(raw_result or ""), "is_error": False, "control_action": None}
+            raw_payload = {"content": str(raw_result or ""), "is_error": False}
         model_result = result_block.get("result") if isinstance(result_block, dict) else {}
         metadata = model_result.get("metadata") if isinstance(model_result, dict) else {}
         metadata = dict(metadata or {}) if isinstance(metadata, dict) else {}
@@ -343,10 +355,13 @@ class ToolCallCoordinator:
                 "is_error": bool(raw_payload.get("is_error")) if final_is_error is None else bool(final_is_error),
                 "raw_result": raw_payload,
                 "model_result": model_visible,
+                "control_action": control_action.to_dict() if control_action is not None else None,
                 "archive": {
                     "content_id": str(metadata.get("content_id") or ""),
                     "archive_ref": str(metadata.get("archive_ref") or metadata.get("original_ref") or ""),
                     "chars": int(metadata.get("tool_result_chars") or metadata.get("archive_size") or 0),
+                    "image_count": int(metadata.get("archive_image_count") or 0),
+                    "images_restorable": bool(metadata.get("archive_images_restorable", True)),
                 },
             },
         )

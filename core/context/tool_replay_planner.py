@@ -5,21 +5,21 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.content.archive_store import SessionArchiveStore
-from core.content.view_protocol import ContentExactness
+from core.content.archive_store import SessionArchiveStore, estimate_tokens
+from core.content.view_protocol import ContentExactness, TOOL_SUMMARY_PROJECTION_CHARS
 from models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 
 
 EXACT_VIEW_KINDS = {"content", "full", "line", "char"}
 CCR_PRESSURE_LEVELS = {"tight", "compact"}
 CCR_EXCERPT_CHARS = 320
-MIN_CCR_SAVINGS_CHARS = 128
-NORMAL_EXACT_TOOL_BATCHES = 16
-TIGHT_EXACT_TOOL_BATCHES = 5
+MIN_CCR_SAVINGS_TOKENS = 512
+NORMAL_EXACT_TOOL_BATCHES = 8
+TIGHT_EXACT_TOOL_BATCHES = 3
 
 
 @dataclass
-class RequestContextItem:
+class ToolReplayItem:
     tool_call_id: str = ""
     tool_name: str = ""
     content_id: str = ""
@@ -31,12 +31,12 @@ class RequestContextItem:
 
 
 @dataclass
-class RequestContextPlan:
-    items: list[RequestContextItem] = field(default_factory=list)
+class ToolReplayPlan:
+    items: list[ToolReplayItem] = field(default_factory=list)
     dropped: list[str] = field(default_factory=list)
     degraded: list[str] = field(default_factory=list)
     token_estimate: int = 0
-    reason: str = "request_context_planner"
+    reason: str = "tool_replay_planner"
     compact_actions: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -51,11 +51,11 @@ class _ReplayCandidate:
     image_count: int = 0
 
 
-class RequestContextPlanner:
+class ToolReplayPlanner:
     """Shape copied request messages without mutating persisted history.
 
     Tool results are archived before this planner runs. Normal requests retain
-    the latest 16 completed tool batches; tight requests retain the latest 5.
+    the latest 8 completed tool batches; tight requests retain the latest 3.
     Every older replacement is a deterministic CCR marker whose original text
     and images stay recoverable from Archive.
     """
@@ -68,10 +68,10 @@ class RequestContextPlanner:
     ) -> None:
         self.conversation = conversation
         self.replay_pressure = str(replay_pressure or "normal").strip().lower() or "normal"
-        self.plan = RequestContextPlan()
+        self.plan = ToolReplayPlan()
 
-    def prepare_messages(self, messages: list[Message]) -> RequestContextPlan:
-        self.plan = RequestContextPlan()
+    def prepare_messages(self, messages: list[Message]) -> ToolReplayPlan:
+        self.plan = ToolReplayPlan()
         candidates: list[_ReplayCandidate] = []
 
         for message_index, msg in enumerate(messages):
@@ -118,7 +118,34 @@ class RequestContextPlanner:
         metadata = self._fresh_archive_metadata(dict(metadata))
         if str(metadata.get("tool_result_replay_view") or "").strip() == "ccr":
             return self._render_ccr_result(payload, metadata)
+        refreshed = self._render_refreshed_long_view(payload, metadata)
+        if refreshed:
+            return refreshed
         return self._render_inline_result(payload)
+
+    @staticmethod
+    def _render_refreshed_long_view(payload: dict[str, Any], metadata: dict[str, Any]) -> str:
+        summary = str(metadata.get("tool_result_summary") or payload.get("summary") or "").strip()
+        content = payload.get("content")
+        if not summary or not isinstance(content, str) or not content.startswith("[summary:unavailable]"):
+            return ""
+        marker = content.find("\n\n[char:")
+        if marker < 0:
+            return ""
+        content_id = str(metadata.get("content_id") or "").strip()
+        try:
+            chars = int(metadata.get("tool_result_chars") or metadata.get("archive_size") or 0)
+        except Exception:
+            chars = 0
+        try:
+            tokens = int(metadata.get("tool_result_tokens_estimate") or 0)
+        except Exception:
+            tokens = 0
+        lines = ["[summary]"]
+        if content_id:
+            lines.append(f"content_id={content_id}")
+        lines.extend(("derived=true", f"chars={chars}", f"tokens={tokens}", summary[:TOOL_SUMMARY_PROJECTION_CHARS]))
+        return "\n".join(lines) + content[marker:]
 
     def _fill_basic_metadata(
         self,
@@ -170,9 +197,9 @@ class RequestContextPlanner:
                 for candidate in batch:
                     self._mark_live(candidate.metadata, reason="unrecoverable_tool_batch")
                 continue
-            exact_chars = sum(candidate.exact_chars for candidate in batch)
-            ccr_chars = sum(len(self._render_ccr_result(candidate.payload, candidate.metadata)) for candidate in batch)
-            if exact_chars - ccr_chars < MIN_CCR_SAVINGS_CHARS:
+            exact_tokens = sum(estimate_tokens(self._render_inline_result(candidate.payload)) for candidate in batch)
+            ccr_tokens = sum(estimate_tokens(self._render_ccr_result(candidate.payload, candidate.metadata)) for candidate in batch)
+            if exact_tokens - ccr_tokens < MIN_CCR_SAVINGS_TOKENS:
                 for candidate in batch:
                     self._mark_live(candidate.metadata, reason="ccr_no_savings")
                 continue
@@ -256,10 +283,18 @@ class RequestContextPlanner:
             return ""
         if "\nexact_excerpt:\n" in content:
             content = content.split("\nexact_excerpt:\n", 1)[1]
+        first_char_view = content.find("[char:")
+        if first_char_view >= 0:
+            content = content[first_char_view:]
+            next_char_view = content.find("\n\n[char:")
+            if next_char_view >= 0:
+                content = content[:next_char_view]
         lines = content.strip().splitlines()
         while lines and (
             (lines[0].startswith("[") and "]" in lines[0][:80])
-            or lines[0].startswith(("content_id=", "exact=", "next_offset=", "char_range="))
+            or lines[0].startswith(
+                ("content_id=", "exact=", "next_offset=", "char_range=", "derived=", "chars=", "tokens=")
+            )
         ):
             lines.pop(0)
         excerpt = "\n".join(lines).strip()
@@ -273,10 +308,10 @@ class RequestContextPlanner:
             content_id = content_id or str(metadata["archive_record"].get("id") or "").strip()
             metadata.pop("archive_record", None)
         conversation = self.conversation
-        work_dir = str(getattr(conversation, "work_dir", "") or "").strip() if conversation is not None else ""
-        if not content_id or not work_dir:
+        if not content_id or conversation is None:
             metadata["archive_available"] = False
             return metadata
+        work_dir = str(getattr(conversation, "work_dir", "") or "").strip()
         store = SessionArchiveStore(work_dir, conversation_id=getattr(conversation, "id", None))
         try:
             record = store.read_record(content_id)
@@ -305,8 +340,8 @@ class RequestContextPlanner:
         tool_call: dict[str, Any],
         payload: dict[str, Any],
         metadata: dict[str, Any],
-    ) -> RequestContextItem:
-        return RequestContextItem(
+    ) -> ToolReplayItem:
+        return ToolReplayItem(
             tool_call_id=str(tool_call.get("id") or ""),
             tool_name=tool_call_name(tool_call) or str(metadata.get("name") or ""),
             content_id=str(metadata.get("content_id") or ""),

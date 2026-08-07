@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from models.contracts.tooling import ToolSelectionPolicy
+from models.contracts.tooling import PermissionPreset, ToolSelectionPolicy
 from models.contracts.mcp import McpServerConfig
 from models.contracts.mode import ModeConfig
 from models.provider import Provider
@@ -20,6 +20,7 @@ class ConversationSelection:
     mode_slug: str = "chat"
     work_dir: str = ""
     show_thinking: bool = True
+    permission_preset: PermissionPreset | None = None
 
 
 @dataclass(frozen=True)
@@ -32,13 +33,12 @@ class ConversationSettingsUpdate:
     primary_model_ref: str = ""
     mode_slug: str = "chat"
     session_instructions: str = ""
+    pycat_assistant_enabled: bool | None = None
     max_context_messages: int | None = None
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
     stream: bool | None = None
-    reasoning_enabled: bool | None = None
-    reasoning_effort: str = ""
     show_thinking: bool = True
     memory_sources: tuple[str, ...] = ("session", "workspace", "global")
     tool_selection: ToolSelectionPolicy | None = None

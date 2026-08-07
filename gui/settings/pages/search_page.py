@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
+from PyQt6.QtCore import QThreadPool
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -17,6 +17,7 @@ from core.app.services.search import SearchService
 from gui.settings.page_header import build_page_header
 from gui.utils.icon_manager import Icons
 from gui.utils.form_builder import FormSection
+from gui.runtime.background_job import BackgroundJob
 
 
 class SearchPage(QWidget):
@@ -31,6 +32,8 @@ class SearchPage(QWidget):
 
     def __init__(self, search_config: SearchConfig, parent=None, *, embedded: bool = False):
         super().__init__(parent)
+        self._check_job: BackgroundJob | None = None
+        self._check_button_text = "检查"
         self._setup_ui(search_config, embedded=embedded)
 
     def _setup_ui(self, search_config: SearchConfig, *, embedded: bool = False) -> None:
@@ -133,24 +136,36 @@ class SearchPage(QWidget):
         self._provider_hint.setText(hints.get(pid, ""))
 
     def _on_check_clicked(self):
+        if self._check_job is not None:
+            return
         config = self.collect()
         service = SearchService(config)
         self._check_btn.setEnabled(False)
         old_text = self._check_btn.text()
+        self._check_button_text = old_text
         self._check_btn.setText("检查中")
-        try:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                valid, error = executor.submit(lambda: asyncio.run(service.check())).result()
-        except Exception as e:
-            valid, error = False, str(e)
-        finally:
-            self._check_btn.setText(old_text)
-            self._check_btn.setEnabled(True)
+
+        job = BackgroundJob(lambda: asyncio.run(service.check()))
+        self._check_job = job
+        job.signals.finished.connect(self._finish_check)
+        QThreadPool.globalInstance().start(job)
+
+    def _finish_check(self, result, error) -> None:
+        job = self._check_job
+        if job is None:
+            return
+        self._check_job = None
+        self._check_btn.setText(self._check_button_text)
+        self._check_btn.setEnabled(True)
+        if error is not None:
+            valid, message = False, str(error)
+        else:
+            valid, message = result
 
         if valid:
             QMessageBox.information(self, "连接测试", "搜索配置可用。")
         else:
-            msg = f"连接失败: {error}" if error else "连接失败"
+            msg = f"连接失败: {message}" if message else "连接失败"
             QMessageBox.warning(self, "连接测试", msg)
 
     def collect(self) -> SearchConfig:

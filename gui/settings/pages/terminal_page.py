@@ -3,17 +3,17 @@ from __future__ import annotations
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QGroupBox,
-    QFormLayout,
     QComboBox,
-    QLineEdit,
     QCheckBox,
     QLabel,
+    QSpinBox,
 )
 
 from models.contracts.config import ShellConfig
 from gui.settings.page_header import build_page_header
 from gui.utils.combo_box import configure_combo_popup
+from gui.utils.form_builder import FormSection
+from gui.widgets.themed_line_edit import ThemedLineEdit
 
 
 class TerminalPage(QWidget):
@@ -32,8 +32,8 @@ class TerminalPage(QWidget):
         if not embedded:
             layout.addWidget(build_page_header("终端", "统一选择命令执行宿主、编码与默认可执行文件。"))
 
-        backend_group = QGroupBox("宿主 Shell")
-        backend_layout = QFormLayout(backend_group)
+        backend = FormSection("宿主 Shell")
+        backend_layout = backend.form
 
         self.backend_combo = QComboBox()
         configure_combo_popup(self.backend_combo)
@@ -44,7 +44,7 @@ class TerminalPage(QWidget):
         idx = self.backend_combo.findData(current_backend)
         self.backend_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self.backend_combo.currentIndexChanged.connect(self._update_preview)
-        backend_layout.addRow("默认后端:", self.backend_combo)
+        backend_layout.addRow("默认后端", self.backend_combo)
 
         self.encoding_combo = QComboBox()
         configure_combo_popup(self.encoding_combo)
@@ -55,11 +55,11 @@ class TerminalPage(QWidget):
         encoding_value = str(getattr(shell_config, "output_encoding", "auto") or "auto").strip().lower()
         encoding_idx = self.encoding_combo.findData(encoding_value)
         self.encoding_combo.setCurrentIndex(encoding_idx if encoding_idx >= 0 else 0)
-        backend_layout.addRow("输出编码:", self.encoding_combo)
+        backend_layout.addRow("输出编码", self.encoding_combo)
 
         self.inherit_env_check = QCheckBox("继承当前进程环境变量")
         self.inherit_env_check.setChecked(bool(getattr(shell_config, "inherit_env", True)))
-        backend_layout.addRow("环境:", self.inherit_env_check)
+        backend_layout.addRow("环境", self.inherit_env_check)
 
         self.bang_behavior_combo = QComboBox()
         configure_combo_popup(self.bang_behavior_combo)
@@ -68,32 +68,42 @@ class TerminalPage(QWidget):
         bang_behavior = str(getattr(shell_config, "bang_command_behavior", "shell") or "shell").strip().lower()
         bang_idx = self.bang_behavior_combo.findData(bang_behavior)
         self.bang_behavior_combo.setCurrentIndex(bang_idx if bang_idx >= 0 else 0)
-        backend_layout.addRow("! 命令处理方式:", self.bang_behavior_combo)
-        layout.addWidget(backend_group)
+        backend_layout.addRow("! 命令处理方式", self.bang_behavior_combo)
+        layout.addWidget(backend.group)
 
-        exec_group = QGroupBox("后端可执行文件")
-        exec_layout = QFormLayout(exec_group)
+        executables = FormSection("后端可执行文件")
+        exec_layout = executables.form
 
-        self.cmd_edit = QLineEdit()
+        self.cmd_edit = ThemedLineEdit()
         self.cmd_edit.setText(str(getattr(shell_config, "cmd_executable", "") or ""))
         self.cmd_edit.setPlaceholderText("留空则使用系统 COMSPEC / cmd.exe")
-        exec_layout.addRow("CMD:", self.cmd_edit)
+        exec_layout.addRow("CMD", self.cmd_edit)
 
-        self.powershell_edit = QLineEdit()
+        self.powershell_edit = ThemedLineEdit()
         self.powershell_edit.setText(str(getattr(shell_config, "powershell_executable", "powershell.exe") or "powershell.exe"))
         self.powershell_edit.setPlaceholderText("powershell.exe")
-        exec_layout.addRow("PowerShell:", self.powershell_edit)
+        exec_layout.addRow("PowerShell", self.powershell_edit)
 
-        self.wsl_edit = QLineEdit()
+        self.wsl_edit = ThemedLineEdit()
         self.wsl_edit.setText(str(getattr(shell_config, "wsl_executable", "wsl.exe") or "wsl.exe"))
         self.wsl_edit.setPlaceholderText("wsl.exe")
-        exec_layout.addRow("WSL:", self.wsl_edit)
+        exec_layout.addRow("WSL", self.wsl_edit)
 
-        self.wsl_distro_edit = QLineEdit()
+        self.wsl_distro_edit = ThemedLineEdit()
         self.wsl_distro_edit.setText(str(getattr(shell_config, "wsl_distro", "") or ""))
         self.wsl_distro_edit.setPlaceholderText("可选，例如 Ubuntu")
-        exec_layout.addRow("WSL 发行版:", self.wsl_distro_edit)
-        layout.addWidget(exec_group)
+        exec_layout.addRow("WSL 发行版", self.wsl_distro_edit)
+        layout.addWidget(executables.group)
+
+        waiting = FormSection("等待与后台")
+        timeout_layout = waiting.form
+
+        self.wait_seconds_spin = QSpinBox()
+        self.wait_seconds_spin.setRange(5, 600)
+        self.wait_seconds_spin.setSuffix(" 秒")
+        self.wait_seconds_spin.setValue(int(getattr(shell_config, "wait_seconds", 120) or 120))
+        timeout_layout.addRow("命令等待上限", self.wait_seconds_spin)
+        layout.addWidget(waiting.group)
 
         self.preview_label = QLabel("")
         self.preview_label.setWordWrap(True)
@@ -101,8 +111,9 @@ class TerminalPage(QWidget):
         layout.addWidget(self.preview_label)
 
         hint = QLabel(
-            "这里控制 shell__run / shell__start / shell__read / shell__kill 的默认宿主后端。"
-            "本轮先提供统一入口与管理能力，不引入完整 PTY/终端页签系统。"
+            "这里控制 shell__run / shell__read / shell__kill / shell__list 的默认宿主后端。"
+            "shell__run 超过等待上限会自动转入后台并返回 process_id，进程不会被终止；"
+            "可用 shell__read 跟踪进度、shell__kill 终止。"
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -131,5 +142,6 @@ class TerminalPage(QWidget):
             output_encoding=str(self.encoding_combo.currentData() or "auto").strip().lower() or "auto",
             inherit_env=bool(self.inherit_env_check.isChecked()),
             bang_command_behavior=str(self.bang_behavior_combo.currentData() or "shell").strip().lower() or "shell",
+            wait_seconds=int(self.wait_seconds_spin.value()),
         )
         return {"shell": config.to_dict(), "shell_backend": config.backend}

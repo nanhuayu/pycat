@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from html import escape
 
+from core.app.services.release import STABLE_RELEASE_PAGE
+from core.version import __version__
+
 
 PRODUCT_NAME = "PyCat"
 TAGLINE = "LLM 对话、Agent 和工具协作的桌面工作台"
@@ -11,6 +14,7 @@ CHAT_EMPTY_TITLE = "PyCat 工作台"
 CHAT_EMPTY_DESCRIPTION = "选好工作区和模型，直接写下目标。PyCat 会把对话、工具、文件和记忆串到同一条上下文里。"
 REPOSITORY_URL = "https://github.com/nanhuayu/pycat"
 REPOSITORY_LABEL = "nanhuayu/pycat"
+RELEASES_URL = STABLE_RELEASE_PAGE
 LICENSE_LABEL = "AGPL-3.0"
 
 
@@ -36,8 +40,10 @@ def about_dialog_html() -> str:
     return (
         f"<h2>{escape(PRODUCT_NAME)}</h2>"
         f"<p>{escape(TAGLINE)}</p>"
+        f"<p>版本：v{escape(__version__)}</p>"
         f"<p>{escape(INTRO)}</p>"
         f"<ul>{items}</ul>"
         f"<p><a href=\"{escape(REPOSITORY_URL)}\">GitHub · {escape(REPOSITORY_LABEL)}</a></p>"
+        f"<p><a href=\"{escape(RELEASES_URL)}\">查看 Release</a></p>"
         f"<p>许可证：{escape(LICENSE_LABEL)}</p>"
     )

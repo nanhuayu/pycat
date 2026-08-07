@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from html import escape
@@ -25,7 +24,33 @@ class MemoryAdvisor:
 
     def __init__(self, capability_executor: Any) -> None:
         self._executor = capability_executor
-        self._advice_cache: dict[str, tuple[str, str]] = {}
+
+    async def advise_current(
+        self,
+        *,
+        provider: Provider,
+        conversation: Conversation,
+        debug_trace: Any = None,
+    ) -> str:
+        """Build advice once at the real-user boundary of an Agent run."""
+        try:
+            state = conversation.get_state()
+            todo = next(
+                (item for item in (state.todos or []) if item.status == TodoStatus.IN_PROGRESS),
+                None,
+            )
+        except Exception:
+            todo = None
+        if todo is None:
+            return ""
+        return await self.advise(
+            provider=provider,
+            conversation=conversation,
+            todo=todo,
+            query=self._latest_user_query(conversation),
+            sources=(conversation.settings or {}).get("memory_sources"),
+            debug_trace=debug_trace,
+        )
 
     async def advise(
         self,
@@ -60,12 +85,6 @@ class MemoryAdvisor:
             return ""
 
         catalog = self._catalog(snippets)
-        cache_key = self._advice_key(todo, catalog)
-        conversation_id = str(getattr(conversation, "id", "") or "")
-        cached = self._advice_cache.get(conversation_id)
-        if cached and cached[0] == cache_key:
-            return cached[1]
-
         payload = {
             "milestone": {
                 "id": str(getattr(todo, "id", "") or ""),
@@ -95,7 +114,6 @@ class MemoryAdvisor:
         except Exception as exc:
             logger.debug("Memory advice failed: %s", exc)
             content = ""
-        self._advice_cache[conversation_id] = (cache_key, content)
         return content
 
     async def curate(
@@ -205,17 +223,14 @@ class MemoryAdvisor:
         ]
 
     @staticmethod
-    def _advice_key(todo: Any, catalog: list[dict[str, Any]]) -> str:
-        raw = json.dumps(
-            {
-                "todo_id": str(getattr(todo, "id", "") or ""),
-                "todo_updated_seq": int(getattr(todo, "updated_seq", 0) or 0),
-                "catalog": catalog,
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-        )
-        return hashlib.sha1(raw.encode("utf-8", errors="replace")).hexdigest()
+    def _latest_user_query(conversation: Conversation) -> str:
+        for message in reversed(getattr(conversation, "messages", []) or []):
+            if getattr(message, "role", "") != "user":
+                continue
+            content = str(getattr(message, "content", "") or "").strip()
+            if content:
+                return content
+        return ""
 
     @classmethod
     def _render_advice(cls, parsed: Any, catalog: list[dict[str, Any]]) -> str:

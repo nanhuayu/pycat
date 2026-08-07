@@ -31,7 +31,6 @@ class AppearancePage(QWidget):
         *,
         theme: str = "light",
         accent: str = DEFAULT_ACCENT,
-        show_stats: bool = False,
         show_thinking: bool = True,
         close_to_tray: bool = True,
         log_stream: bool = False,
@@ -44,7 +43,6 @@ class AppearancePage(QWidget):
         self._setup_ui(
             theme,
             accent,
-            show_stats,
             show_thinking,
             close_to_tray,
             log_stream,
@@ -57,7 +55,6 @@ class AppearancePage(QWidget):
         self,
         theme: str,
         accent: str,
-        show_stats: bool,
         show_thinking: bool,
         close_to_tray: bool,
         log_stream: bool,
@@ -88,8 +85,10 @@ class AppearancePage(QWidget):
         self.accent_combo.setCurrentIndex(accent_index if accent_index >= 0 else 0)
         configure_combo_popup(self.accent_combo)
         interface.form.addRow("强调色", self.accent_combo)
-        self.stats_check = interface.add_checkbox("显示右侧辅助面板", checked=bool(show_stats))
-        self.thinking_check = interface.add_checkbox("显示思考过程", checked=bool(show_thinking))
+        self.thinking_check = interface.add_checkbox(
+            "新会话默认显示推理过程",
+            checked=bool(show_thinking),
+        )
         self.close_to_tray_check = interface.add_checkbox(
             "关闭窗口时最小化到系统托盘",
             checked=bool(close_to_tray),
@@ -110,7 +109,7 @@ class AppearancePage(QWidget):
             decimals=0,
             tooltip="模型请求的总超时，包括首包等待、流式响应和长输出。",
         )
-        self.log_stream_check = runtime.add_checkbox("记录流式调试日志", checked=bool(log_stream))
+        self.log_stream_check = runtime.add_checkbox("保存完整调试载荷", checked=bool(log_stream))
         layout.addWidget(runtime.group)
 
         layout.addStretch()
@@ -121,7 +120,6 @@ class AppearancePage(QWidget):
             "llm_timeout_seconds": float(self.timeout_spin.value()),
             "theme": "dark" if self.theme_combo.currentIndex() == 1 else "light",
             "accent": str(self.accent_combo.currentData() or DEFAULT_ACCENT),
-            "show_stats": bool(self.stats_check.isChecked()),
             "show_thinking": bool(self.thinking_check.isChecked()),
             "close_to_tray": bool(self.close_to_tray_check.isChecked()),
             "log_stream": bool(self.log_stream_check.isChecked()),

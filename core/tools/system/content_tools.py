@@ -12,6 +12,13 @@ from core.tools.base import BaseTool, ToolContext, ToolResult
 ARCHIVE_CONTENT_CHARS = 8000
 
 
+def _archive_work_dir(context: ToolContext) -> str:
+    conversation = getattr(context, "conversation", None)
+    if conversation is not None:
+        return str(getattr(conversation, "work_dir", "") or "")
+    return str(getattr(context, "work_dir", "") or "")
+
+
 def _session_ids(context: ToolContext) -> list[str | None]:
     values: list[str | None] = []
     current = getattr(getattr(context, "conversation", None), "id", None)
@@ -25,8 +32,9 @@ def _session_ids(context: ToolContext) -> list[str | None]:
 
 
 def _find_record(context: ToolContext, content_id: str):
+    work_dir = _archive_work_dir(context)
     for session_id in _session_ids(context):
-        store = SessionArchiveStore(context.work_dir, conversation_id=session_id)
+        store = SessionArchiveStore(work_dir, conversation_id=session_id)
         record = store.read_record(content_id)
         if record is not None:
             return store, record, session_id
@@ -57,7 +65,7 @@ class ArchiveListTool(BaseTool):
             "properties": {
                 "kind": {
                     "type": "string",
-                    "enum": ["tool_call", "history", "artifact"],
+                    "enum": ["tool_call", "history"],
                     "description": "Optional archive kind.",
                 },
                 "limit": {"type": "integer", "description": "Maximum records; default 20, max 50."},
@@ -73,8 +81,9 @@ class ArchiveListTool(BaseTool):
             return ToolResult(f"Invalid argument: {exc}", is_error=True)
         records = []
         seen: set[str] = set()
+        work_dir = _archive_work_dir(context)
         for session_id in _session_ids(context):
-            store = SessionArchiveStore(context.work_dir, conversation_id=session_id)
+            store = SessionArchiveStore(work_dir, conversation_id=session_id)
             for record in store.list_records(kind=kind, limit=limit):
                 if record.id in seen:
                     continue
@@ -147,15 +156,30 @@ class ArchiveReadTool(BaseTool):
                 images = store.read_images(record)
             except Exception as exc:
                 return ToolResult(f"Archive read error: {exc}", is_error=True)
-            if len(exact) < MIN_LLM_COMPRESSION_CHARS and not images:
+            if len(exact) <= MIN_LLM_COMPRESSION_CHARS and not images:
                 return self._result_with_images(
                     f"[content:0-{len(exact)}]\ncontent_id={content_id}\nexact=true\nnext_offset=none\n{exact}"
                 )
+            compression_tasks = getattr(getattr(context, "runtime", None), "compression_tasks", None)
+            if compression_tasks is not None:
+                compression_tasks.submit(content_id, priority="urgent")
+                await compression_tasks.wait(content_id)
+                refreshed = store.read_record(content_id)
+                if refreshed is not None and refreshed.summary:
+                    self._sync_state(context)
+                    return ToolResult(f"[summary]\ncontent_id={content_id}\n{refreshed.summary}")
+                end = min(len(exact), ARCHIVE_CONTENT_CHARS)
+                next_offset = end if end < len(exact) else None
+                return self._result_with_images(
+                    f"[content:0-{end}]\ncontent_id={content_id}\nexact=true\n"
+                    f"next_offset={next_offset if next_offset is not None else 'none'}\n{exact[:end]}",
+                    images,
+                )
             service = ArchiveViewService(
-                work_dir=context.work_dir,
+                work_dir=_archive_work_dir(context),
                 conversation_id=session_id,
                 conversation=getattr(context, "conversation", None),
-                compressor=self._compressor(context, store),
+                compressor=self._compressor(context),
             )
             result = await service.get_or_create_summary(
                 content_id,
@@ -200,15 +224,13 @@ class ArchiveReadTool(BaseTool):
         return ToolResult(blocks)
 
     @staticmethod
-    def _compressor(context: ToolContext, store: SessionArchiveStore):
+    def _compressor(context: ToolContext):
         runtime = getattr(context, "runtime", None)
-        factory = getattr(runtime, "archive_compressor_factory", None)
+        factory = getattr(runtime, "compression_factory", None)
         if factory is None:
             return None
         return factory(
-            client=getattr(context, "llm_client", None),
             provider=getattr(context, "provider", None),
-            store=store,
             debug_trace=getattr(runtime, "debug_trace", None),
         )
 

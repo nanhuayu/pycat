@@ -1,16 +1,32 @@
 """LLM provider/service connection configuration model."""
 
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Iterable
-import uuid
 import json
+import logging
+import uuid
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, List
 
 from models.model_profile import ModelProfile
 from models.model_ref import (
     build_model_ref,
     normalize_provider_name,
-    provider_matches_name,
-    split_model_ref,
+)
+
+logger = logging.getLogger(__name__)
+
+# Model profiles may add endpoint-specific headers, but must not replace the
+# transport/authentication headers assembled by Provider.  Provider-level
+# custom headers remain the explicit gateway escape hatch.
+_MODEL_RESERVED_HEADERS = frozenset(
+    {
+        "authorization",
+        "x-api-key",
+        "host",
+        "content-length",
+        "content-type",
+        "transfer-encoding",
+        "anthropic-version",
+    }
 )
 
 OPENAI_COMPATIBLE = "openai_compatible"
@@ -20,7 +36,7 @@ OLLAMA_CHAT = "ollama_chat"
 
 ANTHROPIC_NATIVE = ANTHROPIC_MESSAGES
 DEFAULT_API_TYPE = OPENAI_COMPATIBLE
-PROVIDER_SCHEMA_VERSION = 3
+PROVIDER_SCHEMA_VERSION = 6
 
 SUPPORTED_API_TYPES = {
     OPENAI_COMPATIBLE,
@@ -90,23 +106,34 @@ def _strip_api_version_suffix(base_url: str) -> str:
 class Provider:
     """Represents an LLM provider configuration"""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    catalog_key: str = ""
     name: str = "New Provider"
     api_type: str = DEFAULT_API_TYPE
     api_base: str = "https://api.openai.com/v1"
     api_key: str = ""
     models: List[ModelProfile] = field(default_factory=list)
     custom_headers: Dict[str, str] = field(default_factory=dict)
-    supports_reasoning: bool = False
-    supports_vision: bool = True
     enabled: bool = True
 
     def __post_init__(self) -> None:
         self.normalize_inplace()
 
     def normalize_inplace(self) -> None:
+        self.catalog_key = str(getattr(self, "catalog_key", "") or "").strip().lower()
         self.name = normalize_provider_name(self.name)
         self.api_type = normalize_api_type(getattr(self, "api_type", DEFAULT_API_TYPE))
+        self.custom_headers = self._normalize_headers(getattr(self, "custom_headers", {}) or {})
         self.models = self._normalize_models(getattr(self, "models", []) or [])
+
+    @staticmethod
+    def _normalize_headers(value: Any) -> Dict[str, str]:
+        if not isinstance(value, dict):
+            return {}
+        return {
+            str(key).strip(): str(item or "").strip()
+            for key, item in value.items()
+            if str(key or "").strip()
+        }
 
     def _normalize_models(self, values: Iterable[Any]) -> List[ModelProfile]:
         out: List[ModelProfile] = []
@@ -117,11 +144,7 @@ class Provider:
             elif isinstance(value, dict):
                 profile = ModelProfile.from_dict(value)
             else:
-                profile = ModelProfile.from_model_id(
-                    str(value or "").strip(),
-                    supports_vision=bool(self.supports_vision),
-                    supports_reasoning=bool(self.supports_reasoning),
-                )
+                profile = ModelProfile.from_model_id(str(value or "").strip())
             if not profile.model_id or profile.model_id in seen:
                 continue
             out.append(profile)
@@ -147,6 +170,19 @@ class Provider:
     @property
     def is_chat_completions_like(self) -> bool:
         return self.api_type == OPENAI_COMPATIBLE
+
+    @property
+    def is_openrouter_route(self) -> bool:
+        """Whether this Provider uses OpenRouter's Chat wire variant.
+
+        OpenRouter is a route marker, not an API type.  Keep the envelope
+        check here so discovery, request construction and GUI codec filtering
+        cannot silently disagree about a provider named ``openrouter``.
+        """
+
+        return self.is_chat_completions_like and (
+            self.catalog_key == "openrouter" or self.canonical_name == "openrouter"
+        )
 
     @property
     def requires_api_key(self) -> bool:
@@ -177,11 +213,7 @@ class Provider:
         explicit = self.find_model_profile(target)
         if explicit is not None:
             return ModelProfile.from_dict(explicit.to_dict())
-        return ModelProfile.from_model_id(
-            target,
-            supports_vision=bool(self.supports_vision),
-            supports_reasoning=bool(self.supports_reasoning),
-        )
+        return ModelProfile.from_model_id(target)
 
     def upsert_model(self, profile: ModelProfile) -> None:
         normalized = ModelProfile.from_dict(profile.to_dict())
@@ -202,78 +234,29 @@ class Provider:
         return {
             'schema_version': PROVIDER_SCHEMA_VERSION,
             'id': self.id,
+            'catalog_key': self.catalog_key,
             'name': self.name,
             'api_type': self.api_type,
             'api_base': self.api_base,
             'api_key': self.api_key,
             'models': [profile.to_dict() for profile in self.models],
             'custom_headers': self.custom_headers,
-            'supports_reasoning': self.supports_reasoning,
-            'supports_vision': self.supports_vision,
             'enabled': self.enabled
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Provider':
         """Create from dictionary"""
-        supports_reasoning = data.get('supports_reasoning', data.get('supports_thinking', False))
-        supports_vision = data.get('supports_vision', True)
         raw_models = list(data.get('models', []) or [])
-        schema_version = int(data.get('schema_version', 1) or 1)
-        if schema_version < PROVIDER_SCHEMA_VERSION:
-            explicit = {
-                profile.model_id: profile
-                for profile in (
-                    ModelProfile.from_dict(item)
-                    for item in (data.get('model_profiles', []) or [])
-                )
-                if profile.model_id
-            }
-            legacy_request = data.get('request_format') if isinstance(data.get('request_format'), dict) else {}
-            selected_ids: list[str] = []
-
-            def select(model_id: object) -> None:
-                value = str(model_id or "").strip()
-                if value and value not in selected_ids:
-                    selected_ids.append(value)
-
-            select(data.get('default_model'))
-            for item in raw_models:
-                model_id = str(item or "").strip() if not isinstance(item, dict) else str(item.get('model_id') or "").strip()
-                if model_id in explicit:
-                    select(model_id)
-            for model_id in explicit:
-                select(model_id)
-            if not selected_ids and raw_models:
-                first = raw_models[0]
-                select(first.get('model_id') if isinstance(first, dict) else first)
-
-            migrated_models: list[ModelProfile] = []
-            for model_id in selected_ids:
-                profile = explicit.get(model_id) or ModelProfile.from_model_id(
-                    model_id,
-                    supports_vision=bool(supports_vision),
-                    supports_reasoning=bool(supports_reasoning),
-                )
-                if legacy_request:
-                    payload = profile.to_dict()
-                    payload['request_overrides'] = {
-                        **legacy_request,
-                        **dict(payload.get('request_overrides') or {}),
-                    }
-                    profile = ModelProfile.from_dict(payload)
-                migrated_models.append(profile)
-            raw_models = migrated_models
         return cls(
             id=data.get('id', str(uuid.uuid4())),
+            catalog_key=data.get('catalog_key', ''),
             name=data.get('name', 'Provider'),
             api_type=data.get('api_type', DEFAULT_API_TYPE),
             api_base=data.get('api_base', 'https://api.openai.com/v1'),
             api_key=data.get('api_key', ''),
             models=raw_models,
             custom_headers=data.get('custom_headers', {}),
-            supports_reasoning=supports_reasoning,
-            supports_vision=supports_vision,
             enabled=data.get('enabled', True)
         )
 
@@ -287,7 +270,7 @@ class Provider:
         data = json.loads(json_str)
         return cls.from_dict(data)
 
-    def get_headers(self) -> Dict[str, str]:
+    def get_headers(self, model_id: str = "") -> Dict[str, str]:
         """Get complete headers for API requests"""
         headers = {
             'Content-Type': 'application/json',
@@ -299,6 +282,13 @@ class Provider:
         elif self.api_key:
             headers['Authorization'] = f'Bearer {self.api_key}'
         headers.update(self.custom_headers)
+        profile = self.find_model_profile(model_id)
+        if profile is not None:
+            for key, value in profile.custom_headers.items():
+                if str(key).strip().lower() in _MODEL_RESERVED_HEADERS:
+                    logger.warning("忽略模型级保留请求头: %s", key)
+                    continue
+                headers[key] = value
         return headers
 
     def get_chat_endpoint(self) -> str:

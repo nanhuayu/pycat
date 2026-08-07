@@ -47,6 +47,16 @@ def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--work-dir", default="")
     parser.add_argument("--conversation", default="")
     parser.add_argument("--output", choices=["text", "json"], default="text")
+    parser.add_argument(
+        "--permission",
+        choices=["default", "ask", "deny", "allow", "custom"],
+        default="",
+        help=(
+            "Conversation permission preset: default, ask, deny, allow, or custom. "
+            "'allow' runs high-risk tools without confirmation. "
+            "Omit to keep the conversation's stored preset."
+        ),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
             work_dir=args.work_dir,
             conversation_id=args.conversation,
             output=args.output,
+            permission=args.permission,
         )))
     if args.command == "chat":
         return asyncio.run(executor.chat(
@@ -78,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
             model=args.model,
             work_dir=args.work_dir,
             output_mode=args.output,
+            permission=args.permission,
         ))
     if args.command == "list":
         return executor.list_items(args.target, output_mode=args.output, work_dir=args.work_dir)

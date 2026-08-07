@@ -26,9 +26,12 @@ from PyQt6.QtWidgets import (
 )
 
 from models.conversation import Conversation
-from core.agent.events import resolve_debug_trace_dir
+from core.observability import resolve_debug_trace_dir
+from core.observability.debug_trace import redact_debug_payload
+from core.content.archive_store import SessionArchiveStore
 from gui.utils.icon_manager import Icons
 from gui.utils.window_geometry import apply_workbench_dialog_size
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedPlainTextEdit, ThemedSelectableLabel
 
 
 def _short_id(value: object, *, head: int = 8, tail: int = 4) -> str:
@@ -67,6 +70,10 @@ class DebugTraceDialog(QDialog):
 
         self._conversation = conversation
         self._debug_dir = self._resolve_debug_dir(conversation)
+        self._archive_store = SessionArchiveStore(
+            str(getattr(conversation, "work_dir", "") or "."),
+            conversation_id=str(getattr(conversation, "id", "") or "default"),
+        )
         self._events: list[dict[str, Any]] = []
         self._node_events: dict[str, list[dict[str, Any]]] = {}
         self._items: dict[str, QTreeWidgetItem] = {}
@@ -88,7 +95,7 @@ class DebugTraceDialog(QDialog):
         root.setSpacing(8)
 
         header = QHBoxLayout()
-        self.subtitle = QLabel("")
+        self.subtitle = ThemedSelectableLabel("")
         self.subtitle.setProperty("muted", True)
         self.subtitle.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         header.addWidget(self.subtitle, 1)
@@ -115,7 +122,7 @@ class DebugTraceDialog(QDialog):
         left_layout.setContentsMargins(0, 0, 8, 0)
         left_layout.setSpacing(8)
 
-        self.search_edit = QLineEdit()
+        self.search_edit = ThemedLineEdit()
         self.search_edit.setPlaceholderText("搜索节点 / 工具 / request_id")
         self.search_edit.textChanged.connect(self._apply_filter)
         left_layout.addWidget(self.search_edit)
@@ -168,15 +175,20 @@ class DebugTraceDialog(QDialog):
         self.tabs.setCornerWidget(self.copy_tab_btn, Qt.Corner.TopRightCorner)
         self.overview_text = self._json_view()
         self.request_text = self._json_view()
-        self.response_text = self._json_view()
+        self.raw_result_text = self._json_view()
+        self.model_result_text = self._json_view()
+        self.event_text = self._json_view()
+        self.response_text = self.model_result_text
         self.tabs.addTab(self.overview_text, "概览")
         self.tabs.addTab(self.request_text, "请求")
-        self.tabs.addTab(self.response_text, "响应/事件")
+        self.tabs.addTab(self.raw_result_text, "原始结果")
+        self.tabs.addTab(self.model_result_text, "模型视图")
+        self.tabs.addTab(self.event_text, "事件")
         right_layout.addWidget(self.tabs, 1)
         splitter.addWidget(right)
         splitter.setSizes([320, 780])
 
-        self.path_label = QLabel("")
+        self.path_label = ThemedSelectableLabel("")
         self.path_label.setProperty("muted", True)
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         root.addWidget(self.path_label)
@@ -199,7 +211,7 @@ class DebugTraceDialog(QDialog):
         layout.setSpacing(2)
         label_widget = QLabel(label)
         label_widget.setObjectName("stat_label")
-        value_widget = QLabel("-")
+        value_widget = ThemedSelectableLabel("-")
         value_widget.setObjectName("stat_value")
         value_widget.setWordWrap(True)
         value_widget.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -215,7 +227,7 @@ class DebugTraceDialog(QDialog):
             label.setText(str(value or "-"))
 
     def _json_view(self) -> QPlainTextEdit:
-        edit = QPlainTextEdit()
+        edit = ThemedPlainTextEdit()
         edit.setReadOnly(True)
         edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         edit.setTextInteractionFlags(
@@ -454,7 +466,9 @@ class DebugTraceDialog(QDialog):
         if not events:
             self.overview_text.setPlainText("暂无事件")
             self.request_text.setPlainText("未保存 payload")
-            self.response_text.setPlainText("暂无事件")
+            self.raw_result_text.setPlainText("暂无原始结果")
+            self.model_result_text.setPlainText("暂无模型视图")
+            self.event_text.setPlainText("暂无事件")
             return
         first = events[0]
         last = events[-1]
@@ -491,21 +505,169 @@ class DebugTraceDialog(QDialog):
         self.overview_text.setPlainText(_pretty_json(overview))
         kind = str(first.get("kind") or last.get("kind") or "")
         self.tabs.setTabText(1, "请求参数" if kind == "tool" else "请求")
-        self.tabs.setTabText(2, "工具响应" if kind == "tool" else "响应/事件")
-        fallback_request = self._request_fallback(events)
-        self.request_text.setPlainText(
-            self._load_ref(refs.get("request"), empty=_pretty_json(fallback_request) if fallback_request else "未保存 payload")
+        self.tabs.setTabText(2, "原始结果" if kind == "tool" else "原始响应")
+        self.tabs.setTabText(3, "模型视图" if kind == "tool" else "响应")
+        response_payload, response_state = self._load_json_ref(refs.get("response"))
+        content_id = self._content_id(events, response_payload)
+        request_text = self._tool_request_text(
+            events,
+            refs=refs,
+            content_id=content_id,
         )
-        response = self._load_ref(refs.get("response"), empty="")
-        event_text = _pretty_json(events)
-        if response:
-            self.response_text.setPlainText(response + "\n\n--- events ---\n" + event_text)
+        self.request_text.setPlainText(request_text)
+        if kind == "tool":
+            self.raw_result_text.setPlainText(
+                self._tool_raw_result_text(
+                    response_payload,
+                    response_state=response_state,
+                    content_id=content_id,
+                )
+            )
+            self.model_result_text.setPlainText(
+                self._tool_model_result_text(
+                    events,
+                    response_payload=response_payload,
+                    response_state=response_state,
+                )
+            )
         else:
-            fallback_response = self._response_fallback(events)
-            if fallback_response:
-                self.response_text.setPlainText(_pretty_json(fallback_response) + "\n\n--- events ---\n" + event_text)
-            else:
-                self.response_text.setPlainText(event_text)
+            response = self._load_ref(refs.get("response"), empty="未保存完整响应 payload")
+            self.raw_result_text.setPlainText(response)
+            self.model_result_text.setPlainText(response)
+        self.event_text.setPlainText(_pretty_json(events))
+
+    def _tool_request_text(
+        self,
+        events: list[dict[str, Any]],
+        *,
+        refs: dict[str, str],
+        content_id: str,
+    ) -> str:
+        request_payload, state = self._load_json_ref(refs.get("request"))
+        if request_payload is not None and not self._contains_truncation(request_payload):
+            return self._labeled_payload("Trace request attachment", "exact", request_payload)
+        archived_input = self._archive_input(content_id)
+        if archived_input is not None:
+            reason = "attachment missing" if request_payload is None else "legacy attachment truncated"
+            return self._labeled_payload(f"Archive input ({reason})", "exact", archived_input)
+        fallback = self._request_fallback(events)
+        if request_payload is not None:
+            return self._labeled_payload("Legacy Trace request attachment", "partial", request_payload)
+        if fallback:
+            return self._labeled_payload("Bounded start event", "derived", fallback)
+        return f"source: {state or 'missing'}\nexactness: unavailable\n\n未保存请求参数，Archive 中也没有可恢复 input。"
+
+    def _tool_raw_result_text(
+        self,
+        response_payload: Any,
+        *,
+        response_state: str,
+        content_id: str,
+    ) -> str:
+        raw_result = response_payload.get("raw_result") if isinstance(response_payload, dict) else None
+        raw_content = raw_result.get("content") if isinstance(raw_result, dict) else None
+        if raw_content is not None and not self._contains_truncation(raw_content):
+            return self._labeled_content("Trace response attachment", "exact", raw_content)
+        archived = self._archive_original(content_id)
+        if archived is not None:
+            reason = "attachment missing" if raw_content is None else "legacy attachment truncated"
+            return self._labeled_content(f"Archive original ({reason})", "exact", archived)
+        if raw_content is not None:
+            return self._labeled_content("Legacy Trace response attachment", "partial", raw_content)
+        detail = response_state or "response attachment missing"
+        return (
+            f"source: {detail}\nexactness: unavailable\ncontent_id: {content_id or '-'}\n\n"
+            "未保存原始结果，且 Archive 原文不存在。"
+        )
+
+    def _tool_model_result_text(
+        self,
+        events: list[dict[str, Any]],
+        *,
+        response_payload: Any,
+        response_state: str,
+    ) -> str:
+        model_result = response_payload.get("model_result") if isinstance(response_payload, dict) else None
+        content = model_result.get("content") if isinstance(model_result, dict) else None
+        if content is not None:
+            return self._labeled_content("Trace response attachment", "derived", content)
+        fallback = self._response_fallback(events)
+        if fallback:
+            return self._labeled_payload("Bounded end event", "derived", fallback)
+        return f"source: {response_state or 'missing'}\nexactness: unavailable\n\n未保存模型实际收到的结果。"
+
+    def _archive_original(self, content_id: str) -> str | None:
+        if not content_id:
+            return None
+        try:
+            record = self._archive_store.read_record(content_id)
+            if record is None:
+                return None
+            return str(redact_debug_payload(self._archive_store.read_original(record)))
+        except Exception:
+            return None
+
+    def _archive_input(self, content_id: str) -> Any:
+        if not content_id:
+            return None
+        try:
+            value = self._archive_store.read_input(content_id)
+            return redact_debug_payload(value) if value is not None else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _content_id(events: list[dict[str, Any]], response_payload: Any) -> str:
+        if isinstance(response_payload, dict) and isinstance(response_payload.get("archive"), dict):
+            value = str(response_payload["archive"].get("content_id") or "").strip()
+            if value:
+                return value
+        for event in reversed(events):
+            data = event.get("data") if isinstance(event.get("data"), dict) else {}
+            value = str(data.get("content_id") or "").strip()
+            if value:
+                return value
+            refs = event.get("refs") if isinstance(event.get("refs"), dict) else {}
+            value = str(refs.get("content_id") or "").strip()
+            if value:
+                return value
+        return ""
+
+    @staticmethod
+    def _contains_truncation(value: Any) -> bool:
+        if isinstance(value, dict):
+            if value.get("truncated") is True and "preview" in value:
+                return True
+            return any(DebugTraceDialog._contains_truncation(item) for item in value.values())
+        if isinstance(value, list):
+            return any(DebugTraceDialog._contains_truncation(item) for item in value)
+        return False
+
+    @staticmethod
+    def _content_text(value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            parts: list[str] = []
+            for item in value:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text") or ""))
+                elif isinstance(item, dict) and item.get("type") in {"image", "image_ref"}:
+                    parts.append(_pretty_json(item))
+                else:
+                    parts.append(_pretty_json(item) if isinstance(item, (dict, list)) else str(item))
+            return "\n".join(parts)
+        return _pretty_json(value) if isinstance(value, (dict, list)) else str(value or "")
+
+    @classmethod
+    def _labeled_content(cls, source: str, exactness: str, value: Any) -> str:
+        text = cls._content_text(value)
+        return f"source: {source}\nexactness: {exactness}\ncharacters: {len(text)}\n\n{text}"
+
+    @staticmethod
+    def _labeled_payload(source: str, exactness: str, value: Any) -> str:
+        text = _pretty_json(value)
+        return f"source: {source}\nexactness: {exactness}\ncharacters: {len(text)}\n\n{text}"
 
     @staticmethod
     def _request_fallback(events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -576,6 +738,22 @@ class DebugTraceDialog(QDialog):
                 return raw
         except Exception as exc:
             return f"读取失败: {exc}"
+
+    def _load_json_ref(self, relative: str | None) -> tuple[Any, str]:
+        rel = str(relative or "").strip()
+        if not rel:
+            return None, "attachment not recorded"
+        target = (self._debug_dir / rel).resolve()
+        try:
+            target.relative_to(self._debug_dir.resolve())
+        except ValueError:
+            return None, "invalid attachment path"
+        if not target.is_file():
+            return None, "attachment file missing"
+        try:
+            return json.loads(target.read_text(encoding="utf-8")), ""
+        except Exception as exc:
+            return None, f"attachment parse failed: {exc}"
 
     def _copy_request_id(self) -> None:
         request_id = ""

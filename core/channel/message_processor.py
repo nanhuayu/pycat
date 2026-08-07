@@ -56,6 +56,51 @@ class ChannelMessageProcessor:
             binding_key=resolved_key,
             user_id=user_id,
         )
+        conversation_id = str(getattr(conversation, "id", "") or "").strip()
+        begin_turn = getattr(self._conv_service, "begin_turn", None)
+        if callable(begin_turn) and not begin_turn(conversation_id):
+            logger.debug("Conversation %s is already active; rejecting channel turn", conversation_id)
+            return None
+        activity_claimed = callable(begin_turn)
+        try:
+            return self._process_resolved_message(
+                channel,
+                message,
+                conversation=conversation,
+                focus_requested=focus_requested,
+                resolved_key=resolved_key,
+                user_id=user_id,
+                thread_id=thread_id,
+                reply_user=reply_user,
+                context_token=context_token,
+                platform_label=platform_label,
+                reply_normalizer=reply_normalizer,
+                binding_updates=binding_updates,
+                reply_sender=reply_sender,
+            )
+        finally:
+            if activity_claimed:
+                end_turn = getattr(self._conv_service, "end_turn", None)
+                if callable(end_turn):
+                    end_turn(conversation_id)
+
+    def _process_resolved_message(
+        self,
+        channel: ChannelConfig,
+        message: Message,
+        *,
+        conversation: Conversation,
+        focus_requested: bool,
+        resolved_key: str,
+        user_id: str,
+        thread_id: str,
+        reply_user: str,
+        context_token: str,
+        platform_label: str,
+        reply_normalizer: Callable[[str], str] | None,
+        binding_updates: dict[str, Any] | None,
+        reply_sender: Callable[[str, Message | None], None] | None,
+    ) -> tuple[Conversation, str] | None:
         self._session_resolver.remember_binding_context(
             conversation,
             channel,

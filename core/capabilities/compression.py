@@ -1,23 +1,23 @@
 """Capability-backed, model-aware context compression."""
 from __future__ import annotations
 
-import json
 import logging
 import time
 from types import SimpleNamespace
 from typing import Any
 
 from core.capabilities import CapabilityConfig
-from core.content.archive_store import ArchivedContentRecord, SessionArchiveStore
 from core.context.compression import (
     COMPRESSION_IMAGE_TOKEN_RESERVE,
     COMPRESSION_INPUT_SAFETY_RATIO,
-    MAP_SUMMARY_CHARS,
-    MAX_SUMMARY_CHARS,
+    CompressionPurpose,
     CompressionResult,
-    CompressionSource,
+    compression_chunk_prompt,
+    compression_document_prompt,
+    compression_reduce_prompt,
+    compression_system_contract,
     group_sections_by_token_budget,
-    json_output_contract,
+    parse_compression_result,
     split_text_by_token_budget,
 )
 from core.llm.model_selection import ResolvedModelSelection
@@ -30,107 +30,31 @@ logger = logging.getLogger(__name__)
 MAX_REDUCE_LEVELS = 8
 
 
-class CapabilityCompressionOrchestrator:
+class CapabilityCompressor:
     def __init__(
         self,
-        client: Any,
         provider: Provider,
-        store: SessionArchiveStore | None = None,
-        capability_executor: Any = None,
+        *,
+        capability_executor: Any,
         debug_trace: Any = None,
     ) -> None:
-        self.client = client
         self.provider = provider
-        self.store = store
         self.debug_trace = debug_trace
         self.capability_executor = capability_executor
 
-    async def summarize_archive(
-        self,
-        record: ArchivedContentRecord,
-        *,
-        conversation: Conversation | None = None,
-        purpose: str = "maintenance",
-    ) -> CompressionResult:
-        store = self._store(conversation)
-        text = store.read_original(record)
-        result = await self._summarize_text(
-            text,
-            images=store.read_images(record),
-            conversation=conversation,
-            purpose=purpose,
-            content_id=record.id,
-            source=record.source or record.title,
-            material="archived content",
-        )
-        return result
-
-    async def compress_history(
-        self,
-        source: CompressionSource,
-        *,
-        conversation: Conversation | None = None,
-    ) -> CompressionResult:
-        return await self._summarize_text(
-            source.text,
-            images=list(source.images),
-            conversation=conversation,
-            purpose="history_compaction",
-            content_id="",
-            source="conversation history",
-            material="conversation material",
-        )
-
-    def apply_archive_summary(
-        self,
-        record: ArchivedContentRecord,
-        result: CompressionResult,
-        *,
-        conversation: Conversation | None = None,
-    ) -> ArchivedContentRecord:
-        store = self._store(conversation)
-        record.metadata = dict(record.metadata or {})
-        record.metadata.update(
-            {
-                "compressed_token_estimate": int(result.token_estimate or 0),
-                "compression_calls": int(result.calls or 0),
-                "compression_chunks": int(result.chunks or 0),
-                "compression_reduce_levels": int(result.reduce_levels or 0),
-                "compression_strategy": str(result.strategy or ""),
-                "compression_vision_fallback": bool(result.vision_fallback),
-            }
-        )
-        if result.summary:
-            store.write_summary_view(
-                record,
-                summary=result.summary,
-                source=f"capability__{result.capability_id or 'compress'}",
-                model=result.model,
-                metadata={
-                    "fallback": result.status == "fallback",
-                    "calls": int(result.calls or 0),
-                    "chunks": int(result.chunks or 0),
-                    "reduce_levels": int(result.reduce_levels or 0),
-                    "strategy": str(result.strategy or ""),
-                    "vision_fallback": bool(result.vision_fallback),
-                },
-            )
-        else:
-            store.mark_summary_failed(record, error=result.error or result.status)
-        return store.read_record(record.id) or record
-
-    async def _summarize_text(
+    async def compress(
         self,
         text: str,
         *,
-        images: list[str],
-        conversation: Conversation | None,
-        purpose: str,
-        content_id: str,
-        source: str,
-        material: str,
+        purpose: CompressionPurpose,
+        images: list[str] | None = None,
+        conversation: Conversation | None = None,
+        trace_purpose: str = "",
+        content_id: str = "",
     ) -> CompressionResult:
+        compression_system_contract(purpose)
         started_at = time.monotonic()
+        trace_name = str(trace_purpose or purpose)
         capability = self._capability("compress")
         selection = self.capability_executor.resolve_capability_target(
             provider=self.provider,
@@ -155,14 +79,12 @@ class CapabilityCompressionOrchestrator:
         prompt_budget = self._prompt_budget_tokens(
             capability,
             selection,
+            purpose=purpose,
             image_count=len(usable_images),
         )
-        full_prompt = self._document_prompt(
+        full_prompt = compression_document_prompt(
             text,
             purpose=purpose,
-            content_id=content_id,
-            source=source,
-            material=material,
         )
         if estimate_tokens(full_prompt) <= prompt_budget:
             result = await self._run_capability(
@@ -171,7 +93,7 @@ class CapabilityCompressionOrchestrator:
                 conversation=conversation,
                 selection=selection,
                 images=usable_images,
-                max_chars=MAX_SUMMARY_CHARS,
+                purpose=purpose,
             )
             result.calls = 1
             result.chunks = 1
@@ -182,17 +104,15 @@ class CapabilityCompressionOrchestrator:
                 result,
                 input_chars=len(text),
                 content_id=content_id,
-                purpose=purpose,
+                purpose=trace_name,
                 started_at=started_at,
             )
             return result
 
         chunk_overhead = estimate_tokens(
-            self._chunk_prompt(
+            compression_chunk_prompt(
                 "",
                 purpose=purpose,
-                content_id=content_id,
-                source=source,
                 index=1,
                 total=1,
                 start=0,
@@ -212,7 +132,7 @@ class CapabilityCompressionOrchestrator:
                 failed,
                 input_chars=len(text),
                 content_id=content_id,
-                purpose=purpose,
+                purpose=trace_name,
                 started_at=started_at,
             )
             return failed
@@ -220,11 +140,9 @@ class CapabilityCompressionOrchestrator:
         partials: list[str] = []
         calls = 0
         for index, chunk in enumerate(chunks, start=1):
-            prompt = self._chunk_prompt(
+            prompt = compression_chunk_prompt(
                 chunk.text,
                 purpose=purpose,
-                content_id=content_id,
-                source=source,
                 index=index,
                 total=len(chunks),
                 start=chunk.start,
@@ -236,7 +154,7 @@ class CapabilityCompressionOrchestrator:
                 conversation=conversation,
                 selection=selection,
                 images=usable_images if index == 1 else [],
-                max_chars=MAP_SUMMARY_CHARS,
+                purpose=purpose,
             )
             calls += 1
             if not result.summary:
@@ -248,22 +166,20 @@ class CapabilityCompressionOrchestrator:
                     result,
                     input_chars=len(text),
                     content_id=content_id,
-                    purpose=purpose,
+                    purpose=trace_name,
                     started_at=started_at,
                 )
                 return result
             partials.append(
-                f"## Chunk {index}/{len(chunks)} chars={chunk.start}-{chunk.end}\n{result.summary}"
+                f"## Chunk {index}/{len(chunks)} char_range={chunk.start}-{chunk.end}\n{result.summary}"
             )
 
         reduce_levels = 0
         sections = partials
         while reduce_levels < MAX_REDUCE_LEVELS:
-            final_prompt = self._reduce_prompt(
+            final_prompt = compression_reduce_prompt(
                 sections,
                 purpose=purpose,
-                content_id=content_id,
-                source=source,
                 final=True,
             )
             if estimate_tokens(final_prompt) <= prompt_budget:
@@ -273,7 +189,7 @@ class CapabilityCompressionOrchestrator:
                     conversation=conversation,
                     selection=selection,
                     images=[],
-                    max_chars=MAX_SUMMARY_CHARS,
+                    purpose=purpose,
                 )
                 calls += 1
                 final.calls = calls
@@ -286,18 +202,16 @@ class CapabilityCompressionOrchestrator:
                     final,
                     input_chars=len(text),
                     content_id=content_id,
-                    purpose=purpose,
+                    purpose=trace_name,
                     started_at=started_at,
                 )
                 return final
 
             reduce_levels += 1
             reduce_overhead = estimate_tokens(
-                self._reduce_prompt(
+                compression_reduce_prompt(
                     [],
                     purpose=purpose,
-                    content_id=content_id,
-                    source=source,
                     final=False,
                 )
             )
@@ -309,11 +223,9 @@ class CapabilityCompressionOrchestrator:
                 break
             reduced: list[str] = []
             for index, group in enumerate(groups, start=1):
-                prompt = self._reduce_prompt(
+                prompt = compression_reduce_prompt(
                     group,
                     purpose=purpose,
-                    content_id=content_id,
-                    source=source,
                     final=False,
                 )
                 result = await self._run_capability(
@@ -322,7 +234,7 @@ class CapabilityCompressionOrchestrator:
                     conversation=conversation,
                     selection=selection,
                     images=[],
-                    max_chars=MAP_SUMMARY_CHARS,
+                    purpose=purpose,
                 )
                 calls += 1
                 if not result.summary:
@@ -335,7 +247,7 @@ class CapabilityCompressionOrchestrator:
                         result,
                         input_chars=len(text),
                         content_id=content_id,
-                        purpose=purpose,
+                        purpose=trace_name,
                         started_at=started_at,
                     )
                     return result
@@ -356,7 +268,7 @@ class CapabilityCompressionOrchestrator:
             failed,
             input_chars=len(text),
             content_id=content_id,
-            purpose=purpose,
+            purpose=trace_name,
             started_at=started_at,
         )
         return failed
@@ -369,7 +281,7 @@ class CapabilityCompressionOrchestrator:
         conversation: Conversation | None,
         selection: ResolvedModelSelection,
         images: list[str],
-        max_chars: int,
+        purpose: CompressionPurpose,
     ) -> CompressionResult:
         if self.capability_executor is None:
             return CompressionResult(status="error", capability_id=capability.id, error="capability_executor_not_injected")
@@ -387,7 +299,7 @@ class CapabilityCompressionOrchestrator:
                     if getattr(self.debug_trace, "enabled", False)
                     else None,
                 ),
-                extra_system_contract=json_output_contract(max_chars),
+                extra_system_contract=compression_system_contract(purpose),
                 title=f"runtime_{capability.id}_compression",
                 images=list(images or []),
                 resolved_selection=selection,
@@ -396,7 +308,7 @@ class CapabilityCompressionOrchestrator:
             logger.warning("Capability compression failed via %s: %s", capability.id, exc)
             return CompressionResult(status="error", capability_id=capability.id, error=str(exc))
 
-        result = self._parse_model_result(getattr(response, "content", ""), max_chars=max_chars)
+        result = parse_compression_result(getattr(response, "content", ""))
         metadata = getattr(response, "metadata", {})
         result.model = str(
             getattr(response, "model", "")
@@ -412,13 +324,16 @@ class CapabilityCompressionOrchestrator:
         capability: CapabilityConfig,
         selection: ResolvedModelSelection,
         *,
+        purpose: CompressionPurpose,
         image_count: int,
     ) -> int:
         provider = selection.provider or self.provider
         budget = resolve_token_budget(provider=provider, model_id=selection.model)
         effective = int(budget.effective_prompt_limit or budget.context_window or 0)
         safe = int(effective * COMPRESSION_INPUT_SAFETY_RATIO)
-        overhead = estimate_tokens(str(capability.prompt or "")) + estimate_tokens(json_output_contract())
+        overhead = estimate_tokens(str(capability.prompt or "")) + estimate_tokens(
+            compression_system_contract(purpose)
+        )
         overhead += max(0, int(image_count or 0)) * COMPRESSION_IMAGE_TOKEN_RESERVE
         return max(1, safe - overhead)
 
@@ -428,9 +343,9 @@ class CapabilityCompressionOrchestrator:
         if provider is None:
             return False
         try:
-            return bool(provider.effective_model_profile(selection.model).supports_vision)
+            return provider.effective_model_profile(selection.model).supports_input("image")
         except Exception:
-            return bool(getattr(provider, "supports_vision", False))
+            return False
 
     def _primary_vision_selection(self, conversation: Conversation | None) -> ResolvedModelSelection | None:
         model = str(getattr(conversation, "model", "") or "").strip() if conversation is not None else ""
@@ -445,68 +360,11 @@ class CapabilityCompressionOrchestrator:
         return selection if model and self._supports_vision(selection) else None
 
     @staticmethod
-    def _document_prompt(
-        text: str,
-        *,
-        purpose: str,
-        content_id: str,
-        source: str,
-        material: str,
-    ) -> str:
-        metadata = [f"purpose={purpose}", f"source={source}", f"chars={len(text)}"]
-        if content_id:
-            metadata.insert(1, f"content_id={content_id}")
-        return (
-            f"Condense this exact {material} into one continuation summary.\n"
-            + "\n".join(metadata)
-            + f"\n\n<content>\n{text}\n</content>"
-        )
-
-    @staticmethod
-    def _chunk_prompt(
-        text: str,
-        *,
-        purpose: str,
-        content_id: str,
-        source: str,
-        index: int,
-        total: int,
-        start: int,
-        end: int,
-    ) -> str:
-        content_ref = f"content_id={content_id}\n" if content_id else ""
-        return (
-            "Summarize this exact chunk for a later reduce step. Preserve concrete facts, references, "
-            "requirements, decisions, errors and unresolved work; do not assume unseen chunks.\n"
-            f"purpose={purpose}\n{content_ref}source={source}\n"
-            f"chunk={index}/{total}\nchar_range={start}-{end}\n\n<chunk>\n{text}\n</chunk>"
-        )
-
-    @staticmethod
-    def _reduce_prompt(
-        sections: list[str],
-        *,
-        purpose: str,
-        content_id: str,
-        source: str,
-        final: bool,
-    ) -> str:
-        content_ref = f"content_id={content_id}\n" if content_id else ""
-        action = "Create the final detailed continuation summary" if final else "Merge these summaries without losing evidence"
-        return (
-            f"{action}. Remove duplication but preserve disagreements, errors, references, offsets and next actions.\n"
-            f"purpose={purpose}\n{content_ref}source={source}\n\n<summaries>\n"
-            + "\n\n".join(sections)
-            + "\n</summaries>"
-        )
-
-    @staticmethod
     def _append_image_note(result: CompressionResult, note: str) -> None:
         clean = str(note or "").strip()
         if not clean or not result.summary:
             return
-        available = max(0, MAX_SUMMARY_CHARS - len(clean) - 2)
-        result.summary = f"{result.summary[:available].rstrip()}\n\n{clean}".strip()
+        result.summary = f"{result.summary.rstrip()}\n\n{clean}".strip()
         result.token_estimate = estimate_tokens(result.summary)
 
     def _record_trace(
@@ -550,27 +408,7 @@ class CapabilityCompressionOrchestrator:
         except Exception:
             return
 
-    def _store(self, conversation: Conversation | None) -> SessionArchiveStore:
-        if self.store is not None:
-            return self.store
-        return SessionArchiveStore(getattr(conversation, "work_dir", "") or ".", getattr(conversation, "id", None))
-
     def _capability(self, capability_id: str) -> CapabilityConfig:
         if self.capability_executor is None:
             raise ValueError(f"Missing capability executor for: {capability_id}")
         return self.capability_executor.get_capability(capability_id)
-
-    @staticmethod
-    def _parse_model_result(content: str, *, max_chars: int = MAX_SUMMARY_CHARS) -> CompressionResult:
-        try:
-            payload = json.loads(str(content or "").strip())
-        except Exception:
-            return CompressionResult(status="error", error="model_output_not_json", token_estimate=estimate_tokens(content))
-        if not isinstance(payload, dict) or set(payload) != {"summary"}:
-            return CompressionResult(status="error", error="model_output_invalid_schema", token_estimate=estimate_tokens(content))
-        summary = str(payload.get("summary") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
-        if not summary:
-            return CompressionResult(status="empty", error="summary_empty")
-        if len(summary) > max(1, int(max_chars or 0)):
-            return CompressionResult(status="error", error="summary_too_long", token_estimate=estimate_tokens(summary))
-        return CompressionResult(summary=summary, status="complete", token_estimate=estimate_tokens(summary))

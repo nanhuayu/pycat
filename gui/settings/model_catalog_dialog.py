@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QToolButton,
@@ -15,7 +14,8 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.utils.icon_manager import Icons
-from models.model_profile import ModelProfile
+from gui.widgets.themed_line_edit import ThemedLineEdit
+from models.model_profile import BUNDLED_MODEL_TAG, ModelProfile
 from models.provider import Provider
 
 
@@ -30,6 +30,7 @@ class ModelCatalogDialog(QDialog):
         self._profiles = {profile.model_id: profile for profile in self._provider.get_models()}
         self._catalog_order = [profile.model_id for profile in self._provider.models]
         self._selected_ids = set(self._catalog_order)
+        self._remote_profiles: dict[str, ModelProfile] = {}
         self._remote_ids: list[str] = []
         self._setup_ui()
         self._rebuild_list()
@@ -46,7 +47,7 @@ class ModelCatalogDialog(QDialog):
 
         search_row = QHBoxLayout()
         search_row.setSpacing(6)
-        self.search_input = QLineEdit()
+        self.search_input = ThemedLineEdit()
         self.search_input.setPlaceholderText("搜索模型 ID 或名称")
         self.search_input.textChanged.connect(self._apply_filter)
         search_row.addWidget(self.search_input, 1)
@@ -81,10 +82,17 @@ class ModelCatalogDialog(QDialog):
         self.refresh_btn.setEnabled(not loading)
         self.status_label.setText("正在获取远端模型..." if loading else self.status_label.text())
 
-    def set_remote_models(self, model_ids: list[str]) -> None:
-        self._remote_ids = sorted(
-            {str(model_id or "").strip() for model_id in model_ids or [] if str(model_id or "").strip()}
-        )
+    def set_remote_models(self, profiles: list[ModelProfile]) -> None:
+        self._remote_profiles = {
+            profile.model_id: ModelProfile.from_dict(profile.to_dict())
+            for profile in profiles or []
+            if isinstance(profile, ModelProfile) and profile.model_id
+        }
+        self._remote_ids = sorted(self._remote_profiles)
+        for model_id, profile in self._remote_profiles.items():
+            existing = self._profiles.get(model_id)
+            if existing is None or BUNDLED_MODEL_TAG in existing.tags:
+                self._profiles[model_id] = profile
         self._rebuild_list()
         self.status_label.setText("未找到远端模型" if not self._remote_ids else "")
         self._update_count()
@@ -122,9 +130,13 @@ class ModelCatalogDialog(QDialog):
                 item.setCheckState(
                     Qt.CheckState.Checked if model_id in self._selected_ids else Qt.CheckState.Unchecked
                 )
-                item.setToolTip(
-                    f"{model_id}\n{'远端与本地' if model_id in self._remote_ids and profile is not None else '本地模型' if profile is not None else '远端模型'}"
-                )
+                source = "远端与本地" if model_id in self._remote_ids and model_id in self._catalog_order else "远端模型" if model_id in self._remote_ids else "本地模型"
+                details = [model_id, source]
+                if profile is not None and profile.context_window:
+                    details.append(f"上下文 {profile.context_window:,}")
+                if profile is not None and profile.reasoning_codec != "none":
+                    details.append(f"推理 {profile.reasoning_codec}")
+                item.setToolTip("\n".join(details))
                 self.list_widget.addItem(item)
                 if model_id == current_id:
                     self.list_widget.setCurrentItem(item)

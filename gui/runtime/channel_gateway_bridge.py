@@ -4,6 +4,8 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from core.channel.events import ChannelEvent
 from core.channel.gateway import ChannelGateway
+from models.contracts.agent import RunStatus
+from models.streaming import ConversationPatch
 
 
 class ChannelGatewayBridge(QObject):
@@ -15,7 +17,9 @@ class ChannelGatewayBridge(QObject):
     response_step = pyqtSignal(str, str, object)
     response_complete = pyqtSignal(str, str, object)
     response_error = pyqtSignal(str, str, str)
+    run_finished = pyqtSignal(str, str, object)
     runtime_event = pyqtSignal(str, str, object)
+    conversation_patch = pyqtSignal(str, str, object)
 
     def __init__(self, runtime: ChannelGateway, parent=None) -> None:
         super().__init__(parent)
@@ -46,11 +50,23 @@ class ChannelGatewayBridge(QObject):
         if kind == "turn-complete":
             message = payload.get("message") if isinstance(payload, dict) else None
             self.response_complete.emit(conversation_id, request_id, message)
+            if message is not None:
+                self.run_finished.emit(conversation_id, request_id, RunStatus.COMPLETED)
             return
         if kind == "turn-error":
             self.response_error.emit(conversation_id, request_id, str(payload.get("error", "") or ""))
+            self.run_finished.emit(conversation_id, request_id, RunStatus.FAILED)
             return
         if kind == "turn-event":
-            self.runtime_event.emit(conversation_id, request_id, payload.get("event") if isinstance(payload, dict) else event)
+            runtime_event = payload.get("event") if isinstance(payload, dict) else event
+            self.runtime_event.emit(conversation_id, request_id, runtime_event)
+            data = getattr(runtime_event, "data", None)
+            raw_patch = data.get("conversation_patch") if isinstance(data, dict) else None
+            patch = ConversationPatch.from_payload(
+                raw_patch,
+                conversation_id=conversation_id,
+            )
+            if patch is not None:
+                self.conversation_patch.emit(conversation_id, request_id, patch)
             return
         self.conversation_updated.emit(event)

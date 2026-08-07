@@ -9,12 +9,12 @@ from typing import Any, Mapping
 import httpx
 
 from core.channel.platforms.wechat.protocol import normalize_wechat_reply_text
+from core.version import __version__ as PYCAT_VERSION
 from models.contracts.channel import ChannelConfig
 
 
 WECHAT_ILINK_LOGIN_BASE = "https://ilinkai.weixin.qq.com"
 WECHAT_ILINK_APP_ID = "bot"
-PYCAT_VERSION = "0.1.0"
 PYCAT_BOT_AGENT = f"PyCat/{PYCAT_VERSION}"
 WECHAT_MESSAGE_BOT = 2
 WECHAT_MESSAGE_FINISH = 2

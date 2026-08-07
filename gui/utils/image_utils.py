@@ -1,7 +1,7 @@
-"""UI image helpers.
+"""UI attachment and image helpers.
 
 Centralizes:
-- Extracting images from QMimeData (paste/drag-drop)
+- Extracting local attachment sources from QMimeData (paste/drag-drop)
 - Converting QImage/QPixmap to data URLs
 - Filtering supported image file paths
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
-from typing import Iterable, Tuple, List, Optional
+from typing import List, Optional, Tuple
 
 from PyQt6.QtCore import QByteArray, QBuffer, QIODevice
 from PyQt6.QtGui import QImage, QPixmap, QGuiApplication
@@ -66,8 +66,13 @@ def qimage_to_data_url(image: object, mime: str = "image/png") -> Optional[str]:
     return f"data:{mime};base64,{b64}"
 
 
-def extract_images_from_mime(mime_data: object) -> Tuple[List[str], List[str]]:
-    """Return (data_urls, file_paths) extracted from QMimeData."""
+def extract_attachment_sources_from_mime(mime_data: object) -> Tuple[List[str], List[str]]:
+    """Return ``(data_urls, local_file_paths)`` from a Qt MIME payload.
+
+    ``QMimeData`` is the authority for a dropped/pasted file. Only local
+    ``QUrl`` values are accepted; typed ``file:///...`` text never reaches
+    this function and therefore remains ordinary composer text.
+    """
     data_urls: List[str] = []
     file_paths: List[str] = []
 
@@ -86,12 +91,19 @@ def extract_images_from_mime(mime_data: object) -> Tuple[List[str], List[str]]:
 
         if hasattr(mime_data, "hasUrls") and mime_data.hasUrls():
             try:
-                for u in mime_data.urls() or []:
-                    p = u.toLocalFile()
-                    if is_supported_image_path(p):
-                        file_paths.append(p)
+                for url in mime_data.urls() or []:
+                    is_local_file = getattr(url, "isLocalFile", None)
+                    if callable(is_local_file) and not is_local_file():
+                        continue
+                    to_local_file = getattr(url, "toLocalFile", None)
+                    path = str(to_local_file() if callable(to_local_file) else "").strip()
+                    if not path or os.path.isdir(path):
+                        continue
+                    normalized = os.path.normpath(path)
+                    if normalized not in file_paths:
+                        file_paths.append(normalized)
             except Exception as exc:
-                logger.debug("Failed to extract image file paths from mime data: %s", exc)
+                logger.debug("Failed to extract local file paths from mime data: %s", exc)
     except Exception as exc:
         logger.debug("Failed to inspect mime data for images: %s", exc)
         return data_urls, file_paths
@@ -99,13 +111,13 @@ def extract_images_from_mime(mime_data: object) -> Tuple[List[str], List[str]]:
     return data_urls, file_paths
 
 
-def extract_images_from_clipboard() -> List[str]:
-    """Convenience: get screenshot image from clipboard as data URLs."""
+def extract_attachment_sources_from_clipboard() -> List[str]:
+    """Return explicit local clipboard files and embedded screenshot data."""
     try:
         cb = QGuiApplication.clipboard()
         md = cb.mimeData()
-        data_urls, file_paths = extract_images_from_mime(md)
-        # Prefer embedded image data; also accept file paths if clipboard provides them.
+        data_urls, file_paths = extract_attachment_sources_from_mime(md)
+        # Prefer embedded image data; also accept local files if clipboard provides them.
         return data_urls + file_paths
     except Exception as exc:
         logger.debug("Failed to extract clipboard images: %s", exc)

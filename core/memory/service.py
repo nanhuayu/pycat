@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from core.content.markdown import extract_markdown_links, extract_title_and_preview, strip_frontmatter, with_frontmatter
+from core.config import get_global_subdir
 from models.contracts.session_state import (
     MEMORY_CATEGORIES,
     MEMORY_CONTENT_LIMIT,
@@ -518,7 +519,7 @@ class MemoryService:
                 return None
             target = root / ".pycat" / "memory"
         elif scope == "global":
-            target = Path.home() / ".PyCat" / "memory"
+            target = get_global_subdir("memory")
         else:
             return None
         try:
@@ -537,7 +538,7 @@ class MemoryService:
 
     @classmethod
     def _global_memory_dir(cls) -> Path | None:
-        path = Path.home() / ".PyCat" / "memory"
+        path = get_global_subdir("memory")
         return path if path.is_dir() else None
 
     @classmethod

@@ -138,8 +138,6 @@ class PromptOptimizationPresenter:
             auxiliary_model_ref=str(host.app_settings.get("default_auxiliary_model", "") or "").strip(),
         )
         provider = selection.provider or provider
-        opt_model = selection.model or base_model
-        opt_sys = prompt_capability.prompt.strip() or None
 
         host.input_area.set_prompt_optimize_busy(True)
 
@@ -147,6 +145,5 @@ class PromptOptimizationPresenter:
             provider=provider,
             conversation_id=host.current_conversation.id,
             raw_prompt=text,
-            model=opt_model,
-            system_prompt=opt_sys,
+            resolved_selection=selection,
         )

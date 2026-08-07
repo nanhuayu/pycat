@@ -9,7 +9,6 @@ from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPen
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFrame,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -38,6 +37,7 @@ RESOURCE_TITLE_ROLE = Qt.ItemDataRole.UserRole + 20
 RESOURCE_SUBTITLE_ROLE = Qt.ItemDataRole.UserRole + 21
 RESOURCE_ENABLED_ROLE = Qt.ItemDataRole.UserRole + 22
 RESOURCE_STATE_ROLE = Qt.ItemDataRole.UserRole + 23
+RESOURCE_TRAILING_ICONS_ROLE = Qt.ItemDataRole.UserRole + 24
 
 
 class SettingsActionBar(QWidget):
@@ -109,13 +109,10 @@ class SettingsListDetailLayout(QWidget):
 
     def __init__(
         self,
-        list_title: str,
-        detail_title: str,
         parent=None,
         *,
         list_stretch: int = 2,
         detail_stretch: int = 3,
-        spacing: int = 12,
         list_minimum_width: int = RESOURCE_LIST_MINIMUM_WIDTH,
         list_preferred_width: int = RESOURCE_LIST_PREFERRED_WIDTH,
     ):
@@ -126,8 +123,9 @@ class SettingsListDetailLayout(QWidget):
         root.setSpacing(0)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setObjectName("settings_list_detail_splitter")
         self.splitter.setChildrenCollapsible(False)
-        self.splitter.setHandleWidth(max(4, int(spacing // 2)))
+        self.splitter.setHandleWidth(8)
         root.addWidget(self.splitter)
 
         self.list_panel = QFrame()
@@ -135,25 +133,20 @@ class SettingsListDetailLayout(QWidget):
         self.list_panel.setMinimumWidth(max(180, int(list_minimum_width)))
         self.list_panel.setMaximumWidth(RESOURCE_LIST_MAXIMUM_WIDTH)
         self.list_layout = QVBoxLayout(self.list_panel)
-        self.list_layout.setContentsMargins(0, 0, 0, 0)
+        self.list_layout.setContentsMargins(8, 8, 8, 8)
         self.list_layout.setSpacing(6)
-        self.list_title_label = QLabel(str(list_title or "列表"))
-        self.list_title_label.setObjectName("settings_pane_title")
-        self.list_layout.addWidget(self.list_title_label)
         self.splitter.addWidget(self.list_panel)
 
-        self.detail_group = QGroupBox(str(detail_title or "详情"))
-        self.detail_group.setMinimumWidth(360)
-        self.detail_layout = QVBoxLayout(self.detail_group)
-        self.detail_layout.setContentsMargins(10, 10, 10, 10)
+        self.detail_panel = QFrame()
+        self.detail_panel.setObjectName("settings_detail_panel")
+        self.detail_panel.setMinimumWidth(360)
+        self.detail_layout = QVBoxLayout(self.detail_panel)
+        self.detail_layout.setContentsMargins(12, 8, 12, 8)
         self.detail_layout.setSpacing(8)
-        self.splitter.addWidget(self.detail_group)
+        self.splitter.addWidget(self.detail_panel)
         self.splitter.setStretchFactor(0, list_stretch)
         self.splitter.setStretchFactor(1, detail_stretch)
         self.splitter.setSizes([max(180, int(list_preferred_width)), max(420, int(list_preferred_width * 2.2))])
-
-    def set_list_title(self, title: str) -> None:
-        self.list_title_label.setText(str(title or "列表"))
 
     def add_detail_widget(self, widget: QWidget, *, scrollable: bool = False) -> QWidget:
         """Add one editor while keeping resource-page scrolling predictable."""
@@ -252,6 +245,11 @@ class SettingsResourceDelegate(QStyledItemDelegate):
         enabled = True if enabled_value is None else bool(enabled_value)
         title = str(index.data(RESOURCE_TITLE_ROLE) or index.data(Qt.ItemDataRole.DisplayRole) or "")
         subtitle = str(index.data(RESOURCE_SUBTITLE_ROLE) or "").strip()
+        trailing_icons = [
+            value
+            for value in (index.data(RESOURCE_TRAILING_ICONS_ROLE) or [])
+            if isinstance(value, QIcon) and not value.isNull()
+        ]
         icon = index.data(Qt.ItemDataRole.DecorationRole)
         icon = icon if isinstance(icon, QIcon) else QIcon()
 
@@ -289,7 +287,8 @@ class SettingsResourceDelegate(QStyledItemDelegate):
 
         content = rect.adjusted(9, 4, -9, -4)
         icon_width = 24 if not icon.isNull() else 0
-        state_width = 18 if not enabled else 0
+        trailing_width = len(trailing_icons) * 20
+        state_width = (18 if not enabled else 0) + trailing_width
         text_left = content.left() + icon_width
         text_width = max(24, content.width() - icon_width - state_width)
         title_font = QFont(option.font)
@@ -321,6 +320,12 @@ class SettingsResourceDelegate(QStyledItemDelegate):
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 QFontMetrics(subtitle_font).elidedText(subtitle, Qt.TextElideMode.ElideRight, subtitle_rect.width()),
             )
+
+        if trailing_icons:
+            left = content.right() - trailing_width + 2
+            for offset, trailing_icon in enumerate(trailing_icons):
+                pixmap = trailing_icon.pixmap(16, 16)
+                painter.drawPixmap(left + offset * 20, content.center().y() - 8, pixmap)
 
         if not enabled:
             center_x = content.right() - 5

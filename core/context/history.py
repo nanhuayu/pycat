@@ -20,6 +20,94 @@ def is_control_message(message: Message) -> bool:
     return any(content.startswith(prefix) for prefix in CONTROL_MESSAGE_PREFIXES)
 
 
+def is_real_user_message(message: Message) -> bool:
+    """Return True for persisted user input rather than runtime control data."""
+    if message.role != "user" or is_control_message(message):
+        return False
+    metadata = message.metadata if isinstance(message.metadata, dict) else {}
+    return not bool(metadata.get("synthetic"))
+
+
+def is_restartable_user_message(message: Message, *, allow_external: bool = False) -> bool:
+    """Return True when a caller may restart from this real user input.
+
+    External/channel input remains blocked by default.  A bound Channel
+    conversation can opt in explicitly; this keeps provenance visible while
+    preventing ordinary Desktop sessions from rewriting external traffic.
+    """
+    if not is_real_user_message(message):
+        return False
+    metadata = message.metadata if isinstance(message.metadata, dict) else {}
+    if allow_external:
+        return True
+    return not (bool(metadata.get("external_input")) or bool(metadata.get("channel")))
+
+
+def is_external_user_message(message: Message) -> bool:
+    """Return True for a real user message received from an external Channel."""
+
+    if not is_real_user_message(message):
+        return False
+    metadata = message.metadata if isinstance(message.metadata, dict) else {}
+    return bool(metadata.get("external_input") or metadata.get("channel"))
+
+
+def restartable_user_by_id(
+    messages: List[Message],
+    user_message_id: str,
+    *,
+    allow_external: bool = False,
+) -> Message | None:
+    """Find a restart anchor without crossing an external input by default."""
+    target_id = str(user_message_id or "")
+    target: Message | None = None
+    target_is_external = False
+    for message in messages:
+        if str(message.id or "") == target_id:
+            target = message if is_restartable_user_message(message, allow_external=allow_external) else None
+            target_is_external = is_external_user_message(message)
+            if target is None:
+                return None
+            continue
+        if (
+            target is not None
+            and is_real_user_message(message)
+            and is_external_user_message(message)
+            and (not allow_external or not target_is_external)
+        ):
+            return None
+    return target
+
+
+def restartable_user_for_assistant(
+    messages: List[Message],
+    assistant_message_id: str,
+    *,
+    allow_external: bool = False,
+) -> Message | None:
+    """Find the local user turn that owns one assistant message."""
+    target_id = str(assistant_message_id or "")
+    latest_user: Message | None = None
+    found = False
+    for message in messages:
+        if is_real_user_message(message):
+            latest_user = (
+                message
+                if is_restartable_user_message(message, allow_external=allow_external)
+                else None
+            )
+        if message.role == "assistant" and str(message.id or "") == target_id:
+            found = True
+            break
+    if not found or latest_user is None:
+        return None
+    return restartable_user_by_id(
+        messages,
+        latest_user.id,
+        allow_external=allow_external,
+    )
+
+
 def build_turn_blocks(messages: List[Message]) -> List[List[Message]]:
     """Group active messages into user-led interaction blocks."""
     blocks: List[List[Message]] = []

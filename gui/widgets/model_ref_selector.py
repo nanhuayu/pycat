@@ -7,9 +7,10 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QComboBox, QCompleter, QListView
 
 from core.llm.model_selection import provider_model_ids
-from models.contracts.model_target import ModelTarget
-from models.provider import Provider, build_model_ref
 from gui.utils.combo_box import configure_combo_popup
+from models.contracts.model_target import ModelTarget
+from models.model_ref import build_model_ref
+from models.provider import Provider
 
 
 @dataclass(frozen=True)

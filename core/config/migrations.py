@@ -1,13 +1,14 @@
-"""One-way persisted configuration migration to the v3 runtime contracts."""
+"""One-way persisted configuration migration to the v5 runtime contracts."""
 from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any, Mapping
 
 from models.contracts.config import DEFAULT_ACCENT, SUPPORTED_ACCENTS
+from models.contracts.tooling import TOOL_CATEGORIES
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 _CATEGORY_MAP = {
     "read": "read",
@@ -88,6 +89,12 @@ def migrate_tool_selection_payload(data: Mapping[str, Any] | None) -> dict[str, 
 
 def _policy(data: Any) -> dict[str, bool]:
     payload = dict(data) if isinstance(data, Mapping) else {}
+    if "action" in payload:
+        # Already-migrated tri-state payload; keeps re-migration idempotent.
+        return {
+            "deny": {"enabled": False, "auto_approve": False},
+            "allow": {"enabled": True, "auto_approve": True},
+        }.get(str(payload.get("action") or "").strip().lower(), {"enabled": True, "auto_approve": False})
     return {
         "enabled": bool(payload.get("enabled", True)),
         "auto_approve": bool(payload.get("auto_approve", False)),
@@ -101,6 +108,12 @@ def _most_restrictive(policies: list[dict[str, bool]]) -> dict[str, bool]:
         "enabled": all(item["enabled"] for item in policies),
         "auto_approve": all(item["auto_approve"] for item in policies),
     }
+
+
+def _bool_policy_to_action(policy: Mapping[str, Any]) -> str:
+    if not bool(policy.get("enabled", True)):
+        return "deny"
+    return "allow" if bool(policy.get("auto_approve", False)) else "ask"
 
 
 def migrate_permissions_payload(data: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -123,7 +136,11 @@ def migrate_permissions_payload(data: Mapping[str, Any] | None) -> dict[str, Any
     tools = {name: _most_restrictive(values) for name, values in grouped_tools.items()}
     raw_mode = str(payload.get("approval_mode") or "").strip().lower()
     if raw_mode in {"all_confirm", "confirm_all", "manual", "ask", "always_ask"}:
+        # Legacy "confirm everything" intent materializes as an all-ask table.
         raw_mode = "custom"
+        for category in TOOL_CATEGORIES:
+            existing = defaults.get(category) or {}
+            defaults[category] = {"enabled": bool(existing.get("enabled", True)), "auto_approve": False}
     if raw_mode not in {"standard", "developer_trust", "allow_all", "custom"}:
         values = list(defaults.values()) + list(tools.values())
         if values and all(item["enabled"] and item["auto_approve"] for item in values):
@@ -132,7 +149,23 @@ def migrate_permissions_payload(data: Mapping[str, Any] | None) -> dict[str, Any
             raw_mode = "custom"
         else:
             raw_mode = "standard" if not tools else "custom"
-    return {"approval_mode": raw_mode, "category_defaults": defaults, "tools": tools}
+    if raw_mode in {"developer_trust", "allow_all"}:
+        # Materialize the legacy preset labels into concrete rules so the
+        # tri-state custom table keeps the same behavior.
+        for category in TOOL_CATEGORIES:
+            existing = defaults.get(category) or {}
+            defaults[category] = {"enabled": bool(existing.get("enabled", True)), "auto_approve": True}
+    if raw_mode == "allow_all":
+        # Under the legacy runtime allow_all short-circuited every approval, so
+        # per-tool auto_approve=False entries are dead config that would now
+        # re-introduce prompts. Drop them; keep real disables (enabled=False).
+        tools = {name: policy for name, policy in tools.items() if not policy["enabled"]}
+    return {
+        "category_defaults": {
+            category: {"action": _bool_policy_to_action(policy)} for category, policy in defaults.items()
+        },
+        "tools": {name: {"action": _bool_policy_to_action(policy)} for name, policy in tools.items()},
+    }
 
 
 def migrate_capabilities_payload(data: Mapping[str, Any] | None) -> tuple[dict[str, Any], list[dict[str, Any]]]:

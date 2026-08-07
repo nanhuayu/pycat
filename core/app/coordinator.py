@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, Iterable, Optional
 
-from models.contracts.config import AppConfig
-from core.app.state import AppState, ConversationSelection, ConversationSettingsUpdate, EMPTY_APP_STATE
+from core.app.state import EMPTY_APP_STATE, AppState, ConversationSelection, ConversationSettingsUpdate
 from core.app.store import Store
+from models.contracts.config import AppConfig
+from models.contracts.tooling import normalize_permission_preset
 from models.conversation import Conversation
-from models.provider import Provider, build_model_ref, provider_matches_name
+from models.model_ref import build_model_ref, provider_matches_name
+from models.provider import Provider
 
 
 class AppCoordinator:
@@ -22,9 +24,11 @@ class AppCoordinator:
         *,
         conv_service: Any,
         store: Store[AppState] | None = None,
+        active_processes: Any = None,
     ) -> None:
         self._conv_service = conv_service
         self._store = store or Store(EMPTY_APP_STATE)
+        self._active_processes = active_processes
 
     @property
     def store(self) -> Store[AppState]:
@@ -49,7 +53,7 @@ class AppCoordinator:
     def create_conversation(self, selection: ConversationSelection | None = None) -> Conversation:
         conversation = self._conv_service.create()
         if selection is not None:
-            self.apply_selection(conversation, selection)
+            self.apply_selection(conversation, selection, initialize_workspace=True)
         return conversation
 
     def ensure_conversation(
@@ -62,7 +66,23 @@ class AppCoordinator:
             return self.create_conversation(selection)
         return self.apply_selection(conversation, selection)
 
-    def apply_selection(self, conversation: Conversation, selection: ConversationSelection) -> Conversation:
+    def apply_selection(
+        self,
+        conversation: Conversation,
+        selection: ConversationSelection,
+        *,
+        initialize_workspace: bool = False,
+    ) -> Conversation:
+        if initialize_workspace and not str(getattr(conversation, "work_dir", "") or "").strip():
+            conversation.work_dir = str(selection.work_dir or "").strip()
+        else:
+            result = self._conv_service.change_work_dir(
+                conversation,
+                selection.work_dir,
+                active_processes=self._active_processes,
+            )
+            if not result.ok:
+                raise ValueError(result.error)
         self._conv_service.configure_llm(
             conversation,
             provider_id=selection.provider_id,
@@ -71,13 +91,12 @@ class AppCoordinator:
             model=selection.model,
         )
         self._conv_service.set_mode(conversation, selection.mode_slug)
-        self._conv_service.set_work_dir(conversation, selection.work_dir)
-        self._conv_service.set_settings(
-            conversation,
-            {
-                "show_thinking": bool(selection.show_thinking),
-            },
-        )
+        settings: dict[str, Any] = {"show_thinking": bool(selection.show_thinking)}
+        if selection.permission_preset is not None:
+            settings["permission_preset"] = normalize_permission_preset(
+                selection.permission_preset
+            )
+        self._conv_service.set_settings(conversation, settings)
         return conversation
 
     def update_provider_model(
@@ -111,9 +130,12 @@ class AppCoordinator:
         self._conv_service.set_mode(conversation, mode_slug)
         return conversation
 
-    def apply_work_dir(self, conversation: Conversation, work_dir: str) -> Conversation:
-        self._conv_service.set_work_dir(conversation, work_dir)
-        return conversation
+    def apply_work_dir(self, conversation: Conversation, work_dir: str, *, active_processes: Any = None) -> Any:
+        return self._conv_service.change_work_dir(
+            conversation,
+            work_dir,
+            active_processes=self._active_processes if active_processes is None else active_processes,
+        )
 
     def apply_settings_update(
         self,

@@ -8,7 +8,6 @@ from pathlib import Path
 
 from models.provider import PROVIDER_SCHEMA_VERSION, Provider
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +19,19 @@ class ProviderRepository:
         self.providers_file = self.data_dir / "providers.json"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._loaded_schema_version = PROVIDER_SCHEMA_VERSION
+        self._has_catalog = False
+
+    @property
+    def has_catalog(self) -> bool:
+        """Whether a valid provider catalog has already been written."""
+
+        return self._has_catalog
+
+    @property
+    def catalog_file_exists(self) -> bool:
+        """Whether a user catalog file exists, even if it cannot be parsed."""
+
+        return self.providers_file.exists()
 
     @property
     def needs_migration(self) -> bool:
@@ -35,6 +47,7 @@ class ProviderRepository:
                 else:
                     self._loaded_schema_version = 1
                     data = payload
+                self._has_catalog = isinstance(data, list)
                 return [Provider.from_dict(item) for item in data or [] if isinstance(item, dict)]
         except Exception as exc:
             logger.warning("Error loading providers: %s", exc)
@@ -57,6 +70,7 @@ class ProviderRepository:
                 fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
             os.replace(temp_name, self.providers_file)
             self._loaded_schema_version = PROVIDER_SCHEMA_VERSION
+            self._has_catalog = True
             return True
         except Exception as exc:
             logger.warning("Error saving providers: %s", exc)

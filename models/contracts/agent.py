@@ -152,8 +152,6 @@ class SubtaskTrace:
 
 class RunEventKind(str, Enum):
     TURN_START = "turn_start"
-    TOKEN = "token"
-    THINKING = "thinking"
     STEP = "step"
     TOOL_START = "tool_start"
     TOOL_END = "tool_end"
@@ -214,6 +212,7 @@ class TurnContext:
     had_tool_work: bool = False
     incomplete_responses: int = 0
     runtime_messages: list[Message] = field(default_factory=list)
+    memory_advice: str = ""
     state: TurnState = TurnState.TURN_START
 
 
@@ -223,8 +222,29 @@ class TurnOutcome:
     context: TurnContext
     final_message: Optional[Message] = None
     error: Optional[str] = None
-    next_policy: Optional["RunPolicy"] = None
     stop_reason: RunStopReason = RunStopReason.COMPLETED
+
+
+_FALSE_BOOLEAN_VALUES = frozenset({"0", "false", "no", "off", "disabled", "disable"})
+
+
+def effective_pycat_assistant_enabled(value: object = True, *, mode: str = "chat") -> bool:
+    """Resolve the session prompt-layer switch for one run.
+
+    The switch is intentionally a Chat-only control. Agent-like modes retain
+    their runtime instructions even when a stale or shared setting says false.
+    Keeping this pure and in the contract layer lets policy construction and
+    prompt rendering agree without introducing a second settings owner.
+    """
+    if str(mode or "chat").strip().lower() != "chat":
+        return True
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return True
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() not in _FALSE_BOOLEAN_VALUES
 
 
 @dataclass(frozen=True)
@@ -241,11 +261,10 @@ class RunPolicy:
 
     mode: str = "chat"
     max_turns: int = 200
-    context_window_limit: int = 100_000
 
-    reasoning_enabled: bool | None = None
-    reasoning_effort: str = ""
+    reasoning_mode: str | None = None
     show_thinking: bool = True
+    pycat_assistant_enabled: bool = True
     completion_policy: str = "text"
     tool_selection: ToolSelectionPolicy = field(default_factory=ToolSelectionPolicy.all)
     tool_permissions: ToolPermissionConfig = field(default_factory=ToolPermissionConfig)

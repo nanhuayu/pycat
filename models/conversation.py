@@ -7,6 +7,8 @@ import uuid
 import json
 import hashlib
 
+from models.contracts.content import ContentRef
+
 if TYPE_CHECKING:
     from models.contracts.session_state import SessionState
 
@@ -178,6 +180,7 @@ class Message:
     role: str = "user"  # "user", "assistant", "system"
     content: str = ""
     images: List[str] = field(default_factory=list)  # Base64 or file paths
+    content_refs: List[ContentRef] = field(default_factory=list)
     tool_calls: Optional[List[Dict[str, Any]]] = None  # [{id, type, function: {name, arguments}}]
     tool_call_id: Optional[str] = None  # Provider/API boundary only; not persisted in Conversation.messages
     thinking: Optional[str] = None
@@ -186,13 +189,11 @@ class Message:
     response_time_ms: Optional[int] = None  # Response time in milliseconds
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    # === Event Sourcing: Global sequence ID for time-travel/rollback ===
+    # Monotonic evidence sequence shared by messages and session records.
     seq_id: int = 0  # Assigned when Conversation.add_message() persists the message.
-    
-    # === State Snapshot (for rollback) ===
-    # Attached at key points (after tool execution, assistant response complete)
-    # When rolling back, restore state from the last message with a snapshot
-    state_snapshot: Optional[Dict[str, Any]] = None  # Serialized SessionState
+
+    # Lightweight diagnostic checkpoint; never a restorable SessionState.
+    state_snapshot: Optional[Dict[str, Any]] = None
     
     # ID of the archived content record that contains this message's exact prior context.
     archived_content_id: Optional[str] = None
@@ -210,6 +211,7 @@ class Message:
             'role': self.role,
             'content': self.content,
             'images': self.images,
+            'content_refs': [ref.to_dict() for ref in self.content_refs],
             'tool_calls': normalize_tool_calls(self.tool_calls),
             'tool_call_id': self.tool_call_id,
             'thinking': self.thinking,
@@ -308,6 +310,11 @@ class Message:
             role=data.get('role', 'user'),
             content=content,
             images=images,
+            content_refs=[
+                ContentRef.from_dict(item)
+                for item in (data.get('content_refs') or [])
+                if isinstance(item, dict)
+            ],
             tool_calls=normalize_tool_calls(data.get('tool_calls')),
             tool_call_id=data.get('tool_call_id'),
             thinking=data.get('thinking'),
@@ -343,7 +350,7 @@ class Conversation:
     # Lazy-loaded to avoid circular import; use get_state() method
     _state_dict: Dict[str, Any] = field(default_factory=dict)
     
-    # === Sequence counter for time-travel/rollback ===
+    # Monotonic high-water mark; removed message sequence IDs are not reused.
     _seq_counter: int = 0
 
     def __post_init__(self) -> None:
@@ -568,7 +575,6 @@ class Conversation:
                 self.updated_at = datetime.now()
                 return True
         return False
-
     def update_message(self, message_id: str, content: str = None, 
                        images: List[str] = None):
         """Update an existing message"""
@@ -580,21 +586,6 @@ class Conversation:
                     msg.images = images
                 self.updated_at = datetime.now()
                 break
-
-    def delete_message(self, message_id: str) -> List[str]:
-        """Delete a message from the conversation.
-           Returns a list containing the deleted message ID.
-           Note: If we were storing tool results as separate messages, we would need to cascade delete them here.
-           But since we merge tool results into the assistant message, deleting the assistant message
-           implicitly deletes the results.
-        """
-        original_count = len(self.messages)
-        self.messages = [m for m in self.messages if m.id != message_id]
-        
-        if len(self.messages) < original_count:
-            self.updated_at = datetime.now()
-            return [message_id]
-        return []
 
     def get_tokens_per_minute(self) -> float:
         """Calculate average tokens per minute for assistant responses"""
@@ -611,15 +602,23 @@ class Conversation:
         return 0.0
 
     def generate_title_from_first_message(self):
-        """Generate title from first user message"""
+        """Generate a deterministic title from the first real user message."""
         for msg in self.messages:
-            if msg.role == 'user' and msg.content:
-                # Take first 50 characters
-                title = msg.content[:50]
-                if len(msg.content) > 50:
-                    title += "..."
-                self.title = title
-                break
+            if msg.role != 'user':
+                continue
+            metadata = msg.metadata if isinstance(msg.metadata, dict) else {}
+            if metadata.get("synthetic"):
+                continue
+            content = " ".join(str(msg.content or "").split())
+            if content:
+                self.title = content[:50] + ("..." if len(content) > 50 else "")
+                return
+            refs = list(msg.content_refs or [])
+            if refs:
+                name = str(getattr(refs[0], "name", "") or "").strip()
+                if name:
+                    self.title = name[:50] + ("..." if len(name) > 50 else "")
+                    return
     # ============ Sequence ID Management ============
     
     def next_seq_id(self) -> int:
@@ -679,55 +678,8 @@ class Conversation:
         self._state_dict.update(updates)
         self.updated_at = datetime.now()
 
-    # ============ Rollback / Time-Travel ============
-    
-    def rollback_to_seq(self, target_seq_id: int) -> bool:
-        """
-        Rollback conversation to a specific seq_id.
-        
-        This will:
-        1. Remove all messages with seq_id > target_seq_id
-        2. Restore state from the last message with a state_snapshot
-        
-        Returns True if rollback was successful.
-        """
-        if target_seq_id <= 0:
-            return False
-        
-        # 1. Filter messages
-        original_count = len(self.messages)
-        self.messages = [m for m in self.messages if m.seq_id <= target_seq_id]
-        
-        if len(self.messages) == original_count:
-            # No messages removed, target_seq_id might be current or future
-            return False
-        
-        # 2. Reset seq_counter
-        self._seq_counter = target_seq_id
-        
-        # 3. Find and restore the latest state snapshot
-        from models.contracts.session_state import SessionState
-        restored = False
-        for msg in reversed(self.messages):
-            if msg.state_snapshot and not is_state_checkpoint_snapshot(msg.state_snapshot):
-                self._state_dict = msg.state_snapshot.copy()
-                restored = True
-                break
-        
-        if not restored:
-            # No snapshot found, reset to empty state
-            self._state_dict = {}
-        
-        self.updated_at = datetime.now()
-        return True
-
     def attach_state_snapshot(self, message_id: str):
-        """
-        Attach current state as a snapshot to a specific message.
-        
-        Call this after tool execution or at key checkpoints
-        to enable rollback to that point.
-        """
+        """Attach a bounded state checkpoint for projection diagnostics."""
         for msg in self.messages:
             if msg.id == message_id:
                 try:
@@ -741,10 +693,3 @@ class Conversation:
                 self.updated_at = datetime.now()
                 return True
         return False
-
-    def get_last_message_with_snapshot(self) -> Optional[Message]:
-        """Find the most recent message that has a state snapshot"""
-        for msg in reversed(self.messages):
-            if msg.state_snapshot:
-                return msg
-        return None

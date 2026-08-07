@@ -105,6 +105,13 @@ class ConversationRepository:
             logger.warning("Error loading conversation %s: %s", conversation_id, exc)
         return None
 
+    def exists(self, conversation_id: str) -> bool:
+        """Check persistence presence without parsing a full transcript."""
+        try:
+            return (self.conversations_dir / f"{conversation_id}.json").is_file()
+        except Exception:
+            return False
+
     def list_all(self) -> list[dict[str, Any]]:
         indexed = self._load_index()
         if indexed is not None:

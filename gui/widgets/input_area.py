@@ -3,9 +3,18 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
-from PyQt6.QtWidgets import QFileDialog, QFrame, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from core.commands import CommandRegistry
 from core.commands.parser import parse_bang_command_text
@@ -13,15 +22,14 @@ from core.commands.types import CommandAction, CommandResult, ShellInvocation
 from core.content.attachments import extract_composer_text
 from core.context.sections import extract_user_request
 from core.modes.manager import ModeManager
-from core.llm.model_selection import provider_model_ids
-from models.provider import provider_matches_name, split_model_ref
-
-from gui.utils.image_utils import extract_images_from_mime, is_supported_image_path
+from gui.utils.icon_manager import Icons
+from gui.utils.image_utils import extract_attachment_sources_from_mime, is_supported_image_path
 
 # Extracted sub-components
 from gui.widgets.input.attachment_strip import AttachmentPreviewStrip
 from gui.widgets.input.composer_toolbar import ComposerToolbar
 from gui.widgets.input.text_editor import MessageTextEdit
+from models.model_ref import build_model_ref, provider_matches_name, split_model_ref
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +40,14 @@ class InputArea(QWidget):
     message_sent = pyqtSignal(str, list, object)
     slash_command_result = pyqtSignal(object)  # CommandResult from / or # commands
     cancel_requested = pyqtSignal()
-    conversation_settings_requested = pyqtSignal()
-    model_edit_requested = pyqtSignal()
-    show_thinking_changed = pyqtSignal(bool)
     prompt_optimize_requested = pyqtSignal(str)  # Optimize current input prompt
     prompt_optimize_cancel_requested = pyqtSignal()
     model_ref_changed = pyqtSignal(str)
     
-    provider_model_changed = pyqtSignal(str, str)  # provider_id, model
     mode_changed = pyqtSignal(str)
+    permission_preset_changed = pyqtSignal(str)
+    session_settings_requested = pyqtSignal()
+    model_edit_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -57,15 +64,20 @@ class InputArea(QWidget):
         self._attachments: List[Dict[str, Any]] = []  # [{'path': str, 'type': 'image'|'file'}]
         self._conversation = None
         self._providers = []
-        self._suppress_thinking_signal = False
-        self._suppress_model_ref_signal = False
         self._work_dir = ""
         self._app_settings: Dict[str, Any] = {}
+        self._context_busy = False
+        self._submission_busy = False
         self._is_streaming = False
+        self._input_enabled = True
+        self._revision_state: Dict[str, Any] | None = None
         self._setup_ui()
 
     def set_app_settings(self, settings: Dict[str, Any] | None) -> None:
         self._app_settings = dict(settings or {})
+
+    def refresh_theme(self) -> None:
+        self.toolbar.refresh_theme()
 
     def _bang_command_behavior(self) -> str:
         try:
@@ -125,6 +137,26 @@ class InputArea(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
 
+        self.revision_bar = QFrame()
+        self.revision_bar.setObjectName("composer_revision_bar")
+        revision_layout = QHBoxLayout(self.revision_bar)
+        revision_layout.setContentsMargins(8, 4, 6, 4)
+        revision_layout.setSpacing(6)
+        self.revision_label = QLabel()
+        self.revision_label.setObjectName("composer_revision_label")
+        self.revision_label.setWordWrap(True)
+        revision_layout.addWidget(self.revision_label, 1)
+        self.revision_cancel_btn = QToolButton()
+        self.revision_cancel_btn.setObjectName("composer_revision_cancel")
+        self.revision_cancel_btn.setIcon(Icons.get_muted(Icons.XMARK))
+        self.revision_cancel_btn.setIconSize(QSize(16, 16))
+        self.revision_cancel_btn.setFixedSize(24, 24)
+        self.revision_cancel_btn.setToolTip("取消编辑")
+        self.revision_cancel_btn.clicked.connect(self.cancel_revision)
+        revision_layout.addWidget(self.revision_cancel_btn)
+        self.revision_bar.setVisible(False)
+        layout.addWidget(self.revision_bar)
+
         self.attachment_strip = AttachmentPreviewStrip()
         self.attachment_strip.remove_requested.connect(self._remove_attachment)
         layout.addWidget(self.attachment_strip)
@@ -146,37 +178,38 @@ class InputArea(QWidget):
         self.text_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.text_input.configure_command_registry(self._command_registry, self._build_command_context)
         self.text_input.send_requested.connect(self._send_message)
+        self.text_input.cancel_requested.connect(self._request_cancel)
+        self.text_input.textChanged.connect(self._sync_primary_action)
         self.text_input.attachments_received.connect(self.add_attachments)
         self.text_input.file_reference_added.connect(self._add_attachment_file)
         wrapper_layout.addWidget(self.text_input)
 
         self.toolbar = ComposerToolbar()
         self.toolbar.attach_requested.connect(self._attach_file)
-        self.toolbar.conversation_settings_requested.connect(self.conversation_settings_requested.emit)
-        self.toolbar.model_edit_requested.connect(self.model_edit_requested.emit)
         self.toolbar.prompt_optimize_requested.connect(self._on_prompt_optimize_clicked)
         self.toolbar.prompt_optimize_cancel_requested.connect(self.prompt_optimize_cancel_requested.emit)
-        self.toolbar.send_requested.connect(self._handle_send_requested)
+        self.toolbar.primary_action_requested.connect(self._handle_primary_action_requested)
         self.toolbar.model_ref_changed.connect(self._on_model_ref_changed)
+        self.toolbar.permission_preset_changed.connect(self.permission_preset_changed.emit)
+        self.toolbar.compact_requested.connect(self._request_compact)
+        self.toolbar.session_settings_requested.connect(self.session_settings_requested.emit)
+        self.toolbar.model_edit_requested.connect(self.model_edit_requested.emit)
         wrapper_layout.addWidget(self.toolbar)
         layout.addWidget(input_wrapper)
 
-        self.provider_combo = self.toolbar.provider_combo
-        self.model_combo = self.toolbar.model_combo
         self.mode_combo = self.toolbar.mode_combo
-        self.thinking_toggle = self.toolbar.thinking_toggle
         self.prompt_optimize_btn = self.toolbar.prompt_optimize_btn
         self.model_ref_combo = self.toolbar.model_ref_combo
+        self.permission_btn = self.toolbar.permission_btn
+        self.context_usage_btn = self.toolbar.context_usage_btn
+        self.session_options_btn = self.toolbar.session_options_btn
+        self.model_edit_btn = self.toolbar.model_edit_btn
 
         self._mode_manager = ModeManager(self._work_dir or None)
         for m in self._mode_manager.list_ui_modes():
             self.mode_combo.addItem(m.name, m.slug)
 
-        self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
-        self.provider_combo.currentIndexChanged.connect(self._emit_provider_model_changed)
-        self.model_combo.currentTextChanged.connect(self._emit_provider_model_changed)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-        self.thinking_toggle.toggled.connect(self._on_thinking_toggled)
 
     def _on_mode_changed(self, _index: int) -> None:
         try:
@@ -185,13 +218,27 @@ class InputArea(QWidget):
             logger.debug("Failed to emit mode change: %s", e)
 
     def set_streaming_state(self, is_streaming: bool):
-        self._is_streaming = is_streaming
-        self.toolbar.set_streaming_state(is_streaming, self.style())
-        if is_streaming:
-            self.text_input.setEnabled(False)
-        else:
-            self.text_input.setEnabled(True)
+        self._is_streaming = bool(is_streaming)
+        self.toolbar.set_streaming_state(self._is_streaming)
+        self.text_input.setAcceptDrops(not is_streaming)
+        self.text_input.setPlaceholderText(
+            "追加要求，将在当前步骤完成后处理"
+            if is_streaming
+            else self._command_registry.build_input_placeholder()
+        )
+        self._sync_interaction_state()
+        if self.text_input.isEnabled():
             self.text_input.setFocus()
+
+    def set_context_busy(self, busy: bool) -> None:
+        self._context_busy = bool(busy)
+        self.toolbar.set_context_busy(self._context_busy)
+        self._sync_interaction_state()
+
+    def set_submission_busy(self, busy: bool) -> None:
+        self._submission_busy = bool(busy)
+        self._update_revision_bar()
+        self._sync_interaction_state()
 
 
     def set_prompt_optimize_busy(self, busy: bool) -> None:
@@ -207,11 +254,52 @@ class InputArea(QWidget):
             return
         self.prompt_optimize_requested.emit(text)
 
-    def _handle_send_requested(self):
+    def _sync_primary_action(self) -> None:
+        attachments_ready = not self._has_attachment_errors()
+        self.toolbar.set_primary_action_state(
+            has_draft=self._has_actionable_draft(),
+            enabled=self._is_streaming
+            or (
+                attachments_ready
+                and (
+                    self._input_enabled
+                    and not self._submission_busy
+                    and not self._context_busy
+                )
+            ),
+        )
+
+    def _sync_interaction_state(self) -> None:
+        editable = (
+            self._input_enabled
+            and not self._context_busy
+            and not self._submission_busy
+        )
+        self.text_input.setEnabled(editable)
+        self.attachment_strip.setEnabled(editable)
+        self.toolbar.setEnabled(not self._submission_busy or self._is_streaming)
+        self._sync_primary_action()
+
+    def _has_actionable_draft(self) -> bool:
+        return (
+            self.text_input.isEnabled()
+            and not self._submission_busy
+            and not self._has_attachment_errors()
+            and bool(self.text_input.toPlainText().strip() or self._attachments)
+        )
+
+    def _has_attachment_errors(self) -> bool:
+        return any(str(item.get("error") or "").strip() for item in self._attachments)
+
+    def _handle_primary_action_requested(self) -> None:
+        if self._is_streaming and not self._has_actionable_draft():
+            self._request_cancel()
+            return
+        self._send_message()
+
+    def _request_cancel(self) -> None:
         if self._is_streaming:
             self.cancel_requested.emit()
-        else:
-            self._send_message()
 
     def set_providers(
         self,
@@ -223,127 +311,32 @@ class InputArea(QWidget):
         emit_signal: bool = True,
     ):
         providers = [provider for provider in (providers or []) if bool(getattr(provider, "enabled", True))]
-        desired_provider_id = str(selected_provider_id or self.get_selected_provider_id() or "").strip()
-        desired_model = str(selected_model or self.get_selected_model() or "").strip()
-        desired_model_ref = str(selected_model_ref or "").strip()
-
-        if desired_model_ref:
-            provider_name, model_name = split_model_ref(desired_model_ref)
-            if provider_name:
-                for provider in providers or []:
-                    if provider_matches_name(provider, provider_name):
-                        desired_provider_id = str(getattr(provider, "id", "") or "").strip()
-                        models = provider_model_ids(provider)
-                        desired_model = model_name or (models[0] if models else "")
-                        break
-            elif model_name:
-                desired_model = model_name
-
-        self.provider_combo.blockSignals(True)
-        self.provider_combo.clear()
         self._providers = providers
-        
-        for provider in providers:
-            self.provider_combo.addItem(provider.name, provider.id)
-        
-        self.provider_combo.blockSignals(False)
-        if not providers:
-            self.model_combo.clear()
-            self.toolbar.set_model_ref_options([], "")
-            if emit_signal:
-                self._emit_provider_model_changed()
-            return
-
-        restore_index = self.provider_combo.findData(desired_provider_id)
-        if restore_index < 0:
-            restore_index = 0
-
-        self.provider_combo.blockSignals(True)
-        try:
-            self.provider_combo.setCurrentIndex(restore_index)
-        finally:
-            self.provider_combo.blockSignals(False)
-
-        self._populate_models_for_provider(
-            restore_index,
-            preferred_model=desired_model,
-            emit_signal=emit_signal,
-        )
-        try:
-            current_ref = desired_model_ref or self._build_selected_model_ref()
-            self.toolbar.set_model_ref_options(providers or [], current_model_ref=current_ref)
-        except Exception as e:
-            logger.debug("Failed to sync bottom model selector options: %s", e)
-    
-    def _on_provider_changed(self, index: int):
-        self._populate_models_for_provider(index, emit_signal=True)
-
-    def _populate_models_for_provider(
-        self,
-        index: int,
-        *,
-        preferred_model: str = "",
-        emit_signal: bool = True,
-    ) -> None:
-        self.model_combo.clear()
-        
-        if 0 <= index < len(self._providers):
-            provider = self._providers[index]
-            for model in provider_model_ids(provider):
-                self.model_combo.addItem(model)
-
-            desired_model = str(preferred_model or "").strip()
-            if desired_model:
-                idx = self.model_combo.findText(desired_model)
-                if idx >= 0:
-                    self.model_combo.setCurrentIndex(idx)
-                else:
-                    self.model_combo.addItem(desired_model)
-                    self.model_combo.setItemData(
-                        self.model_combo.count() - 1,
-                        "当前会话模型（未加入常用模型目录）",
-                        Qt.ItemDataRole.ToolTipRole,
-                    )
-                    self.model_combo.setCurrentText(desired_model)
-
+        current_ref = str(selected_model_ref or "").strip()
+        if not current_ref:
+            current_ref = self._model_ref_for_selection(
+                provider_id=str(selected_provider_id or self.get_selected_provider_id() or "").strip(),
+                model=str(selected_model or self.get_selected_model() or "").strip(),
+            )
+        self.toolbar.set_model_ref_options(providers, current_model_ref=current_ref)
         if emit_signal:
-            self._emit_provider_model_changed()
-    
-    def _emit_provider_model_changed(self) -> None:
-        try:
-            provider_id = self.get_selected_provider_id()
-            model = (self.get_selected_model() or "").strip()
-        except Exception as e:
-            logger.debug("Failed to get provider/model for signal: %s", e)
-            return
-        self.provider_model_changed.emit(provider_id, model)
+            self.model_ref_changed.emit(self.model_ref())
 
     def _on_model_ref_changed(self, model_ref: str) -> None:
-        if self._suppress_model_ref_signal:
-            return
-        provider_name, model_name = split_model_ref(str(model_ref or "").strip())
-        provider_id = ""
-        if provider_name:
-            for provider in self._providers or []:
-                if provider_matches_name(provider, provider_name):
-                    provider_id = str(getattr(provider, "id", "") or "")
-                    break
-        self._suppress_model_ref_signal = True
-        try:
-            self.set_provider_model_selection(
-                provider_id=provider_id,
-                model=model_name or str(model_ref or "").strip(),
-                emit_signal=False,
-            )
-        finally:
-            self._suppress_model_ref_signal = False
         self.model_ref_changed.emit(str(model_ref or "").strip())
 
     def get_selected_provider_id(self) -> str:
-        return self.provider_combo.currentData() or ""
+        provider_name, _model = split_model_ref(self.model_ref())
+        if not provider_name:
+            return ""
+        for provider in self._providers:
+            if provider_matches_name(provider, provider_name):
+                return str(getattr(provider, "id", "") or "").strip()
+        return ""
     
     def get_selected_model(self) -> str:
-        return self.model_combo.currentText()
+        _provider_name, model = split_model_ref(self.model_ref())
+        return str(model or "").strip()
 
     def get_selected_mode(self) -> str:
         return self.mode_combo.currentText()
@@ -358,66 +351,19 @@ class InputArea(QWidget):
     def get_mode_manager(self) -> ModeManager:
         return self._mode_manager
 
-    def set_provider_model_selection(
-        self,
-        *,
-        provider_id: str | None = None,
-        model: str | None = None,
-        emit_signal: bool = False,
-    ) -> bool:
-        target_provider_id = str(provider_id or "").strip()
-        target_model = str(model or "").strip()
-        provider_index = self.provider_combo.findData(target_provider_id) if target_provider_id else -1
-
-        self.provider_combo.blockSignals(True)
-        try:
-            if provider_index >= 0:
-                self.provider_combo.setCurrentIndex(provider_index)
-        finally:
-            self.provider_combo.blockSignals(False)
-
-        if provider_index >= 0:
-            self._populate_models_for_provider(
-                provider_index,
-                preferred_model=target_model,
-                emit_signal=emit_signal,
-            )
-            try:
-                self.toolbar.set_model_ref(self._build_selected_model_ref())
-            except Exception as e:
-                logger.debug("Failed to sync bottom model selector after provider/model selection: %s", e)
-            return True
-
-        if target_model:
-            self.model_combo.setCurrentText(target_model)
-            if emit_signal:
-                self._emit_provider_model_changed()
-            try:
-                self.toolbar.set_model_ref(self._build_selected_model_ref())
-            except Exception as e:
-                logger.debug("Failed to sync bottom model selector fallback selection: %s", e)
-        return False
-
-    def set_model_ref_options(self, providers: list, current_model_ref: str = "") -> None:
-        self.toolbar.set_model_ref_options(providers or [], current_model_ref=current_model_ref)
-
     def set_model_ref(self, model_ref: str) -> None:
         self.toolbar.set_model_ref(model_ref or "")
 
     def model_ref(self) -> str:
         return self.toolbar.model_ref()
 
-    def _build_selected_model_ref(self) -> str:
-        provider_id = self.get_selected_provider_id()
+    def _model_ref_for_selection(self, *, provider_id: str, model: str) -> str:
         provider_name = ""
-        for provider in self._providers or []:
-            if str(getattr(provider, "id", "") or "") == str(provider_id or ""):
-                provider_name = str(getattr(provider, "name", "") or "")
+        for provider in self._providers:
+            if str(getattr(provider, "id", "") or "").strip() == str(provider_id or "").strip():
+                provider_name = str(getattr(provider, "name", "") or "").strip()
                 break
-        model = self.get_selected_model()
-        if provider_name and model:
-            return f"{provider_name}|{model}"
-        return model or ""
+        return build_model_ref(provider_name, model) if provider_name and model else str(model or "").strip()
 
     def set_mode_selection(self, mode_slug: str) -> bool:
         normalized = str(mode_slug or "").strip()
@@ -444,34 +390,39 @@ class InputArea(QWidget):
         return True
 
     def set_show_thinking(self, enabled: bool):
-        self._suppress_thinking_signal = True
-        try:
-            self.thinking_toggle.setChecked(bool(enabled))
-        finally:
-            self._suppress_thinking_signal = False
+        self.toolbar.set_show_thinking(bool(enabled))
+
+    def set_permission_preset(self, preset: str) -> None:
+        self.toolbar.set_permission_preset(preset)
+
+    def get_permission_preset(self) -> str:
+        return self.toolbar.permission_preset()
+
+    def set_permission_preset_enabled(self, enabled: bool) -> None:
+        self.toolbar.set_permission_enabled(enabled)
 
     def is_show_thinking_enabled(self) -> bool:
-        try:
-            return bool(self.thinking_toggle.isChecked())
-        except Exception as e:
-            logger.debug("Failed to read thinking toggle state: %s", e)
-            return True
+        return self.toolbar.is_show_thinking_enabled()
 
-    def _on_thinking_toggled(self, checked: bool):
-        if self._suppress_thinking_signal:
-            return
-        self.show_thinking_changed.emit(bool(checked))
+    def set_token_snapshot(self, snapshot) -> None:
+        self.toolbar.set_token_snapshot(snapshot)
+
+    def _request_compact(self) -> None:
+        """Route the toolbar action through the canonical command presenter."""
+        self.slash_command_result.emit(CommandResult(action=CommandAction.COMPACT))
     
     def _attach_file(self):
+        if self._is_streaming:
+            return
         file_paths, _ = QFileDialog.getOpenFileNames(
             self, '添加文件', '',
-            '所有文件 (*);;图片 (*.png *.jpg *.jpeg *.gif *.webp)'
+            '所有文件 (*);;Word/Excel (*.doc *.docx *.docm *.dotx *.dotm *.xls *.xlsx *.xlsm *.xltx *.xltm);;图片 (*.png *.jpg *.jpeg *.gif *.webp)'
         )
         for file_path in file_paths:
             self._add_attachment_file(file_path)
 
     def add_attachments(self, sources: list) -> None:
-        if not sources:
+        if self._is_streaming or not sources:
             return
         for src in sources:
             if isinstance(src, str) and src:
@@ -482,20 +433,49 @@ class InputArea(QWidget):
         except Exception as e:
             logger.debug("Failed to set focus after attachments: %s", e)
 
-    def _add_attachment_file(self, path: str):
+    def _add_attachment_file(
+        self,
+        path: str,
+        *,
+        error: str = "",
+        name: str = "",
+        mime: str = "",
+    ):
+        if self._is_streaming:
+            return
         # Check if already attached
         for att in self._attachments:
             if att['path'] == path:
+                if error:
+                    att["error"] = str(error)
+                    self.attachment_strip.add_attachment(
+                        path,
+                        is_image=str(att.get("type") or "") == "image",
+                        error=str(error),
+                        display_name=str(att.get("name") or name or ""),
+                    )
+                    self._sync_primary_action()
                 return
         
-        is_img = False
-        if path.startswith("data:image"):
-            is_img = True
-        elif is_supported_image_path(path):
+        is_img = str(mime or "").lower().startswith("image/")
+        if path.startswith("data:image") or is_supported_image_path(path):
             is_img = True
             
-        self._attachments.append({'path': path, 'type': 'image' if is_img else 'file'})
-        self.attachment_strip.add_attachment(path, is_image=is_img)
+        attachment = {'path': path, 'type': 'image' if is_img else 'file'}
+        if name:
+            attachment["name"] = str(name)
+        if mime:
+            attachment["mime"] = str(mime)
+        if error:
+            attachment["error"] = str(error)
+        self._attachments.append(attachment)
+        self.attachment_strip.add_attachment(
+            path,
+            is_image=is_img,
+            error=error,
+            display_name=str(name or ""),
+        )
+        self._sync_primary_action()
 
     def _remove_attachment(self, path: str):
         for i, att in enumerate(self._attachments):
@@ -504,9 +484,13 @@ class InputArea(QWidget):
                 break
 
         self.attachment_strip.remove_attachment(path)
+        self._sync_primary_action()
 
     def set_conversation(self, conversation) -> None:
         """Set the current conversation for command context."""
+        conversation_id = str(getattr(conversation, "id", "") or "")
+        if self._revision_state and self._revision_state.get("conversation_id") != conversation_id:
+            self.cancel_revision()
         self._conversation = conversation
         history: list[str] = []
         for message in getattr(conversation, "messages", []) or []:
@@ -545,6 +529,7 @@ class InputArea(QWidget):
         if bang_command is not None:
             if self._bang_command_behavior() == "agent":
                 return False
+            self.text_input.remember_history_entry(content)
             result = CommandResult(
                 action=CommandAction.SHELL_RUN,
                 data=ShellInvocation(
@@ -566,50 +551,213 @@ class InputArea(QWidget):
         if result is None:
             return False
 
+        self.text_input.remember_history_entry(content)
         self.text_input.clear()
         self.slash_command_result.emit(result)
         return True
 
     def _emit_message_payload(self, content: str) -> None:
-        from core.content.attachments import process_attachments
-
-        composer_text = content
-        result = process_attachments(self._attachments)
-        metadata = None
-        if result.file_content_suffix:
-            content += result.file_content_suffix
-            metadata = {"composer_text": composer_text}
-        self.message_sent.emit(content, result.encoded_images, metadata)
+        attachments = [dict(item) for item in self._attachments]
+        metadata: dict[str, Any] = {"composer_text": content}
+        if self._revision_state:
+            metadata["conversation_revision"] = dict(self._revision_state)
+        self.message_sent.emit(content, attachments, metadata)
 
     def _clear_composer(self) -> None:
         self.text_input.clear()
         self._attachments.clear()
         self.attachment_strip.clear_attachments()
+        self._sync_primary_action()
+
+    def confirm_message_sent(self, content: str, attachments: list[dict[str, Any]]) -> bool:
+        if self._revision_state:
+            return False
+        current_text = self.text_input.toPlainText().strip()
+        current_attachments = [dict(item) for item in self._attachments]
+        if current_text != str(content or "").strip():
+            return False
+        if current_attachments != [dict(item) for item in attachments or []]:
+            return False
+        if current_text:
+            self.text_input.remember_history_entry(current_text)
+        self._clear_composer()
+        return True
+
+    def begin_revision(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+        fingerprint: str,
+        turn_number: int,
+        following_turns: int,
+        content: str,
+        attachments: list[dict[str, Any]],
+    ) -> None:
+        self._revision_state = {
+            "conversation_id": str(conversation_id or ""),
+            "message_id": str(message_id or ""),
+            "fingerprint": str(fingerprint or ""),
+        }
+        self._clear_composer()
+        self.text_input.setPlainText(str(content or ""))
+        for item in attachments or []:
+            if not isinstance(item, dict):
+                continue
+            self._add_attachment_file(
+                str(item.get("path") or ""),
+                error=str(item.get("error") or ""),
+                name=str(item.get("name") or ""),
+                mime=str(item.get("mime") or ""),
+            )
+        self.revision_label.setText(
+            f"编辑第 {max(1, int(turn_number or 1))} 轮 · "
+            f"发送后将移除后续 {max(0, int(following_turns or 0))} 轮"
+        )
+        self._update_revision_bar()
+        self.toolbar.set_revision_state(True)
+        self._sync_primary_action()
+        self.text_input.setFocus()
+
+    def revision_state(self) -> dict[str, str] | None:
+        return dict(self._revision_state) if self._revision_state else None
+
+    def has_draft(self) -> bool:
+        return bool(self.text_input.toPlainText().strip() or self._attachments)
+
+    def cancel_revision(self, *, clear_draft: bool = True) -> bool:
+        if self._revision_state is None:
+            return False
+        self._revision_state = None
+        self.revision_bar.setVisible(False)
+        self.toolbar.set_revision_state(False)
+        if clear_draft:
+            self._clear_composer()
+        self._sync_primary_action()
+        return True
+
+    def confirm_revision_sent(
+        self,
+        conversation_id: str,
+        message_id: str,
+        content: str,
+        attachments: list[dict[str, Any]],
+    ) -> bool:
+        state = self._revision_state
+        if not state:
+            return False
+        if (
+            state.get("conversation_id") != str(conversation_id or "")
+            or state.get("message_id") != str(message_id or "")
+        ):
+            return False
+        unchanged = (
+            self.text_input.toPlainText().strip() == str(content or "").strip()
+            and [dict(item) for item in self._attachments]
+            == [dict(item) for item in attachments or []]
+        )
+        self._revision_state = None
+        self.revision_bar.setVisible(False)
+        self.toolbar.set_revision_state(False)
+        if unchanged:
+            if str(content or "").strip():
+                self.text_input.remember_history_entry(str(content or "").strip())
+            self._clear_composer()
+        self._sync_primary_action()
+        return True
+
+    def _update_revision_bar(self) -> None:
+        active = self._revision_state is not None
+        self.revision_bar.setVisible(active)
+        self.revision_cancel_btn.setEnabled(
+            active and not self._submission_busy and not self._context_busy
+        )
+
+    def restore_failed_message(self, content: str, attachments: list[dict[str, Any]]) -> bool:
+        """Restore a failed submission only when the user has not started a new draft."""
+        if self.text_input.toPlainText().strip() or self._attachments:
+            return False
+        self.text_input.setPlainText(str(content or ""))
+        for item in attachments or []:
+            if isinstance(item, dict):
+                self._add_attachment_file(
+                    str(item.get("path") or ""),
+                    error=str(item.get("error") or ""),
+                    name=str(item.get("name") or ""),
+                    mime=str(item.get("mime") or ""),
+                )
+        return True
+
+    def mark_attachment_errors(self, errors: dict[str, str]) -> None:
+        normalized = {
+            str(source or ""): str(error or "")
+            for source, error in (errors or {}).items()
+            if str(source or "")
+        }
+        for attachment in self._attachments:
+            source = str(attachment.get("path") or "")
+            if source not in normalized:
+                continue
+            attachment["error"] = normalized[source]
+            self.attachment_strip.add_attachment(
+                source,
+                is_image=attachment.get("type") == "image",
+                error=normalized[source],
+                display_name=str(attachment.get("name") or ""),
+            )
+        self._sync_primary_action()
+
+    def load_draft(self, content: str, attachments: list[dict[str, Any]]) -> None:
+        """Replace the composer draft without mutating conversation history."""
+        self.cancel_revision(clear_draft=False)
+        self._clear_composer()
+        self.text_input.setPlainText(str(content or ""))
+        for item in attachments or []:
+            if not isinstance(item, dict):
+                continue
+            self._add_attachment_file(
+                str(item.get("path") or ""),
+                error=str(item.get("error") or ""),
+                name=str(item.get("name") or ""),
+                mime=str(item.get("mime") or ""),
+            )
+        self.text_input.setFocus()
 
     def _send_message(self):
+        if self._submission_busy:
+            return
+        if self._has_attachment_errors():
+            return
         content = self.text_input.toPlainText().strip()
 
-        if content:
-            self.text_input.remember_history_entry(content)
+        if self._is_streaming and not content:
+            return
 
-        if self._try_handle_command(content):
+        if not self._is_streaming and self._revision_state is None and self._try_handle_command(content):
             return
 
         if not content and not self._attachments:
+            if self._revision_state is not None:
+                return
             self.message_sent.emit("", [], None)
             return
 
         self._emit_message_payload(content)
-        self._clear_composer()
     
     def set_enabled(self, enabled: bool):
-        self.text_input.setEnabled(enabled)
-        self.toolbar.send_btn.setEnabled(True if self._is_streaming else bool(enabled))
+        self._input_enabled = bool(enabled)
+        self._sync_interaction_state()
     
     def dragEnterEvent(self, event: QDragEnterEvent):
+        if self._is_streaming:
+            event.ignore()
+            return
         if event.mimeData().hasUrls() or event.mimeData().hasImage():
             event.acceptProposedAction()
     
     def dropEvent(self, event: QDropEvent):
-        data_urls, file_paths = extract_images_from_mime(event.mimeData())
+        if self._is_streaming:
+            event.ignore()
+            return
+        data_urls, file_paths = extract_attachment_sources_from_mime(event.mimeData())
         self.add_attachments(data_urls + file_paths)

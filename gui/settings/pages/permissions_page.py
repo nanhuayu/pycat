@@ -1,4 +1,4 @@
-"""Category-based permission editor backed by ToolDescriptor metadata."""
+"""Category-based tri-state permission editor backed by ToolDescriptor metadata."""
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
@@ -21,6 +21,7 @@ from core.tools.manager import ToolManager
 from gui.settings.page_header import build_page_header
 from gui.utils.combo_box import configure_combo_popup
 from gui.utils.icon_manager import Icons
+from gui.widgets.themed_line_edit import ThemedLineEdit
 from models.contracts.capability import CapabilitiesConfig
 from models.contracts.tooling import (
     RISK_LEVEL_LABELS,
@@ -35,6 +36,13 @@ from models.contracts.tooling import (
 
 
 class PermissionsPage(QWidget):
+    """Editor for the application-level *custom* permission rules.
+
+    Session presets (default/ask/deny/allow/custom) are chosen per conversation in
+    the input area; this page only maintains the rules used by the "custom"
+    preset.
+    """
+
     page_title = "权限"
 
     def __init__(
@@ -49,7 +57,6 @@ class PermissionsPage(QWidget):
         if tool_manager is None:
             raise ValueError("PermissionsPage requires an injected ToolManager")
         self._tool_manager = tool_manager
-        self._approval_mode = permissions.approval_mode
         self._category_defaults = dict(permissions.category_defaults)
         self._overrides = dict(permissions.tools)
         self._rows: dict[str, dict] = {}
@@ -62,32 +69,32 @@ class PermissionsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
-        root.addWidget(build_page_header("权限", "Mode 决定工具上限；这里仅控制全局启用和逐次确认。"))
+        root.addWidget(build_page_header("权限", "这里维护“自定义权限”预设的规则；会话级预设在输入区选择，Mode 决定工具上限。"))
 
         preset_row = QHBoxLayout()
         preset_row.setSpacing(8)
         for text, callback in (
-            ("安全默认", self._apply_safe_defaults),
-            ("开发信任", self._apply_developer_trust),
-            ("全部放行", self._apply_allow_all),
+            ("安全默认", self._fill_safe_defaults),
+            ("全部确认", self._fill_all_ask),
+            ("全部放行", self._fill_all_allow),
         ):
             button = QPushButton(text)
             button.setObjectName("settings_action_btn")
             button.clicked.connect(callback)
             preset_row.addWidget(button)
         preset_row.addStretch(1)
-        self.mode_label = QLabel()
-        self.mode_label.setObjectName("permission_mode_label")
-        preset_row.addWidget(self.mode_label)
         root.addLayout(preset_row)
 
-        self.warning_label = QLabel("全部放行会跳过高风险工具确认，但仍不能突破 Mode、会话或父 Agent 的工具范围。")
+        self.warning_label = QLabel(
+            "“全部放行”规则会跳过所有工具确认（含高风险）；Channel 无人值守会话将直接执行高风险工具，"
+            "但仍不能突破 Mode、会话或父 Agent 的工具范围。"
+        )
         self.warning_label.setObjectName("permission_warning")
         self.warning_label.setProperty("warning", True)
         self.warning_label.setWordWrap(True)
         root.addWidget(self.warning_label)
 
-        self.search_edit = QLineEdit()
+        self.search_edit = ThemedLineEdit()
         self.search_edit.setPlaceholderText("搜索工具名称、技术 ID、类别或来源")
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._filter_rows)
@@ -95,20 +102,24 @@ class PermissionsPage(QWidget):
 
         self.tree = QTreeWidget()
         self.tree.setObjectName("permission_tree")
-        self.tree.setColumnCount(7)
-        self.tree.setHeaderLabels(["工具", "类别", "来源", "风险", "启用", "确认策略", ""])
+        self.tree.setColumnCount(6)
+        self.tree.setHeaderLabels(["工具", "类别", "来源", "风险", "策略", ""])
         self.tree.setAlternatingRowColors(True)
         self.tree.setRootIsDecorated(True)
         self.tree.setUniformRowHeights(False)
         header = self.tree.header()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column in (1, 2, 3, 4, 5, 6):
+        for column in (1, 2, 3, 4, 5):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         root.addWidget(self.tree, 1)
 
     def _descriptors(self) -> list[ToolDescriptor]:
-        descriptors = list(self._tool_manager.list_tool_descriptors(include_dynamic=True).values())
+        descriptors = [
+            descriptor
+            for descriptor in self._tool_manager.list_tool_descriptors(include_dynamic=True).values()
+            if descriptor.name != "agent__complete"
+        ]
         return sorted(
             descriptors,
             key=lambda item: (
@@ -144,16 +155,9 @@ class PermissionsPage(QWidget):
                 parent.setFont(0, font)
                 parent.setData(0, Qt.ItemDataRole.UserRole, category)
 
-                enabled_combo = self._enabled_combo(policy.enabled, inherited=False)
-                confirm_combo = self._confirm_combo(policy.auto_approve, inherited=False)
-                enabled_combo.currentIndexChanged.connect(
-                    lambda _index, category=category: self._category_changed(category)
-                )
-                confirm_combo.currentIndexChanged.connect(
-                    lambda _index, category=category: self._category_changed(category)
-                )
-                self.tree.setItemWidget(parent, 4, enabled_combo)
-                self.tree.setItemWidget(parent, 5, confirm_combo)
+                action_combo = self._action_combo(policy.action, inherited=None)
+                action_combo.currentIndexChanged.connect(self._rules_changed)
+                self.tree.setItemWidget(parent, 4, action_combo)
 
                 reset = QToolButton()
                 reset.setIcon(Icons.get(Icons.REFRESH))
@@ -161,12 +165,8 @@ class PermissionsPage(QWidget):
                 reset.setFixedSize(24, 24)
                 reset.setToolTip("恢复该类别默认值")
                 reset.clicked.connect(lambda _checked=False, category=category: self._reset_category(category))
-                self.tree.setItemWidget(parent, 6, reset)
-                self._category_rows[category] = {
-                    "item": parent,
-                    "enabled": enabled_combo,
-                    "confirm": confirm_combo,
-                }
+                self.tree.setItemWidget(parent, 5, reset)
+                self._category_rows[category] = {"item": parent, "action": action_combo}
 
                 for descriptor in children:
                     child = QTreeWidgetItem(parent)
@@ -178,19 +178,12 @@ class PermissionsPage(QWidget):
                     child.setData(0, Qt.ItemDataRole.UserRole, descriptor.name)
 
                     override = self._overrides.get(descriptor.name)
-                    tool_enabled = self._tool_enabled_combo(policy, override)
-                    tool_enabled.currentIndexChanged.connect(self._tool_changed)
-                    self.tree.setItemWidget(child, 4, tool_enabled)
-
-                    confirm_widget: QComboBox | None = None
-                    approval_label: QLabel | None = None
-                    if descriptor.risk == "high":
-                        approval_label = QLabel()
-                        self.tree.setItemWidget(child, 5, approval_label)
-                    else:
-                        confirm_widget = self._tool_confirm_combo(policy, override)
-                        confirm_widget.currentIndexChanged.connect(self._tool_changed)
-                        self.tree.setItemWidget(child, 5, confirm_widget)
+                    tool_combo = self._action_combo(
+                        override.action if override is not None else "inherit",
+                        inherited=policy.action,
+                    )
+                    tool_combo.currentIndexChanged.connect(self._rules_changed)
+                    self.tree.setItemWidget(child, 4, tool_combo)
 
                     tool_reset = QToolButton()
                     tool_reset.setIcon(Icons.get(Icons.REFRESH))
@@ -200,112 +193,60 @@ class PermissionsPage(QWidget):
                     tool_reset.clicked.connect(
                         lambda _checked=False, tool_name=descriptor.name: self._reset_tool(tool_name)
                     )
-                    self.tree.setItemWidget(child, 6, tool_reset)
+                    self.tree.setItemWidget(child, 5, tool_reset)
                     self._rows[descriptor.name] = {
                         "item": child,
                         "descriptor": descriptor,
-                        "enabled": tool_enabled,
-                        "confirm": confirm_widget,
-                        "approval_label": approval_label,
+                        "action": tool_combo,
                     }
                 parent.setExpanded(True)
-            self._refresh_mode_ui()
             self._filter_rows(self.search_edit.text())
         finally:
             self._loading = False
 
-    @staticmethod
-    def _enabled_combo(enabled: bool, *, inherited: bool) -> QComboBox:
+    _ACTION_ITEMS = (("放行", "allow"), ("确认", "ask"), ("禁用", "deny"))
+    _ACTION_LABELS = {"allow": "放行", "ask": "确认", "deny": "禁用"}
+
+    @classmethod
+    def _action_combo(cls, action: str, *, inherited: str | None) -> QComboBox:
         combo = QComboBox()
-        if inherited:
-            combo.addItem("继承", "inherit")
-        combo.addItem("启用", "enabled")
-        combo.addItem("禁用", "disabled")
-        combo.setCurrentIndex(combo.findData("enabled" if enabled else "disabled"))
+        if inherited is not None:
+            combo.addItem(f"继承（{cls._ACTION_LABELS.get(inherited, inherited)}）", "inherit")
+        for label, value in cls._ACTION_ITEMS:
+            combo.addItem(label, value)
+        if inherited is not None and action == "inherit":
+            combo.setCurrentIndex(0)
+        else:
+            combo.setCurrentIndex(combo.findData(action if action in cls._ACTION_LABELS else "ask"))
         configure_combo_popup(combo)
         return combo
 
-    @staticmethod
-    def _confirm_combo(auto_approve: bool, *, inherited: bool) -> QComboBox:
-        combo = QComboBox()
-        if inherited:
-            combo.addItem("继承", "inherit")
-        combo.addItem("自动", "auto")
-        combo.addItem("每次确认", "confirm")
-        combo.setCurrentIndex(combo.findData("auto" if auto_approve else "confirm"))
-        configure_combo_popup(combo)
-        return combo
-
-    def _tool_enabled_combo(self, category_policy: ToolPolicy, override: ToolPolicy | None) -> QComboBox:
-        combo = self._enabled_combo(category_policy.enabled, inherited=True)
-        combo.setItemText(0, f"继承（{'启用' if category_policy.enabled else '禁用'}）")
-        if override is None:
-            combo.setCurrentIndex(0)
-        else:
-            combo.setCurrentIndex(combo.findData("enabled" if override.enabled else "disabled"))
-        return combo
-
-    def _tool_confirm_combo(self, category_policy: ToolPolicy, override: ToolPolicy | None) -> QComboBox:
-        combo = self._confirm_combo(category_policy.auto_approve, inherited=True)
-        combo.setItemText(0, f"继承（{'自动' if category_policy.auto_approve else '确认'}）")
-        if override is None:
-            combo.setCurrentIndex(0)
-        else:
-            combo.setCurrentIndex(combo.findData("auto" if override.auto_approve else "confirm"))
-        return combo
-
-    def _category_changed(self, _category: str) -> None:
-        if self._loading:
-            return
-        self._sync_from_controls()
-        self._approval_mode = "custom"
-        self._populate()
-
-    def _tool_changed(self, _index: int) -> None:
-        if self._loading:
-            return
-        self._approval_mode = "custom"
-        self._refresh_mode_ui()
+    def _rules_changed(self, _index: int) -> None:
+        if not self._loading:
+            self._sync_from_controls()
 
     def _sync_from_controls(self) -> None:
         for category, controls in self._category_rows.items():
             self._category_defaults[category] = ToolPolicy(
-                enabled=str(controls["enabled"].currentData() or "enabled") == "enabled",
-                auto_approve=str(controls["confirm"].currentData() or "confirm") == "auto",
+                action=str(controls["action"].currentData() or "ask")
             )
 
         overrides: dict[str, ToolPolicy] = {}
         for tool_name, controls in self._rows.items():
-            enabled_value = str(controls["enabled"].currentData() or "inherit")
-            confirm = controls["confirm"]
-            confirm_value = str(confirm.currentData() or "inherit") if confirm is not None else "inherit"
-            if enabled_value == "inherit" and confirm_value == "inherit":
+            action_value = str(controls["action"].currentData() or "inherit")
+            if action_value == "inherit":
                 continue
-            inherited = self._category_defaults.get(controls["descriptor"].category, ToolPolicy())
-            overrides[tool_name] = ToolPolicy(
-                enabled=inherited.enabled if enabled_value == "inherit" else enabled_value == "enabled",
-                auto_approve=(
-                    False
-                    if controls["descriptor"].risk == "high"
-                    else inherited.auto_approve if confirm_value == "inherit" else confirm_value == "auto"
-                ),
-            )
+            overrides[tool_name] = ToolPolicy(action=action_value)
         self._overrides = overrides
 
     def _reset_tool(self, tool_name: str) -> None:
         controls = self._rows.get(tool_name)
-        if not controls:
-            return
-        controls["enabled"].setCurrentIndex(0)
-        if controls["confirm"] is not None:
-            controls["confirm"].setCurrentIndex(0)
-        self._approval_mode = "custom"
-        self._refresh_mode_ui()
+        if controls:
+            controls["action"].setCurrentIndex(0)
 
     def _reset_category(self, category: str) -> None:
         self._sync_from_controls()
         self._category_defaults[category] = default_tool_category_policies()[category]
-        self._approval_mode = "custom"
         self._populate()
 
     def _filter_rows(self, query: str) -> None:
@@ -335,52 +276,27 @@ class PermissionsPage(QWidget):
                 visible_children += 0 if hidden else 1
             parent.setHidden(bool(needle and not category_match and visible_children == 0))
 
-    def _apply_safe_defaults(self) -> None:
-        self._approval_mode = "standard"
+    def _fill_safe_defaults(self) -> None:
         self._category_defaults = default_tool_category_policies()
         self._overrides.clear()
         self._populate()
 
-    def _apply_developer_trust(self) -> None:
-        self._approval_mode = "developer_trust"
-        self._category_defaults = default_tool_category_policies()
+    def _fill_all_ask(self) -> None:
+        self._category_defaults = {name: ToolPolicy(action="ask") for name in TOOL_CATEGORIES}
         self._overrides.clear()
         self._populate()
 
-    def _apply_allow_all(self) -> None:
-        self._approval_mode = "allow_all"
-        self._category_defaults = default_tool_category_policies()
+    def _fill_all_allow(self) -> None:
+        self._category_defaults = {name: ToolPolicy(action="allow") for name in TOOL_CATEGORIES}
         self._overrides.clear()
         self._populate()
-
-    def _refresh_mode_ui(self) -> None:
-        labels = {
-            "standard": "当前：安全默认",
-            "developer_trust": "当前：开发信任",
-            "allow_all": "当前：全部放行",
-            "custom": "当前：自定义",
-        }
-        self.mode_label.setText(labels.get(self._approval_mode, "当前：自定义"))
-        self.warning_label.setVisible(self._approval_mode == "allow_all")
-        policy_controls_enabled = self._approval_mode in {"standard", "custom"}
-        for controls in self._category_rows.values():
-            controls["confirm"].setEnabled(policy_controls_enabled)
-        for controls in self._rows.values():
-            confirm = controls.get("confirm")
-            if confirm is not None:
-                confirm.setEnabled(policy_controls_enabled)
-            label = controls.get("approval_label")
-            if label is not None:
-                label.setText("全部放行" if self._approval_mode == "allow_all" else "每次确认")
-                label.setToolTip("高风险工具仅在“全部放行”模式下跳过确认。")
 
     def collect(self) -> ToolPermissionConfig:
         self._sync_from_controls()
         return ToolPermissionConfig(
-            approval_mode=self._approval_mode,
             category_defaults=dict(self._category_defaults),
             tools=dict(self._overrides),
         )
 
     def _reset_defaults(self) -> None:
-        self._apply_safe_defaults()
+        self._fill_safe_defaults()

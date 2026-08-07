@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from models.contracts.model_target import ModelTarget
-from models.provider import Provider, provider_matches_name, split_model_ref
+from models.model_ref import provider_matches_name, split_model_ref
+from models.provider import Provider
 
 
 @dataclass(frozen=True)

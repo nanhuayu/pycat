@@ -1,15 +1,19 @@
-"""Focused editor for one curated provider model."""
+"""Compact editor for one provider-scoped :class:`ModelProfile`."""
 from __future__ import annotations
 
 import json
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
+    QGridLayout,
     QHBoxLayout,
+    QLabel,
     QMessageBox,
+    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QTextEdit,
@@ -20,12 +24,74 @@ from PyQt6.QtWidgets import (
 from gui.settings.components import build_dialog_button_box
 from gui.utils.combo_box import configure_combo_popup
 from gui.utils.form_builder import FormSection
-from models.model_profile import ModelProfile
-from models.provider import Provider
+from gui.widgets.themed_line_edit import ThemedTextEdit
+from models.model_profile import (
+    REASONING_MODES,
+    ModelProfile,
+)
+from models.model_profile import reasoning_codecs_for_provider as _reasoning_codecs_for_provider
+from models.provider import OPENAI_COMPATIBLE, Provider
+
+_STRUCTURAL_REQUEST_FIELDS = {
+    "model",
+    "messages",
+    "input",
+    "instructions",
+    "system",
+    "tools",
+    "stream",
+}
+_COMMON_REQUEST_FIELDS = {
+    "temperature",
+    "top_p",
+    "max_tokens",
+    "max_output_tokens",
+    "reasoning",
+    "reasoning_effort",
+    "thinking",
+    "think",
+    "enable_thinking",
+    "thinking_budget",
+    "output_config",
+    "options",
+}
+_OUTPUT_BUDGET_FIELDS = {"max_tokens", "max_output_tokens"}
+_CODEC_LABELS = {
+    "none": "无（使用接口默认）",
+    "responses_effort": "Responses 推理强度",
+    "chat_reasoning": "兼容接口推理（含 OpenRouter）",
+    "chat_thinking_effort": "兼容接口 thinking + effort",
+    "chat_toggle_budget": "兼容接口 thinking 开关",
+    "anthropic_adaptive": "Anthropic adaptive",
+    "ollama_think": "Ollama think",
+}
+_DEFAULT_MODES = {
+    "responses_effort": ("inherit", "off", "low", "medium", "high", "xhigh", "max", "ultra"),
+    "chat_reasoning": ("inherit", "off", "low", "medium", "high", "xhigh", "max", "ultra"),
+    "chat_thinking_effort": ("inherit", "off", "low", "medium", "high", "max"),
+    "chat_toggle_budget": ("inherit", "off", "on"),
+    "anthropic_adaptive": ("inherit", "off", "low", "medium", "high", "max"),
+    "ollama_think": ("inherit", "off", "on", "low", "medium", "high"),
+}
+
+
+def reasoning_codecs_for_provider(provider: Provider) -> tuple[str, ...]:
+    """Return the small codec whitelist for one endpoint envelope.
+
+    OpenRouter is a route through the OpenAI-compatible envelope, so it uses
+    the same one ``chat_reasoning`` owner rather than a provider codec.
+    """
+
+    api_type = str(getattr(provider, "api_type", "") or OPENAI_COMPATIBLE).strip().lower()
+    provider_key = str(getattr(provider, "catalog_key", "") or "").strip().lower()
+    provider_name = str(getattr(provider, "canonical_name", "") or "").strip().lower()
+    if provider_name == "openrouter":
+        provider_key = "openrouter"
+    return _reasoning_codecs_for_provider(api_type, provider_key)
 
 
 class ModelProfileDialog(QDialog):
-    """Edit one ``ModelProfile`` without mutating its provider."""
+    """Edit one model without mutating the provider until the dialog is saved."""
 
     def __init__(
         self,
@@ -40,6 +106,14 @@ class ModelProfileDialog(QDialog):
         self._original_model_id = str(model_id or "").strip()
         self._original_profile = ModelProfile.from_dict(profile.to_dict()) if profile is not None else None
         self._accepted_profile: ModelProfile | None = None
+        self._loading = False
+        # Keep the exact declaration from an existing profile.  A profile may
+        # intentionally expose a small subset (for example inherit/off/high)
+        # even though the codec has a larger default set.  Re-saving without
+        # changing the codec must not silently widen that contract.
+        self._loaded_reasoning_codec = "none"
+        self._declared_reasoning_options: list[str] | None = None
+        self._reasoning_codec_changed = False
         self._setup_ui()
         self._load_profile(self._initial_profile())
 
@@ -48,17 +122,13 @@ class ModelProfileDialog(QDialog):
             return ModelProfile.from_dict(self._original_profile.to_dict())
         if self._original_model_id:
             return self._provider.effective_model_profile(self._original_model_id)
-        return ModelProfile.from_model_id(
-            "",
-            supports_vision=bool(self._provider.supports_vision),
-            supports_reasoning=bool(self._provider.supports_reasoning),
-        )
+        return ModelProfile.from_model_id("")
 
     def _setup_ui(self) -> None:
         self.setWindowTitle("添加模型" if not self._original_model_id else "编辑模型")
         self.setObjectName("model_profile_dialog")
-        self.setMinimumSize(520, 500)
-        self.resize(560, 560)
+        self.setMinimumSize(560, 500)
+        self.resize(620, 590)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(14, 14, 14, 14)
@@ -66,8 +136,7 @@ class ModelProfileDialog(QDialog):
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_basic_tab(), "基本")
-        self.tabs.addTab(self._build_generation_tab(), "生成")
-        self.tabs.addTab(self._build_reasoning_tab(), "推理与高级")
+        self.tabs.addTab(self._build_advanced_tab(), "高级")
         root.addWidget(self.tabs, 1)
 
         buttons = build_dialog_button_box(self)
@@ -82,9 +151,11 @@ class ModelProfileDialog(QDialog):
         layout.setSpacing(10)
 
         identity = FormSection("模型")
-        self.model_id_input = identity.add_line_edit("模型 ID", placeholder="例如 gpt-4.1")
+        self.model_id_input = identity.add_line_edit("模型 ID", placeholder="实际发送给接口的完整 ID")
         self.model_id_input.setReadOnly(bool(self._original_model_id))
         self.display_name_input = identity.add_line_edit("显示名称", placeholder="可选")
+        for editor in (self.model_id_input, self.display_name_input):
+            editor.setMinimumHeight(30)
         layout.addWidget(identity.group)
 
         capability = FormSection("能力")
@@ -92,121 +163,242 @@ class ModelProfileDialog(QDialog):
         abilities_layout = QHBoxLayout(abilities)
         abilities_layout.setContentsMargins(0, 0, 0, 0)
         abilities_layout.setSpacing(14)
-        self.tools_check = QCheckBox("工具")
-        self.vision_check = QCheckBox("视觉")
+        self.tools_check = QCheckBox("工具调用")
         self.reasoning_check = QCheckBox("推理")
-        for checkbox in (self.tools_check, self.vision_check, self.reasoning_check):
+        self.image_input_check = QCheckBox("图片输入")
+        self.audio_input_check = QCheckBox("音频输入")
+        self.audio_input_check.setToolTip("用于模型能力档案；当前输入框尚不发送音频附件。")
+        for checkbox in (
+            self.tools_check,
+            self.reasoning_check,
+            self.image_input_check,
+            self.audio_input_check,
+        ):
             abilities_layout.addWidget(checkbox)
         abilities_layout.addStretch(1)
         capability.form.addRow("支持", abilities)
         layout.addWidget(capability.group)
-        layout.addStretch(1)
-        return tab
 
-    def _build_generation_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        generation = FormSection("生成参数")
-        self.context_window_spin = self._optional_spin(2_000_000, 8192)
-        self.max_output_spin = self._optional_spin(200_000, 1024)
+        generation = FormSection("生成")
+        self.context_window_spin = self._optional_spin(10_000_000, 8192)
+        self.max_output_spin = self._optional_spin(1_000_000, 1024)
         self.temperature_spin = self._optional_double_spin(2.0)
         self.top_p_spin = self._optional_double_spin(1.0)
-        generation.form.addRow("上下文窗口", self.context_window_spin)
-        generation.form.addRow("最大输出", self.max_output_spin)
-        generation.form.addRow("Temperature", self.temperature_spin)
-        generation.form.addRow("Top P", self.top_p_spin)
+        generation_fields = QWidget()
+        generation_grid = QGridLayout(generation_fields)
+        generation_grid.setContentsMargins(0, 0, 0, 0)
+        generation_grid.setHorizontalSpacing(8)
+        generation_grid.setVerticalSpacing(6)
+        for column in (1, 3):
+            generation_grid.setColumnStretch(column, 1)
+        context_window_label = QLabel("总窗口")
+        context_window_tooltip = "模型总上下文窗口，输入与输出共享。"
+        context_window_label.setToolTip(context_window_tooltip)
+        self.context_window_spin.setToolTip(context_window_tooltip)
+        generation_grid.addWidget(context_window_label, 0, 0)
+        generation_grid.addWidget(self.context_window_spin, 0, 1)
+        max_output_label = QLabel("最大输出")
+        max_output_tooltip = "模型档案声明的单次输出上限；运行时会与会话请求和总窗口共同校准。"
+        max_output_label.setToolTip(max_output_tooltip)
+        self.max_output_spin.setToolTip(max_output_tooltip)
+        generation_grid.addWidget(max_output_label, 0, 2)
+        generation_grid.addWidget(self.max_output_spin, 0, 3)
+        generation_grid.addWidget(QLabel("Temperature"), 1, 0)
+        generation_grid.addWidget(self.temperature_spin, 1, 1)
+        generation_grid.addWidget(QLabel("Top P"), 1, 2)
+        generation_grid.addWidget(self.top_p_spin, 1, 3)
+        generation.form.addRow(generation_fields)
         layout.addWidget(generation.group)
+
+        reasoning = FormSection("推理")
+        self.reasoning_default_combo = QComboBox()
+        self.reasoning_default_combo.setMinimumHeight(30)
+        self.reasoning_default_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        configure_combo_popup(self.reasoning_default_combo)
+        reasoning.form.addRow("默认推理", self.reasoning_default_combo)
+        self.reasoning_codec_combo = QComboBox()
+        self.reasoning_codec_combo.setMinimumHeight(30)
+        self.reasoning_codec_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        configure_combo_popup(self.reasoning_codec_combo)
+        reasoning.form.addRow("推理协议", self.reasoning_codec_combo)
+        self.reasoning_note = QLabel("")
+        self.reasoning_note.setWordWrap(True)
+        self.reasoning_note.setProperty("muted", True)
+        reasoning.form.addRow("", self.reasoning_note)
+        layout.addWidget(reasoning.group)
+
+        self.reasoning_check.toggled.connect(self._sync_reasoning_controls)
+        self.reasoning_codec_combo.currentIndexChanged.connect(self._on_codec_changed)
         layout.addStretch(1)
         return tab
 
-    def _build_reasoning_tab(self) -> QWidget:
+    def _build_advanced_tab(self) -> QWidget:
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        reasoning = FormSection("推理")
-        self.reasoning_default_combo = QComboBox()
-        self.reasoning_default_combo.addItem("继承接口默认", None)
-        self.reasoning_default_combo.addItem("默认开启", True)
-        self.reasoning_default_combo.addItem("默认关闭", False)
-        configure_combo_popup(self.reasoning_default_combo)
-
-        self.reasoning_effort_combo = QComboBox()
-        self.reasoning_effort_combo.setEditable(True)
-        for label, value in (
-            ("继承接口默认", ""),
-            ("low", "low"),
-            ("medium", "medium"),
-            ("high", "high"),
-            ("max", "max"),
-            ("xhigh", "xhigh"),
-        ):
-            self.reasoning_effort_combo.addItem(label, value)
-        configure_combo_popup(self.reasoning_effort_combo)
-        reasoning.form.addRow("默认状态", self.reasoning_default_combo)
-        reasoning.form.addRow("推理强度", self.reasoning_effort_combo)
-        layout.addWidget(reasoning.group)
-
-        advanced = FormSection("附加字段")
-        self.request_overrides_edit = self._json_editor('{"service_tier": "auto"}')
-        self.request_overrides_edit.setToolTip("非标准接口的附加请求字段；模型、消息、工具和生成核心字段不会被覆盖。")
-        advanced.form.addRow("请求字段", self.request_overrides_edit)
+        advanced = FormSection("附加请求")
+        self.custom_headers_edit = self._json_editor('{"X-Model-Header": "value"}')
+        self.custom_headers_edit.setToolTip(
+            "仅附加到当前模型；普通同名字段覆盖 Provider 请求头，认证和传输保留头会被忽略。"
+        )
+        advanced.form.addRow("自定义请求头", self.custom_headers_edit)
+        self.extra_body_edit = self._json_editor('{"service_tier": "priority"}')
+        self.extra_body_edit.setToolTip(
+            "在 envelope 与推理协议之后做一次顶层覆盖；用于未内置的 Provider 私有字段。"
+        )
+        self.extra_body_warning = QLabel("")
+        self.extra_body_warning.setWordWrap(True)
+        self.extra_body_warning.setProperty("muted", True)
+        advanced.form.addRow("请求字段", self.extra_body_edit)
+        advanced.form.addRow("", self.extra_body_warning)
         layout.addWidget(advanced.group, 1)
 
-        self.reasoning_check.toggled.connect(self._sync_reasoning_controls)
-        self.reasoning_default_combo.currentIndexChanged.connect(self._on_reasoning_default_changed)
+        self.extra_body_edit.textChanged.connect(self._update_extra_body_warning)
         return tab
 
     @staticmethod
     def _optional_spin(maximum: int, step: int) -> QSpinBox:
         spin = QSpinBox()
-        spin.setMinimumWidth(180)
+        spin.setMinimumSize(100, 30)
+        spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         spin.setRange(0, maximum)
         spin.setSingleStep(step)
-        spin.setSpecialValueText("不设置")
+        spin.setSpecialValueText("未设置")
         return spin
 
     @staticmethod
     def _optional_double_spin(maximum: float) -> QDoubleSpinBox:
         spin = QDoubleSpinBox()
-        spin.setMinimumWidth(180)
+        spin.setMinimumSize(100, 30)
+        spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         spin.setRange(-0.01, maximum)
         spin.setDecimals(2)
         spin.setSingleStep(0.05)
-        spin.setSpecialValueText("不设置")
+        spin.setSpecialValueText("未设置")
         spin.setValue(-0.01)
         return spin
 
     @staticmethod
     def _json_editor(placeholder: str) -> QTextEdit:
-        editor = QTextEdit()
+        editor = ThemedTextEdit()
         editor.setAcceptRichText(False)
         editor.setPlaceholderText(placeholder)
-        editor.setMaximumHeight(86)
+        editor.setMaximumHeight(110)
         return editor
 
     def _load_profile(self, profile: ModelProfile) -> None:
-        self.model_id_input.setText(self._original_model_id or profile.model_id)
-        self.display_name_input.setText(profile.display_name)
-        self.tools_check.setChecked(profile.supports_tools)
-        self.vision_check.setChecked(profile.supports_vision)
-        self.reasoning_check.setChecked(profile.supports_reasoning)
-        self.context_window_spin.setValue(profile.context_window or 0)
-        self.max_output_spin.setValue(profile.max_output_tokens or 0)
-        self.temperature_spin.setValue(profile.default_temperature if profile.default_temperature is not None else -0.01)
-        self.top_p_spin.setValue(profile.default_top_p if profile.default_top_p is not None else -0.01)
-        default_index = self.reasoning_default_combo.findData(profile.reasoning_enabled)
-        self.reasoning_default_combo.setCurrentIndex(default_index if default_index >= 0 else 0)
-        effort_index = self.reasoning_effort_combo.findData(profile.reasoning_effort)
-        if effort_index >= 0:
-            self.reasoning_effort_combo.setCurrentIndex(effort_index)
-        else:
-            self.reasoning_effort_combo.setCurrentText(profile.reasoning_effort)
-        self.request_overrides_edit.setPlainText(self._json_text(profile.request_overrides))
+        self._loading = True
+        self._reasoning_codec_changed = False
+        try:
+            self.model_id_input.setText(self._original_model_id or profile.model_id)
+            self.display_name_input.setText(profile.display_name)
+            self.tools_check.setChecked(profile.supports_tools)
+            self.reasoning_check.setChecked(profile.supports_reasoning)
+            self.image_input_check.setChecked(profile.supports_input("image"))
+            self.audio_input_check.setChecked(profile.supports_input("audio"))
+            self.context_window_spin.setValue(profile.context_window or 0)
+            self.max_output_spin.setValue(profile.max_output_tokens or 0)
+            self.temperature_spin.setValue(
+                profile.default_temperature if profile.default_temperature is not None else -0.01
+            )
+            self.top_p_spin.setValue(profile.default_top_p if profile.default_top_p is not None else -0.01)
+            self._populate_codecs(profile.reasoning_codec)
+            selected_codec = str(self.reasoning_codec_combo.currentData() or "none")
+            self._loaded_reasoning_codec = selected_codec
+            self._declared_reasoning_options = (
+                list(profile.reasoning_options)
+                if selected_codec == profile.reasoning_codec and profile.reasoning_codec != "none"
+                else None
+            )
+            self._populate_reasoning_defaults(
+                selected_codec,
+                profile.reasoning_options if selected_codec == profile.reasoning_codec else None,
+                profile.reasoning_default,
+            )
+            self.extra_body_edit.setPlainText(self._json_text(profile.extra_body))
+            self.custom_headers_edit.setPlainText(self._json_text(profile.custom_headers))
+        finally:
+            self._loading = False
         self._sync_reasoning_controls()
+        self._update_extra_body_warning()
+
+    def _populate_codecs(self, preferred: str = "none") -> None:
+        options = reasoning_codecs_for_provider(self._provider)
+        current = str(preferred or "none").strip().lower()
+        if current not in options:
+            current = "none"
+        self.reasoning_codec_combo.blockSignals(True)
+        try:
+            self.reasoning_codec_combo.clear()
+            for codec in options:
+                self.reasoning_codec_combo.addItem(_CODEC_LABELS.get(codec, codec), codec)
+                index = self.reasoning_codec_combo.count() - 1
+                self.reasoning_codec_combo.setItemData(index, codec)
+                self.reasoning_codec_combo.setItemData(index, codec, Qt.ItemDataRole.ToolTipRole)
+            index = self.reasoning_codec_combo.findData(current)
+            self.reasoning_codec_combo.setCurrentIndex(index if index >= 0 else 0)
+        finally:
+            self.reasoning_codec_combo.blockSignals(False)
+
+    def _profile_reasoning_options(self, codec: str, existing: list[str] | None = None) -> list[str]:
+        allowed = list(_DEFAULT_MODES.get(codec, ("inherit",)))
+        if existing:
+            declared = [mode for mode in existing if mode in REASONING_MODES]
+            if declared:
+                allowed = [mode for mode in allowed if mode in declared]
+                if "inherit" not in allowed:
+                    allowed.insert(0, "inherit")
+        return allowed or ["inherit"]
+
+    def _populate_reasoning_defaults(
+        self,
+        codec: str,
+        existing_options: list[str] | None = None,
+        preferred: str = "inherit",
+    ) -> None:
+        codec = str(codec or "none")
+        options = ["inherit"] if codec == "none" else self._profile_reasoning_options(codec, existing_options)
+        selected = str(preferred or "inherit").strip().lower()
+        if selected not in options:
+            selected = "inherit"
+        self.reasoning_default_combo.blockSignals(True)
+        try:
+            self.reasoning_default_combo.clear()
+            labels = {
+                "inherit": "接口默认",
+                "off": "关闭",
+                "on": "开启",
+                "auto": "自动",
+            }
+            for mode in options:
+                self.reasoning_default_combo.addItem(labels.get(mode, mode), mode)
+            self.reasoning_default_combo.setCurrentIndex(
+                max(0, self.reasoning_default_combo.findData(selected))
+            )
+        finally:
+            self.reasoning_default_combo.blockSignals(False)
+        self.reasoning_note.setText(
+            "未发送显式推理字段（接口默认）。"
+            if codec == "none"
+            else f"可用模式：{'、'.join(options)}"
+        )
+
+    def _on_codec_changed(self, _index: int) -> None:
+        if self._loading:
+            return
+        self._reasoning_codec_changed = True
+        codec = str(self.reasoning_codec_combo.currentData() or "none")
+        self._populate_reasoning_defaults(codec)
+        self._sync_reasoning_controls()
+
+    def _sync_reasoning_controls(self, *_args) -> None:
+        enabled = self.reasoning_check.isChecked()
+        codec = str(self.reasoning_codec_combo.currentData() or "none")
+        active = enabled and codec != "none"
+        self.reasoning_codec_combo.setEnabled(enabled)
+        self.reasoning_default_combo.setEnabled(active)
 
     @staticmethod
     def _json_text(value: dict) -> str:
@@ -225,17 +417,32 @@ class ModelProfileDialog(QDialog):
             raise ValueError(f"{label}必须是 JSON 对象")
         return value
 
-    def _sync_reasoning_controls(self) -> None:
-        enabled = self.reasoning_check.isChecked()
-        self.reasoning_default_combo.setEnabled(enabled)
-        self.reasoning_effort_combo.setEnabled(
-            enabled and self.reasoning_default_combo.currentData() is not False
+    def _update_extra_body_warning(self) -> None:
+        text = self.extra_body_edit.toPlainText().strip()
+        if not text:
+            self.extra_body_warning.clear()
+            return
+        try:
+            value = json.loads(text)
+        except Exception:
+            self.extra_body_warning.setText("JSON 尚未完成。")
+            return
+        if not isinstance(value, dict):
+            self.extra_body_warning.setText("请求字段必须是 JSON 对象。")
+            return
+        structural = sorted(set(value).intersection(_STRUCTURAL_REQUEST_FIELDS))
+        budget_fields = sorted(set(value).intersection(_OUTPUT_BUDGET_FIELDS))
+        overrides = sorted(
+            set(value).intersection(_COMMON_REQUEST_FIELDS).difference(_OUTPUT_BUDGET_FIELDS)
         )
-
-    def _on_reasoning_default_changed(self, _index: int) -> None:
-        if self.reasoning_default_combo.currentData() is False:
-            self.reasoning_effort_combo.setCurrentIndex(0)
-        self._sync_reasoning_controls()
+        parts: list[str] = []
+        if structural:
+            parts.append("发送时忽略结构字段：" + ", ".join(structural))
+        if budget_fields:
+            parts.append("作为输出预算输入并在发送前校准：" + ", ".join(budget_fields))
+        if overrides:
+            parts.append("将覆盖生成/推理字段：" + ", ".join(overrides))
+        self.extra_body_warning.setText("；".join(parts))
 
     def accept(self) -> None:
         if not self.model_id():
@@ -255,32 +462,47 @@ class ModelProfileDialog(QDialog):
     def _collect_profile(self) -> ModelProfile:
         base = self._original_profile or ModelProfile(model_id=self.model_id())
         payload = base.to_dict()
-        effort_data = self.reasoning_effort_combo.currentData()
-        effort_text = self.reasoning_effort_combo.currentText().strip()
-        effort = str(effort_data or effort_text).strip().lower()
-        if not effort_data and effort_text == self.reasoning_effort_combo.itemText(0):
-            effort = ""
         supports_reasoning = self.reasoning_check.isChecked()
-        reasoning_enabled = self.reasoning_default_combo.currentData() if supports_reasoning else None
-        if not supports_reasoning or reasoning_enabled is False:
-            effort = ""
+        codec = str(self.reasoning_codec_combo.currentData() or "none") if supports_reasoning else "none"
+        if (
+            supports_reasoning
+            and codec != "none"
+            and not self._reasoning_codec_changed
+            and codec == self._loaded_reasoning_codec
+            and self._declared_reasoning_options
+        ):
+            options = list(self._declared_reasoning_options)
+        else:
+            options = ["inherit"] if codec == "none" else self._profile_reasoning_options(codec)
+        reasoning_default = str(self.reasoning_default_combo.currentData() or "inherit")
+        if reasoning_default not in options:
+            reasoning_default = "inherit"
+        input_modalities = ["text"]
+        if self.image_input_check.isChecked():
+            input_modalities.append("image")
+        if self.audio_input_check.isChecked():
+            input_modalities.append("audio")
         payload.update(
             {
                 "model_id": self.model_id(),
                 "display_name": self.display_name_input.text().strip(),
                 "supports_tools": self.tools_check.isChecked(),
-                "supports_vision": self.vision_check.isChecked(),
                 "supports_reasoning": supports_reasoning,
-                "reasoning_enabled": reasoning_enabled,
+                "input_modalities": input_modalities,
+                "reasoning_codec": codec,
+                "reasoning_options": options,
+                "reasoning_default": reasoning_default,
                 "context_window": self.context_window_spin.value() or None,
                 "max_output_tokens": self.max_output_spin.value() or None,
-                "default_temperature": self.temperature_spin.value() if self.temperature_spin.value() >= 0 else None,
+                "default_temperature": (
+                    self.temperature_spin.value() if self.temperature_spin.value() >= 0 else None
+                ),
                 "default_top_p": self.top_p_spin.value() if self.top_p_spin.value() >= 0 else None,
-                "reasoning_effort": effort,
-                "request_overrides": self._json_object(self.request_overrides_edit, "请求字段"),
+                "custom_headers": self._json_object(self.custom_headers_edit, "自定义请求头"),
+                "extra_body": self._json_object(self.extra_body_edit, "请求字段"),
             }
         )
-        return ModelProfile.from_dict(payload)
+        return ModelProfile.from_dict(payload).as_user_managed()
 
     def accepted_profile(self) -> ModelProfile:
         return ModelProfile.from_dict((self._accepted_profile or self._collect_profile()).to_dict())

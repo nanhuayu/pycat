@@ -27,6 +27,8 @@ def merge_capability(base: CapabilityConfig, override: CapabilityConfig) -> Capa
         output_schema=override.output_schema or base.output_schema,
         allowed_tool_categories=override.allowed_tool_categories or base.allowed_tool_categories,
         max_turns=override.max_turns if override.max_turns is not None else base.max_turns,
+        temperature=override.temperature if override.temperature is not None else base.temperature,
+        max_tokens=override.max_tokens if override.max_tokens is not None else base.max_tokens,
     )
 
 

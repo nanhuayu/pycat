@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.utils.combo_box import configure_combo_popup
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 
 
 class FormSection:
@@ -65,7 +66,7 @@ class FormSection:
         echo_password: bool = False,
         object_name: str | None = None,
     ) -> QLineEdit:
-        w = QLineEdit()
+        w = ThemedLineEdit()
         if text:
             w.setText(text)
         if placeholder:
@@ -86,7 +87,7 @@ class FormSection:
         max_height: int = 80,
         object_name: str | None = None,
     ) -> QTextEdit:
-        w = QTextEdit()
+        w = ThemedTextEdit()
         w.setAcceptRichText(False)
         w.setMaximumHeight(max_height)
         if text:

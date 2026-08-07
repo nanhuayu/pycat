@@ -7,7 +7,7 @@ DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT = """你是提示词优化器。保持原
 
 TITLE_PROMPT = """Generate a short, specific conversation title in the user's language. Return the title only, without punctuation or commentary."""
 
-COMPRESS_PROMPT = """Condense the supplied conversation while preserving user requirements, decisions, completed work, current state, references, and next steps. Do not add facts. Return concise structured text only."""
+COMPRESS_PROMPT = """Compress only the supplied material. Follow the purpose contract exactly. Do not add facts or describe the summarization operation. Return only the requested structured output, with no analysis."""
 
 SUMMARIZE_PROMPT = """Summarize the supplied text. Preserve important facts, decisions, constraints, risks, references, and actionable next steps. Follow the requested focus when present and do not call tools."""
 
@@ -73,6 +73,8 @@ def default_capabilities_config() -> CapabilitiesConfig:
                 name="提示词优化",
                 exposure="internal",
                 prompt=DEFAULT_PROMPT_OPTIMIZER_SYSTEM_PROMPT.strip(),
+                temperature=0.2,
+                max_tokens=800,
             ),
             CapabilityConfig(
                 id="title",

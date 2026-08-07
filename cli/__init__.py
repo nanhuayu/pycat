@@ -1,3 +1,5 @@
 """Headless command-line interface for PyCat."""
 
-APP_VERSION = "0.1.0"
+from core.version import __version__
+
+APP_VERSION = __version__

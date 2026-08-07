@@ -21,16 +21,10 @@ class ToolResultRecorder:
         self,
         *,
         summarize_tool_result: Callable[[str, str], str],
-        client: Any = None,
-        archive_compressor_factory: Any = None,
     ) -> None:
         self._summarize_tool_result = summarize_tool_result
-        self._client = client
-        self._archive_compressor_factory = archive_compressor_factory
-        self._tool_call_archive: ToolCallArchiveService | None = None
-        self._archive_key: tuple[str, str] | None = None
 
-    async def build_block(
+    def build_block(
         self,
         *,
         conversation: Conversation,
@@ -41,24 +35,96 @@ class ToolResultRecorder:
         summary: Optional[str] = None,
         tool_args: Optional[dict[str, Any]] = None,
         parent_message_id: str = "",
-        provider: Any = None,
-        debug_trace: Any = None,
-        on_archive_prepare: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
+        result_text, tool_images, handle, _archive_service = self._build_handle(
+            conversation=conversation,
+            tool_name=tool_name,
+            tool_category=tool_category,
+            tool_call_id=tool_call_id,
+            result=result,
+            tool_args=tool_args,
+        )
+        return self._finish_block(
+            conversation=conversation,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            result=result,
+            summary=summary,
+            parent_message_id=parent_message_id,
+            tool_images=tool_images,
+            handle=handle,
+        )
+
+    async def prepare_block(
+        self,
+        *,
+        conversation: Conversation,
+        tool_name: str,
+        tool_category: str = "",
+        tool_call_id: Optional[str],
+        result: ToolResult | str,
+        summary: Optional[str] = None,
+        tool_args: Optional[dict[str, Any]] = None,
+        parent_message_id: str = "",
+        compression_tasks: Any = None,
+    ) -> dict[str, Any]:
+        result_text, tool_images, handle, archive_service = self._build_handle(
+            conversation=conversation,
+            tool_name=tool_name,
+            tool_category=tool_category,
+            tool_call_id=tool_call_id,
+            result=result,
+            tool_args=tool_args,
+        )
+        if handle.archive is not None and compression_tasks is not None:
+            content_id = str(handle.archive.id or "")
+            if len(result_text) > ToolResultViewService.SHORT_LIMIT:
+                is_long = len(result_text) > ToolResultViewService.FULL_LIMIT
+                compression_tasks.submit(
+                    content_id,
+                    priority="urgent" if is_long else "background",
+                )
+                if is_long:
+                    await compression_tasks.wait(content_id)
+                    fresh = archive_service.archive_store.read_record(content_id)
+                    if fresh is not None:
+                        handle.archive = fresh
+                        handle = ToolResultViewService.rebuild_long_display(
+                            tool_name=tool_name,
+                            text=result_text,
+                            archive_result=handle,
+                            summary=fresh.summary,
+                        )
+        return self._finish_block(
+            conversation=conversation,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            result=result,
+            summary=summary,
+            parent_message_id=parent_message_id,
+            tool_images=tool_images,
+            handle=handle,
+        )
+
+    def _build_handle(
+        self,
+        *,
+        conversation: Conversation,
+        tool_name: str,
+        tool_category: str,
+        tool_call_id: Optional[str],
+        result: ToolResult | str,
+        tool_args: Optional[dict[str, Any]],
+    ):
         result_text = self.tool_result_to_string(result)
         tool_images = self.extract_tool_images(result)
 
-        archive_work_dir = str(getattr(conversation, "work_dir", "") or ".")
-        archive_session_id = str(getattr(conversation, "id", "") or "default")
-        archive_key = (str(archive_work_dir), str(archive_session_id))
-        if self._tool_call_archive is None or self._archive_key != archive_key:
-            self._tool_call_archive = ToolCallArchiveService(
-                archive_work_dir,
-                conversation_id=getattr(conversation, "id", None),
-            )
-            self._archive_key = archive_key
-
-        handle = self._tool_call_archive.process(
+        archive_work_dir = str(getattr(conversation, "work_dir", "") or "")
+        archive_service = ToolCallArchiveService(
+            archive_work_dir,
+            conversation_id=getattr(conversation, "id", None),
+        )
+        handle = archive_service.process(
             tool_name=tool_name,
             raw_text=result_text,
             tool_category=tool_category,
@@ -68,35 +134,32 @@ class ToolResultRecorder:
             images=tool_images,
         )
         if handle.archive is not None:
-            compressor = None
-            if self._archive_compressor_factory is not None and provider is not None:
-                compressor = self._archive_compressor_factory(
-                    client=self._client,
-                    provider=provider,
-                    store=self._tool_call_archive.archive_store,
-                    debug_trace=debug_trace,
-                )
-            view_service = ToolResultViewService(
-                work_dir=archive_work_dir,
-                conversation_id=getattr(conversation, "id", None),
-                conversation=conversation,
-                compressor=compressor,
-            )
-            if (
-                compressor is not None
-                and view_service.needs_summary(text=result_text, archive_result=handle)
-                and on_archive_prepare is not None
-            ):
-                on_archive_prepare()
-            handle = await view_service.build_display(
+            handle = ToolResultViewService().build_display(
                 tool_name=tool_name,
                 text=result_text,
                 archive_result=handle,
             )
+        return result_text, tool_images, handle, archive_service
 
+    def _finish_block(
+        self,
+        *,
+        conversation: Conversation,
+        tool_name: str,
+        tool_call_id: Optional[str],
+        result: ToolResult | str,
+        summary: Optional[str],
+        parent_message_id: str,
+        tool_images: list[str],
+        handle,
+    ) -> dict[str, Any]:
         metadata: dict[str, Any] = {"name": tool_name}
-        if isinstance(result, ToolResult) and bool(getattr(result, "is_error", False)):
-            metadata["is_error"] = True
+        if isinstance(result, ToolResult):
+            result_metadata = getattr(result, "metadata", {})
+            if isinstance(result_metadata, dict):
+                metadata.update(result_metadata)
+            if bool(getattr(result, "is_error", False)):
+                metadata["is_error"] = True
         clean_parent_message_id = str(parent_message_id or "").strip()
         if clean_parent_message_id:
             metadata["parent_message_id"] = clean_parent_message_id

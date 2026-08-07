@@ -45,30 +45,53 @@ class StrategyPage(QWidget):
         layout.addWidget(context_section.group)
 
         pol = context.compression_policy
-        compression = FormSection("压缩阈值")
-        threshold_row = QWidget()
-        threshold_layout = QHBoxLayout(threshold_row)
-        threshold_layout.setContentsMargins(0, 0, 0, 0)
-        threshold_layout.setSpacing(8)
-        threshold_layout.addWidget(QLabel("预整理"))
-        self.comp_preflight_threshold_percent = QSpinBox()
-        self.comp_preflight_threshold_percent.setRange(10, 90)
-        self.comp_preflight_threshold_percent.setValue(round(float(pol.preflight_threshold_ratio) * 100))
-        self.comp_preflight_threshold_percent.setSuffix("%")
-        threshold_layout.addWidget(self.comp_preflight_threshold_percent)
-        threshold_layout.addWidget(QLabel("压缩"))
+        budget = FormSection("上下文预算")
+        compact_percent = max(11, min(95, round(float(pol.token_threshold_ratio) * 100)))
+        tight_percent = max(
+            10,
+            min(compact_percent - 1, round(float(pol.tight_replay_threshold_ratio) * 100)),
+        )
+        tight_row = QWidget()
+        tight_layout = QHBoxLayout(tight_row)
+        tight_layout.setContentsMargins(0, 0, 0, 0)
+        tight_layout.setSpacing(8)
+        self.tight_replay_threshold_percent = QSpinBox()
+        self.tight_replay_threshold_percent.setRange(10, compact_percent - 1)
+        self.tight_replay_threshold_percent.setValue(tight_percent)
+        self.tight_replay_threshold_percent.setSuffix("%")
+        self.tight_replay_threshold_percent.setToolTip(
+            "完整请求达到该比例后，用可恢复视图替换较旧工具结果；不调用模型，也不修改会话历史。"
+        )
+        tight_layout.addWidget(self.tight_replay_threshold_percent)
+        tight_layout.addStretch(1)
+        budget.form.addRow("紧凑重放", tight_row)
+
+        compact_row = QWidget()
+        compact_layout = QHBoxLayout(compact_row)
+        compact_layout.setContentsMargins(0, 0, 0, 0)
+        compact_layout.setSpacing(8)
         self.comp_token_threshold_percent = QSpinBox()
-        self.comp_token_threshold_percent.setRange(15, 95)
-        self.comp_token_threshold_percent.setValue(round(float(pol.token_threshold_ratio) * 100))
+        self.comp_token_threshold_percent.setRange(tight_percent + 1, 95)
+        self.comp_token_threshold_percent.setValue(compact_percent)
         self.comp_token_threshold_percent.setSuffix("%")
-        threshold_layout.addWidget(self.comp_token_threshold_percent)
-        threshold_layout.addStretch(1)
-        compression.form.addRow("触发比例", threshold_row)
-        self.comp_history_keep_last_turns = compression.add_spin(
+        self.comp_token_threshold_percent.setToolTip(
+            "原始活跃历史达到该比例后，自动生成 continuation summary 并归档旧历史。"
+        )
+        compact_layout.addWidget(self.comp_token_threshold_percent)
+        compact_layout.addStretch(1)
+        budget.form.addRow("历史压缩", compact_row)
+        self.comp_history_keep_last_turns = budget.add_spin(
             "保留最近轮次", value=int(pol.history_keep_last_turns or 3), range=(1, 20)
         )
+        self.tight_replay_threshold_percent.valueChanged.connect(
+            lambda value: self.comp_token_threshold_percent.setMinimum(min(95, value + 1))
+        )
+        self.comp_token_threshold_percent.valueChanged.connect(
+            lambda value: self.tight_replay_threshold_percent.setMaximum(max(10, value - 1))
+        )
+        self.tight_replay_threshold_ratio = self.tight_replay_threshold_percent
         self.comp_token_threshold_ratio = self.comp_token_threshold_percent
-        layout.addWidget(compression.group)
+        layout.addWidget(budget.group)
 
         retry_section = FormSection("重试")
         self.max_retries_spin = retry_section.add_spin(
@@ -82,13 +105,8 @@ class StrategyPage(QWidget):
         )
         layout.addWidget(retry_section.group)
 
-        for control in (
-            self.comp_preflight_threshold_percent,
-            self.comp_token_threshold_percent,
-            self.comp_history_keep_last_turns,
-        ):
-            self.agent_auto_compress_enabled.toggled.connect(control.setEnabled)
-            control.setEnabled(bool(context.agent_auto_compress_enabled))
+        self.agent_auto_compress_enabled.toggled.connect(self.comp_token_threshold_percent.setEnabled)
+        self.comp_token_threshold_percent.setEnabled(bool(context.agent_auto_compress_enabled))
         layout.addStretch(1)
 
     def collect_agent(self) -> AgentRuntimeConfig:
@@ -102,14 +120,10 @@ class StrategyPage(QWidget):
         )
 
     def collect_context(self) -> ContextConfig:
-        low = float(self.comp_preflight_threshold_percent.value()) / 100.0
-        high = float(self.comp_token_threshold_percent.value()) / 100.0
-        if low >= high:
-            raise ValueError("预整理阈值必须低于压缩阈值")
         policy = replace(
             self._original_context.compression_policy,
-            preflight_threshold_ratio=low,
-            token_threshold_ratio=high,
+            tight_replay_threshold_ratio=float(self.tight_replay_threshold_percent.value()) / 100.0,
+            token_threshold_ratio=float(self.comp_token_threshold_percent.value()) / 100.0,
             history_keep_last_turns=int(self.comp_history_keep_last_turns.value()),
         )
         return replace(

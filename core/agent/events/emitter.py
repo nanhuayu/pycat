@@ -1,10 +1,6 @@
 """Event emission module - handles task event streaming.
 
-Extracted from task.py to reduce complexity.
-Responsibilities:
-- Emit task events to callbacks
-- Handle event formatting
-- Safe callback invocation with error handling
+Normalizes Agent run events and safely invokes the configured callback.
 """
 from __future__ import annotations
 

@@ -35,6 +35,7 @@ from gui.widgets.tool_category_selector import ToolCategorySelector
 from gui.utils.combo_box import configure_combo_popup
 from gui.utils.icon_manager import Icons
 from gui.utils.qr_code import build_qr_code_pixmap
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedSelectableLabel
 
 
 class ChannelInstanceDialog(QDialog):
@@ -113,7 +114,7 @@ class ChannelInstanceDialog(QDialog):
         base_form.setContentsMargins(12, 12, 12, 12)
         base_form.setSpacing(8)
         base_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.name_input = QLineEdit()
+        self.name_input = ThemedLineEdit()
         self.name_input.setPlaceholderText("连接名称")
         base_form.addRow("名称", self.name_input)
         self.agent_mode_combo = QComboBox()
@@ -173,7 +174,7 @@ class ChannelInstanceDialog(QDialog):
         verify_layout = QHBoxLayout(self.verify_row)
         verify_layout.setContentsMargins(0, 0, 0, 0)
         verify_layout.setSpacing(8)
-        self.verify_code_input = QLineEdit()
+        self.verify_code_input = ThemedLineEdit()
         self.verify_code_input.setPlaceholderText("输入手机微信显示的数字")
         self.verify_code_input.returnPressed.connect(self._submit_verification_code)
         verify_layout.addWidget(self.verify_code_input, 1)
@@ -196,7 +197,7 @@ class ChannelInstanceDialog(QDialog):
         session_layout = QVBoxLayout(self.session_group)
         session_layout.setContentsMargins(12, 12, 12, 12)
         session_layout.setSpacing(8)
-        self.session_summary_label = QLabel()
+        self.session_summary_label = ThemedSelectableLabel()
         self.session_summary_label.setWordWrap(True)
         self.session_summary_label.setProperty("muted", True)
         self.session_summary_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -213,9 +214,9 @@ class ChannelInstanceDialog(QDialog):
         self.diagnostics_group = QGroupBox("诊断信息")
         diagnostics = QFormLayout(self.diagnostics_group)
         diagnostics.setContentsMargins(12, 10, 12, 10)
-        self.diagnostic_id = QLabel()
+        self.diagnostic_id = ThemedSelectableLabel()
         self.diagnostic_id.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.diagnostic_source = QLabel()
+        self.diagnostic_source = ThemedSelectableLabel()
         self.diagnostic_source.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.diagnostic_credentials = QLabel()
         diagnostics.addRow("ID", self.diagnostic_id)
@@ -329,7 +330,7 @@ class ChannelInstanceDialog(QDialog):
         for field_def in self._definition.fields:
             if field_def.show_for_modes and mode not in field_def.show_for_modes:
                 continue
-            line_edit = QLineEdit()
+            line_edit = ThemedLineEdit()
             line_edit.setPlaceholderText(field_def.placeholder)
             line_edit.setToolTip(field_def.help_text or field_def.label)
             if field_def.secret:

@@ -9,7 +9,6 @@ from models.contracts.tooling import ToolSelectionPolicy, normalize_tool_categor
 
 COMMAND_TOOL_NAMES: Tuple[str, ...] = (
     "shell__run",
-    "shell__start",
     "shell__read",
     "shell__kill",
 )

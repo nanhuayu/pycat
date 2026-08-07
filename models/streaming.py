@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ConversationPatch:
-    """UI/runtime patch for synchronizing the foreground conversation.
+    """UI/runtime patch for synchronizing a worker-owned conversation.
 
     The task loop runs on a worker-owned Conversation snapshot. This lightweight
-    patch is the bridge back to the UI Conversation without putting the full
-    transcript inside runtime timeline events.
+    patch is the bridge back to persisted/UI conversations without putting the
+    full transcript inside runtime timeline events.
     """
 
     conversation_id: str
@@ -32,6 +32,41 @@ class ConversationPatch:
     state: dict[str, Any] | None = None
     condensed_message_ids: dict[str, str] = field(default_factory=dict)
     diagnostics: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: object,
+        *,
+        conversation_id: str = "",
+    ) -> "ConversationPatch | None":
+        if isinstance(payload, cls):
+            return payload
+        if not isinstance(payload, dict):
+            return None
+
+        messages: list[Message] = []
+        for item in payload.get("changed_messages") or []:
+            try:
+                if isinstance(item, Message):
+                    messages.append(Message.from_dict(item.to_dict()))
+                elif isinstance(item, dict):
+                    messages.append(Message.from_dict(item))
+            except Exception as exc:
+                logger.debug("Failed to normalize patch message: %s", exc)
+
+        condensed = payload.get("condensed_message_ids")
+        if not isinstance(condensed, dict):
+            condensed = {}
+        state = payload.get("state")
+        diagnostics = payload.get("diagnostics")
+        return cls(
+            conversation_id=str(payload.get("conversation_id") or conversation_id or ""),
+            changed_messages=messages,
+            state=dict(state) if isinstance(state, dict) else None,
+            condensed_message_ids={str(key): str(value) for key, value in condensed.items()},
+            diagnostics=dict(diagnostics) if isinstance(diagnostics, dict) else {},
+        )
 
 
 @dataclass

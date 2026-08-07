@@ -100,7 +100,7 @@ class ModelsPage(QWidget):
         route_layout.addWidget(self.auxiliary_model_combo, 1)
         root.addWidget(route_bar)
 
-        split = SettingsListDetailLayout("服务商", "配置", list_stretch=2, detail_stretch=5)
+        split = SettingsListDetailLayout(list_stretch=2, detail_stretch=5)
         provider_actions = SettingsActionBar(spacing=4)
         self.btn_add_provider = provider_actions.add_icon_action(
             "新增服务商", Icons.get(Icons.PLUS), self._add_provider,
@@ -125,7 +125,10 @@ class ModelsPage(QWidget):
         self.provider_list = configure_settings_resource_list(QListWidget())
         self.provider_list.currentItemChanged.connect(self._on_provider_selected)
         split.list_layout.addWidget(self.provider_list, 1)
-        self.provider_editor = ProviderEditor(self.provider_service)
+        self.provider_editor = ProviderEditor(
+            self.provider_service,
+            self.provider_catalog_service,
+        )
         self.provider_editor.model_catalog_changed.connect(self._on_model_catalog_changed)
         split.add_detail_widget(self.provider_editor)
         root.addWidget(split, 1)
@@ -137,9 +140,12 @@ class ModelsPage(QWidget):
         return item if isinstance(item, ProviderListItem) else None
 
     def _commit_active_editor(self) -> Provider | None:
+        return self._commit_active_editor_with_validation(validate_connection=True)
+
+    def _commit_active_editor_with_validation(self, *, validate_connection: bool) -> Provider | None:
         if not self._active_provider_id or not self.provider_editor.isEnabled():
             return None
-        updated = self.provider_editor.build_provider()
+        updated = self.provider_editor.build_provider(validate_connection=validate_connection)
         self.providers = self.provider_catalog_service.upsert(self.providers, updated)
         for row in range(self.provider_list.count()):
             item = self.provider_list.item(row)
@@ -149,9 +155,9 @@ class ModelsPage(QWidget):
                 break
         return updated
 
-    def _try_commit_active_editor(self) -> bool:
+    def _try_commit_active_editor(self, *, validate_connection: bool = True) -> bool:
         try:
-            self._commit_active_editor()
+            self._commit_active_editor_with_validation(validate_connection=validate_connection)
             return True
         except ValueError as exc:
             self.provider_editor.show_status(str(exc), state="error")
@@ -236,15 +242,16 @@ class ModelsPage(QWidget):
         self.btn_toggle_enabled.setIcon(Icons.get(Icons.PAUSE if enabled else Icons.PLAY))
 
     def _add_provider(self) -> None:
-        if not self._try_commit_active_editor():
+        if not self._try_commit_active_editor(validate_connection=False):
             return
-        index = 1
         names = {provider.name for provider in self.providers}
-        name = "new-provider"
+        provider = Provider(name="new-provider", enabled=True)
+        name = provider.name
+        index = 1
         while name in names:
             index += 1
-            name = f"new-provider-{index}"
-        provider = Provider(name=name, enabled=True)
+            name = f"{provider.name}-{index}"
+        provider.name = name
         self.providers = self.provider_catalog_service.upsert(self.providers, provider)
         self._active_provider_id = provider.id
         self._refresh_provider_list(provider.id)

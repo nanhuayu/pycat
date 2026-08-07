@@ -1,12 +1,6 @@
 ﻿"""Tool execution module - handles tool calls and state management.
 
-Extracted from task.py to reduce complexity.
-Responsibilities:
-- Parse tool calls from LLM responses
-- Execute tools via MCP manager
-- Build tool context with state
-- Handle tool permissions
-- Sync state after tool execution
+Owns the unified selection and permission boundary around ToolManager calls.
 """
 from __future__ import annotations
 
@@ -20,7 +14,13 @@ from models.conversation import Conversation, Message
 from models.provider import Provider
 
 from core.state.operations import state_checkpoint
-from core.tools.base import PermissionContext, ToolContext, ToolResult, ToolRuntimeContext
+from core.tools.base import (
+    PermissionContext,
+    ToolApprovalRequest,
+    ToolContext,
+    ToolResult,
+    ToolRuntimeContext,
+)
 from models.contracts.tooling import normalize_risk_level, normalize_tool_category
 from core.tools.manager import ToolManager
 from models.contracts.agent import RunPolicy
@@ -36,13 +36,15 @@ class ToolExecutor:
         tool_manager: ToolManager,
         *,
         capability_executor: Any = None,
-        archive_compressor_factory: Any = None,
+        compression_factory: Any = None,
         shell_config: Any = None,
+        content_service: Any = None,
     ):
         self._tool_manager = tool_manager
         self._capability_executor = capability_executor
-        self._archive_compressor_factory = archive_compressor_factory
+        self._compression_factory = compression_factory
         self._shell_config = shell_config
+        self._content_service = content_service
 
     def parse_tool_call(self, tool_call: dict) -> tuple[str, dict, Optional[str]]:
         """Parse tool call from LLM response.
@@ -80,13 +82,17 @@ class ToolExecutor:
             # 1. Permission policy
             category = str(getattr(tool, "category", "capability") or "capability")
             tool_policy = policy.tool_permissions.resolve(tool_name, category)
-            if not tool_policy.enabled:
+            if tool_policy.action == "deny":
                 return False
 
             # 2. Request-time tool selection filter
             descriptors = self._tool_manager.list_tool_descriptors(include_dynamic=False)
             descriptor = descriptors.get(tool_name) or tool.descriptor()
-            if not policy.tool_selection.allows(descriptor):
+            required_completion = (
+                tool_name == "agent__complete"
+                and policy.completion_policy == "explicit"
+            )
+            if not policy.tool_selection.allows(descriptor) and not required_completion:
                 return False
 
             return True
@@ -98,13 +104,14 @@ class ToolExecutor:
         *,
         conversation: Conversation,
         provider: Provider,
-        approval_callback: Optional[Callable[[str], bool]],
+        approval_callback: Optional[Callable[[ToolApprovalRequest], Any]],
         questions_callback: Optional[Callable[[dict[str, Any]], Any]],
         llm_client: Any,
         policy: RunPolicy,
         tool_call_id: str | None = None,
         tool_name: str = "",
         debug_trace=None,
+        compression_tasks: Any = None,
     ) -> ToolContext:
         """Build tool context with state.
 
@@ -148,8 +155,10 @@ class ToolExecutor:
             workspace_roots=workspace_roots,
             permission=permission,
             capability_executor=self._capability_executor,
-            archive_compressor_factory=self._archive_compressor_factory,
+            compression_factory=self._compression_factory,
+            compression_tasks=compression_tasks,
             shell_config=self._shell_config,
+            process_manager=getattr(self._tool_manager, "processes", None),
             run_policy=policy,
             debug_trace=debug_trace,
         )
@@ -178,6 +187,7 @@ class ToolExecutor:
             llm_client=llm_client,
             conversation=conversation,
             provider=provider,
+            content_service=self._content_service,
             runtime=runtime,
             permission=permission,
         )
@@ -209,7 +219,8 @@ class ToolExecutor:
             tool_policy = policy.tool_permissions.resolve(tool_name, category)
             return ToolResult(
                 f"Tool '{tool_name}' is disabled by current mode/settings. "
-                f"(tool_policy={tool_policy.to_dict() if tool_policy else 'default'})"
+                f"(tool_policy={tool_policy.to_dict() if tool_policy else 'default'})",
+                is_error=True,
             )
 
         try:
@@ -229,10 +240,18 @@ class ToolExecutor:
             context.permission = permission
             context.runtime = replace(context.runtime, permission=permission)
 
-            if policy.tool_permissions.requires_approval(tool.name, tool.category, risk):
+            if policy.tool_permissions.resolve(tool.name, tool.category).action == "ask":
+                request = ToolApprovalRequest(
+                    tool_name=tool.name,
+                    tool_call_id=str(context.runtime.tool_call_id or ""),
+                    arguments=dict(tool_args or {}),
+                    category=permission.category,
+                    risk=risk,
+                    message=tool.approval_message(tool_args, context),
+                )
                 approved = await self._request_approval(
                     context.approval_callback,
-                    tool.approval_message(tool_args, context),
+                    request,
                 )
                 if not approved:
                     return ToolResult(
@@ -247,11 +266,11 @@ class ToolExecutor:
             return ToolResult(f"Error executing tool {tool_name}: {e}", is_error=True)
 
     @staticmethod
-    async def _request_approval(callback: Any, message: str) -> bool:
+    async def _request_approval(callback: Any, request: ToolApprovalRequest) -> bool:
         if callback is None:
             return False
         try:
-            result = callback(message)
+            result = callback(request)
             if inspect.isawaitable(result):
                 result = await result
             return bool(result)

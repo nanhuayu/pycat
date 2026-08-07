@@ -28,6 +28,9 @@ from gui.widgets.message_widget import MESSAGE_BADGE_HEIGHT, MESSAGE_HEADER_HEIG
 logger = logging.getLogger(__name__)
 
 
+_RENDER_INTERVAL_MS = 400
+
+
 class StreamingOverlay:
     """Manages the streaming response overlay within a ChatView.
 
@@ -62,8 +65,11 @@ class StreamingOverlay:
         # Buffered rendering (avoids UI freezing on fast token streams)
         self._pending_text: str = ""
         self._displayed_text: str = ""
+        self._pending_thinking_text: str = ""
+        self._displayed_thinking_text: str = ""
         self._render_timer = QTimer()
-        self._render_timer.setInterval(60)
+        self._render_timer.setInterval(_RENDER_INTERVAL_MS)
+        self._render_timer.setSingleShot(True)
         self._render_timer.timeout.connect(self._process_buffer)
 
     # ------------------------------------------------------------------
@@ -139,6 +145,8 @@ class StreamingOverlay:
         self._thinking_text = ""
         self._pending_text = ""
         self._displayed_text = ""
+        self._pending_thinking_text = ""
+        self._displayed_thinking_text = ""
         self._thinking_expanded = False
 
         self._container = container
@@ -146,8 +154,6 @@ class StreamingOverlay:
             insert_index = max(0, parent_layout.count())
         parent_layout.insertWidget(max(0, int(insert_index)), container)
         QTimer.singleShot(50, self._scroll_to_bottom_if_allowed)
-
-        self._render_timer.start()
 
     @staticmethod
     def _style_role_label(label: QLabel) -> None:
@@ -165,10 +171,6 @@ class StreamingOverlay:
         """Tear down the streaming overlay and free resources."""
         self._render_timer.stop()
 
-        # Flush final state
-        if self._content_label and self._pending_text != self._displayed_text:
-            self._content_label.set_markdown(self._pending_text)
-
         if self._container is not None:
             self._container.deleteLater()
             self._container = None
@@ -181,6 +183,8 @@ class StreamingOverlay:
         self._thinking_text = ""
         self._pending_text = ""
         self._displayed_text = ""
+        self._pending_thinking_text = ""
+        self._displayed_thinking_text = ""
 
     # ------------------------------------------------------------------
     # Content updates
@@ -191,26 +195,27 @@ class StreamingOverlay:
         if self._content_label is not None and token is not None:
             self._text += str(token)
             self._pending_text = self._text
+            self._schedule_render()
 
     def append_thinking(self, text: str) -> None:
         """Append thinking content (shown in collapsible panel)."""
         if not self._thinking_label or not text:
             return
 
+        first_thinking = not self._thinking_text
         self._thinking_text += str(text)
-        self._thinking_label.set_markdown(self._thinking_text)
+        self._pending_thinking_text = self._thinking_text
+        self._schedule_render()
 
-        if self._thinking_btn:
+        if first_thinking and self._thinking_btn:
             self._thinking_btn.setVisible(True)
 
         # Auto-expand on first thinking token
-        if not self._thinking_expanded:
+        if first_thinking and not self._thinking_expanded:
             self._thinking_expanded = True
             self._thinking_label.setVisible(True)
             if self._thinking_btn:
                 self._thinking_btn.setText("收起思考")
-
-        QTimer.singleShot(10, self._scroll_to_bottom_if_allowed)
 
     def restore(self, visible_text: str = "", thinking_text: str = "") -> None:
         """Restore streaming state from cached buffers (conversation switch)."""
@@ -219,8 +224,12 @@ class StreamingOverlay:
 
         self._text = str(visible_text or "")
         self._content_label.set_markdown(self._text or "正在生成...")
+        self._pending_text = self._text
+        self._displayed_text = self._text
 
         self._thinking_text = str(thinking_text or "")
+        self._pending_thinking_text = self._thinking_text
+        self._displayed_thinking_text = self._thinking_text
         if self._thinking_label and self._thinking_btn:
             if self._thinking_text:
                 self._thinking_label.set_markdown(self._thinking_text)
@@ -240,16 +249,31 @@ class StreamingOverlay:
     # Internal
     # ------------------------------------------------------------------
 
-    def _process_buffer(self) -> None:
+    def _process_buffer(self, *, schedule_layout: bool = True) -> None:
         """Flush pending text to UI (called by render timer)."""
         if not self._content_label:
             return
+        changed = False
         if self._pending_text != self._displayed_text:
             self._displayed_text = self._pending_text
             self._content_label.set_markdown(self._displayed_text or "正在生成...")
+            changed = True
+        if (
+            self._thinking_label is not None
+            and self._pending_thinking_text != self._displayed_thinking_text
+        ):
+            self._displayed_thinking_text = self._pending_thinking_text
+            self._thinking_label.set_markdown(self._displayed_thinking_text)
+            changed = True
+        if changed:
             if self._container is not None:
                 self._container.updateGeometry()
-            QTimer.singleShot(10, self._update_geometry_and_scroll)
+            if schedule_layout:
+                QTimer.singleShot(10, self._update_geometry_and_scroll)
+
+    def _schedule_render(self) -> None:
+        if self._content_label is not None and not self._render_timer.isActive():
+            self._render_timer.start()
 
     def _update_geometry_and_scroll(self) -> None:
         if self._content_label is not None:

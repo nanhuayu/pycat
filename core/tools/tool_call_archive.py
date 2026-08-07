@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.content.archive_store import ArchivedContentRecord, SessionArchiveStore, estimate_tokens, stringify_content
-from core.content.archive_view_service import ArchiveViewService
 from core.content.view_protocol import (
     ContentExactness,
     ContentViewLabel,
+    TOOL_SUMMARY_PROJECTION_CHARS,
     exact_view_from_text,
 )
 
@@ -266,24 +266,13 @@ class ToolCallArchiveService:
 class ToolResultViewService:
     """Build the first recoverable model view for a completed tool result."""
 
+    SHORT_LIMIT = 2_000
     FULL_LIMIT = 8_000
-    SUMMARY_THRESHOLD = 2_000
-    SUMMARY_EXACT_PREFIX = 4_000
+    SUMMARY_LIMIT = TOOL_SUMMARY_PROJECTION_CHARS
+    HEAD_LIMIT = 2_000
+    TAIL_LIMIT = 2_000
 
-    def __init__(
-        self,
-        *,
-        work_dir: str = "",
-        conversation_id: object = None,
-        conversation: Any = None,
-        compressor: Any = None,
-    ) -> None:
-        self.work_dir = str(work_dir or "")
-        self.conversation_id = conversation_id
-        self.conversation = conversation
-        self.compressor = compressor
-
-    async def build_display(
+    def build_display(
         self,
         *,
         tool_name: str,
@@ -298,46 +287,16 @@ class ToolResultViewService:
             return archive_result
 
         record = archive_result.archive
-        should_summarize = self.needs_summary(text=text, archive_result=archive_result)
-        if should_summarize and self.compressor is not None and self.work_dir:
-            service = ArchiveViewService(
-                work_dir=self.work_dir,
-                conversation_id=self.conversation_id,
-                conversation=self.conversation,
-                compressor=self.compressor,
-            )
-            result = await service.get_or_create_summary(
-                record.id,
-                purpose=f"initial_tool_result:{tool_name}",
-            )
-            record = result.record or record
-            archive_result.archive = record
-
         if len(str(text or "")) <= self.FULL_LIMIT:
             view = self._full_view(record=record, tool_name=tool_name, text=text)
             return self._apply_view(archive_result, view, summary=record.summary)
-        if record.summary:
-            view = self._summary_with_exact_prefix_view(
-                record=record,
-                tool_name=tool_name,
-                text=text,
-                summary=record.summary,
-            )
-            return self._apply_view(archive_result, view, summary=record.summary)
-        view = self._content_preview_view(
+        view = self._long_view(
             record=record,
             tool_name=tool_name,
             text=text,
-            limit=self.FULL_LIMIT,
+            summary=record.summary,
         )
         return self._apply_view(archive_result, view, summary=record.summary)
-
-    @classmethod
-    def needs_summary(cls, *, text: str, archive_result: ToolCallArchiveResult) -> bool:
-        record = archive_result.archive
-        if record is None or record.summary:
-            return False
-        return len(str(text or "")) >= cls.SUMMARY_THRESHOLD or archive_result.image_count > 0
 
     @staticmethod
     def _full_view(*, record: ArchivedContentRecord, tool_name: str, text: str) -> ContentView:
@@ -353,59 +312,64 @@ class ToolResultViewService:
         )
 
     @staticmethod
-    def _content_preview_view(
+    def _long_view(
         *,
         record: ArchivedContentRecord,
         tool_name: str,
         text: str,
-        limit: int,
+        summary: str = "",
     ) -> ContentView:
         body = str(text or "")
-        end = min(len(body), max(1, int(limit)))
-        next_offset = end if end < len(body) else None
+        total = len(body)
+        head_end = min(total, ToolResultViewService.HEAD_LIMIT)
+        tail_start = max(head_end, total - ToolResultViewService.TAIL_LIMIT)
+        summary_text = str(summary or "").strip()[: ToolResultViewService.SUMMARY_LIMIT]
+        summary_body = summary_text or "No semantic summary is available; use the exact excerpts and Archive reference."
+        rendered = (
+            f"derived={'true' if summary_text else 'false'}\n"
+            f"chars={total}\n"
+            f"tokens={int(record.token_estimate or estimate_tokens(body))}\n"
+            f"{summary_body}\n\n"
+            f"[char:0-{head_end}]\nexact=true\n{body[:head_end]}\n\n"
+            f"[char:{tail_start}-{total}]\nexact=true\n{body[tail_start:]}\n\n"
+            f'Use archive__read(content_id="{record.id}", view="content", offset={head_end}) '
+            "to restore omitted exact content and images."
+        )
         return ContentView(
-            label=ContentViewLabel("char", f"0-{end}"),
-            body=f"next_offset={next_offset if next_offset is not None else 'none'}\n{body[:end]}",
+            label=ContentViewLabel("summary", "" if summary_text else "unavailable"),
+            body=rendered,
             content_id=record.id,
             source=str(tool_name or ""),
-            chars=len(body),
-            exactness=ContentExactness.EXACT,
-            preview=body[:end],
+            chars=total,
+            exactness=ContentExactness.DERIVED,
+            preview=body[:head_end],
             record=record,
         )
 
     @classmethod
-    def _summary_with_exact_prefix_view(
+    def rebuild_long_display(
         cls,
         *,
-        record: ArchivedContentRecord,
         tool_name: str,
         text: str,
-        summary: str,
-    ) -> ContentView:
-        body = str(text or "")
-        end = min(len(body), cls.SUMMARY_EXACT_PREFIX)
-        next_offset = end if end < len(body) else None
-        rendered = (
-            f"summary:\n{str(summary or '').strip()}\n\n"
-            f"exact_excerpt:\nchar_range=0-{end}\n"
-            f"next_offset={next_offset if next_offset is not None else 'none'}\n{body[:end]}"
-        )
-        return ContentView(
-            label=ContentViewLabel("archive", "summary+char"),
-            body=rendered,
-            content_id=record.id,
-            source=str(tool_name or ""),
-            chars=len(body),
-            exactness=ContentExactness.DERIVED,
-            preview=body[:end],
+        archive_result: ToolCallArchiveResult,
+        summary: str = "",
+    ) -> ToolCallArchiveResult:
+        record = archive_result.archive
+        if record is None:
+            return archive_result
+        view = cls._long_view(
             record=record,
+            tool_name=tool_name,
+            text=text,
+            summary=summary or record.summary,
         )
+        return cls._apply_view(archive_result, view, summary=summary or record.summary)
 
     @staticmethod
     def _apply_view(handle: ToolCallArchiveResult, view: ContentView, *, summary: str = "") -> ToolCallArchiveResult:
         handle.display = view.render()
-        handle.summary = str(summary or "")
+        handle.summary = str(summary or "")[: ToolResultViewService.SUMMARY_LIMIT]
         if not handle.summary and view.exactness == ContentExactness.EXACT:
             handle.summary = ToolCallArchiveService._inline_summary(view.source, view.preview or view.body)
         handle.view_label = view.label.value

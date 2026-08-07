@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 from pathlib import Path
+from typing import Any
 
 
 logger = logging.getLogger(__name__)
@@ -97,4 +98,25 @@ def channel_binding_key(channel_id: str, user_id: str) -> str:
     return f"{str(channel_id or '').strip()}::{str(user_id or '').strip()}"
 
 
-__all__ = ["ChannelConversationBindingStore", "channel_binding_key"]
+def is_bound_channel_conversation(conversation: Any) -> bool:
+    """Return whether a conversation has an explicit Channel binding.
+
+    Revision of external user turns is allowed only for a complete persisted
+    binding.  A mode label or message provenance alone is not sufficient.
+    """
+
+    settings = getattr(conversation, "settings", {}) or {}
+    binding = settings.get("channel_binding") if isinstance(settings, dict) else None
+    if not isinstance(binding, dict):
+        return False
+    return bool(
+        str(binding.get("channel_id") or "").strip()
+        and str(binding.get("source") or "").strip()
+    )
+
+
+__all__ = [
+    "ChannelConversationBindingStore",
+    "channel_binding_key",
+    "is_bound_channel_conversation",
+]

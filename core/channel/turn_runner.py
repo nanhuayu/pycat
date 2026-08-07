@@ -5,16 +5,18 @@ import logging
 import uuid
 from typing import Any, Callable
 
-from core.agent.events import create_run_debug_trace, finish_run_debug_trace
+from core.agent.events.stream_batcher import StreamDeltaBatcher
 from core.agent.policy import RunPolicyBuilder
 from core.agent.run.runtime import AgentRuntime
 from core.channel.events import ChannelEvent
 from core.llm.model_selection import select_default_provider_model
-from models.provider import Provider, build_model_ref
+from core.observability import create_run_debug_trace, finish_run_debug_trace
+from core.tools.base import ToolApprovalRequest
 from models.contracts.agent import RunEvent, RunEventKind, RunPolicy
 from models.contracts.channel import ChannelConfig
 from models.conversation import Conversation, Message
-
+from models.model_ref import build_model_ref
+from models.provider import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ class ChannelTurnRunner:
             mode_slug=mode_slug,
             show_thinking=bool(settings.get("show_thinking", False)),
             tool_selection=tool_selection,
-            disabled_tools=("user__ask",),
+            denied_tools=("user__ask",),
             source="channel",
         )
 
@@ -72,11 +74,24 @@ class ChannelTurnRunner:
         channel_id = str(getattr(channel, "id", "") or "").strip()
         conversation_id = str(getattr(conversation, "id", "") or "").strip()
         request_token = str(request_id or "").strip() or str(uuid.uuid4())
+        stream_batch: StreamDeltaBatcher | None = None
 
-        async def _approval_callback(_message: str) -> bool:
+        def _flush_stream() -> None:
+            if stream_batch is not None:
+                stream_batch.flush()
+
+        def _emit_stream_batch(visible: str, thinking: str) -> None:
+            if visible:
+                _emit_turn_event("turn-token", payload={"token": visible})
+            if thinking:
+                _emit_turn_event("turn-thinking", payload={"thinking": thinking})
+
+        async def _approval_callback(_request: ToolApprovalRequest) -> bool:
+            _flush_stream()
             return False
 
         async def _questions_callback(_question: dict) -> dict:
+            _flush_stream()
             return {"selected": [], "freeText": None, "skipped": True}
 
         def _emit_turn_event(kind: str, *, payload: dict[str, Any] | None = None, source: str = "channel-turn") -> None:
@@ -103,12 +118,15 @@ class ChannelTurnRunner:
             }
 
         def _on_token(token: str) -> None:
-            _emit_turn_event("turn-token", payload={"token": str(token or "")})
+            if stream_batch is not None:
+                stream_batch.append_visible(token)
 
         def _on_thinking(thinking: str) -> None:
-            _emit_turn_event("turn-thinking", payload={"thinking": str(thinking or "")})
+            if stream_batch is not None:
+                stream_batch.append_thinking(thinking)
 
         def _on_event(event: RunEvent) -> None:
+            _flush_stream()
             kind_value = getattr(getattr(event, "kind", ""), "value", str(getattr(event, "kind", "")))
             payload: dict[str, Any] = {
                 "event": event,
@@ -146,19 +164,30 @@ class ChannelTurnRunner:
             capture_stream=bool(app_settings.get("log_stream", False)),
         )
         try:
-            result = asyncio.run(
-                self._agent_runtime.run(
-                    provider=provider,
-                    conversation=conversation,
-                    policy=policy,
-                    on_event=_on_event,
-                    on_token=_on_token,
-                    on_thinking=_on_thinking,
-                    approval_callback=_approval_callback,
-                    questions_callback=_questions_callback,
-                    debug_trace=debug_trace,
+            async def _run():
+                loop = asyncio.get_running_loop()
+                nonlocal stream_batch
+                stream_batch = StreamDeltaBatcher(
+                    schedule=loop.call_later,
+                    emit=_emit_stream_batch,
                 )
-            )
+                try:
+                    return await self._agent_runtime.run(
+                        provider=provider,
+                        conversation=conversation,
+                        policy=policy,
+                        on_event=_on_event,
+                        on_token=_on_token,
+                        on_thinking=_on_thinking,
+                        approval_callback=_approval_callback,
+                        questions_callback=_questions_callback,
+                        debug_trace=debug_trace,
+                    )
+                finally:
+                    _flush_stream()
+                    stream_batch = None
+
+            result = asyncio.run(_run())
         except Exception as exc:
             finish_run_debug_trace(debug_trace, status="error", summary=str(exc))
             raise

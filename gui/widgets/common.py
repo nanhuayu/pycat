@@ -126,28 +126,6 @@ class EmptyState(QFrame):
         layout.addWidget(self.description_label)
 
 
-class MetricCard(QFrame):
-    """A small label/value card."""
-
-    def __init__(self, label: str, value: str = "-", parent: QWidget | None = None):
-        super().__init__(parent)
-        self.setObjectName("metric_card")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(2)
-
-        self.label = QLabel(label)
-        self.label.setObjectName("metric_label")
-        layout.addWidget(self.label)
-
-        self.value_label = QLabel(value)
-        self.value_label.setObjectName("metric_value")
-        layout.addWidget(self.value_label)
-
-    def set_value(self, value: str) -> None:
-        self.value_label.setText(str(value or "-"))
-
-
 class StatusPill(QLabel):
     """Compact status label styled by the `tone` property."""
 

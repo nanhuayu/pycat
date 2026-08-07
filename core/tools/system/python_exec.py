@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -74,6 +75,48 @@ def _subprocess_stdio_options() -> dict[str, Any]:
         options["creationflags"] = subprocess.CREATE_NO_WINDOW
     return options
 
+
+def _run_python_code(
+    *,
+    code: str,
+    python_runner: list[str],
+    cwd: Path,
+    timeout_sec: float,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess:
+    script_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".py",
+            prefix="pycat_exec_",
+            encoding="utf-8",
+            delete=False,
+        ) as handle:
+            script_path = handle.name
+            handle.write(code)
+            if not code.endswith("\n"):
+                handle.write("\n")
+
+        return subprocess.run(
+            [*python_runner, script_path],
+            cwd=str(cwd),
+            capture_output=True,
+            text=False,
+            timeout=timeout_sec,
+            env=env,
+            **_subprocess_stdio_options(),
+        )
+    finally:
+        if script_path:
+            try:
+                os.unlink(script_path)
+            except FileNotFoundError:
+                pass
+            except Exception as exc:
+                logger.debug("Failed to remove python exec temp file %s: %s", script_path, exc)
+
+
 class PythonExecTool(BaseTool):
     @property
     def name(self) -> str:
@@ -140,37 +183,14 @@ class PythonExecTool(BaseTool):
                     is_error=True,
                 )
 
-            script_path = None
-            try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    suffix=".py",
-                    prefix="pycat_exec_",
-                    encoding="utf-8",
-                    delete=False,
-                ) as handle:
-                    script_path = handle.name
-                    handle.write(code)
-                    if not code.endswith("\n"):
-                        handle.write("\n")
-
-                proc = subprocess.run(
-                    [*python_runner, script_path],
-                    cwd=str(cwd_path),
-                    capture_output=True,
-                    text=False,
-                    timeout=timeout_sec,
-                    env=env,
-                    **_subprocess_stdio_options(),
-                )
-            finally:
-                if script_path:
-                    try:
-                        os.unlink(script_path)
-                    except FileNotFoundError:
-                        pass
-                    except Exception as exc:
-                        logger.debug("Failed to remove python exec temp file %s: %s", script_path, exc)
+            proc = await asyncio.to_thread(
+                _run_python_code,
+                code=str(code),
+                python_runner=python_runner,
+                cwd=cwd_path,
+                timeout_sec=timeout_sec,
+                env=env,
+            )
             return ToolResult(json.dumps(
                 {
                     "exitCode": proc.returncode,

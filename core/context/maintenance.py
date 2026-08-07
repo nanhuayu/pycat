@@ -8,7 +8,7 @@ from typing import Any
 
 from core.content.archive_store import SessionArchiveStore, estimate_tokens
 from core.context.compression import (
-    MAX_SUMMARY_CHARS,
+    HISTORY_FALLBACK_PROJECTION_CHARS,
     MIN_LLM_COMPRESSION_CHARS,
     CompressionResult,
     CompressionSource,
@@ -19,6 +19,7 @@ from core.context.sections import extract_user_request
 from core.llm.token_budget import estimate_conversation_tokens
 from core.state.operations import archive_trace_through, remember_archive
 from core.state.work_trace import compact_work_route, work_trace_refs
+from models.contracts.content import FileChange
 from models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 from models.contracts.session_state import SessionState
 from models.provider import Provider
@@ -54,20 +55,18 @@ class ContextMaintenance:
         self,
         policy: MaintenancePolicy | None = None,
         *,
-        compressor_factory: Any = None,
+        compression_factory: Any = None,
         debug_trace: Any = None,
     ) -> None:
         self.policy = policy or MaintenancePolicy()
-        self.compressor_factory = compressor_factory
+        self.compression_factory = compression_factory
         self.debug_trace = debug_trace
 
-    def _compressor(self, *, client: Any, provider: Provider, store: SessionArchiveStore):
-        if self.compressor_factory is None:
+    def _compressor(self, *, provider: Provider):
+        if self.compression_factory is None:
             return None
-        return self.compressor_factory(
-            client=client,
+        return self.compression_factory(
             provider=provider,
-            store=store,
             debug_trace=self.debug_trace,
         )
 
@@ -77,7 +76,7 @@ class ContextMaintenance:
         *,
         client,
         provider: Provider | None,
-        context_window_limit: int = 0,
+        prompt_limit: int = 0,
         current_seq: int = 0,
         force: bool = False,
         force_check: bool = False,
@@ -93,12 +92,12 @@ class ContextMaintenance:
 
         diagnostics = self._diagnostics(
             conversation,
-            context_window_limit,
+            prompt_limit,
             request_token_estimate=request_token_estimate,
             conversation_token_estimate=conversation_token_estimate,
         )
         should_compact, reason = self._should_compact(
-            context_window_limit,
+            prompt_limit,
             force=force,
             diagnostics=diagnostics,
         )
@@ -141,16 +140,16 @@ class ContextMaintenance:
 
     def _should_compact(
         self,
-        context_window_limit: int,
+        prompt_limit: int,
         *,
         force: bool,
         diagnostics: dict[str, int],
     ) -> tuple[bool, str]:
         if force:
             return True, "force"
-        if context_window_limit <= 0:
+        if prompt_limit <= 0:
             return False, "below_threshold"
-        threshold = int(context_window_limit * self.policy.token_threshold_ratio)
+        threshold = int(prompt_limit * self.policy.token_threshold_ratio)
         estimate = max(
             int(diagnostics.get("request_tokens", 0) or 0),
             int(diagnostics.get("conversation_tokens", 0) or 0),
@@ -168,7 +167,7 @@ class ContextMaintenance:
         provider: Provider | None,
     ) -> tuple[int, bool, dict[str, Any]]:
         store = SessionArchiveStore(
-            getattr(conversation, "work_dir", "") or ".",
+            getattr(conversation, "work_dir", "") or "",
             conversation_id=getattr(conversation, "id", None),
         )
         start_seq = min(int(getattr(message, "seq_id", 0) or 0) for message in candidates)
@@ -201,9 +200,9 @@ class ContextMaintenance:
         result, calls, fallback_reason = await self._summarize_source(
             source,
             conversation=conversation,
-            store=store,
             client=client,
             provider=provider,
+            content_id=record.id,
         )
         if not result.summary:
             result = CompressionResult(
@@ -295,19 +294,26 @@ class ContextMaintenance:
         source: CompressionSource,
         *,
         conversation: Conversation,
-        store: SessionArchiveStore,
         client: Any,
         provider: Provider | None,
+        content_id: str,
     ) -> tuple[CompressionResult, int, str]:
         if source.chars < MIN_LLM_COMPRESSION_CHARS and not source.images:
             return CompressionResult(status="fallback"), 0, "below_min_chars"
         if client is None or provider is None:
             return CompressionResult(status="fallback"), 0, "llm_unavailable"
-        compressor = self._compressor(client=client, provider=provider, store=store)
+        compressor = self._compressor(provider=provider)
         if compressor is None:
             return CompressionResult(status="fallback"), 0, "compressor_unavailable"
         try:
-            result = await compressor.compress_history(source, conversation=conversation)
+            result = await compressor.compress(
+                source.text,
+                purpose="history",
+                images=list(source.images),
+                conversation=conversation,
+                trace_purpose="history_compaction",
+                content_id=content_id,
+            )
         except Exception as exc:
             return CompressionResult(status="fallback", error=str(exc)), 1, "compressor_error"
         summary = str(getattr(result, "summary", "") or "").strip()
@@ -315,8 +321,6 @@ class ContextMaintenance:
             return CompressionResult(status="fallback", error=getattr(result, "error", "summary_empty")), 1, str(
                 getattr(result, "error", "summary_empty") or "summary_empty"
             )
-        if len(summary) > MAX_SUMMARY_CHARS:
-            return CompressionResult(status="fallback", error="summary_too_long"), 1, "summary_too_long"
         if estimate_tokens(summary) >= max(1, source.token_estimate):
             return CompressionResult(status="fallback", error="summary_no_savings"), 1, "summary_no_savings"
         return result, int(result.calls or 1), ""
@@ -496,17 +500,25 @@ class ContextMaintenance:
                 if image not in message_images:
                     message_images.append(image)
             function = tool_call.get("function") if isinstance(tool_call.get("function"), dict) else {}
-            tools.append(
-                {
-                    "id": str(tool_call.get("id") or ""),
-                    "name": tool_call_name(tool_call) or str(metadata.get("name") or "tool"),
-                    "arguments": function.get("arguments", ""),
-                    "content_id": content_id,
-                    "result": exact,
-                    "is_error": bool(metadata.get("is_error")),
-                    "image_count": len(archived_images),
-                }
-            )
+            tool_item = {
+                "id": str(tool_call.get("id") or ""),
+                "name": tool_call_name(tool_call) or str(metadata.get("name") or "tool"),
+                "arguments": function.get("arguments", ""),
+                "content_id": content_id,
+                "result": exact,
+                "is_error": bool(metadata.get("is_error")),
+                "image_count": len(archived_images),
+            }
+            # File changes are compact provenance, not tool-result content.
+            # Keep only the validated contract so history remains recoverable
+            # without duplicating arbitrary result metadata.
+            raw_file_change = metadata.get("file_change")
+            if isinstance(raw_file_change, dict):
+                try:
+                    tool_item["file_change"] = FileChange.from_dict(raw_file_change).to_dict()
+                except (TypeError, ValueError):
+                    pass
+            tools.append(tool_item)
         if tools:
             item["tool_calls"] = tools
         return item, message_images
@@ -550,14 +562,14 @@ class ContextMaintenance:
                 ref = f"; content_id={content_id}" if content_id else ""
                 parts.append(f"tool {name}{ref}{detail}")
         recovery = f"Exact archived history: content_id={history_content_id}."
-        body_limit = max(0, MAX_SUMMARY_CHARS - len(recovery) - 1)
+        body_limit = max(0, HISTORY_FALLBACK_PROJECTION_CHARS - len(recovery) - 1)
         body = "\n".join(parts).strip()[:body_limit].rstrip()
         return f"{body}\n{recovery}".strip()
 
     def _diagnostics(
         self,
         conversation: Conversation,
-        context_window_limit: int,
+        prompt_limit: int,
         *,
         request_token_estimate: int = 0,
         conversation_token_estimate: int = 0,
@@ -567,10 +579,10 @@ class ContextMaintenance:
             "request_tokens": int(request_token_estimate or 0),
             "conversation_tokens": int(conversation_token_estimate or 0),
             "active_tokens": int(estimate_conversation_tokens(conversation) or 0),
-            "threshold_tokens": int(context_window_limit * self.policy.token_threshold_ratio)
-            if context_window_limit > 0
+            "threshold_tokens": int(prompt_limit * self.policy.token_threshold_ratio)
+            if prompt_limit > 0
             else 0,
-            "prompt_limit": int(context_window_limit or 0),
+            "prompt_limit": int(prompt_limit or 0),
             "tool_chars": int(tool_stats.get("result_chars", 0) or 0),
             "tool_steps": int(tool_stats.get("active_messages", 0) or 0),
             "turn_blocks": count_user_turn_blocks(conversation.messages),
@@ -622,7 +634,7 @@ class ContextMaintenance:
 
     @staticmethod
     def _sanitize_state_summary(text: str) -> str:
-        return re.sub(r"\s+", " ", str(text or "")).strip()[:MAX_SUMMARY_CHARS]
+        return re.sub(r"\s+", " ", str(text or "")).strip()[:HISTORY_FALLBACK_PROJECTION_CHARS]
 
     @staticmethod
     def _latest_seq(conversation: Conversation) -> int:

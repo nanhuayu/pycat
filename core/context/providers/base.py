@@ -15,6 +15,7 @@ class ProviderContext:
     latest_user_query: str = ""
     memory_prompt: str = ""
     memory_sources: tuple[str, ...] = ()
+    include_environment: bool = True
 
 
 class ContextProvider(Protocol):

@@ -1,27 +1,20 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, List
 
 from core.context.history import get_effective_history
-from core.context.items import ContextBudgetState, ContextItem, ContextPacker
+from core.context.items import ContextItem, ContextPacker
 from core.context.providers import ProviderContext, get_default_context_providers
 from core.context.providers.memory import selected_memory_sources
-from core.context.request_context_planner import RequestContextPlanner
-from core.llm.token_budget import resolve_token_budget
+from core.context.tool_replay_planner import ToolReplayPlanner
 from models.conversation import Conversation, Message
 
 
 DEFAULT_PROVIDER_CONTEXT_LIMIT = 16_000
-
-
-@dataclass(frozen=True)
-class RuntimeContextSections:
-    channel: str = ""
-    project_instructions: str = ""
-    skills: str = ""
-    memory: str = ""
+SUMMARY_CONTEXT_KIND = "summary"
+CURRENT_STATE_CONTEXT_KIND = "current_state"
 
 
 def latest_user_query(conversation: Conversation) -> str:
@@ -41,9 +34,13 @@ def build_context_messages(
     keep_last_turns: int,
     default_work_dir: str = ".",
     memory_prompt: str = "",
+    include_environment: bool = True,
+    captured_at: datetime | None = None,
+    prompt_limit: int = 0,
 ) -> List[Message]:
-    """Assemble provider context and recent conversation history."""
+    """Assemble summary checkpoint, event history, and one tail state snapshot."""
     work_dir = getattr(conversation, "work_dir", None) or default_work_dir or "."
+    snapshot_time = captured_at or datetime.now().astimezone()
     items: list[ContextItem] = []
     provider_context = ProviderContext(
         conversation=conversation,
@@ -52,6 +49,7 @@ def build_context_messages(
         latest_user_query=latest_user_query(conversation),
         memory_prompt=str(memory_prompt or ""),
         memory_sources=selected_memory_sources(conversation),
+        include_environment=bool(include_environment),
     )
     for provider in get_default_context_providers():
         try:
@@ -73,12 +71,11 @@ def build_context_messages(
             continue
 
     token_limit = DEFAULT_PROVIDER_CONTEXT_LIMIT
-    try:
-        budget = resolve_token_budget(conversation=conversation)
-        token_limit = max(DEFAULT_PROVIDER_CONTEXT_LIMIT, min(int(budget.effective_prompt_limit * 0.25), 64_000))
-    except Exception:
-        token_limit = DEFAULT_PROVIDER_CONTEXT_LIMIT
-    messages = ContextPacker(ContextBudgetState(token_limit=token_limit)).pack(items).to_messages()
+    if prompt_limit > 0:
+        token_limit = max(1, min(int(prompt_limit * 0.25), 64_000))
+    packed_items = ContextPacker(token_limit).pack(items).items
+    summary_messages = [item.to_message() for item in packed_items if item.kind == SUMMARY_CONTEXT_KIND]
+    state_items = [item for item in packed_items if item.kind != SUMMARY_CONTEXT_KIND]
 
     recent_history = [
         copy.deepcopy(msg)
@@ -87,26 +84,50 @@ def build_context_messages(
             keep_last_turns=keep_last_turns,
         )
     ]
-    return messages + recent_history
+    messages = summary_messages + recent_history
+    if state_items:
+        captured_text = snapshot_time.astimezone().replace(second=0, microsecond=0).isoformat(timespec="minutes")
+        state_content = "\n\n".join(item.content.strip() for item in state_items if item.content.strip())
+        messages.append(
+            Message(
+                role="user",
+                content=(
+                    f'<current_state captured_at="{captured_text}">\n'
+                    f"{state_content}\n"
+                    "</current_state>"
+                ),
+                metadata={
+                    "synthetic": True,
+                    "context_kind": CURRENT_STATE_CONTEXT_KIND,
+                    "context_sections": [item.kind for item in state_items],
+                    "context_item_ids": [item.id for item in state_items],
+                    "captured_at": captured_text,
+                },
+            )
+        )
+    return messages
 
 
 def prepare_context_messages(
     conversation: Conversation,
-    context_window_limit: int,
     app_config: Any,
     *,
     keep_last_turns: int = 3,
     default_work_dir: str = ".",
-    sections: RuntimeContextSections | None = None,
+    memory_prompt: str = "",
+    include_environment: bool = True,
+    captured_at: datetime | None = None,
+    prompt_limit: int = 0,
 ) -> List[Message]:
-    del context_window_limit
-    sections = sections or RuntimeContextSections()
     return build_context_messages(
         conversation=conversation,
         app_config=app_config,
         keep_last_turns=max(1, int(keep_last_turns or 3)),
         default_work_dir=default_work_dir,
-        memory_prompt=sections.memory,
+        memory_prompt=memory_prompt,
+        include_environment=include_environment,
+        captured_at=captured_at,
+        prompt_limit=prompt_limit,
     )
 
 
@@ -118,7 +139,7 @@ def prepare_api_messages(
 ) -> tuple[list[Message], Any]:
     """Apply request replay planning and return the tool-result renderer."""
     prepared = copy.deepcopy(messages)
-    planner = RequestContextPlanner(
+    planner = ToolReplayPlanner(
         conversation=conversation,
         replay_pressure=replay_pressure,
     )

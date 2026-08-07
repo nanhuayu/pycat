@@ -15,7 +15,7 @@ from typing import Any, Callable
 from core.agent.run.state import AgentRunContext, AgentRunParent, AgentRunResult
 from core.agent.events.trace import build_trace, publish_trace_event, record_trace_event, update_running_thinking
 from models.contracts.agent import RunPolicy, SubtaskTraceStatus, RunEvent, RunStatus, RunStopReason
-from core.agent.events.debug_trace import DebugTraceContext
+from core.observability.debug_trace import DebugTraceContext
 from models.contracts.tooling import ToolSelectionPolicy
 from models.conversation import Conversation, Message
 from core.llm.model_selection import resolve_model_target

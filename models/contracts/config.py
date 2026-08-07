@@ -67,22 +67,25 @@ def _clamp_int(v: int, lo: int | None = None, hi: int | None = None) -> int:
 
 @dataclass(frozen=True)
 class CompressionPolicyConfig:
-    preflight_threshold_ratio: float = 0.35
+    tight_replay_threshold_ratio: float = 0.35
     token_threshold_ratio: float = 0.80
     history_keep_last_turns: int = 3
 
     @staticmethod
     def from_dict(data: Mapping[str, Any] | None) -> "CompressionPolicyConfig":
         d = _as_dict(dict(data) if data is not None else {})
+        compact_ratio = max(0.11, min(0.95, _as_float(d.get("token_threshold_ratio"), 0.80)))
+        tight_ratio = max(0.10, min(0.94, _as_float(d.get("tight_replay_threshold_ratio"), 0.35)))
+        tight_ratio = min(tight_ratio, compact_ratio - 0.01)
         return CompressionPolicyConfig(
-            preflight_threshold_ratio=max(0.10, min(0.95, _as_float(d.get("preflight_threshold_ratio"), 0.35))),
-            token_threshold_ratio=max(0.10, min(0.95, _as_float(d.get("token_threshold_ratio"), 0.80))),
+            tight_replay_threshold_ratio=tight_ratio,
+            token_threshold_ratio=compact_ratio,
             history_keep_last_turns=_clamp_int(_as_int(d.get("history_keep_last_turns"), 3), 1, 200),
         )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "preflight_threshold_ratio": float(self.preflight_threshold_ratio),
+            "tight_replay_threshold_ratio": float(self.tight_replay_threshold_ratio),
             "token_threshold_ratio": float(self.token_threshold_ratio),
             "history_keep_last_turns": int(self.history_keep_last_turns),
         }
@@ -190,6 +193,10 @@ class ShellConfig:
     output_encoding: str = "auto"
     inherit_env: bool = True
     bang_command_behavior: str = "shell"
+    # Single wait knob for shell tools: shell__run waits at most this long
+    # before returning a background process_id (the process keeps running);
+    # shell__read wait_seconds is capped at the same value.
+    wait_seconds: int = 120
 
     @staticmethod
     def from_dict(data: Mapping[str, Any] | None) -> "ShellConfig":
@@ -215,6 +222,14 @@ class ShellConfig:
             output_encoding=encoding,
             inherit_env=_as_bool(d.get("inherit_env"), True),
             bang_command_behavior=bang_behavior,
+            wait_seconds=_clamp_int(
+                _as_int(
+                    d.get("wait_seconds", d.get("foreground_timeout_seconds", d.get("read_wait_max_seconds"))),
+                    120,
+                ),
+                5,
+                600,
+            ),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -227,6 +242,7 @@ class ShellConfig:
             "output_encoding": self.output_encoding,
             "inherit_env": bool(self.inherit_env),
             "bang_command_behavior": self.bang_command_behavior if self.bang_command_behavior in {"shell", "agent"} else "shell",
+            "wait_seconds": _clamp_int(int(self.wait_seconds or 120), 5, 600),
         }
 
 

@@ -29,6 +29,7 @@ from gui.settings.page_header import build_page_header
 from gui.utils.combo_box import configure_combo_popup
 from gui.utils.icon_manager import Icons
 from gui.widgets.model_ref_selector import ModelTargetCombo
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from models.contracts.config import PromptsConfig
 from models.contracts.model_target import ModelTarget
 from models.contracts.tooling import TOOL_CATEGORIES, TOOL_CATEGORY_LABELS
@@ -71,7 +72,7 @@ class CapabilitiesPage(QWidget):
         root.setSpacing(12)
         root.addWidget(build_page_header("能力", "能力可执行单轮转换或受限的 Agent 循环；工作流仍由独立编排层负责。"))
 
-        body = SettingsListDetailLayout("能力", "配置", list_stretch=2, detail_stretch=5)
+        body = SettingsListDetailLayout(list_stretch=2, detail_stretch=5)
         actions = SettingsActionBar(spacing=4)
         actions.add_icon_action("新增", Icons.get(Icons.PLUS), self._add_capability)
         self.delete_button = actions.add_icon_action(
@@ -92,14 +93,14 @@ class CapabilitiesPage(QWidget):
 
         general_page = QWidget()
         form = QFormLayout(general_page)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(8)
 
-        self.id_edit = QLineEdit()
+        self.id_edit = ThemedLineEdit()
         self.id_edit.setReadOnly(True)
-        self.name_edit = QLineEdit()
+        self.name_edit = ThemedLineEdit()
         self.enabled_check = QCheckBox("启用")
         self.exposure_combo = QComboBox()
         self.exposure_combo.addItem("模型工具", "tool")
@@ -111,7 +112,7 @@ class CapabilitiesPage(QWidget):
         configure_combo_popup(self.runtime_combo)
         self.runtime_combo.currentIndexChanged.connect(self._sync_runtime_fields)
         self.model_target_combo = ModelTargetCombo(self._providers, current_target=ModelTarget())
-        self.description_edit = QLineEdit()
+        self.description_edit = ThemedLineEdit()
         self.description_edit.setPlaceholderText("一句用途和关键约束")
         self.tool_categories_widget = QWidget()
         category_layout = QGridLayout(self.tool_categories_widget)
@@ -144,7 +145,7 @@ class CapabilitiesPage(QWidget):
         prompt_page = QWidget()
         prompt_layout = QVBoxLayout(prompt_page)
         prompt_layout.setContentsMargins(8, 8, 8, 8)
-        self.prompt_edit = QTextEdit()
+        self.prompt_edit = ThemedTextEdit()
         self.prompt_edit.setAcceptRichText(False)
         self.prompt_edit.setMinimumHeight(190)
         self.prompt_edit.setPlaceholderText("Capability 系统指令")
@@ -153,11 +154,12 @@ class CapabilitiesPage(QWidget):
 
         schema_page = QWidget()
         schema_form = QFormLayout(schema_page)
+        schema_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         schema_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.input_schema_edit = QTextEdit()
+        self.input_schema_edit = ThemedTextEdit()
         self.input_schema_edit.setMinimumHeight(150)
         self.input_schema_edit.setPlaceholderText('{"type":"object","properties":{...}}')
-        self.output_schema_edit = QTextEdit()
+        self.output_schema_edit = ThemedTextEdit()
         self.output_schema_edit.setMinimumHeight(150)
         self.output_schema_edit.setPlaceholderText('{"type":"object","required":[...]}')
         self.schema_edit = self.input_schema_edit

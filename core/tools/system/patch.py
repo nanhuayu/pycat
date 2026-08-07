@@ -5,6 +5,7 @@ import re
 from typing import Any, Dict, List
 
 from core.tools.base import BaseTool, ToolContext, ToolResult
+from core.tools.system.file_change import digest_bytes, file_change_metadata
 
 
 @dataclass
@@ -133,10 +134,24 @@ class PatchTool(BaseTool):
             hunks = parse_patch(diff)
             if not hunks:
                 return ToolResult("No unified diff hunks were found.", is_error=True)
-            original = path.read_bytes().decode("utf-8")
+            original_bytes = path.read_bytes()
+            before_digest = digest_bytes(original_bytes)
+            original = original_bytes.decode("utf-8")
             updated = self._apply_hunks(original, hunks)
-            path.write_bytes(updated.encode("utf-8"))
-            return ToolResult(f"Applied patch to {path_text} ({len(hunks)} hunks).")
+            updated_bytes = updated.encode("utf-8")
+            path.write_bytes(updated_bytes)
+            summary = f"Applied patch to {path_text} ({len(hunks)} hunks)."
+            return ToolResult(
+                summary,
+                metadata=file_change_metadata(
+                    path=path_text,
+                    action="patch",
+                    context=context,
+                    before_digest=before_digest,
+                    after_digest=digest_bytes(updated_bytes),
+                    summary=summary,
+                ),
+            )
         except Exception as exc:
             return ToolResult(f"Patch failed: {exc}", is_error=True)
 

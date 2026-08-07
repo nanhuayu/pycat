@@ -18,8 +18,9 @@ from models.provider import Provider
 from models.conversation import Message
 
 from core.llm.thinking_parser import ThinkingStreamParser
+from core.llm.reasoning import normalize_reasoning_codec
 from core.llm.response_handler import parse_non_stream_response, parse_stream_response
-from core.agent.events.debug_trace import DebugTraceContext, ensure_debug_trace
+from core.observability.debug_trace import DebugTraceContext, ensure_debug_trace
 
 
 logger = logging.getLogger(__name__)
@@ -112,7 +113,10 @@ class LLMClient:
 
         try:
             response_format = str(getattr(provider, "api_type", "") or "openai_compatible")
-            headers = provider.get_headers()
+            logical_model = str(model_hint or request_body.get("model") or "").strip()
+            profile = provider.effective_model_profile(logical_model)
+            reasoning_codec = normalize_reasoning_codec(getattr(profile, "reasoning_codec", "none"))
+            headers = provider.get_headers(logical_model)
             endpoint = provider.get_chat_endpoint()
 
             if trace_context is not None:
@@ -163,6 +167,7 @@ class LLMClient:
                         thinking_parser=thinking_parser,
                         show_thinking=show_thinking,
                         response_format=response_format,
+                        reasoning_codec=reasoning_codec,
                         on_token=on_token,
                         start_time=start_time,
                     )
@@ -189,6 +194,7 @@ class LLMClient:
                         thinking_parser=thinking_parser,
                         show_thinking=show_thinking,
                         response_format=response_format,
+                        reasoning_codec=reasoning_codec,
                         on_token=on_token,
                         on_thinking=on_thinking,
                         cancel_event=cancel_event,

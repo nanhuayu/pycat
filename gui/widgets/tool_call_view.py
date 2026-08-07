@@ -7,7 +7,7 @@ import logging
 import math
 import os
 import re
-from typing import Any, Callable, List
+from typing import Any, Callable, Iterable, List
 
 from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QPainter, QTextOption
@@ -26,9 +26,11 @@ from PyQt6.QtWidgets import (
 )
 
 from models.conversation import normalize_subtask_run, normalize_tool_result
+from models.contracts.content import FileChange
 from gui.view_models.message_tree import ToolInvocationView, build_message_tree_view_model
 from gui.utils.icon_manager import Icons
 from gui.widgets.markdown_view import MarkdownView
+from gui.widgets.themed_line_edit import ThemedContextMenuMixin
 from gui.widgets.workflow_capsule import WorkflowCapsuleRow, create_artifact_capsule
 
 logger = logging.getLogger(__name__)
@@ -165,7 +167,7 @@ def _fit_text_browser_height(view: QTextBrowser, *, min_height: int = 18, max_he
         logger.debug("Failed to fit text browser height: %s", exc)
 
 
-class CompactTextBrowser(QTextBrowser):
+class CompactTextBrowser(ThemedContextMenuMixin, QTextBrowser):
     """Read-only text browser that keeps height close to its content."""
 
     def __init__(self, text: str = "", parent=None, *, min_height: int = 18, max_height: int = 96):
@@ -347,7 +349,10 @@ class ThinkingSection(QWidget):
         return self.content_widget
 
     def _toggle(self):
-        self.is_expanded = not self.is_expanded
+        self.set_expanded(not self.is_expanded)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.is_expanded = bool(expanded)
         if self.content_widget is not None:
             self.content_widget.setVisible(self.is_expanded)
         self.toggle_btn.setText("思考过程 >")
@@ -368,11 +373,13 @@ class ToolCallItem(QWidget):
         *,
         work_dir: str = "",
         artifact_lookup: Callable[[str], object | None] | None = None,
+        embedded_message_factory: Callable[..., object] | None = None,
     ):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         self.work_dir = str(work_dir or "")
         self.artifact_lookup = artifact_lookup
+        self._embedded_message_factory = embedded_message_factory
         self.invocation = tool_call if isinstance(tool_call, ToolInvocationView) else None
         self.tool_call = self.invocation.tool_call if self.invocation is not None else tool_call
         self.result_payload = dict(self.invocation.result) if self.invocation is not None and isinstance(self.invocation.result, dict) else None
@@ -504,6 +511,7 @@ class ToolCallItem(QWidget):
                 self._subtask_trace,
                 work_dir=self.work_dir,
                 artifact_lookup=self.artifact_lookup,
+                embedded_message_factory=self._embedded_message_factory,
             )
             capsule_layout = self.capsule_layout
             if capsule_layout is None:
@@ -521,7 +529,10 @@ class ToolCallItem(QWidget):
         self.result_view = self.detail_panel.result_view
 
     def _toggle(self):
-        self.is_expanded = not self.is_expanded
+        self.set_expanded(not self.is_expanded)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.is_expanded = bool(expanded)
         details_widget = self._ensure_details_widget() if self.is_expanded else self.details_widget
         if details_widget is not None:
             details_widget.setVisible(self.is_expanded)
@@ -608,19 +619,39 @@ class ToolCallItem(QWidget):
         if name not in EDIT_TOOL_NAMES:
             return
         args = _coerce_tool_arguments(self.tool_call)
-        path = str(args.get("path") or "").strip()
+        structured_change = None
+        result_metadata = self.result_payload.get("metadata") if isinstance(self.result_payload, dict) else {}
+        raw_change = result_metadata.get("file_change") if isinstance(result_metadata, dict) else None
+        if isinstance(raw_change, dict):
+            try:
+                structured_change = FileChange.from_dict(raw_change)
+            except (TypeError, ValueError):
+                structured_change = None
+        path = str((structured_change.path if structured_change is not None else "") or args.get("path") or "").strip()
         if not path:
             return
 
         action, action_label = _file_change_action(name)
-        row = WorkflowCapsuleRow(kind="file", status="completed", payload=path, file_path=path, work_dir=self.work_dir)
+        if structured_change is not None:
+            action = structured_change.action
+            action_label = {
+                "write": "已写入",
+                "edit": "已编辑",
+                "patch": "已应用补丁",
+                "delete": "已删除",
+            }.get(action, action_label)
+        row_status = "completed"
+        if structured_change is not None and not structured_change.is_successful:
+            row_status = "failed"
+        row = WorkflowCapsuleRow(kind="file", status=row_status, payload=path, file_path=path, work_dir=self.work_dir)
         row.clicked.connect(lambda _payload, capsule=row: capsule.open_file())
         icon_text = "±"
         if action == "write":
             icon_text = "+"
         elif action == "delete":
             icon_text = "x"
-            row.set_kind_status(status="failed")
+            if structured_change is None:
+                row.set_kind_status(status="failed")
         elif action == "patch":
             icon_text = "~"
         row.set_content(icon=icon_text, title=f"{action_label} {_file_name_for_display(path)}")
@@ -644,6 +675,15 @@ class ToolCallItem(QWidget):
         result_text = ""
         if isinstance(self.result_payload, dict):
             result_text = str(self.result_payload.get("summary") or self.result_payload.get("content") or "")
+            result_metadata = self.result_payload.get("metadata")
+            raw_change = result_metadata.get("file_change") if isinstance(result_metadata, dict) else None
+            if isinstance(raw_change, dict):
+                try:
+                    change = FileChange.from_dict(raw_change)
+                except (TypeError, ValueError):
+                    change = None
+                if change is not None and change.summary:
+                    result_text = change.summary
         if self.file_change_meta is not None:
             self.file_change_meta.setText(meta_text)
             self.file_change_meta.setVisible(bool(meta_text))
@@ -659,6 +699,18 @@ class ToolCallItem(QWidget):
             tooltip_parts.append(meta_text)
         if result_text:
             tooltip_parts.append(_plain_summary(result_text, 260))
+        if isinstance(self.result_payload, dict):
+            result_metadata = self.result_payload.get("metadata")
+            raw_change = result_metadata.get("file_change") if isinstance(result_metadata, dict) else None
+            if isinstance(raw_change, dict):
+                try:
+                    change = FileChange.from_dict(raw_change)
+                except (TypeError, ValueError):
+                    change = None
+                if change is not None and (change.before_digest or change.after_digest):
+                    tooltip_parts.append(
+                        f"前: {change.before_digest or '-'}\n后: {change.after_digest or '-'}"
+                    )
         self.file_change_widget.setToolTip("\n".join(part for part in tooltip_parts if part))
 
     def _lookup_artifact(self, name: str, fallback: object) -> object:
@@ -843,11 +895,13 @@ class ToolCallsSection(QWidget):
         *,
         work_dir: str = "",
         artifact_lookup: Callable[[str], object | None] | None = None,
+        embedded_message_factory: Callable[..., object] | None = None,
     ):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         self.work_dir = str(work_dir or "")
         self.artifact_lookup = artifact_lookup
+        self._embedded_message_factory = embedded_message_factory
         self.invocations: list[ToolInvocationView] = [item for item in tool_calls if isinstance(item, ToolInvocationView)]
         self.tool_calls = [item.tool_call if isinstance(item, ToolInvocationView) else item for item in tool_calls]
         self.items = {}
@@ -863,7 +917,12 @@ class ToolCallsSection(QWidget):
             tool_call = source.tool_call if isinstance(source, ToolInvocationView) else source
             if not isinstance(tool_call, dict):
                 continue
-            item = ToolCallItem(source, work_dir=self.work_dir, artifact_lookup=self.artifact_lookup)
+            item = ToolCallItem(
+                source,
+                work_dir=self.work_dir,
+                artifact_lookup=self.artifact_lookup,
+                embedded_message_factory=self._embedded_message_factory,
+            )
             self.items[tool_call.get('id')] = item
             layout.addWidget(item)
 
@@ -883,6 +942,18 @@ class ToolCallsSection(QWidget):
         for item in self.items.values():
             item.update_content()
 
+    def expanded_tool_ids(self) -> set[str]:
+        return {
+            str(tool_id)
+            for tool_id, item in self.items.items()
+            if tool_id and bool(item.is_expanded)
+        }
+
+    def restore_expanded_tool_ids(self, tool_ids: Iterable[str]) -> None:
+        expanded = {str(tool_id) for tool_id in tool_ids or ()}
+        for tool_id, item in self.items.items():
+            item.set_expanded(str(tool_id) in expanded)
+
     def set_work_dir(self, work_dir: str) -> None:
         self.work_dir = str(work_dir or "")
         for item in self.items.values():
@@ -899,11 +970,13 @@ class SubtaskRunWidget(QWidget):
         *,
         work_dir: str = "",
         artifact_lookup: Callable[[str], object | None] | None = None,
+        embedded_message_factory: Callable[..., object] | None = None,
     ):
         super().__init__(parent)
         self.trace = self._normalize_trace(trace)
         self.work_dir = str(work_dir or "")
         self.artifact_lookup = artifact_lookup
+        self._embedded_message_factory = embedded_message_factory
         self.is_expanded = False
         self.toggle_btn = None
         self.summary_row = None
@@ -1178,25 +1251,25 @@ class SubtaskRunWidget(QWidget):
                 seen_message_ids.add(message_id)
             render_messages.append(view.message)
         limit = len(render_messages) if self._show_all else 80
-        from gui.widgets.message_widget import MessageWidget
+        factory = self._embedded_message_factory
 
-        for child_message in render_messages[:limit]:
-            try:
-                content_layout.addWidget(
-                    MessageWidget(
-                        child_message,
-                        embedded=True,
-                        work_dir=self.work_dir,
-                        artifact_lookup=self.artifact_lookup,
+        if factory is not None:
+            for child_message in render_messages[:limit]:
+                try:
+                    content_layout.addWidget(
+                        factory(
+                            child_message,
+                            work_dir=self.work_dir,
+                            artifact_lookup=self.artifact_lookup,
+                        )
                     )
-                )
-            except Exception as exc:
-                logger.debug("Failed to render subtask message: %s", exc)
-        if len(render_messages) > limit:
-            self.show_more_btn = QPushButton(f"显示全部 {len(render_messages)} 条子任务消息（还有 {len(render_messages) - limit} 条）")
-            self.show_more_btn.setProperty("secondary", True)
-            self.show_more_btn.clicked.connect(self._show_all_messages)
-            content_layout.addWidget(self.show_more_btn)
+                except Exception as exc:
+                    logger.debug("Failed to render subtask message: %s", exc)
+            if len(render_messages) > limit:
+                self.show_more_btn = QPushButton(f"显示全部 {len(render_messages)} 条子任务消息（还有 {len(render_messages) - limit} 条）")
+                self.show_more_btn.setProperty("secondary", True)
+                self.show_more_btn.clicked.connect(self._show_all_messages)
+                content_layout.addWidget(self.show_more_btn)
 
         error = str(self.trace.get('error') or '').strip()
         if error:

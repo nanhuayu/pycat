@@ -4,9 +4,13 @@ from collections.abc import Iterable
 from typing import Any, Callable
 
 from core.agent.run.engine import AgentRunEngine
+from core.agent.run.control import RunControl
+from core.context.maintainer import ContextMaintainer
+from core.content.session_content import SessionContentService
 from core.capabilities.executor import CapabilityExecutor
 from models.contracts.config import AppConfig
 from core.prompts.renderer import PromptRenderer
+from core.tools.base import ToolApprovalRequest
 from core.tools.manager import ToolManager
 from models.contracts.agent import RunPolicy, RunResult
 from models.conversation import Conversation
@@ -25,12 +29,16 @@ class AgentRuntime:
         capability_executor: CapabilityExecutor,
         app_config: AppConfig | None = None,
         provider_catalog_provider: Callable[[], Iterable[Provider]] | None = None,
+        context_maintenance: ContextMaintainer | None = None,
+        content_service: SessionContentService | None = None,
     ) -> None:
         self.client = client
         self.tool_manager = tool_manager
         self.prompt_renderer = prompt_renderer
         self.capability_executor = capability_executor
         self._provider_catalog_provider = provider_catalog_provider
+        self._context_maintenance = context_maintenance
+        self._content_service = content_service
         self._app_config = app_config or AppConfig()
         self._rebuild_turn_loop()
 
@@ -42,10 +50,14 @@ class AgentRuntime:
             capability_executor=self.capability_executor,
             app_config=self._app_config,
             provider_catalog_provider=self._provider_catalog_provider,
+            context_maintenance=self._context_maintenance,
+            content_service=self._content_service,
         )
 
     def update_configuration(self, app_config: AppConfig) -> None:
         self._app_config = app_config
+        if self._context_maintenance is not None:
+            self._context_maintenance.update_configuration(app_config)
         self._rebuild_turn_loop()
 
     async def run(
@@ -57,12 +69,13 @@ class AgentRuntime:
         on_event: Callable | None = None,
         on_token=None,
         on_thinking=None,
-        approval_callback=None,
+        approval_callback: Callable[[ToolApprovalRequest], Any] | None = None,
         questions_callback=None,
         cancel_event=None,
         debug_log_path: str | None = None,
         debug_trace=None,
         initial_runtime_messages=None,
+        run_control: RunControl | None = None,
     ) -> RunResult:
         return await self._turn_loop.run(
             provider=provider,
@@ -77,4 +90,5 @@ class AgentRuntime:
             debug_log_path=debug_log_path,
             debug_trace=debug_trace,
             initial_runtime_messages=initial_runtime_messages,
+            run_control=run_control,
         )

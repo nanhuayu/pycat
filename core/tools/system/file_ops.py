@@ -4,6 +4,7 @@ import unicodedata
 from typing import Any, Dict
 
 from core.tools.base import BaseTool, ToolContext, ToolResult
+from core.tools.system.file_change import digest_bytes, digest_path, file_change_metadata
 
 
 def _canonical_units(text: str) -> tuple[str, dict[int, int]]:
@@ -106,9 +107,21 @@ class WriteToFileTool(BaseTool):
             return ToolResult("path is required.", is_error=True)
         try:
             path = context.resolve_path(path_text)
+            before_digest = digest_path(path)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(str(arguments.get("content") or ""), encoding="utf-8")
-            return ToolResult(f"Wrote {path_text}")
+            summary = f"Wrote {path_text}"
+            return ToolResult(
+                summary,
+                metadata=file_change_metadata(
+                    path=path_text,
+                    action="write",
+                    context=context,
+                    before_digest=before_digest,
+                    after_digest=digest_path(path),
+                    summary=summary,
+                ),
+            )
         except Exception as exc:
             return ToolResult(f"Write error: {exc}", is_error=True)
 
@@ -163,7 +176,9 @@ class EditFileTool(BaseTool):
         if not path.is_file():
             return ToolResult(f"File not found: {path_text}", is_error=True)
         try:
-            content = path.read_bytes().decode("utf-8")
+            original = path.read_bytes()
+            before_digest = digest_bytes(original)
+            content = original.decode("utf-8")
             spans = _equivalent_match_spans(content, old_text)
             if not spans:
                 return ToolResult("old_text was not found.", is_error=True)
@@ -173,8 +188,20 @@ class EditFileTool(BaseTool):
             replacement = _adapt_newlines(new_text, _preferred_newline(content, content[start:end]))
             if content.startswith("\ufeff") and start == 1 and replacement.startswith("\ufeff"):
                 replacement = replacement[1:]
-            path.write_bytes((content[:start] + replacement + content[end:]).encode("utf-8"))
-            return ToolResult(f"Edited {path_text}")
+            updated = (content[:start] + replacement + content[end:]).encode("utf-8")
+            path.write_bytes(updated)
+            summary = f"Edited {path_text}"
+            return ToolResult(
+                summary,
+                metadata=file_change_metadata(
+                    path=path_text,
+                    action="edit",
+                    context=context,
+                    before_digest=before_digest,
+                    after_digest=digest_bytes(updated),
+                    summary=summary,
+                ),
+            )
         except Exception as exc:
             return ToolResult(f"Edit error: {exc}", is_error=True)
 
@@ -226,12 +253,23 @@ class DeleteFileTool(BaseTool):
         if not path.exists():
             return ToolResult(f"Path not found: {path_text}", is_error=True)
         try:
+            before_digest = digest_path(path)
             if path.is_dir():
                 if any(path.iterdir()) and not bool(arguments.get("recursive")):
                     return ToolResult("Directory is not empty; set recursive=true to delete it.", is_error=True)
                 shutil.rmtree(path)
             else:
                 path.unlink()
-            return ToolResult(f"Deleted {path_text}")
+            summary = f"Deleted {path_text}"
+            return ToolResult(
+                summary,
+                metadata=file_change_metadata(
+                    path=path_text,
+                    action="delete",
+                    context=context,
+                    before_digest=before_digest,
+                    summary=summary,
+                ),
+            )
         except Exception as exc:
             return ToolResult(f"Delete error: {exc}", is_error=True)

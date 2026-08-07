@@ -5,14 +5,16 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+from PyQt6.QtCore import QThreadPool
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from core.app.services.mode_catalog import ModeCatalogService
-from models.provider import Provider
+from gui.about_content import PRODUCT_NAME, about_dialog_html
+from gui.runtime.background_job import BackgroundJob
 from gui.settings.model_profile_dialog import ModelProfileDialog
 from gui.settings.settings_dialog import SettingsDialog
-from gui.about_content import PRODUCT_NAME, about_dialog_html
 from gui.utils.theme import normalize_accent, palette_for_theme, render_theme_stylesheet
+from models.model_ref import split_model_ref
+from models.provider import Provider
 
 if TYPE_CHECKING:
     from gui.main_window import MainWindow
@@ -27,6 +29,8 @@ class SettingsPresenter:
         self._window = window
         self._applied_theme_key: str | None = None
         self._applied_stylesheet: str = ""
+        self._settings_dialog: SettingsDialog | None = None
+        self._settings_job: BackgroundJob | None = None
 
     def apply_theme(self) -> None:
         """Apply theme based on app settings."""
@@ -73,6 +77,9 @@ class SettingsPresenter:
                 widget.setProperty("accent", accent)
                 widget.style().unpolish(widget)
                 widget.style().polish(widget)
+                refresh_theme = getattr(widget, "refresh_theme", None)
+                if callable(refresh_theme):
+                    refresh_theme()
                 widget.update()
         sidebar = getattr(self._window, "sidebar", None)
         conversation_list = getattr(sidebar, "conversation_list", None)
@@ -106,10 +113,6 @@ class SettingsPresenter:
             if not host.services.provider_catalog_service.save(next_providers):
                 raise RuntimeError("无法保存服务商配置")
         host.providers = next_providers
-        try:
-            host.inspector_panel.set_providers(host.providers)
-        except Exception as e:
-            logger.debug("Failed to sync providers into inspector panel: %s", e)
         host.input_area.set_providers(
             host.providers,
             selected_provider_id=selected_provider_id,
@@ -117,17 +120,8 @@ class SettingsPresenter:
             selected_model_ref=selected_model_ref,
             emit_signal=False,
         )
-        try:
-            current_provider_id = host.input_area.get_selected_provider_id()
-            current_model = host.input_area.get_selected_model()
-            current_ref = str(selected_model_ref or "").strip() or host.services.app_coordinator.build_model_ref(
-                providers=host.providers,
-                provider_id=current_provider_id,
-                model=current_model,
-            )
-            host.input_area.set_model_ref_options(host.providers, current_model_ref=current_ref)
-        except Exception as e:
-            logger.debug("Failed to refresh header model options after provider update: %s", e)
+        current_provider_id = host.input_area.get_selected_provider_id()
+        current_model = host.input_area.get_selected_model()
         host.services.app_coordinator.sync_catalog(providers=host.providers)
         if host.current_conversation:
             host.services.app_coordinator.remember_current_conversation(
@@ -147,23 +141,44 @@ class SettingsPresenter:
         provider_id = host.input_area.get_selected_provider_id()
         self.open_settings(initial_page="models", selected_provider_id=provider_id)
 
-    def edit_current_model(self) -> None:
-        """Open the focused model editor and persist through the catalog service."""
+    def edit_current_model(self) -> bool:
+        """Edit the model selected by the Composer."""
 
         host = self._window
-        provider_id = str(host.input_area.get_selected_provider_id() or "").strip()
-        model_id = str(host.input_area.get_selected_model() or "").strip()
-        provider = next(
-            (
-                item
-                for item in host.providers
-                if str(getattr(item, "id", "") or "").strip() == provider_id
-            ),
-            None,
+        return self.edit_model_profile(
+            provider_id=host.input_area.get_selected_provider_id(),
+            model_id=host.input_area.get_selected_model(),
         )
+
+    def edit_model_ref(self, model_ref: str) -> bool:
+        """Edit a ``provider|model`` reference from another GUI surface."""
+
+        host = self._window
+        provider_name, model_id = split_model_ref(model_ref)
+        provider = host.services.conv_service.resolve_provider(
+            host.providers,
+            provider_name=provider_name,
+        )
+        return self.edit_model_profile(
+            provider_id=str(getattr(provider, "id", "") or ""),
+            model_id=model_id,
+        )
+
+    def edit_model_profile(self, *, provider_id: str, model_id: str) -> bool:
+        """Open the shared profile editor and persist through the catalog service."""
+
+        host = self._window
+        raise_approval = getattr(getattr(host, "message_presenter", None), "raise_pending_approval", None)
+        if callable(raise_approval) and raise_approval():
+            return False
+        provider, _index = host.services.provider_catalog_service.find(
+            host.providers,
+            str(provider_id or "").strip(),
+        )
+        model_id = str(model_id or "").strip()
         if provider is None or not model_id:
-            self.open_provider_settings()
-            return
+            QMessageBox.information(host, "无法编辑模型", "请先选择一个已配置的模型。")
+            return False
 
         profile = provider.find_model_profile(model_id) or provider.effective_model_profile(model_id)
         dialog = ModelProfileDialog(
@@ -173,26 +188,35 @@ class SettingsPresenter:
             parent=host,
         )
         if dialog.exec() != dialog.DialogCode.Accepted:
-            return
+            return False
 
-        updated_provider = Provider.from_dict(provider.to_dict())
-        updated_profile = dialog.accepted_profile()
-        updated_provider.upsert_model(updated_profile)
-        providers = host.services.provider_catalog_service.upsert(
-            host.providers,
-            updated_provider,
-        )
         try:
+            providers = host.services.provider_catalog_service.save_model_profile(
+                provider.id,
+                dialog.accepted_profile(),
+            )
             self.apply_provider_catalog(
                 providers,
-                selected_provider_id=updated_provider.id,
-                selected_model=updated_profile.model_id,
+                selected_provider_id=host.input_area.get_selected_provider_id(),
+                selected_model=host.input_area.get_selected_model(),
+                persist=False,
             )
-        except RuntimeError as exc:
+        except Exception as exc:
             QMessageBox.warning(host, "模型保存失败", str(exc))
+            return False
+        return True
 
     def open_settings(self, *, initial_page: str = "", selected_provider_id: str = "") -> None:
         host = self._window
+        raise_approval = getattr(getattr(host, "message_presenter", None), "raise_pending_approval", None)
+        if callable(raise_approval) and raise_approval():
+            return
+        if self._settings_dialog is not None:
+            self._settings_dialog.focus_page(
+                initial_page,
+                selected_provider_id=selected_provider_id,
+            )
+            return
         work_dir = ""
         try:
             work_dir = str(getattr(host.current_conversation, "work_dir", "") or "") if host.current_conversation else ""
@@ -200,127 +224,225 @@ class SettingsPresenter:
             logger.debug("Failed to get work_dir for settings: %s", e)
             work_dir = ""
 
+        settings_service = host.services.settings_update_service
+        snapshot = settings_service.load_snapshot()
+
+        def reload_mcp_servers():
+            return settings_service.load_snapshot().mcp_servers
+
         dialog = SettingsDialog(
-            host.providers,
+            list(snapshot.providers),
             current_settings=host.app_settings,
             provider_service=host.services.provider_service,
             provider_catalog_service=host.services.provider_catalog_service,
             mode_catalog_service=getattr(host.services, "mode_catalog_service", None),
-            repositories=host.services.repositories,
+            mcp_servers=snapshot.mcp_servers,
+            search_config=snapshot.search_config,
+            mcp_server_provider=reload_mcp_servers,
             channel_service=host.services.channel_service,
             tool_manager=host.services.tool_manager,
+            skill_service=getattr(host.services, "skill_service", None),
             parent=host,
             work_dir=work_dir,
             initial_page=initial_page,
             selected_provider_id=selected_provider_id,
         )
-        if dialog.exec():
-            update = dialog.build_update()
-            selected_provider_id = host.input_area.get_selected_provider_id()
-            selected_model = host.input_area.get_selected_model()
-            default_chat_model = str(update.settings_patch.get("default_chat_model", "") or "").strip()
-            preferred_channel_session_id = dialog.get_preferred_channel_session_id()
-            next_app_settings = host.services.app_settings_service.apply_update(
-                host.app_settings,
+        self._settings_dialog = dialog
+        about_page = getattr(dialog, "about_page", None)
+        if about_page is not None:
+            check_requested = getattr(about_page, "check_requested", None)
+            if check_requested is not None:
+                check_requested.connect(host.check_for_updates)
+            release_open_requested = getattr(about_page, "release_open_requested", None)
+            if release_open_requested is not None:
+                release_open_requested.connect(host.open_release_url)
+            release_ignore_requested = getattr(about_page, "release_ignore_requested", None)
+            if release_ignore_requested is not None:
+                release_ignore_requested.connect(host.ignore_release)
+            self.set_release_checking(bool(getattr(host, "_release_job", None)))
+            self.apply_release_result(getattr(host, "_release_result", None))
+        dialog.save_requested.connect(
+            lambda update, dialog=dialog: self._start_settings_save(dialog, update)
+        )
+        dialog.finished.connect(lambda _result, dialog=dialog: self._release_settings_dialog(dialog))
+        dialog.open()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _release_settings_dialog(self, dialog: SettingsDialog) -> None:
+        if self._settings_dialog is dialog and self._settings_job is not None:
+            self._settings_job.abandon()
+            self._settings_job = None
+        if self._settings_dialog is dialog:
+            self._settings_dialog = None
+        dialog.deleteLater()
+
+    def _start_settings_save(self, dialog: SettingsDialog, update) -> None:
+        if dialog is not self._settings_dialog or self._settings_job is not None:
+            return
+        host = self._window
+        current_settings = dict(host.app_settings or {})
+        current_providers = tuple(host.providers or ())
+
+        def operation():
+            return host.services.settings_update_service.apply(
                 update,
+                current_settings=current_settings,
+                current_providers=current_providers,
             )
 
-            persistence_failures: list[str] = []
-            if not host.services.provider_catalog_service.save(list(update.providers)):
-                persistence_failures.append("服务商")
-            if not host.services.app_settings_service.save(next_app_settings):
-                persistence_failures.append("应用设置")
-            if not host.services.repositories.mcp_servers.save(list(update.mcp_servers)):
-                persistence_failures.append("MCP")
-            mode_catalog_service = getattr(host.services, "mode_catalog_service", None) or ModeCatalogService()
-            if not mode_catalog_service.save(list(update.modes)):
-                persistence_failures.append("模式")
-            if update.search_config is not None and not host.services.repositories.search_config.save(update.search_config):
-                persistence_failures.append("搜索")
-            if persistence_failures:
-                QMessageBox.warning(
-                    host,
-                    "设置保存失败",
-                    "以下配置未能保存：" + "、".join(persistence_failures),
-                )
-                return
-
-            self.apply_provider_catalog(
-                list(update.providers),
-                selected_provider_id=selected_provider_id,
-                selected_model=selected_model,
-                selected_model_ref=default_chat_model if not host.current_conversation else "",
-                persist=False,
+        job = BackgroundJob(operation)
+        self._settings_job = job
+        job.signals.finished.connect(
+            lambda result, error, dialog=dialog, update=update, job=job: self._finish_settings_save(
+                dialog,
+                update,
+                job,
+                result,
+                error,
             )
-            host.app_settings = next_app_settings
+        )
+        QThreadPool.globalInstance().start(job)
 
-            try:
-                host.input_area.set_app_settings(host.app_settings)
-                host.input_area.refresh_modes()
-            except Exception as e:
-                logger.debug("Failed to sync updated settings into input area: %s", e)
+    def _finish_settings_save(
+        self,
+        dialog: SettingsDialog,
+        update,
+        job: BackgroundJob,
+        result,
+        error,
+    ) -> None:
+        if self._settings_job is not job:
+            return
+        self._settings_job = None
+        if dialog is not self._settings_dialog:
+            return
+        if error is not None:
+            dialog.apply_save_error(error)
+            QMessageBox.warning(dialog, "设置保存失败", str(error))
+            return
+        self._apply_settings_result(dialog, update, result)
 
-            self.apply_proxy()
-            try:
-                host.services.client.set_timeout(float(host.app_settings.get('llm_timeout_seconds', 600.0) or 600.0))
-            except Exception as e:
-                logger.debug("Failed to apply updated LLM timeout: %s", e)
+    _SETTINGS_DOMAIN_LABELS = {
+        "providers": "服务商",
+        "app_settings": "应用设置",
+        "mcp": "MCP",
+        "modes": "模式",
+        "search": "搜索",
+    }
+    _SETTINGS_STAGE_LABELS = {
+        "validate": "配置校验",
+        "runtime": "运行时刷新",
+        "channel": "Channel 协调",
+    }
 
-            host.services.tool_manager.refresh_search_config()
+    def _apply_settings_dialog(self, dialog: SettingsDialog) -> None:
+        """Synchronous compatibility entry used by focused tests and callers."""
 
-            host.services.app_coordinator.remember_current_conversation(
-                host.current_conversation,
+        host = self._window
+        update = dialog.build_update()
+        result = host.services.settings_update_service.apply(
+            update,
+            current_settings=host.app_settings,
+            current_providers=host.providers,
+        )
+        self._apply_settings_result(dialog, update, result)
+
+    def _apply_settings_result(self, dialog: SettingsDialog, update, result) -> None:
+        host = self._window
+        selected_provider_id = host.input_area.get_selected_provider_id()
+        selected_model = host.input_area.get_selected_model()
+        default_chat_model = str(update.settings_patch.get("default_chat_model", "") or "").strip()
+        preferred_channel_session_id = dialog.get_preferred_channel_session_id()
+        host.app_settings = result.app_settings
+
+        self.apply_provider_catalog(
+            list(result.snapshot.providers),
+            selected_provider_id=selected_provider_id,
+            selected_model=selected_model,
+            selected_model_ref=(
+                str(result.app_settings.get("default_chat_model", default_chat_model) or "").strip()
+                if not host.current_conversation
+                else ""
+            ),
+            persist=False,
+        )
+
+        try:
+            host.input_area.set_app_settings(host.app_settings)
+            host.input_area.refresh_modes()
+        except Exception as e:
+            logger.debug("Failed to sync updated settings into input area: %s", e)
+
+        self.apply_proxy()
+
+        host.services.app_coordinator.remember_current_conversation(
+            host.current_conversation,
+            providers=host.providers,
+            app_settings=host.app_settings,
+            is_streaming=bool(
+                host.current_conversation
+                and host.message_runtime.is_streaming(host.current_conversation.id)
+            ),
+        )
+
+        try:
+            conversations = host.services.conv_service.list_all()
+            host.sidebar.update_conversations(conversations)
+            host.services.app_coordinator.sync_catalog(
                 providers=host.providers,
-                app_settings=host.app_settings,
-                is_streaming=bool(
-                    host.current_conversation
-                    and host.message_runtime.is_streaming(host.current_conversation.id)
-                ),
+                conversation_count=len(conversations),
             )
+            current_id = str(getattr(host.current_conversation, "id", "") or "").strip()
+            saved_channel_settings = "app_settings" in result.saved_domains
+            preferred_id = preferred_channel_session_id if saved_channel_settings else ""
+            focus_id = str(preferred_id or current_id).strip()
+            if focus_id:
+                host.sidebar.select_conversation(focus_id)
+                if str(preferred_id or "").strip():
+                    host.conversation_presenter.select(focus_id)
+        except Exception as e:
+            logger.debug("Failed to refresh sidebar after settings update: %s", e)
 
-            try:
-                from core.config.app_settings import set_cached_settings
-                set_cached_settings(host.app_settings)
-            except Exception as e:
-                logger.debug("Failed to refresh settings cache: %s", e)
+        self.apply_shell_visibility(
+            show_sidebar=bool(host.app_settings.get("show_sidebar", True)),
+            show_stats=bool(host.app_settings.get("show_stats", False)),
+        )
+        try:
+            host.tray_controller.set_enabled(bool(host.app_settings.get("close_to_tray", True)))
+        except Exception as e:
+            logger.debug("Failed to apply tray setting: %s", e)
+        self.apply_theme()
 
-            try:
-                host.container.apply_runtime_configuration(host.app_settings)
-            except Exception as e:
-                logger.debug("Failed to apply runtime configuration: %s", e)
-
-            try:
-                host.services.channel_gateway.start(
-                    host.services.channel_service.runtime_channels(host.app_settings)
-                )
-            except Exception as e:
-                logger.debug("Failed to reload channel gateway after settings update: %s", e)
-
-            try:
-                conversations = host.services.conv_service.list_all()
-                host.sidebar.update_conversations(conversations)
-                host.services.app_coordinator.sync_catalog(
-                    providers=host.providers,
-                    conversation_count=len(conversations),
-                )
-                current_id = str(getattr(host.current_conversation, "id", "") or "").strip()
-                focus_id = str(preferred_channel_session_id or current_id).strip()
-                if focus_id:
-                    host.sidebar.select_conversation(focus_id)
-                    if str(preferred_channel_session_id or "").strip():
-                        host.conversation_presenter.select(focus_id)
-            except Exception as e:
-                logger.debug("Failed to refresh sidebar after settings update: %s", e)
-
-            self.apply_shell_visibility(
-                show_sidebar=bool(host.app_settings.get("show_sidebar", True)),
-                show_stats=bool(host.app_settings.get("show_stats", False)),
+        if not result.ok:
+            QMessageBox.warning(
+                dialog,
+                "设置未完全应用",
+                self._format_settings_failure(result),
             )
-            try:
-                host.tray_controller.set_enabled(bool(host.app_settings.get("close_to_tray", True)))
-            except Exception as e:
-                logger.debug("Failed to apply tray setting: %s", e)
-            self.apply_theme()
+        apply_result = getattr(dialog, "apply_save_result", None)
+        if callable(apply_result):
+            apply_result(result)
+
+    def _format_settings_failure(self, result) -> str:
+        lines: list[str] = []
+        if result.saved_domains:
+            labels = [
+                self._SETTINGS_DOMAIN_LABELS.get(domain, domain)
+                for domain in result.saved_domains
+            ]
+            lines.append("已保存：" + "、".join(labels))
+        if result.failed_domains:
+            labels = [
+                self._SETTINGS_DOMAIN_LABELS.get(domain, domain)
+                for domain in result.failed_domains
+            ]
+            lines.append("未保存：" + "、".join(labels))
+        for stage, error in result.failed_stages:
+            label = self._SETTINGS_STAGE_LABELS.get(stage, stage)
+            detail = str(error or "未知错误").strip()
+            lines.append(f"{label}失败：{detail}")
+        return "\n".join(lines) or "设置更新失败。"
 
     def toggle_sidebar_panel(self, visible: bool) -> None:
         host = self._window
@@ -384,7 +506,7 @@ class SettingsPresenter:
         for key in ("main_window_size", "splitter_sizes", "chat_splitter_sizes"):
             host.app_settings.pop(key, None)
         host.apply_window_size()
-        host.splitter.setSizes([180, 700, 200])
+        host.splitter.setSizes([180, 660, 240])
         host.chat_splitter.setSizes([520, 140])
         try:
             host.services.app_settings_service.save(host.app_settings)
@@ -422,6 +544,20 @@ class SettingsPresenter:
             f"关于 {PRODUCT_NAME}",
             about_dialog_html(),
         )
+
+    def set_release_checking(self, checking: bool) -> None:
+        dialog = self._settings_dialog
+        page = getattr(dialog, "about_page", None) if dialog is not None else None
+        setter = getattr(page, "set_release_checking", None)
+        if callable(setter):
+            setter(bool(checking))
+
+    def apply_release_result(self, result, *, ignored_tag: str = "") -> None:
+        dialog = self._settings_dialog
+        page = getattr(dialog, "about_page", None) if dialog is not None else None
+        setter = getattr(page, "set_release_result", None)
+        if callable(setter):
+            setter(result, ignored_tag=ignored_tag)
 
     def _persist_splitter_layout(self, key: str, sizes: list[int], label: str) -> None:
         host = self._window

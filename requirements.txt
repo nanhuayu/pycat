@@ -4,8 +4,8 @@ Pillow>=10.0.0
 tiktoken>=0.5.0
 python-dotenv>=1.0.0
 markdown>=3.5.0
-mcp
-pathspec
+mcp>=1.0.0
+pathspec>=0.10.0
 websockets>=11.0.0
 qrcode>=7.4.0
 jsonschema>=4.22.0

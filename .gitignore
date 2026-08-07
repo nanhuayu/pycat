@@ -1,5 +1,7 @@
 # 常见 Python + PyQt6 .gitignore
 *.json
+# This package seed is copied to ~/.pycat/default_models.json on first use.
+!core/app/default_models.json
 
 *.zip
 *.tar.gz
@@ -85,4 +87,4 @@ Makefile.Debug
 # Misc
 *.bak
 *.swp
-*~ 
+*~

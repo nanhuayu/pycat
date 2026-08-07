@@ -15,6 +15,7 @@ import os
 
 from gui.utils.icon_manager import Icons
 from gui.utils.theme import prepare_context_menu, resolve_accent, resolve_theme, theme_colors
+from gui.widgets.themed_line_edit import ThemedLineEdit
 
 
 TITLE_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -203,7 +204,6 @@ class Sidebar(QWidget):
     new_conversation = pyqtSignal()
     import_conversation = pyqtSignal(str)
     delete_conversation = pyqtSignal(str)
-    duplicate_conversation = pyqtSignal(str)
     export_conversation = pyqtSignal(str, str)
     
     def __init__(self, parent=None):
@@ -237,7 +237,7 @@ class Sidebar(QWidget):
         self.new_chat_btn.clicked.connect(self.new_conversation.emit)
         header_layout.addWidget(self.new_chat_btn)
         
-        self.search_input = QLineEdit()
+        self.search_input = ThemedLineEdit()
         self.search_input.setObjectName("search_input")
         self.search_input.setPlaceholderText("搜索标题或消息...")
         self.search_input.textChanged.connect(self._filter_conversations)
@@ -351,13 +351,6 @@ class Sidebar(QWidget):
         export_json_action.triggered.connect(lambda: self.export_conversation.emit(conversation_id, "json"))
         export_menu.addAction(export_json_action)
         menu.addMenu(export_menu)
-        menu.addSeparator()
-
-        duplicate_action = QAction("复制会话", self)
-        duplicate_action.triggered.connect(
-            lambda: self.duplicate_conversation.emit(conversation_id)
-        )
-        menu.addAction(duplicate_action)
         menu.addSeparator()
 
         delete_action = QAction("删除", self)

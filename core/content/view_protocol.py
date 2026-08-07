@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from enum import Enum
 
 
+TOOL_SUMMARY_PROJECTION_CHARS = 3_000
+
+
 class ContentExactness(Enum):
     EXACT = "exact"
     DERIVED = "derived"

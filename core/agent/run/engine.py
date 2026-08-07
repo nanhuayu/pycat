@@ -16,18 +16,21 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 from models.contracts.config import AppConfig
-from models.conversation import Conversation, Message
+from models.conversation import Conversation, Message, normalize_tool_result
 from models.provider import Provider
 
 from core.llm.client import LLMClient
 from core.prompts.renderer import PromptRenderer
+from core.prompts.sections import PromptSections
 from core.tools.manager import ToolManager
 from core.tools.base import ToolResult
 from core.context.maintainer import ContextMaintainer
-from core.capabilities.compression import CapabilityCompressionOrchestrator
+from core.content.session_content import SessionContentService
+from core.capabilities.compression import CapabilityCompressor
 from models.contracts.agent import (
     RunPolicy,
     RunEvent,
@@ -40,24 +43,28 @@ from models.contracts.agent import (
     TurnOutcome,
     TurnOutcomeKind,
 )
-from core.agent.request.retry import ErrorKind, classify_error
 from core.agent.tooling.repetition import ToolRepetitionDetector
 from core.agent.request.pipeline import RequestPipeline
 from core.agent.tooling.executor import ToolExecutor
 from core.agent.events.emitter import EventEmitter
 from core.agent.events.conversation import (
     conversation_patch_payload,
-    emit_condense_report,
     emit_conversation_patch,
 )
 from core.agent.delegation.subagent import build_root_run
 from core.agent.run.stop_policy import TaskStopPolicy
+from core.agent.run.control import RunControl, effective_run_policy
+from core.agent.run.compression_tasks import CompressionTaskSet
 from core.agent.delegation.runner import SubagentRunner
 from core.agent.tooling.loop import ToolCallCoordinator
 from core.agent.tooling.result_recorder import ToolResultRecorder
-from core.agent.events.debug_trace import DebugTraceContext, ensure_debug_trace
+from core.observability.debug_trace import DebugTraceContext, ensure_debug_trace
+from core.tools.base import ToolApprovalRequest
 from core.agent.run.control_messages import EXPLICIT_COMPLETION_REMINDER, MAX_EXPLICIT_COMPLETION_RETRIES
 from core.memory.advisor import MemoryAdvisor
+from core.content.archive_store import SessionArchiveStore
+from core.content.archive_view_service import ArchiveViewService
+from core.tools.tool_call_archive import ToolResultViewService
 
 logger = logging.getLogger(__name__)
 
@@ -77,31 +84,36 @@ class AgentRunEngine:
         capability_executor: Any = None,
         app_config: AppConfig | None = None,
         provider_catalog_provider: Callable[[], Iterable[Provider]] | None = None,
+        context_maintenance: ContextMaintainer | None = None,
+        content_service: SessionContentService | None = None,
     ) -> None:
         self._client = client
         self._tool_manager = tool_manager
         self._app_config = app_config or AppConfig()
         self._app_settings = self._app_config.to_dict()
-        compressor_factory = self._compressor_factory(capability_executor)
+        self._capability_executor = capability_executor
+        compression_factory = self._build_compression_factory(capability_executor)
+        self._compression_factory = compression_factory
         self._memory_advisor = MemoryAdvisor(capability_executor) if capability_executor is not None else None
-        self._context_maintenance = ContextMaintainer(
+        self._context_maintenance = context_maintenance or ContextMaintainer(
             client=client,
             app_config=self._app_config,
-            compressor_factory=compressor_factory,
+            compression_factory=compression_factory,
         )
         self._llm_executor = RequestPipeline(
             client,
             tool_manager=tool_manager,
             context_maintenance=self._context_maintenance,
             prompt_renderer=prompt_renderer,
-            memory_advisor=self._memory_advisor,
+            content_service=content_service,
             app_config=self._app_config,
         )
         self._tool_executor = ToolExecutor(
             tool_manager,
             capability_executor=capability_executor,
-            archive_compressor_factory=compressor_factory,
+            compression_factory=compression_factory,
             shell_config=getattr(self._app_config, "shell", None),
+            content_service=content_service,
         )
         self._subtask_coordinator = SubagentRunner(
             self,
@@ -109,22 +121,18 @@ class AgentRunEngine:
         )
         self._tool_result_recorder = ToolResultRecorder(
             summarize_tool_result=self._summarize_tool_result,
-            client=client,
-            archive_compressor_factory=compressor_factory,
         )
         self._pre_turn_hooks: list[Callable] = []
         self._post_turn_hooks: list[Callable] = []
 
     @staticmethod
-    def _compressor_factory(capability_executor: Any):
+    def _build_compression_factory(capability_executor: Any):
         if capability_executor is None:
             return None
 
-        def factory(*, client: Any, provider: Provider, store: Any, debug_trace: Any = None):
-            return CapabilityCompressionOrchestrator(
-                client,
+        def factory(*, provider: Provider, debug_trace: Any = None):
+            return CapabilityCompressor(
                 provider,
-                store=store,
                 capability_executor=capability_executor,
                 debug_trace=debug_trace,
             )
@@ -152,12 +160,61 @@ class AgentRunEngine:
         on_event: Optional[Callable[[RunEvent], None]] = None,
         on_token: Optional[Callable[[str], None]] = None,
         on_thinking: Optional[Callable[[str], None]] = None,
-        approval_callback: Optional[Callable[[str], bool]] = None,
+        approval_callback: Optional[Callable[[ToolApprovalRequest], Any]] = None,
         questions_callback: Optional[Callable[[dict[str, Any]], Any]] = None,
         cancel_event: Optional[threading.Event] = None,
         debug_log_path: Optional[str] = None,
         debug_trace: DebugTraceContext | None = None,
         initial_runtime_messages: Optional[list[Message]] = None,
+        run_control: RunControl | None = None,
+    ) -> RunResult:
+        trace_context = ensure_debug_trace(debug_trace)
+        compression_tasks = CompressionTaskSet(
+            lambda content_id: self._get_or_create_archive_summary(
+                content_id=content_id,
+                provider=provider,
+                conversation=conversation,
+                debug_trace=trace_context,
+            ),
+            cancel_event=cancel_event,
+        )
+        try:
+            return await self._run_with_compression_tasks(
+                provider=provider,
+                conversation=conversation,
+                policy=policy,
+                on_event=on_event,
+                on_token=on_token,
+                on_thinking=on_thinking,
+                approval_callback=approval_callback,
+                questions_callback=questions_callback,
+                cancel_event=cancel_event,
+                debug_log_path=debug_log_path,
+                debug_trace=trace_context,
+                initial_runtime_messages=initial_runtime_messages,
+                run_control=run_control,
+                compression_tasks=compression_tasks,
+            )
+        finally:
+            await compression_tasks.cancel_all("agent run finished")
+
+    async def _run_with_compression_tasks(
+        self,
+        *,
+        provider: Provider,
+        conversation: Conversation,
+        policy: RunPolicy,
+        on_event: Optional[Callable[[RunEvent], None]] = None,
+        on_token: Optional[Callable[[str], None]] = None,
+        on_thinking: Optional[Callable[[str], None]] = None,
+        approval_callback: Optional[Callable[[ToolApprovalRequest], Any]] = None,
+        questions_callback: Optional[Callable[[dict[str, Any]], Any]] = None,
+        cancel_event: Optional[threading.Event] = None,
+        debug_log_path: Optional[str] = None,
+        debug_trace: DebugTraceContext | None = None,
+        initial_runtime_messages: Optional[list[Message]] = None,
+        run_control: RunControl | None = None,
+        compression_tasks: CompressionTaskSet,
     ) -> RunResult:
         run = build_root_run(conversation=conversation, provider=provider, policy=policy)
         provider = run.provider
@@ -165,18 +222,37 @@ class AgentRunEngine:
         policy = run.policy
         turns_limit = max(1, int(policy.max_turns or 200))
         final_assistant: Optional[Message] = None
-        turn_context = TurnContext(turn=0, runtime_messages=list(initial_runtime_messages or []))
         repetition_detector = ToolRepetitionDetector()
         emitter = EventEmitter(on_event)
         trace_context = ensure_debug_trace(debug_trace)
+        self._queue_missing_tool_summaries(conversation, compression_tasks)
+        stable_prompt_sections: PromptSections = self._llm_executor.build_stable_prompt_sections(
+            conversation,
+            self._app_config,
+            pycat_assistant_enabled=policy.pycat_assistant_enabled,
+        )
+        memory_advice = ""
+        if not (cancel_event and cancel_event.is_set()):
+            memory_advice = await self._advise_memory(
+                provider=provider,
+                conversation=conversation,
+                policy=policy,
+                debug_trace=trace_context,
+            )
+        turn_context = TurnContext(
+            turn=0,
+            runtime_messages=list(initial_runtime_messages or []),
+            memory_advice=memory_advice,
+        )
 
         for turn in range(turns_limit):
             turn_context.turn = turn + 1
             turn_trace = self._turn_trace_context(trace_context, turn_context.turn)
+            turn_policy, _permission_revision = effective_run_policy(policy, run_control)
             outcome = await self._run_turn(
                 provider=provider,
                 conversation=conversation,
-                policy=policy,
+                policy=turn_policy,
                 turn_context=turn_context,
                 repetition_detector=repetition_detector,
                 emitter=emitter,
@@ -189,14 +265,38 @@ class AgentRunEngine:
                 debug_log_path=debug_log_path,
                 debug_trace=turn_trace,
                 on_event=on_event,
+                stable_prompt_sections=stable_prompt_sections,
+                run_control=run_control,
+                compression_tasks=compression_tasks,
             )
             self._record_turn_end(turn_trace, outcome)
             turn_context = outcome.context
             if outcome.final_message is not None:
                 final_assistant = outcome.final_message
-            if outcome.next_policy is not None:
-                policy = outcome.next_policy
-
+            guidance_terminal = outcome.kind == TurnOutcomeKind.COMPLETE or (
+                outcome.kind == TurnOutcomeKind.INTERRUPTED
+                and outcome.stop_reason == RunStopReason.EXPLICIT_COMPLETION_MISSING
+            )
+            if outcome.kind == TurnOutcomeKind.CONTINUE or guidance_terminal:
+                guidance = self._take_runtime_guidance(
+                    run_control,
+                    terminal=guidance_terminal,
+                    can_continue=turn + 1 < turns_limit,
+                )
+                if guidance:
+                    if outcome.final_message is not None:
+                        outcome.final_message.metadata["intermediate"] = True
+                        outcome.final_message.metadata.pop("interrupted", None)
+                        outcome.final_message.metadata.pop("interrupt_reason", None)
+                    turn_context.runtime_messages = []
+                    turn_context.incomplete_responses = 0
+                    self._append_runtime_guidance(
+                        conversation,
+                        guidance,
+                        emitter=emitter,
+                        turn=turn_context.turn,
+                    )
+                    continue
             if outcome.kind == TurnOutcomeKind.CONTINUE:
                 continue
             if outcome.kind == TurnOutcomeKind.CANCELLED:
@@ -223,6 +323,7 @@ class AgentRunEngine:
                     conversation=conversation,
                 )
             final_message = outcome.final_message or final_assistant
+            state_version_before_curate = self._state_version(conversation)
             await self._curate_memory(
                 provider=provider,
                 conversation=conversation,
@@ -230,6 +331,14 @@ class AgentRunEngine:
                 final_message=final_message,
                 debug_trace=turn_trace,
             )
+            if self._state_version(conversation) > state_version_before_curate:
+                self._emit_conversation_patch(
+                    emitter,
+                    conversation,
+                    turn=turn_context.turn,
+                    detail="Conversation state synchronized after memory review.",
+                    include_messages=False,
+                )
             return RunResult(
                 status=RunStatus.COMPLETED,
                 final_message=final_message,
@@ -280,6 +389,31 @@ class AgentRunEngine:
             )
         except Exception as exc:
             logger.debug("Run-end memory review failed: %s", exc)
+
+    async def _advise_memory(
+        self,
+        *,
+        provider: Provider,
+        conversation: Conversation,
+        policy: RunPolicy,
+        debug_trace: DebugTraceContext | None = None,
+    ) -> str:
+        if self._memory_advisor is None:
+            return ""
+        settings = getattr(conversation, "settings", {}) or {}
+        if str(getattr(policy, "source", "") or "").strip().lower() in {"sub_task", "capability"}:
+            return ""
+        if settings.get("parent_session_id"):
+            return ""
+        try:
+            return await self._memory_advisor.advise_current(
+                provider=provider,
+                conversation=conversation,
+                debug_trace=debug_trace,
+            )
+        except Exception as exc:
+            logger.debug("Run-start memory advice failed: %s", exc)
+            return ""
 
     @staticmethod
     def _trace_status_for_outcome(outcome: TurnOutcome) -> str:
@@ -357,7 +491,10 @@ class AgentRunEngine:
         cancel_event,
         debug_log_path,
         on_event,
+        stable_prompt_sections: PromptSections,
+        run_control: RunControl | None = None,
         debug_trace: DebugTraceContext | None = None,
+        compression_tasks: CompressionTaskSet | None = None,
     ) -> TurnOutcome:
         if cancel_event and cancel_event.is_set():
             turn_context.state = TurnState.CANCELLED
@@ -377,6 +514,7 @@ class AgentRunEngine:
                 data={"turns_limit": turns_limit},
             )
             debug_trace = debug_trace.child(default_purpose="main")
+        state_version_before_request = self._state_version(conversation)
         turn_context.state = TurnState.PRE_TURN_HOOKS
         for hook in self._pre_turn_hooks:
             try:
@@ -395,7 +533,16 @@ class AgentRunEngine:
             cancel_event=cancel_event,
             debug_log_path=debug_log_path,
             debug_trace=debug_trace,
+            stable_prompt_sections=stable_prompt_sections,
+            compression_tasks=compression_tasks,
         )
+        if self._state_version(conversation) > state_version_before_request:
+            self._emit_conversation_patch(
+                emitter,
+                conversation,
+                turn=turn_context.turn,
+                detail="Conversation state synchronized after context maintenance.",
+            )
         if isinstance(assistant_msg, TurnOutcome):
             return assistant_msg
 
@@ -439,7 +586,9 @@ class AgentRunEngine:
             on_token=on_token,
             on_thinking=on_thinking,
             turns_limit=turns_limit,
+            run_control=run_control,
             debug_trace=debug_trace,
+            compression_tasks=compression_tasks,
         )
 
     async def _request_assistant_message(
@@ -455,6 +604,8 @@ class AgentRunEngine:
         cancel_event,
         debug_log_path,
         debug_trace: DebugTraceContext | None,
+        stable_prompt_sections: PromptSections,
+        compression_tasks: CompressionTaskSet | None = None,
     ) -> Message | TurnOutcome:
         turn_context.state = TurnState.LLM_CALL
         try:
@@ -470,41 +621,12 @@ class AgentRunEngine:
                 debug_trace=debug_trace,
                 debug_turn=turn_context.turn,
                 debug_purpose="main",
+                memory_advice=turn_context.memory_advice,
+                stable_prompt_sections=stable_prompt_sections,
                 emit=lambda **kw: emitter.emit(turn=turn_context.turn, **kw),
+                compression_tasks=compression_tasks,
             )
         except Exception as e:
-            kind = classify_error(e)
-            if kind == ErrorKind.CONTEXT_OVERFLOW:
-                try:
-                    report = await self._force_condense(
-                        conversation,
-                        provider,
-                        policy,
-                        debug_trace=debug_trace.with_purpose("condense") if debug_trace is not None else None,
-                        turn=turn_context.turn,
-                    )
-                    self._emit_condense_report(emitter, conversation, report, turn=turn_context.turn)
-                    return await self._llm_executor._call_raw(
-                        provider=provider,
-                        conversation=conversation,
-                        policy=policy,
-                        runtime_messages=turn_context.runtime_messages,
-                        on_token=on_token,
-                        on_thinking=on_thinking,
-                        cancel_event=cancel_event,
-                        debug_log_path=debug_log_path,
-                        debug_trace=debug_trace,
-                        debug_turn=turn_context.turn,
-                        debug_purpose="retry",
-                    )
-                except Exception as e2:
-                    turn_context.state = TurnState.FAILED
-                    return TurnOutcome(
-                        kind=TurnOutcomeKind.FAILED,
-                        context=turn_context,
-                        error=str(e2),
-                        stop_reason=RunStopReason.ERROR,
-                    )
             turn_context.state = TurnState.FAILED
             return TurnOutcome(
                 kind=TurnOutcomeKind.FAILED,
@@ -568,10 +690,12 @@ class AgentRunEngine:
         on_token,
         on_thinking,
         turns_limit: int,
+        run_control: RunControl | None = None,
         debug_trace: DebugTraceContext | None = None,
+        compression_tasks: CompressionTaskSet | None = None,
     ) -> TurnOutcome:
         del on_token, on_thinking
-        return await self._build_tool_call_coordinator().execute(
+        return await self._build_tool_call_coordinator(compression_tasks).execute(
             provider=provider,
             conversation=conversation,
             policy=policy,
@@ -584,17 +708,69 @@ class AgentRunEngine:
             cancel_event=cancel_event,
             on_event=on_event,
             turns_limit=turns_limit,
+            run_control=run_control,
             debug_trace=debug_trace,
         )
 
-    def _build_tool_call_coordinator(self) -> ToolCallCoordinator:
+    @staticmethod
+    def _take_runtime_guidance(
+        run_control: RunControl | None,
+        *,
+        terminal: bool,
+        can_continue: bool,
+    ) -> tuple[str, ...]:
+        if run_control is None or not can_continue:
+            return ()
+        if terminal:
+            return run_control.take_or_close()
+        return run_control.take_pending()
+
+    @staticmethod
+    def _append_runtime_guidance(
+        conversation: Conversation,
+        guidance: tuple[str, ...],
+        *,
+        emitter: EventEmitter,
+        turn: int,
+    ) -> None:
+        submitted_at = datetime.now().isoformat(timespec="seconds")
+        for text in guidance:
+            message = Message(
+                role="user",
+                content=text,
+                metadata={
+                    "runtime_guidance": True,
+                    "submitted_at": submitted_at,
+                },
+            )
+            conversation.add_message(message)
+            emitter.emit(RunEventKind.STEP, turn=turn, data=message)
+        emit_conversation_patch(
+            emitter,
+            conversation,
+            turn=turn,
+            detail="Runtime guidance appended.",
+            include_messages=True,
+        )
+
+    def _build_tool_call_coordinator(
+        self,
+        compression_tasks: CompressionTaskSet | None = None,
+    ) -> ToolCallCoordinator:
         return ToolCallCoordinator(
             client=self._client,
             tool_executor=self._tool_executor,
             subtask_coordinator=self._subtask_coordinator,
             tool_result_to_string=self._tool_result_to_string,
-            summarize_tool_result=self._summarize_tool_result,
-            build_tool_result_block=self._build_tool_result_block_async,
+            build_tool_result_block=(
+                self._build_tool_result_block
+                if compression_tasks is None
+                else lambda **kwargs: self._prepare_tool_result_block(
+                    compression_tasks=compression_tasks,
+                    **kwargs,
+                )
+            ),
+            compression_tasks=compression_tasks,
         )
 
     def _build_max_turns_message(
@@ -611,18 +787,6 @@ class AgentRunEngine:
 
     def _build_tool_result_block(
         self,
-        **kwargs,
-    ) -> dict[str, Any]:
-        import asyncio
-
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(self._build_tool_result_block_async(**kwargs))
-        raise RuntimeError("_build_tool_result_block cannot be called synchronously from a running event loop")
-
-    async def _build_tool_result_block_async(
-        self,
         *,
         conversation: Conversation,
         tool_name: str,
@@ -632,11 +796,8 @@ class AgentRunEngine:
         summary: Optional[str] = None,
         tool_args: Optional[dict[str, Any]] = None,
         parent_message_id: str = "",
-        provider: Provider | None = None,
-        debug_trace: DebugTraceContext | None = None,
-        on_archive_prepare: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
-        return await self._tool_result_recorder.build_block(
+        return self._tool_result_recorder.build_block(
             conversation=conversation,
             tool_name=tool_name,
             tool_category=tool_category,
@@ -645,10 +806,105 @@ class AgentRunEngine:
             summary=summary,
             tool_args=tool_args,
             parent_message_id=parent_message_id,
-            provider=provider,
-            debug_trace=debug_trace,
-            on_archive_prepare=on_archive_prepare,
         )
+
+    async def _prepare_tool_result_block(
+        self,
+        *,
+        compression_tasks: CompressionTaskSet,
+        conversation: Conversation,
+        tool_name: str,
+        tool_category: str = "",
+        tool_call_id: Optional[str],
+        result: ToolResult | str,
+        summary: Optional[str] = None,
+        tool_args: Optional[dict[str, Any]] = None,
+        parent_message_id: str = "",
+    ) -> dict[str, Any]:
+        return await self._tool_result_recorder.prepare_block(
+            conversation=conversation,
+            tool_name=tool_name,
+            tool_category=tool_category,
+            tool_call_id=tool_call_id,
+            result=result,
+            summary=summary,
+            tool_args=tool_args,
+            parent_message_id=parent_message_id,
+            compression_tasks=compression_tasks,
+        )
+
+    async def _get_or_create_archive_summary(
+        self,
+        *,
+        content_id: str,
+        provider: Provider,
+        conversation: Conversation,
+        debug_trace: DebugTraceContext | None,
+    ):
+        factory = self._compression_factory
+        capability_executor = self._capability_executor
+        if factory is None or capability_executor is None:
+            return None
+        try:
+            capability = capability_executor.get_capability("compress")
+        except Exception:
+            return None
+        if str(getattr(capability, "runtime", "single_turn") or "single_turn") != "single_turn":
+            return None
+        work_dir = str(getattr(conversation, "work_dir", "") or "")
+        session_ids = [str(getattr(conversation, "id", "") or "")]
+        settings = getattr(conversation, "settings", {}) or {}
+        parent_id = str(settings.get("parent_session_id") or "") if isinstance(settings, dict) else ""
+        if parent_id and parent_id not in session_ids:
+            session_ids.append(parent_id)
+        session_id = ""
+        store = None
+        for candidate in session_ids:
+            candidate_store = SessionArchiveStore(work_dir, conversation_id=candidate or None)
+            if candidate_store.read_record(content_id) is not None:
+                store = candidate_store
+                session_id = candidate
+                break
+        if store is None:
+            return None
+        compressor = factory(
+            provider=provider,
+            debug_trace=debug_trace.with_purpose("condense") if debug_trace is not None else None,
+        )
+        return await ArchiveViewService(
+            work_dir=work_dir,
+            conversation_id=session_id or None,
+            conversation=conversation,
+            compressor=compressor,
+        ).get_or_create_summary(content_id, trace_purpose="tool_result:first_view")
+
+    @staticmethod
+    def _queue_missing_tool_summaries(
+        conversation: Conversation,
+        compression_tasks: CompressionTaskSet,
+    ) -> None:
+        work_dir = str(getattr(conversation, "work_dir", "") or "")
+        store = SessionArchiveStore(work_dir, conversation_id=getattr(conversation, "id", None))
+        for message in getattr(conversation, "messages", []) or []:
+            if getattr(message, "archived_content_id", None):
+                continue
+            for tool_call in getattr(message, "tool_calls", None) or []:
+                if not isinstance(tool_call, dict) or tool_call.get("result") is None:
+                    continue
+                payload = normalize_tool_result(tool_call.get("result"))
+                metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+                content_id = str(metadata.get("content_id") or "").strip()
+                if not content_id:
+                    continue
+                try:
+                    chars = int(metadata.get("tool_result_chars") or metadata.get("archive_size") or 0)
+                except Exception:
+                    chars = 0
+                if chars <= ToolResultViewService.SHORT_LIMIT:
+                    continue
+                record = store.read_record(content_id)
+                if record is not None and not record.summary:
+                    compression_tasks.submit(content_id, priority="background")
 
     @staticmethod
     def _tool_result_to_string(result: ToolResult | str) -> str:
@@ -711,34 +967,6 @@ class AgentRunEngine:
 
         return lines[0][:220]
 
-    # ------------------------------------------------------------------
-    # Context management (condense)
-    # ------------------------------------------------------------------
-
-    async def _force_condense(
-        self,
-        conversation: Conversation,
-        provider: Provider,
-        policy: RunPolicy,
-        *,
-        debug_trace: DebugTraceContext | None = None,
-        turn: int = 0,
-    ):
-        """Emergency condense on context overflow."""
-        report = await self._context_maintenance.maintain_async(
-            conversation,
-            provider=provider,
-            policy=policy,
-            client=self._client,
-            force=True,
-            honor_auto_enabled=False,
-            keep_last_turns=3,
-            token_threshold_ratio=0.80,
-            debug_trace=debug_trace,
-        )
-        logger.info("Emergency condense complete")
-        return report
-
     @staticmethod
     def _conversation_patch_payload(conversation: Conversation) -> dict[str, Any]:
         return conversation_patch_payload(conversation)
@@ -751,6 +979,7 @@ class AgentRunEngine:
         turn: int = 0,
         detail: str = "Conversation state synchronized.",
         diagnostics: dict[str, Any] | None = None,
+        include_messages: bool = True,
     ) -> None:
         emit_conversation_patch(
             emitter,
@@ -758,26 +987,15 @@ class AgentRunEngine:
             turn=turn,
             detail=detail,
             diagnostics=diagnostics,
+            include_messages=include_messages,
         )
 
-    def _emit_condense_report(
-        self,
-        emitter: EventEmitter | None,
-        conversation: Conversation,
-        report,
-        *,
-        turn: int = 0,
-        live_message_id: str = "",
-        live_tool_call_id: str = "",
-    ) -> None:
-        emit_condense_report(
-            emitter,
-            conversation,
-            report,
-            turn=turn,
-            live_message_id=live_message_id,
-            live_tool_call_id=live_tool_call_id,
-        )
+    @staticmethod
+    def _state_version(conversation: Conversation) -> int:
+        try:
+            return int(conversation.get_state().state_version or 0)
+        except Exception:
+            return 0
 
     def _attach_state_snapshot(self, conversation: Conversation, msg: Message) -> None:
         """Attach state snapshot to message."""

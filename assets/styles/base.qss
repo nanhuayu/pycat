@@ -32,6 +32,23 @@ QToolButton#msg_delete_btn {
     border-radius: 6px;
 }
 
+QFrame#composer_revision_bar {
+    border-radius: 6px;
+}
+
+QLabel#composer_revision_label {
+    font-size: 12px;
+}
+
+QToolButton#composer_revision_cancel {
+    padding: 0px;
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    border-radius: 6px;
+}
+
 QPushButton#settings_action_btn {
     min-height: 28px;
     max-height: 28px;
@@ -204,12 +221,6 @@ QListWidget#settings_list {
 QFrame#settings_list_panel {
     border: none;
     padding: 0;
-}
-
-QLabel#settings_pane_title {
-    padding: 0 0 2px 0;
-    font-size: 12px;
-    font-weight: 600;
 }
 
 QListWidget#settings_list::item {
@@ -433,28 +444,38 @@ QLabel#model_indicator {
     font-weight: 500;
 }
 
-QLabel#runtime_indicator {
+QToolButton#runtime_indicator {
     font-size: 11px;
     font-weight: 600;
     padding: 0 6px;
     border-radius: 6px;
-    max-height: 30px;
-}
-
-QLabel#context_indicator {
-    font-size: 11px;
-    padding: 0 8px;
-    border-radius: 6px;
+    min-height: 30px;
     max-height: 30px;
 }
 
 QPushButton#work_dir_btn {
     border-radius: 8px;
-    padding: 0px 8px 0px 7px;
+    padding: 0px;
     font-size: 12px;
-    text-align: left;
+    min-width: 30px;
+    max-width: 30px;
     min-height: 30px;
     max-height: 30px;
+}
+
+QToolButton[composer_action="true"] {
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    padding: 0px;
+    border-radius: 8px;
+}
+
+QLabel#conversation_title_label {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0 2px;
 }
 
 QFrame#chat_nav_group {
@@ -471,38 +492,13 @@ QWidget#chat_empty_state {
     background: transparent;
 }
 
-QFrame#chat_empty_card {
-    border-radius: 16px;
-}
-
 QLabel#chat_empty_hero_icon {
-    min-height: 30px;
+    min-height: 40px;
 }
 
 QLabel#chat_empty_title {
     font-size: 18px;
     font-weight: 700;
-}
-
-QLabel#chat_empty_description {
-    font-size: 12px;
-    line-height: 1.45;
-}
-
-QFrame#chat_empty_tip_card {
-    border-radius: 12px;
-    min-width: 150px;
-    min-height: 88px;
-}
-
-QLabel#chat_empty_tip_title {
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.35;
-}
-
-QLabel#chat_empty_tip_description {
-    font-size: 10px;
 }
 
 /* Input Area */
@@ -642,19 +638,16 @@ QLabel#stats_model {
     font-size: 11px;
 }
 
-QLabel#stat_label,
-QLabel#metric_label {
+QLabel#stat_label {
     font-size: 11px;
 }
 
-QLabel#stat_value,
-QLabel#metric_value {
+QLabel#stat_value {
     font-size: 15px;
     font-weight: 700;
 }
 
-QFrame#stat_card,
-QFrame#metric_card {
+QFrame#stat_card {
     border-radius: 6px;
 }
 
@@ -773,17 +766,10 @@ QToolButton#title_tool_btn {
     max-height: 42px;
 }
 
-QPushButton#work_dir_btn,
-QLabel#context_indicator,
-QLabel#runtime_indicator {
+QPushButton#work_dir_btn {
     min-height: 30px;
     max-height: 30px;
     border-radius: 8px;
-}
-
-QLabel#context_indicator {
-    min-width: 68px;
-    max-width: 78px;
 }
 
 QFrame#chat_nav_group {
@@ -799,8 +785,6 @@ QPushButton#load_earlier_messages_btn {
 }
 
 QComboBox#mode_combo,
-QComboBox#provider_combo,
-QComboBox#model_combo,
 QComboBox#bottom_model_selector {
     min-height: 30px;
     max-height: 30px;
@@ -809,8 +793,6 @@ QComboBox#bottom_model_selector {
 }
 
 QComboBox#mode_combo::drop-down,
-QComboBox#provider_combo::drop-down,
-QComboBox#model_combo::drop-down,
 QComboBox#bottom_model_selector::drop-down {
     width: 10px;
     margin: 2px 1px 2px 0px;

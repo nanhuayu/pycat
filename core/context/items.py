@@ -12,21 +12,6 @@ DegradeFn = Callable[["ContextItem", int], "ContextItem | None"]
 
 
 @dataclass(frozen=True)
-class ContextBudgetState:
-    """Token budget used by the context packer."""
-
-    token_limit: int
-    reserved_output_tokens: int = 0
-    warning_ratio: float = 0.80
-    compact_ratio: float = 0.90
-    danger_ratio: float = 0.95
-
-    @property
-    def effective_prompt_limit(self) -> int:
-        return max(1, int(self.token_limit) - max(0, int(self.reserved_output_tokens)))
-
-
-@dataclass(frozen=True)
 class ContextItem:
     """A single candidate piece of prompt context."""
 
@@ -105,11 +90,11 @@ class ContextPack:
 class ContextPacker:
     """Small deterministic priority packer for provider context."""
 
-    def __init__(self, budget: ContextBudgetState):
-        self.budget = budget
+    def __init__(self, token_limit: int):
+        self.token_limit = max(1, int(token_limit))
 
     def pack(self, items: list[ContextItem]) -> ContextPack:
-        limit = self.budget.effective_prompt_limit
+        limit = self.token_limit
         pack = ContextPack(diagnostics={"limit": limit, "input_items": len(items)})
         ordered = sorted(
             items,

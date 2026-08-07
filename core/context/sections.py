@@ -35,8 +35,9 @@ def build_environment_info(
     *,
     cwd: str | None = None,
     now: datetime | None = None,
+    include_time: bool = True,
 ) -> str:
-    """Build the OS, shell, time, and working-directory context section."""
+    """Build the OS, shell, and working-directory context section."""
     os_name = platform.system()
     os_release = platform.release()
     os_version = platform.version()
@@ -49,10 +50,10 @@ def build_environment_info(
         f"OS Version: {os_version}",
         f"Machine: {machine}",
         f"Shell: {shell}",
-        f"Current Time: {_iso_time_text(now or datetime.now().astimezone())}",
-        f"CWD: {cwd}",
-        "</environment_info>",
     ]
+    if include_time:
+        lines.append(f"Current Time: {_iso_time_text(now or datetime.now().astimezone())}")
+    lines.extend((f"CWD: {cwd}", "</environment_info>"))
     return "\n".join(lines)
 
 

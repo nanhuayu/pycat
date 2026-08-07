@@ -22,6 +22,28 @@ class PermissionContext:
 
 
 @dataclass(frozen=True)
+class ToolApprovalRequest:
+    """Typed approval request emitted by the tool execution boundary."""
+
+    tool_name: str
+    tool_call_id: str
+    arguments: dict[str, Any]
+    category: str
+    risk: str
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tool_name": self.tool_name,
+            "tool_call_id": self.tool_call_id,
+            "arguments": dict(self.arguments or {}),
+            "category": self.category,
+            "risk": self.risk,
+            "message": self.message,
+        }
+
+
+@dataclass(frozen=True)
 class ToolRuntimeContext:
     """Runtime identity and boundary data for one tool call."""
 
@@ -33,8 +55,10 @@ class ToolRuntimeContext:
     workspace_roots: tuple[str, ...] = ()
     permission: PermissionContext = field(default_factory=PermissionContext)
     capability_executor: Any = None
-    archive_compressor_factory: Any = None
+    compression_factory: Any = None
+    compression_tasks: Any = None
     shell_config: Any = None
+    process_manager: Any = None
     run_policy: Any = None
     debug_trace: Any = None
 
@@ -83,10 +107,12 @@ class ToolResult:
         is_error: bool = False,
         *,
         control_action: ToolControlAction | None = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         self.content = content
         self.is_error = is_error
         self.control_action = control_action
+        self.metadata = dict(metadata or {})
 
     def to_string(self) -> str:
         if isinstance(self.content, str):
@@ -105,12 +131,13 @@ class ToolContext:
     """Context passed to tool execution."""
     def __init__(self, 
                  work_dir: str, 
-                 approval_callback: Optional[Callable[[str], bool]] = None, 
+                 approval_callback: Optional[Callable[[ToolApprovalRequest], Any]] = None,
                  questions_callback: Optional[Callable[[Dict[str, Any]], Any]] = None,
                  state: Optional[Dict[str, Any]] = None,
                  llm_client: Any = None,
                  conversation: Any = None,
                  provider: Any = None,
+                 content_service: Any = None,
                  runtime: ToolRuntimeContext | None = None,
                  permission: PermissionContext | None = None):
         self.work_dir = work_dir
@@ -120,6 +147,10 @@ class ToolContext:
         self.llm_client = llm_client
         self.conversation = conversation
         self.provider = provider
+        # The application container owns this service. Standalone callers may
+        # leave it unset; tools then reject references that require it rather
+        # than constructing a second service owner.
+        self.content_service = content_service
         self.runtime = runtime or ToolRuntimeContext(
             workspace_roots=(str(work_dir or "."),),
             permission=permission or PermissionContext(workspace_roots=(str(work_dir or "."),)),

@@ -120,7 +120,13 @@ class ChannelGateway:
         if not normalized:
             return
         self._stop_event.clear()
-        self._lifecycle.start(normalized)
+        try:
+            self._lifecycle.start(normalized)
+        except Exception:
+            # A failed start must not look reconciled to the settings control
+            # plane; leave an empty runtime snapshot so the next save retries.
+            self.stop()
+            raise
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -131,6 +137,11 @@ class ChannelGateway:
     @property
     def is_stopping(self) -> bool:
         return self._stop_event.is_set()
+
+    def configured_channels(self) -> tuple[ChannelConfig, ...]:
+        """Return the channel configurations currently owned by the gateway."""
+
+        return tuple(self._channels_by_id.values())
 
     def enqueue_channel_message(
         self,

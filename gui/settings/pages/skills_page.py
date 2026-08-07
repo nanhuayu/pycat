@@ -1,12 +1,16 @@
 """Skills management settings page."""
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QLineEdit,
     QWidget,
     QVBoxLayout,
     QLabel,
@@ -17,7 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core.config import get_global_subdir
-from core.skills import SkillsManager
+from core.app.services.skill import SkillService
 from gui.settings.page_header import build_page_header
 from gui.settings.components import (
     SettingsActionBar,
@@ -26,15 +30,60 @@ from gui.settings.components import (
     configure_settings_resource_list,
 )
 from gui.utils.icon_manager import Icons
+from gui.widgets.themed_line_edit import ThemedTextEdit
+from gui.widgets.themed_line_edit import ThemedLineEdit
+
+
+class SkillCreateDialog(QDialog):
+    """Collect a local skill draft; no directory is created before confirmation."""
+
+    def __init__(self, *, has_project: bool, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("创建技能")
+        self.setModal(True)
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.name_edit = ThemedLineEdit()
+        self.name_edit.setPlaceholderText("例如 review-code")
+        self.description_edit = ThemedLineEdit()
+        self.description_edit.setPlaceholderText("一句话说明用途")
+        self.scope_combo = QComboBox()
+        self.scope_combo.addItem("全局", "global")
+        if has_project:
+            self.scope_combo.addItem("当前工作区", "project")
+        form.addRow("名称", self.name_edit)
+        form.addRow("说明", self.description_edit)
+        form.addRow("范围", self.scope_combo)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("创建")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def values(self) -> tuple[str, str, str]:
+        return (
+            self.name_edit.text().strip(),
+            self.description_edit.text().strip(),
+            str(self.scope_combo.currentData() or "global"),
+        )
 
 
 class SkillsPage(QWidget):
     page_title = "技能"
 
-    def __init__(self, work_dir: str = ".", parent=None):
+    def __init__(self, work_dir: str = ".", parent=None, *, skill_service: SkillService | None = None):
         super().__init__(parent)
-        self._work_dir = str(work_dir or ".")
-        self._manager = SkillsManager(self._work_dir, include_disabled=True)
+        self._work_dir = str(work_dir or "")
+        self._service = skill_service or SkillService()
         self._skills = []
         self._setup_ui()
         self._refresh_list()
@@ -46,11 +95,8 @@ class SkillsPage(QWidget):
 
         layout.addWidget(build_page_header("技能", "加载、管理全局与项目技能。停用的技能不会进入运行时列表。"))
 
-        body = SettingsListDetailLayout("技能", "技能预览", list_stretch=1, detail_stretch=2)
+        body = SettingsListDetailLayout(list_stretch=1, detail_stretch=2)
         self.list_body = body
-        body.list_title_label.setToolTip(
-            f"全局目录：{get_global_subdir('skills')}\n项目目录：{Path(self._work_dir) / '.pycat' / 'skills'}"
-        )
         toolbar = SettingsActionBar(spacing=4)
         self.add_btn = toolbar.add_icon_action("新增技能", Icons.get(Icons.PLUS), self._add_skill)
         self.edit_btn = toolbar.add_icon_action("编辑技能", Icons.get(Icons.EDIT), self._open_skill_file)
@@ -81,7 +127,7 @@ class SkillsPage(QWidget):
         self.description_label.setProperty("muted", True)
         right.addWidget(self.description_label)
 
-        self.preview = QTextEdit()
+        self.preview = ThemedTextEdit()
         self.preview.setReadOnly(True)
         self.preview.setPlaceholderText("选择左侧技能查看内容")
         right.addWidget(self.preview)
@@ -92,8 +138,9 @@ class SkillsPage(QWidget):
         self.preview.clear()
         self.source_label.setText("")
         self.description_label.setText("")
-        self._manager.reload()
-        self._skills = list(self._manager.list_skills())
+        self._skills = list(
+            self._service.list_for_workdir(self._work_dir, include_disabled=True)
+        )
         self._render_list()
 
     def _render_list(self) -> None:
@@ -103,7 +150,11 @@ class SkillsPage(QWidget):
             current_name = str(current.data(Qt.ItemDataRole.UserRole) or "")
 
         self.skill_list.clear()
-        self.list_body.set_list_title(f"技能 ({len(self._skills)})")
+        self.skill_list.setToolTip(
+            f"已发现 {len(self._skills)} 个技能\n"
+            f"全局目录：{get_global_subdir('skills')}\n"
+            f"项目目录：{Path(self._work_dir) / '.pycat' / 'skills'}"
+        )
         for skill in self._skills:
             enabled = bool(getattr(skill, "enabled", True))
             status = "启用" if enabled else "停用"
@@ -139,7 +190,11 @@ class SkillsPage(QWidget):
             self.description_label.setText("")
             self._sync_actions(None)
             return
-        skill = self._manager.get(current.data(Qt.ItemDataRole.UserRole))
+        skill = self._service.get(
+            current.data(Qt.ItemDataRole.UserRole),
+            work_dir=self._work_dir,
+            include_disabled=True,
+        )
         if skill:
             status = "启用" if getattr(skill, "enabled", True) else "停用"
             self.source_label.setText(
@@ -158,7 +213,11 @@ class SkillsPage(QWidget):
         item = self.skill_list.currentItem()
         if item is None:
             return None
-        return self._manager.get(str(item.data(Qt.ItemDataRole.UserRole) or ""))
+        return self._service.get(
+            str(item.data(Qt.ItemDataRole.UserRole) or ""),
+            work_dir=self._work_dir,
+            include_disabled=True,
+        )
 
     def _sync_actions(self, skill) -> None:
         has_selection = skill is not None
@@ -183,40 +242,38 @@ class SkillsPage(QWidget):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _add_skill(self) -> None:
-        root = get_global_subdir("skills")
-        root.mkdir(parents=True, exist_ok=True)
-        index = 1
-        while (root / f"custom-skill-{index}").exists():
-            index += 1
-        skill_dir = root / f"custom-skill-{index}"
-        skill_dir.mkdir(parents=True, exist_ok=False)
-        (skill_dir / "SKILL.md").write_text(
-            "---\n"
-            f"name: custom-skill-{index}\n"
-            "description: 简短说明这个技能适合处理什么。\n"
-            "mode: agent\n"
-            "---\n\n"
-            "# 使用说明\n\n"
-            "写下触发场景、处理步骤和必要约束。\n",
-            encoding="utf-8",
-        )
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(skill_dir)))
+        dialog = SkillCreateDialog(has_project=bool(str(self._work_dir or "").strip()), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        name, description, scope = dialog.values()
+        try:
+            skill_file = self._service.create_managed(
+                name,
+                description=description,
+                scope=scope,
+                work_dir=self._work_dir,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "创建技能失败", str(exc))
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(skill_file)))
         self._refresh_list()
-        self._select_skill(f"custom-skill-{index}")
+        self._select_skill(name)
 
     def _toggle_skill_enabled(self) -> None:
         skill = self._current_skill()
         root = self._skill_root(skill)
         if skill is None or root is None or bool(getattr(skill, "read_only", False)):
             return
-        marker = root / ".disabled"
-        if bool(getattr(skill, "enabled", True)):
-            marker.write_text("disabled by PyCat settings\n", encoding="utf-8")
-        else:
-            try:
-                marker.unlink()
-            except FileNotFoundError:
-                pass
+        try:
+            self._service.set_managed_enabled(
+                skill,
+                not bool(getattr(skill, "enabled", True)),
+                work_dir=self._work_dir,
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "技能状态更新失败", str(exc))
+            return
         name = skill.name
         self._refresh_list()
         self._select_skill(name)
@@ -232,7 +289,11 @@ class SkillsPage(QWidget):
             f'确定删除技能 "{skill.name}" 吗？\n{root}',
         ) != QMessageBox.StandardButton.Yes:
             return
-        shutil.rmtree(root)
+        try:
+            self._service.delete_managed(skill, work_dir=self._work_dir)
+        except Exception as exc:
+            QMessageBox.warning(self, "删除技能失败", str(exc))
+            return
         self._refresh_list()
 
     def _select_skill(self, name: str) -> None:
@@ -252,9 +313,12 @@ class SkillsPage(QWidget):
             if not (root / "SKILL.md").is_file():
                 return None
             allowed_roots = [
-                (Path(self._work_dir).resolve() / ".pycat" / "skills").resolve(),
                 get_global_subdir("skills").resolve(),
             ]
+            if str(self._work_dir or "").strip():
+                allowed_roots.append(
+                    (Path(self._work_dir).resolve() / ".pycat" / "skills").resolve()
+                )
             for allowed in allowed_roots:
                 try:
                     root.relative_to(allowed)
@@ -287,7 +351,14 @@ class SkillsPage(QWidget):
         if root is None:
             return "外部"
         try:
-            root.relative_to((Path(self._work_dir).resolve() / ".pycat" / "skills").resolve())
-            return "项目"
-        except ValueError:
+            if str(self._work_dir or "").strip():
+                try:
+                    root.relative_to((Path(self._work_dir).resolve() / ".pycat" / "skills").resolve())
+                    return "项目"
+                except ValueError:
+                    pass
+            root.relative_to(get_global_subdir("skills").resolve())
             return "全局"
+        except ValueError:
+            return "外部"
+        return "外部"

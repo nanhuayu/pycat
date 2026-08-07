@@ -35,6 +35,7 @@ from gui.settings.page_header import build_page_header
 from gui.utils.combo_box import configure_combo_popup
 from gui.utils.icon_manager import Icons
 from gui.widgets.model_ref_selector import ModelTargetCombo
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from models.contracts.mode import ModeConfig
 from models.contracts.model_target import ModelTarget
 from models.provider import Provider
@@ -79,7 +80,7 @@ class ModesPage(QWidget):
         self.view_tabs.currentChanged.connect(self._on_view_changed)
         root.addWidget(self.view_tabs)
 
-        body = SettingsListDetailLayout("模式", "配置", list_stretch=2, detail_stretch=5)
+        body = SettingsListDetailLayout(list_stretch=2, detail_stretch=5)
         actions = SettingsActionBar(spacing=4)
         actions.add_icon_action("新增模式", Icons.get(Icons.PLUS), self._add_mode)
         self.mode_delete_btn = actions.add_icon_action(
@@ -99,15 +100,16 @@ class ModesPage(QWidget):
 
         self.editor = QWidget()
         form = QFormLayout(self.editor)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(6)
 
-        self.slug_edit = QLineEdit()
+        self.slug_edit = ThemedLineEdit()
         self.slug_edit.setReadOnly(True)
-        self.name_edit = QLineEdit()
-        self.purpose_edit = QLineEdit()
+        self.name_edit = ThemedLineEdit()
+        self.purpose_edit = ThemedLineEdit()
         self.tool_category_selector = ToolCategorySelector(
             columns=4,
             object_prefix="mode_tool_category",
@@ -136,7 +138,7 @@ class ModesPage(QWidget):
         self.shared_context_combo.addItem("共享选定产物", "selected_artifacts")
         self.shared_context_combo.addItem("只读完整会话", "full_session_readonly")
         configure_combo_popup(self.shared_context_combo)
-        self.prompt_edit = QTextEdit()
+        self.prompt_edit = ThemedTextEdit()
         self.prompt_edit.setAcceptRichText(False)
         self.prompt_edit.setMinimumHeight(130)
 

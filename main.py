@@ -3,6 +3,7 @@
 import sys
 import os
 from core.tools.system.python_worker import PYTHON_EXEC_WORKER_ARG, run_python_exec_worker
+from core.version import __version__
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,6 +18,21 @@ def _qt_message_handler(mode, context, message):
     if category in {"qt.text.font.db", "qt.qpa.fonts"}:
         return
     sys.stderr.write(text + "\n")
+
+
+def _install_qtbase_translation(app) -> bool:
+    """Install Qt's bundled Chinese UI strings when the wheel provides them."""
+
+    from PyQt6.QtCore import QLibraryInfo, QTranslator
+
+    translator = QTranslator(app)
+    translations_path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if not translator.load("qtbase_zh_CN", translations_path):
+        return False
+    if not app.installTranslator(translator):
+        return False
+    app._pycat_qtbase_translator = translator
+    return True
 
 
 def main():
@@ -43,7 +59,8 @@ def main():
     # Set application info
     app.setApplicationName("PyCat Agent")
     app.setOrganizationName("PyCat")
-    app.setApplicationVersion("0.1.0")
+    app.setApplicationVersion(__version__)
+    _install_qtbase_translation(app)
     
     # Set application icon
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pycat.ico")

@@ -6,7 +6,6 @@ materialization so MessagePresenter can focus on higher-level message actions.
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Optional
 
 from models.conversation import Conversation, Message
@@ -14,7 +13,8 @@ from models.provider import Provider
 from models.contracts.session_state import SessionState
 from models.streaming import ConversationPatch
 from core.app.runtime_paths import get_debug_log_path
-from models.contracts.agent import RunEvent
+from core.agent.policy import RunPolicyBuilder
+from models.contracts.agent import RunEvent, RunStatus
 
 if TYPE_CHECKING:
     from gui.main_window import MainWindow
@@ -34,10 +34,11 @@ def _format_error_message(error: str) -> str:
     return f"错误: {text}"
 
 
-_STATE_MUTATING_TOOLS = {
-    "state__todo",
-    "state__memory",
-    "state__artifact",
+_STATE_BOOKKEEPING_FIELDS = {
+    "state_version",
+    "last_updated_seq",
+    "last_maintenance_seq",
+    "last_memory_review_seq",
 }
 
 
@@ -58,15 +59,16 @@ class StreamingMessagePresenter:
         self,
         provider: Provider,
         *,
+        conversation: Conversation | None = None,
         initial_runtime_messages: list[Message] | None = None,
     ):
         host = self._host
-        conversation = host.current_conversation
+        conversation = conversation or host.current_conversation
         conversation_id = getattr(conversation, "id", "") or ""
         if not conversation_id:
             return None
 
-        debug_log_path = get_debug_log_path(host.app_settings, host.services.repositories.data_dir)
+        debug_log_path = get_debug_log_path(host.app_settings, host.services.data_dir)
 
         show_thinking = bool(
             (conversation.settings or {}).get(
@@ -110,14 +112,16 @@ class StreamingMessagePresenter:
         if not state:
             return None
 
-        host.services.app_coordinator.set_streaming(conversation_id, is_streaming=True)
+        is_current = bool(host.current_conversation and host.current_conversation.id == conversation_id)
+        if is_current:
+            host.services.app_coordinator.set_streaming(conversation_id, is_streaming=True)
         self._set_sidebar_streaming(conversation_id, True)
         self._sync_runtime_state(conversation_id, stream_state=state)
 
-        if host.current_conversation and host.current_conversation.id == conversation_id:
+        if is_current:
             host.chat_view.start_streaming_response(model=state.model)
             host.chat_view.restore_streaming_state("", "")
-        host.window_state_presenter.sync_input_enabled()
+            host.window_state_presenter.sync_input_enabled()
         return state
 
     def on_token(self, conversation_id: str, request_id: str, token: str) -> None:
@@ -185,10 +189,6 @@ class StreamingMessagePresenter:
                         self._remember_pending_tool_step(conversation_id, message)
                 except Exception as e:
                     logger.debug("Failed to refresh tool result in chat view: %s", e)
-                try:
-                    host.inspector_panel.update_stats(host.current_conversation)
-                except Exception as e:
-                    logger.debug("Failed to update stats after tool result step: %s", e)
                 self._sync_runtime_state(conversation_id)
             return
 
@@ -217,10 +217,7 @@ class StreamingMessagePresenter:
             else:
                 host.chat_view.add_message(message)
 
-            try:
-                host.inspector_panel.update_stats(host.current_conversation)
-            except Exception as e:
-                logger.debug("Failed to update stats in response step: %s", e)
+            self._refresh_inspector_state(target_conv, {"messages"})
             self._sync_runtime_state(conversation_id)
 
     def on_response_complete(
@@ -235,7 +232,6 @@ class StreamingMessagePresenter:
                 host.chat_view.finish_streaming_response(
                     Message(role="system", content=""), add_to_view=False
                 )
-                host.inspector_panel.update_stats(host.current_conversation)
                 self._sync_runtime_state(conversation_id, stream_state=None)
                 self._update_header(conversation_id)
             host.window_state_presenter.sync_input_enabled()
@@ -248,7 +244,6 @@ class StreamingMessagePresenter:
         if isinstance(channel_meta, dict) and channel_meta.get("channel_owned"):
             if host.current_conversation and host.current_conversation.id == conversation_id:
                 host.chat_view.finish_streaming_response(response, add_to_view=False)
-                host.inspector_panel.update_stats(host.current_conversation)
                 self._sync_runtime_state(conversation_id, stream_state=None)
                 self._update_header(conversation_id)
             host.window_state_presenter.sync_input_enabled()
@@ -303,7 +298,7 @@ class StreamingMessagePresenter:
                         host.chat_view.update_message(response)
                 except Exception as exc:
                     logger.debug("Failed to refresh completed response in chat view: %s", exc)
-            host.inspector_panel.update_stats(host.current_conversation)
+            self._refresh_inspector_state(host.current_conversation, {"messages"})
             self._sync_runtime_state(conversation_id, stream_state=None)
             self._update_header(conversation_id)
 
@@ -343,13 +338,24 @@ class StreamingMessagePresenter:
 
         if host.current_conversation and host.current_conversation.id == conversation_id:
             host.chat_view.finish_streaming_response(error_message)
-            inspector_panel = getattr(host, "inspector_panel", None)
-            if inspector_panel is not None:
-                inspector_panel.update_stats(host.current_conversation)
+            self._refresh_inspector_state(host.current_conversation, {"messages"})
             self._sync_runtime_state(conversation_id, stream_state=None)
             self._update_header(conversation_id)
 
         host.window_state_presenter.sync_input_enabled()
+
+    def on_run_finished(
+        self,
+        conversation_id: str,
+        request_id: str,
+        status: RunStatus,
+    ) -> None:
+        host = self._host
+        if not (host.current_conversation and host.current_conversation.id == conversation_id):
+            return
+        finish_run = getattr(host.chat_view, "finish_active_run", None)
+        if callable(finish_run):
+            finish_run(status)
 
     @staticmethod
     def _is_conversation_streaming(host, conversation_id: str) -> bool:
@@ -358,9 +364,8 @@ class StreamingMessagePresenter:
     def on_retry_attempt(
         self, conversation_id: str, request_id: str, detail: str
     ) -> None:
-        host = self._host
-        if host.current_conversation and host.current_conversation.id == conversation_id:
-            host.statusBar().showMessage(f"重试中: {detail}", 5000)
+        del request_id, detail
+        self._sync_runtime_state(conversation_id)
 
     def on_runtime_event(
         self,
@@ -375,25 +380,11 @@ class StreamingMessagePresenter:
         kind_value = str(getattr(getattr(event, "kind", ""), "value", getattr(event, "kind", "")))
         if kind_value == "condense":
             self._show_condense_notice(data)
-        if (
-            kind_value == "tool_start"
-            and isinstance(data, dict)
-            and str(data.get("phase") or "").strip() == "organizing"
-        ):
-            host.chat_view.update_tool_call_status(
-                str(data.get("tool_call_id") or ""),
-                "正在整理长结果",
-            )
         if isinstance(data, dict) and isinstance(data.get("subtask"), dict):
             try:
                 host.chat_view.update_subtask_trace(data.get("subtask") or {})
             except Exception as exc:
                 logger.debug("Failed to update live subtask trace: %s", exc)
-        if self._runtime_event_may_change_state(data):
-            try:
-                host.inspector_panel.update_stats(host.current_conversation)
-            except Exception as exc:
-                logger.debug("Failed to update stats after runtime state event: %s", exc)
         self._sync_runtime_state(conversation_id)
 
     def on_conversation_patch(
@@ -403,69 +394,123 @@ class StreamingMessagePresenter:
         patch: ConversationPatch,
     ) -> None:
         host = self._host
-        if not (host.current_conversation and host.current_conversation.id == conversation_id):
-            return
         if not isinstance(patch, ConversationPatch):
             return
+        if patch.conversation_id and str(patch.conversation_id) != str(conversation_id or ""):
+            return
+        active_state = host.message_runtime.get_state(conversation_id)
+        active_request_id = str(getattr(active_state, "request_id", "") or "")
+        if active_request_id and request_id and active_request_id != str(request_id):
+            return
+        current = host.current_conversation
+        is_current = bool(current and current.id == conversation_id)
+        target = current if is_current else host.services.conv_service.load(conversation_id)
+        if target is None:
+            return
         try:
-            self._apply_conversation_patch(host.current_conversation, patch)
-            host.services.conv_service.save(host.current_conversation)
+            new_condensed = self._new_condensed_message_ids(target, patch)
+            changed_fields = self._apply_conversation_patch(target, patch)
+            if not changed_fields and not new_condensed:
+                # Idempotent patch (e.g. the final run patch duplicating the
+                # last state patch already merged and saved): nothing new to
+                # persist or repaint.
+                return
+            host.services.conv_service.save(target)
+            if not is_current:
+                return
             host.services.app_coordinator.remember_current_conversation(
-                host.current_conversation,
+                target,
                 providers=host.providers,
                 app_settings=host.app_settings,
                 is_streaming=self._is_conversation_streaming(host, conversation_id),
             )
-            if patch.condensed_message_ids:
-                host.chat_view.load_conversation(host.current_conversation)
+            if new_condensed:
                 self._show_condense_notice(
                     {
-                        "archived_messages": len(patch.condensed_message_ids),
-                        "history_ids": list(dict.fromkeys(str(v) for v in patch.condensed_message_ids.values() if str(v).strip())),
+                        "archived_messages": len(new_condensed),
+                        "history_ids": list(dict.fromkeys(str(v) for v in new_condensed.values() if str(v).strip())),
                         "reason": "conversation_patch",
                     }
                 )
-            host.inspector_panel.update_stats(host.current_conversation)
+            self._refresh_inspector_state(target, changed_fields)
             self._update_header(conversation_id)
         except Exception as exc:
             logger.debug("Failed to apply runtime conversation patch: %s", exc)
 
     @staticmethod
-    def _runtime_event_may_change_state(data: Any) -> bool:
-        if not isinstance(data, dict):
-            return False
-        if isinstance(data.get("state_snapshot"), dict):
-            return True
-        tool_name = str(data.get("tool_name") or data.get("name") or "").strip()
-        if tool_name in _STATE_MUTATING_TOOLS:
-            return True
-        metadata = data.get("metadata")
-        if isinstance(metadata, dict):
-            meta_tool_name = str(metadata.get("name") or metadata.get("tool_name") or "").strip()
-            if meta_tool_name in _STATE_MUTATING_TOOLS:
-                return True
-        return False
+    def _new_condensed_message_ids(
+        conversation: Conversation,
+        patch: ConversationPatch,
+    ) -> dict[str, str]:
+        existing = {
+            str(getattr(message, "id", "") or ""): str(getattr(message, "archived_content_id", "") or "")
+            for message in getattr(conversation, "messages", []) or []
+        }
+        return {
+            str(message_id): str(content_id)
+            for message_id, content_id in (patch.condensed_message_ids or {}).items()
+            if str(content_id or "").strip() and existing.get(str(message_id), "") != str(content_id)
+        }
 
     @staticmethod
-    def _apply_conversation_patch(conversation: Conversation, patch: ConversationPatch) -> None:
-        if patch.state:
+    def _apply_conversation_patch(conversation: Conversation, patch: ConversationPatch) -> set[str]:
+        changed_fields: set[str] = set()
+        if isinstance(patch.state, dict):
             try:
-                conversation.set_state(SessionState.from_dict(dict(patch.state or {})))
+                current_state = conversation.get_state()
+                incoming_state = SessionState.from_dict(dict(patch.state or {}))
+                if int(incoming_state.state_version or 0) < int(current_state.state_version or 0):
+                    return changed_fields
+                current_payload = current_state.to_dict()
+                incoming_payload = incoming_state.to_dict()
+                changed_fields.update(
+                    key
+                    for key in current_payload.keys() | incoming_payload.keys()
+                    if key not in _STATE_BOOKKEEPING_FIELDS
+                    and current_payload.get(key) != incoming_payload.get(key)
+                )
+                if current_payload != incoming_payload:
+                    conversation.set_state(incoming_state)
             except Exception as exc:
                 logger.debug("Failed to merge patch state: %s", exc)
         if patch.changed_messages:
-            conversation.messages = [Message.from_dict(msg.to_dict()) for msg in patch.changed_messages]
+            incoming_messages = [Message.from_dict(msg.to_dict()) for msg in patch.changed_messages]
+            current_payload = [msg.to_dict() for msg in getattr(conversation, "messages", []) or []]
+            incoming_payload = [msg.to_dict() for msg in incoming_messages]
+            if current_payload != incoming_payload:
+                conversation.messages = incoming_messages
+                changed_fields.add("messages")
         elif patch.condensed_message_ids:
             for msg in getattr(conversation, "messages", []) or []:
                 parent = patch.condensed_message_ids.get(str(getattr(msg, "id", "") or ""))
-                if parent:
+                if parent and str(getattr(msg, "archived_content_id", "") or "") != str(parent):
                     msg.archived_content_id = parent
+                    changed_fields.add("messages")
+        if not changed_fields:
+            return changed_fields
         try:
             from datetime import datetime
 
             conversation.updated_at = datetime.now()
         except Exception:
             pass
+        return changed_fields
+
+    def _refresh_inspector_state(
+        self,
+        conversation: Conversation,
+        changed_fields: set[str],
+    ) -> None:
+        if not changed_fields:
+            return
+        panel = getattr(self._host, "inspector_panel", None)
+        if panel is None:
+            return
+        updater = getattr(panel, "update_conversation_state", None)
+        if callable(updater):
+            updater(conversation, changed_fields)
+            return
+        panel.update_stats(conversation)
 
     def _remember_pending_tool_step(self, conversation_id: str, message: Message) -> None:
         tool_call_id = str(getattr(message, "tool_call_id", "") or "").strip()
@@ -532,8 +577,8 @@ class StreamingMessagePresenter:
         if reason:
             text += f" ({reason})"
         chat_view = getattr(host, "chat_view", None)
-        if chat_view is not None and hasattr(chat_view, "show_runtime_notice"):
-            chat_view.show_runtime_notice(text, kind="condense")
+        if chat_view is not None and hasattr(chat_view, "append_transcript_notice"):
+            chat_view.append_transcript_notice(text, kind="condense")
 
     def _build_request_policy(
         self,
@@ -543,36 +588,31 @@ class StreamingMessagePresenter:
         skill_run: Optional[dict[str, Any]],
     ):
         host = self._host
-        from core.agent.policy import RunPolicyBuilder
 
         if skill_run:
             skill_name = str(skill_run.get("name") or "").strip().lower()
             work_dir = getattr(conversation, "work_dir", ".") or "."
             spec = host.services.skill_service.get_invocation_spec(skill_name, work_dir=work_dir)
             if spec is not None:
-                return self._apply_agent_runtime_overrides(
-                    RunPolicyBuilder.build(
-                        conversation=conversation,
-                        app_settings=host.app_settings,
-                        mode_slug=spec.mode,
-                        show_thinking=bool(show_thinking),
-                        tool_selection=spec.tool_selection,
-                        mode_manager=host.input_area.get_mode_manager(),
-                        source="desktop",
-                    )
+                return RunPolicyBuilder.build(
+                    conversation=conversation,
+                    app_settings=host.app_settings,
+                    mode_slug=spec.mode,
+                    show_thinking=bool(show_thinking),
+                    tool_selection=spec.tool_selection,
+                    mode_manager=host.input_area.get_mode_manager(),
+                    source="desktop",
                 )
 
         try:
             mode_slug = host.input_area.get_selected_mode_slug()
-            return self._apply_agent_runtime_overrides(
-                RunPolicyBuilder.build(
-                    conversation=conversation,
-                    app_settings=host.app_settings,
-                    mode_slug=str(mode_slug or "chat"),
-                    show_thinking=bool(show_thinking),
-                    mode_manager=host.input_area.get_mode_manager(),
-                    source="desktop",
-                )
+            return RunPolicyBuilder.build(
+                conversation=conversation,
+                app_settings=host.app_settings,
+                mode_slug=str(mode_slug or "chat"),
+                show_thinking=bool(show_thinking),
+                mode_manager=host.input_area.get_mode_manager(),
+                source="desktop",
             )
         except Exception as e:
             logger.warning("Failed to build run policy from input state: %s", e)
@@ -582,31 +622,13 @@ class StreamingMessagePresenter:
             )
 
     def _build_fallback_policy(self, *, conversation: Conversation, show_thinking: bool):
-        from core.agent.policy import RunPolicyBuilder
-
-        return self._apply_agent_runtime_overrides(
-            RunPolicyBuilder.build(
-                conversation=conversation,
-                app_settings=getattr(self._host, "app_settings", {}) or {},
-                mode_slug=str(getattr(conversation, "mode", "chat") or "chat"),
-                show_thinking=bool(show_thinking),
-                source="desktop",
-            )
+        return RunPolicyBuilder.build(
+            conversation=conversation,
+            app_settings=getattr(self._host, "app_settings", {}) or {},
+            mode_slug=str(getattr(conversation, "mode", "chat") or "chat"),
+            show_thinking=bool(show_thinking),
+            source="desktop",
         )
-
-    def _apply_agent_runtime_overrides(self, policy):
-        settings = getattr(self._host, "app_settings", {}) or {}
-        agent_settings = settings.get("agent") if isinstance(settings, dict) else None
-        agent_settings = agent_settings if isinstance(agent_settings, dict) else {}
-        raw = agent_settings.get("max_turns")
-        try:
-            max_turns = int(raw) if raw not in (None, "") else 0
-        except Exception:
-            max_turns = 0
-        updates = {}
-        if max_turns > 0:
-            updates["max_turns"] = max_turns
-        return replace(policy, **updates) if updates else policy
 
     @staticmethod
     def _get_latest_skill_run_metadata(
@@ -641,13 +663,14 @@ class StreamingMessagePresenter:
                 else host.message_runtime.get_state(conversation_id)
             )
 
-            chat_view = getattr(host, "chat_view", None)
-            if chat_view is not None and hasattr(chat_view, "update_runtime_state"):
-                chat_view.update_runtime_state(resolved_state)
+            presenter = getattr(host, "window_state_presenter", None)
+            if presenter is not None and hasattr(presenter, "sync_runtime_state"):
+                presenter.sync_runtime_state(conversation_id)
+            else:
+                chat_view = getattr(host, "chat_view", None)
+                if chat_view is not None and hasattr(chat_view, "update_runtime_state"):
+                    chat_view.update_runtime_state(resolved_state)
 
-            inspector_panel = getattr(host, "inspector_panel", None)
-            if inspector_panel is not None and hasattr(inspector_panel, "update_runtime_state"):
-                inspector_panel.update_runtime_state(resolved_state)
         except Exception as e:
             logger.debug("Failed to sync runtime state to UI: %s", e)
 

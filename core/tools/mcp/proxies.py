@@ -8,6 +8,7 @@ from typing import Any, Dict
 
 from core.tools.base import BaseTool, ToolContext, ToolResult
 from core.tools.mcp.naming import build_mcp_tool_name
+from models.session_paths import resolve_session_root
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +89,12 @@ class McpProxyTool(BaseTool):
 
     def _session_tool_results_dir(self, *, context: ToolContext, conversation_id: object = None) -> Path | None:
         session_id = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(conversation_id or "default")).strip("-._") or "default"
+        raw = str(context.work_dir or "").strip()
         try:
-            work_root = Path(context.work_dir or ".").expanduser().resolve()
+            root = Path(raw).expanduser().resolve() if raw else ""
         except Exception:
             return None
-        return work_root / ".pycat" / "sessions" / session_id / "tool-call" / "mcp-output"
+        return resolve_session_root(root, session_id) / "tool-call" / "mcp-output"
 
     def _rewrite_output_file_arguments(
         self,

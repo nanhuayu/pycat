@@ -27,6 +27,7 @@ from gui.settings.components import (
     configure_settings_resource_list,
 )
 from gui.utils.icon_manager import Icons
+from gui.widgets.themed_line_edit import ThemedSelectableLabel
 
 
 class ChannelTypeItem(QListWidgetItem):
@@ -99,11 +100,8 @@ class ChannelsPage(QWidget):
         )
 
         body = SettingsListDetailLayout(
-            "频道类型",
-            "连接",
             list_stretch=2,
             detail_stretch=5,
-            spacing=14,
         )
         left_panel = body.list_layout
 
@@ -138,10 +136,6 @@ class ChannelsPage(QWidget):
         detail_layout.setContentsMargins(10, 8, 10, 8)
         detail_layout.setSpacing(6)
 
-        self.detail_title = QLabel("详情")
-        self.detail_title.setProperty("heading", True)
-        detail_layout.addWidget(self.detail_title)
-
         self.detail_meta = QLabel("")
         self.detail_meta.setWordWrap(True)
         self.detail_meta.setProperty("muted", True)
@@ -162,7 +156,7 @@ class ChannelsPage(QWidget):
         self.diagnostics_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.diagnostics_toggle.toggled.connect(self._toggle_diagnostics)
         detail_layout.addWidget(self.diagnostics_toggle, 0, Qt.AlignmentFlag.AlignLeft)
-        self.diagnostics_label = QLabel("")
+        self.diagnostics_label = ThemedSelectableLabel("")
         self.diagnostics_label.setWordWrap(True)
         self.diagnostics_label.setProperty("muted", True)
         self.diagnostics_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -250,7 +244,6 @@ class ChannelsPage(QWidget):
         self._update_action_state(True)
 
     def _set_empty_overview(self, message: str) -> None:
-        self.detail_title.setText("详情")
         self.detail_meta.setText("")
         self.detail_summary.setText(message)
         self.detail_hint.setText("编辑弹窗负责连接配置、会话绑定和扫码等细节。")
@@ -273,7 +266,6 @@ class ChannelsPage(QWidget):
             ChannelConnectionState.ERROR: "异常",
         }.get(snapshot.state, snapshot.state.value)
         meta_parts = [state_label, self._connection_label(normalized)]
-        self.detail_title.setText(instance.title)
         self.detail_meta.setText(" · ".join(meta_parts))
 
         summary = instance.summary or normalized.source or "未填写摘要"

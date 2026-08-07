@@ -2,7 +2,7 @@
 
 Explicit commands use ``/``. Inline mentions use ``#`` for files only.
 
-Extensible via ``~/.PyCat/commands/`` or ``.pycat/commands/``.
+Extensible via ``~/.pycat/commands/`` or ``.pycat/commands/``.
 """
 from __future__ import annotations
 

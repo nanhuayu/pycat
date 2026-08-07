@@ -180,8 +180,9 @@ class CapabilityExecutor:
         request_config = LLMConfig(
             model=model,
             stream=False,
-            reasoning_enabled=False,
             system_prompt_override=system_prompt,
+            temperature=capability.temperature,
+            max_tokens=capability.max_tokens,
         )
         temp_conversation.set_llm_config(request_config)
         api_messages = self.prompt_renderer.build_api_messages(
@@ -195,7 +196,7 @@ class CapabilityExecutor:
             api_messages,
             tools=[],
             llm_config=request_config,
-            reasoning_enabled=False,
+            reasoning_mode="off",
         )
         response = await self.client.send_request(
             provider=execution_provider,
@@ -263,7 +264,15 @@ class CapabilityExecutor:
                 temp_conversation.set_state(conversation.get_state())
             except Exception:
                 pass
-        temp_conversation.set_llm_config(LLMConfig(model=model, stream=False, system_prompt_override=system_prompt))
+        temp_conversation.set_llm_config(
+            LLMConfig(
+                model=model,
+                stream=False,
+                system_prompt_override=system_prompt,
+                temperature=capability.temperature,
+                max_tokens=capability.max_tokens,
+            )
+        )
 
         capability_selection = ToolSelectionPolicy.from_categories(capability.allowed_tool_categories)
         parent_policy = context.parent_policy
@@ -276,6 +285,7 @@ class CapabilityExecutor:
                 completion_schema=dict(capability.output_schema or {}) or None,
                 tool_selection=parent_policy.tool_selection.intersect(capability_selection),
                 model=model,
+                pycat_assistant_enabled=True,
                 source="capability",
             )
         else:

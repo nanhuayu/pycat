@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import os
+from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QWidget,
@@ -20,25 +22,19 @@ from PyQt6.QtWidgets import (
 )
 
 from models.conversation import Conversation
-from models.provider import Provider
+from models.contracts.content import FileChange
 from models.contracts.session_state import TodoStatus
-from core.llm.token_budget import build_token_usage_snapshot, format_token_count
 from core.channel import channel_origin_from_message
+from core.content.resolver import SessionContentResolver
 from core.state.artifact import ArtifactService
 from gui.widgets.collapsible_section import CollapsibleSection
-from gui.widgets.common import MetricCard
-from gui.widgets.themed_line_edit import ThemedLineEdit
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedSelectableLabel
 from gui.widgets.workflow_capsule import (
     WorkflowCapsuleRow,
     create_artifact_capsule,
 )
+from core.content.references import delivery_refs_for_messages
 from gui.utils.icon_manager import Icons
-
-
-class InspectorMetricCard(MetricCard):
-    """Inspector-specific metric card."""
-
-    pass
 
 
 class _TwoLineElideLabel(QLabel):
@@ -105,6 +101,31 @@ class RuntimeStrip(QFrame):
         self.detail.setText(str(detail or "-"))
 
 
+def _format_process_elapsed(seconds: float) -> str:
+    total = max(0, int(seconds or 0))
+    if total < 60:
+        return f"{total}s"
+    minutes, secs = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m{secs:02d}s"
+    hours, mins = divmod(minutes, 60)
+    return f"{hours}h{mins:02d}m"
+
+
+def _format_last_output(modified_at) -> str:
+    if not modified_at:
+        return "无输出"
+    delta = max(0, int(datetime.now().timestamp() - float(modified_at)))
+    if delta < 5:
+        return "刚刚"
+    if delta < 60:
+        return f"{delta}s 前"
+    minutes = delta // 60
+    if minutes < 60:
+        return f"{minutes}min 前"
+    return f"{minutes // 60}h 前"
+
+
 class InspectorPanel(QWidget):
     """Panel displaying conversation state, workspace artifacts, and runtime metrics."""
 
@@ -114,23 +135,33 @@ class InspectorPanel(QWidget):
     task_delete_requested = pyqtSignal(str)
     memory_candidate_promote_requested = pyqtSignal(str)
     memory_candidate_reject_requested = pyqtSignal(str)
-    debug_trace_requested = pyqtSignal()
-    
-    def __init__(self, parent=None):
+    process_stop_requested = pyqtSignal(str)
+    process_stop_all_requested = pyqtSignal()
+    processes_refresh_requested = pyqtSignal()
+
+    _PROCESS_REFRESH_INTERVAL_MS = 2000
+
+    def __init__(self, parent=None, *, content_service=None):
         super().__init__(parent)
         self.setObjectName("inspector_panel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setFixedWidth(260)
+        self.setMinimumWidth(220)
+        self.setMaximumWidth(420)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self._conversation: Optional[Conversation] = None
         self._app_state = None
-        self._providers: list[Provider] = []
+        self._process_snapshots: list = []
+        self._mutations_enabled = True
+        self._workspace_memory_key = ""
+        self._workspace_memory_count: Optional[int] = None
+        self._content_service = content_service
+        self._content_resolver = SessionContentResolver(content_service) if content_service is not None else None
         self._setup_ui()
+        self._process_timer = QTimer(self)
+        self._process_timer.setInterval(self._PROCESS_REFRESH_INTERVAL_MS)
+        self._process_timer.timeout.connect(self.processes_refresh_requested.emit)
+        self._process_timer.start()
 
-    def set_providers(self, providers: list[Provider] | None) -> None:
-        self._providers = list(providers or [])
-        if self._conversation:
-            self.update_stats(self._conversation)
-    
     def _setup_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -182,17 +213,7 @@ class InspectorPanel(QWidget):
         self.tasks_layout.setSpacing(1)
         self.tasks_section.body_layout.addWidget(self.tasks_container)
 
-        self.memory_section = CollapsibleSection("记忆", summary="会话 / 工作区", collapsed=True)
-        layout.addWidget(self.memory_section)
-
-        self.memory_container = QFrame()
-        self.memory_container.setObjectName("memory_container")
-        self.memory_layout = QVBoxLayout(self.memory_container)
-        self.memory_layout.setContentsMargins(0, 0, 0, 0)
-        self.memory_layout.setSpacing(4)
-        self.memory_section.body_layout.addWidget(self.memory_container)
-
-        self.documents_section = CollapsibleSection("产物", summary="暂无会话产物", collapsed=True)
+        self.documents_section = CollapsibleSection("内容", summary="暂无内容", collapsed=True)
         layout.addWidget(self.documents_section)
 
         self.documents_container = QFrame()
@@ -201,6 +222,50 @@ class InspectorPanel(QWidget):
         self.documents_layout.setContentsMargins(0, 0, 0, 0)
         self.documents_layout.setSpacing(4)
         self.documents_section.body_layout.addWidget(self.documents_container)
+
+        self.memory_section = CollapsibleSection("记忆", summary="会话 / 工作区", collapsed=True)
+        layout.addWidget(self.memory_section)
+        self.memory_container = QFrame()
+        self.memory_container.setObjectName("memory_container")
+        self.memory_layout = QVBoxLayout(self.memory_container)
+        self.memory_layout.setContentsMargins(0, 0, 0, 0)
+        self.memory_layout.setSpacing(4)
+        self.memory_section.body_layout.addWidget(self.memory_container)
+
+        self.processes_section = CollapsibleSection("Shell 进程", summary="无后台进程", collapsed=True)
+        layout.addWidget(self.processes_section)
+
+        processes_header = QHBoxLayout()
+        processes_header.setSpacing(6)
+        self.processes_count_label = QLabel("0 个进行中")
+        self.processes_count_label.setProperty("muted", True)
+        processes_header.addWidget(self.processes_count_label, 1)
+        self.stop_all_processes_btn = QToolButton()
+        self.stop_all_processes_btn.setObjectName("stop_all_processes_btn")
+        self.stop_all_processes_btn.setIcon(Icons.get(Icons.STOP, scale_factor=0.85))
+        self.stop_all_processes_btn.setAutoRaise(True)
+        self.stop_all_processes_btn.setFixedSize(22, 22)
+        self.stop_all_processes_btn.setToolTip("全部停止")
+        self.stop_all_processes_btn.clicked.connect(self.process_stop_all_requested.emit)
+        processes_header.addWidget(self.stop_all_processes_btn)
+        self.processes_section.body_layout.addLayout(processes_header)
+
+        self.processes_container = QFrame()
+        self.processes_container.setObjectName("processes_container")
+        self.processes_layout = QVBoxLayout(self.processes_container)
+        self.processes_layout.setContentsMargins(0, 0, 0, 0)
+        self.processes_layout.setSpacing(4)
+        self.processes_section.body_layout.addWidget(self.processes_container)
+
+        self.completed_tasks_section = CollapsibleSection("最近完成", summary="暂无已完成任务", collapsed=True)
+        layout.addWidget(self.completed_tasks_section)
+        self.completed_tasks_container = QFrame()
+        self.completed_tasks_container.setObjectName("completed_tasks_container")
+        self.completed_tasks_layout = QVBoxLayout(self.completed_tasks_container)
+        self.completed_tasks_layout.setContentsMargins(0, 0, 0, 0)
+        self.completed_tasks_layout.setSpacing(1)
+        self.completed_tasks_section.body_layout.addWidget(self.completed_tasks_container)
+        self.completed_tasks_section.setVisible(False)
 
         self.channels_section = CollapsibleSection("通道", summary="外部来源", collapsed=True)
         layout.addWidget(self.channels_section)
@@ -211,47 +276,7 @@ class InspectorPanel(QWidget):
         self.channels_layout.setContentsMargins(0, 0, 0, 0)
         self.channels_layout.setSpacing(4)
         self.channels_section.body_layout.addWidget(self.channels_container)
-
-        self.overview_section = CollapsibleSection("会话概览", summary="模式 / 核心指标", collapsed=True)
-        layout.addWidget(self.overview_section)
-
-        self.mode_card = InspectorMetricCard("模式")
-        self.overview_section.body_layout.addWidget(self.mode_card)
-
-        self.capabilities_card = InspectorMetricCard("能力")
-        self.overview_section.body_layout.addWidget(self.capabilities_card)
-        
-        self.total_messages = InspectorMetricCard("消息数量")
-        self.overview_section.body_layout.addWidget(self.total_messages)
-        
-        self.context_summary = InspectorMetricCard("上下文")
-        self.overview_section.body_layout.addWidget(self.context_summary)
-        
-        self.performance_summary = InspectorMetricCard("性能")
-        self.overview_section.body_layout.addWidget(self.performance_summary)
-
-        self.timeline_section = CollapsibleSection("调试时间线", summary="空闲", collapsed=True)
-        layout.addWidget(self.timeline_section)
-
-        timeline_action_row = QHBoxLayout()
-        timeline_action_row.setContentsMargins(0, 0, 0, 0)
-        timeline_action_row.addStretch(1)
-        self.open_trace_btn = QToolButton()
-        self.open_trace_btn.setObjectName("open_trace_btn")
-        self.open_trace_btn.setIcon(Icons.get_muted(Icons.NETWORK, scale_factor=0.85))
-        self.open_trace_btn.setAutoRaise(True)
-        self.open_trace_btn.setFixedSize(22, 22)
-        self.open_trace_btn.setToolTip("查看完整调用链路")
-        self.open_trace_btn.clicked.connect(self.debug_trace_requested.emit)
-        timeline_action_row.addWidget(self.open_trace_btn)
-        self.timeline_section.body_layout.addLayout(timeline_action_row)
-
-        self.timeline_container = QFrame()
-        self.timeline_container.setObjectName("timeline_container")
-        self.timeline_layout = QVBoxLayout(self.timeline_container)
-        self.timeline_layout.setContentsMargins(0, 0, 0, 0)
-        self.timeline_layout.setSpacing(4)
-        self.timeline_section.body_layout.addWidget(self.timeline_container)
+        self.channels_section.setVisible(False)
         
         layout.addStretch(1)
 
@@ -259,16 +284,28 @@ class InspectorPanel(QWidget):
         self._render_memory(None)
         self._render_artifacts(None)
         self._render_channels(None)
-        self.update_runtime_state(None)
         self._set_task_controls_enabled(False)
         self.artifact_open_requested.connect(self._open_artifact_path)
 
     def _set_task_controls_enabled(self, enabled: bool) -> None:
-        self.task_input_edit.setEnabled(bool(enabled))
-        self.add_task_btn.setEnabled(bool(enabled))
+        available = bool(enabled) and self._mutations_enabled
+        self.task_input_edit.setEnabled(available)
+        self.add_task_btn.setEnabled(available)
+
+    def set_mutations_enabled(self, enabled: bool) -> None:
+        self._mutations_enabled = bool(enabled)
+        self._set_task_controls_enabled(bool(self._conversation))
+        for object_name in (
+            "task_done_btn",
+            "task_delete_btn",
+            "memory_promote_btn",
+            "memory_reject_btn",
+        ):
+            for button in self.findChildren(QToolButton, object_name):
+                button.setEnabled(self._mutations_enabled)
 
     def _emit_create_task(self) -> None:
-        if not self._conversation:
+        if not self._conversation or not self._mutations_enabled:
             return
         text = (self.task_input_edit.text() or "").strip()
         if not text:
@@ -277,16 +314,13 @@ class InspectorPanel(QWidget):
         self.task_create_requested.emit(text)
 
     def _render_tasks(self, conversation: Optional[Conversation]) -> None:
-        # clear
-        while self.tasks_layout.count():
-            item = self.tasks_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
+        self._clear_layout(self.tasks_layout)
+        self._clear_layout(self.completed_tasks_layout)
 
         if not conversation:
-            self.tasks_section.set_title("任务")
-            self.tasks_section.set_summary("当前任务与待办")
+            self.tasks_section.set_title("当前任务")
+            self.tasks_section.set_summary("暂无任务")
+            self.completed_tasks_section.setVisible(False)
             empty = QLabel("-")
             empty.setProperty("muted", True)
             self.tasks_layout.addWidget(empty)
@@ -302,84 +336,118 @@ class InspectorPanel(QWidget):
             active_tasks = []
             recent_tasks = []
 
-        tasks = active_tasks + list(reversed(recent_tasks[-4:]))
         active_count = len(active_tasks)
-        self.tasks_section.set_title(f"任务 ({active_count})")
-        self.tasks_section.set_summary("当前会话待办" if active_count else ("最近已完成" if tasks else "暂无任务"))
-        if not tasks:
+        self.tasks_section.set_title(f"当前任务 ({active_count})" if active_count else "当前任务")
+        in_progress = next(
+            (task for task in active_tasks if self._todo_status(getattr(task, "status", None)) == TodoStatus.IN_PROGRESS),
+            None,
+        )
+        blocked = next(
+            (task for task in active_tasks if self._todo_status(getattr(task, "status", None)) == TodoStatus.BLOCKED),
+            None,
+        )
+        if blocked is not None:
+            self.tasks_section.set_summary("存在阻塞")
+        elif in_progress is not None:
+            self.tasks_section.set_summary("正在执行")
+        elif active_count:
+            self.tasks_section.set_summary("等待执行")
+        else:
+            self.tasks_section.set_summary("暂无任务")
+
+        if not active_tasks:
             empty = QLabel("暂无任务")
             empty.setProperty("muted", True)
             self.tasks_layout.addWidget(empty)
-            return
+        else:
+            for task in active_tasks[:8]:
+                self.tasks_layout.addWidget(self._create_task_row(task, actions=True))
+            if len(active_tasks) > 8:
+                more = QLabel(f"+{len(active_tasks) - 8} 个任务未显示")
+                more.setProperty("muted", True)
+                self.tasks_layout.addWidget(more)
 
-        # show top N for compactness
-        max_show = 8
-        shown = tasks[:max_show]
-        rest = len(tasks) - len(shown)
+        completed = list(reversed(recent_tasks[-4:]))
+        self.completed_tasks_section.setVisible(bool(completed))
+        self.completed_tasks_section.set_title(
+            f"最近完成 ({len(completed)})" if completed else "最近完成"
+        )
+        self.completed_tasks_section.set_summary("最近里程碑" if completed else "暂无已完成任务")
+        for task in completed:
+            self.completed_tasks_layout.addWidget(self._create_task_row(task, actions=False))
 
-        for t in shown:
-            row = QFrame()
-            row.setObjectName("task_card")
-            row.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(5, 2, 4, 2)
-            row_layout.setSpacing(5)
+    def _create_task_row(self, task, *, actions: bool) -> QFrame:
+        row = QFrame()
+        row.setObjectName("task_card")
+        row.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(5, 2, 4, 2)
+        row_layout.setSpacing(5)
 
-            status = self._todo_status(getattr(t, "status", TodoStatus.PENDING))
-            status_label = self._todo_status_label(status)
-            title = str(getattr(t, "title", "") or "").strip() or "未命名任务"
+        status = self._todo_status(getattr(task, "status", TodoStatus.PENDING))
+        status_label = self._todo_status_label(status)
+        title = str(getattr(task, "title", "") or "").strip() or "未命名任务"
+        icon = QLabel()
+        icon.setObjectName("task_status_icon")
+        icon.setProperty("status", status.value)
+        icon.setFixedSize(16, 16)
+        icon.setToolTip(status_label)
+        icon.setPixmap(self._todo_status_icon(status).pixmap(16, 16))
+        row_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignVCenter)
 
-            icon = QLabel()
-            icon.setObjectName("task_status_icon")
-            icon.setProperty("status", status.value)
-            icon.setFixedSize(16, 16)
-            icon.setToolTip(status_label)
-            icon.setPixmap(self._todo_status_icon(status).pixmap(16, 16))
-            row_layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        label = QLabel(title)
+        label.setObjectName("task_text")
+        label.setWordWrap(False)
+        label.setMinimumWidth(0)
+        label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        tooltip_parts = [f"状态：{status_label}", title]
+        description = str(getattr(task, "description", "") or "").strip()
+        blocked_reason = str(getattr(task, "blocked_reason", "") or "").strip()
+        if description:
+            tooltip_parts.append(description)
+        if blocked_reason:
+            tooltip_parts.append(f"阻塞：{blocked_reason}")
+        label.setToolTip("\n".join(tooltip_parts))
+        label.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        row_layout.addWidget(label, 1)
 
-            lbl = QLabel(title)
-            lbl.setObjectName("task_text")
-            lbl.setWordWrap(False)
-            lbl.setMinimumWidth(0)
-            lbl.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-            tooltip_parts = [f"状态：{status_label}", title]
-            description = str(getattr(t, "description", "") or "").strip()
-            blocked_reason = str(getattr(t, "blocked_reason", "") or "").strip()
-            if description:
-                tooltip_parts.append(description)
-            if blocked_reason:
-                tooltip_parts.append(f"阻塞：{blocked_reason}")
-            lbl.setToolTip("\n".join(tooltip_parts))
-            lbl.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-            row_layout.addWidget(lbl, 1)
+        task_id = str(getattr(task, "id", "") or "").strip()
+        if actions and task_id:
+            action_group = QWidget()
+            action_group.setObjectName("task_action_group")
+            action_layout = QHBoxLayout(action_group)
+            action_layout.setContentsMargins(0, 0, 0, 0)
+            action_layout.setSpacing(1)
 
-            task_id = str(getattr(t, "id", "") or "").strip()
-            if task_id and status not in {TodoStatus.COMPLETED, TodoStatus.CANCELLED}:
-                done_btn = QToolButton()
-                done_btn.setObjectName("task_done_btn")
-                done_btn.setIcon(Icons.get_success(Icons.CHECK))
-                done_btn.setAutoRaise(True)
-                done_btn.setFixedSize(18, 18)
-                done_btn.setToolTip("标记完成")
-                done_btn.clicked.connect(lambda _=False, task_id=task_id: self.task_complete_requested.emit(task_id))
-                row_layout.addWidget(done_btn)
+            done_btn = QToolButton()
+            done_btn.setObjectName("task_done_btn")
+            done_btn.setIcon(Icons.get_success(Icons.CHECK))
+            done_btn.setAutoRaise(True)
+            done_btn.setFixedSize(22, 22)
+            done_btn.setIconSize(QSize(15, 15))
+            done_btn.setToolTip("标记完成")
+            done_btn.setAccessibleName("标记完成")
+            done_btn.setEnabled(self._mutations_enabled)
+            done_btn.clicked.connect(
+                lambda _checked=False, item_id=task_id: self.task_complete_requested.emit(item_id)
+            )
+            action_layout.addWidget(done_btn)
 
-            if task_id:
-                del_btn = QToolButton()
-                del_btn.setObjectName("task_delete_btn")
-                del_btn.setIcon(Icons.get_error(Icons.XMARK))
-                del_btn.setAutoRaise(True)
-                del_btn.setFixedSize(18, 18)
-                del_btn.setToolTip("删除")
-                del_btn.clicked.connect(lambda _=False, task_id=task_id: self.task_delete_requested.emit(task_id))
-                row_layout.addWidget(del_btn)
-
-            self.tasks_layout.addWidget(row)
-
-        if rest > 0:
-            more = QLabel(f"+{rest} 个任务未显示")
-            more.setProperty("muted", True)
-            self.tasks_layout.addWidget(more)
+            delete_btn = QToolButton()
+            delete_btn.setObjectName("task_delete_btn")
+            delete_btn.setIcon(Icons.get_muted(Icons.XMARK))
+            delete_btn.setAutoRaise(True)
+            delete_btn.setFixedSize(22, 22)
+            delete_btn.setIconSize(QSize(15, 15))
+            delete_btn.setToolTip("删除")
+            delete_btn.setAccessibleName("删除任务")
+            delete_btn.setEnabled(self._mutations_enabled)
+            delete_btn.clicked.connect(
+                lambda _checked=False, item_id=task_id: self.task_delete_requested.emit(item_id)
+            )
+            action_layout.addWidget(delete_btn)
+            row_layout.addWidget(action_group)
+        return row
 
     @staticmethod
     def _todo_status(value) -> TodoStatus:
@@ -423,7 +491,7 @@ class InspectorPanel(QWidget):
         session_enabled = "session" in selected_sources
         workspace_enabled = "workspace" in selected_sources
 
-        source_label = QLabel(f"来源：{self._memory_sources_text(selected_sources)}")
+        source_label = ThemedSelectableLabel(f"来源：{self._memory_sources_text(selected_sources)}")
         source_label.setProperty("muted", True)
         source_label.setWordWrap(True)
         source_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -443,7 +511,7 @@ class InspectorPanel(QWidget):
                 for item in (state.memory_candidates or {}).values()
                 if str(getattr(item, "status", "pending") or "pending") == "pending"
             ]
-            workspace_count = len(MemoryStats.workspace_items(getattr(conversation, "work_dir", "") or ""))
+            workspace_count = self._get_workspace_memory_count(conversation)
         except Exception:
             memory = {}
             candidates = []
@@ -482,24 +550,28 @@ class InspectorPanel(QWidget):
                 title.setProperty("muted", True)
                 title_row.addWidget(title, 1)
                 promote = QToolButton()
+                promote.setObjectName("memory_promote_btn")
                 promote.setIcon(Icons.get_success(Icons.CHECK))
                 promote.setToolTip("提升为正式记忆")
                 promote.setFixedSize(20, 20)
+                promote.setEnabled(self._mutations_enabled)
                 promote.clicked.connect(
                     lambda _checked=False, candidate_id=candidate_id: self.memory_candidate_promote_requested.emit(candidate_id)
                 )
                 title_row.addWidget(promote)
                 reject = QToolButton()
+                reject.setObjectName("memory_reject_btn")
                 reject.setIcon(Icons.get_error(Icons.XMARK))
                 reject.setToolTip("拒绝候选")
                 reject.setFixedSize(20, 20)
+                reject.setEnabled(self._mutations_enabled)
                 reject.clicked.connect(
                     lambda _checked=False, candidate_id=candidate_id: self.memory_candidate_reject_requested.emit(candidate_id)
                 )
                 title_row.addWidget(reject)
                 card_layout.addLayout(title_row)
 
-                content_label = QLabel(content or "-")
+                content_label = ThemedSelectableLabel(content or "-")
                 content_label.setWordWrap(True)
                 content_label.setMinimumWidth(0)
                 content_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
@@ -509,7 +581,9 @@ class InspectorPanel(QWidget):
                     content_label.setToolTip(tooltip)
                 card_layout.addWidget(content_label)
                 if refs:
-                    refs_label = QLabel("引用：" + "，".join(_soft_wrap_reference(ref) for ref in refs[:3]))
+                    refs_label = ThemedSelectableLabel(
+                        "引用：" + "，".join(_soft_wrap_reference(ref) for ref in refs[:3])
+                    )
                     refs_label.setProperty("muted", True)
                     refs_label.setWordWrap(True)
                     refs_label.setMinimumWidth(0)
@@ -535,7 +609,9 @@ class InspectorPanel(QWidget):
             workspace_title.setObjectName("task_text")
             workspace_layout.addWidget(workspace_title)
 
-            workspace_detail = QLabel(f"已发现 {visible_workspace_count} 条 `.pycat/memory` 记忆条目")
+            workspace_detail = ThemedSelectableLabel(
+                f"已发现 {visible_workspace_count} 条 `.pycat/memory` 记忆条目"
+            )
             workspace_detail.setProperty("muted", True)
             workspace_detail.setWordWrap(True)
             workspace_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -563,7 +639,7 @@ class InspectorPanel(QWidget):
             preview = str(getattr(value, "content", value) or "")
             if len(preview) > 100:
                 preview = preview[:100] + "..."
-            value_label = QLabel(preview or "-")
+            value_label = ThemedSelectableLabel(preview or "-")
             value_label.setWordWrap(True)
             value_label.setProperty("muted", True)
             value_label.setToolTip(str(value or "") or preview or "-")
@@ -576,46 +652,238 @@ class InspectorPanel(QWidget):
         self._clear_layout(self.documents_layout)
 
         if not conversation:
-            self.documents_section.set_title("产物")
-            self.documents_section.set_summary("暂无会话产物")
+            self.documents_section.set_title("内容")
+            self.documents_section.set_summary("暂无内容")
             empty = QLabel("-")
             empty.setProperty("muted", True)
             self.documents_layout.addWidget(empty)
             return
 
+        inputs = self._input_refs(conversation)
+        deliveries = delivery_refs_for_messages(getattr(conversation, "messages", []) or [])
         try:
             artifacts = dict((conversation.get_state().artifacts or {}))
         except Exception:
             artifacts = {}
+        changes = self._file_changes(conversation)
+        total = len(inputs) + len(deliveries) + len(artifacts) + len(changes)
 
-        self.documents_section.set_title(f"产物 ({len(artifacts)})")
-        self.documents_section.set_summary("文件与草稿" if artifacts else "暂无会话产物")
-        self.documents_section.set_collapsed(not bool(artifacts))
-        if not artifacts:
-            empty = QLabel("暂无会话产物")
+        self.documents_section.set_title(f"内容 ({total})" if total else "内容")
+        summary_parts = []
+        if inputs:
+            summary_parts.append(f"输入 {len(inputs)}")
+        if deliveries:
+            summary_parts.append(f"交付 {len(deliveries)}")
+        if artifacts:
+            summary_parts.append(f"产出 {len(artifacts)}")
+        if changes:
+            summary_parts.append(f"变更 {len(changes)}")
+        self.documents_section.set_summary(" · ".join(summary_parts) or "暂无内容")
+        self.documents_section.set_collapsed(not bool(total))
+        if not total:
+            empty = QLabel("暂无内容")
             empty.setProperty("muted", True)
             self.documents_layout.addWidget(empty)
             return
 
-        for name, doc in list(artifacts.items())[:6]:
+        for ref in inputs:
+            self.documents_layout.addWidget(self._create_input_row(ref))
+        for ref in deliveries:
+            self.documents_layout.addWidget(self._create_delivery_row(ref))
+        for name, doc in artifacts.items():
             self.documents_layout.addWidget(self._create_artifact_row(str(name), doc))
+        for change in changes:
+            self.documents_layout.addWidget(self._create_file_change_row(change))
+
+    @staticmethod
+    def _input_refs(conversation: Conversation) -> list:
+        refs = []
+        seen = set()
+        for message in reversed(getattr(conversation, "messages", []) or []):
+            for ref in reversed(list(getattr(message, "content_refs", []) or [])):
+                key = str(getattr(ref, "ref", "") or "")
+                if key and key not in seen:
+                    refs.append(ref)
+                    seen.add(key)
+        return refs
+
+    @staticmethod
+    def _file_changes(conversation: Conversation) -> list[dict]:
+        latest: dict[str, dict] = {}
+        labels = {
+            "file__write": "已写入",
+            "file__edit": "已编辑",
+            "file__patch": "已应用补丁",
+            "file__delete": "已删除",
+        }
+        action_labels = {
+            "write": "已写入",
+            "edit": "已编辑",
+            "patch": "已应用补丁",
+            "delete": "已删除",
+        }
+        for message in reversed(getattr(conversation, "messages", []) or []):
+            for tool_call in reversed(list(getattr(message, "tool_calls", None) or [])):
+                function = tool_call.get("function") if isinstance(tool_call, dict) else None
+                function = function if isinstance(function, dict) else {}
+                name = str(function.get("name") or "")
+                if name not in labels:
+                    continue
+                result = tool_call.get("result") if isinstance(tool_call, dict) else None
+                if not isinstance(result, dict):
+                    continue
+                result_metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+                if bool(result.get("is_error")) or bool(result_metadata.get("is_error")):
+                    continue
+                structured_change = result_metadata.get("file_change")
+                change: FileChange | None = None
+                if isinstance(structured_change, dict):
+                    try:
+                        candidate = FileChange.from_dict(structured_change)
+                        if candidate.is_successful and candidate.path:
+                            change = candidate
+                    except (TypeError, ValueError):
+                        change = None
+                if change is not None:
+                    path = change.path
+                    deleted = change.action == "delete"
+                    target = Path(path).expanduser() if path else None
+                    if target is not None and not target.is_absolute():
+                        target = Path(str(getattr(conversation, "work_dir", "") or ".")) / target
+                    if (
+                        path
+                        and path not in latest
+                        and (deleted or (target is not None and target.is_file()))
+                    ):
+                        latest[path] = {
+                            "path": path,
+                            "label": action_labels.get(change.action, "已变更"),
+                            "deleted": deleted,
+                            "action": change.action,
+                            "status": change.status,
+                            "summary": change.summary,
+                            "change_id": change.change_id,
+                            "before_digest": change.before_digest,
+                            "after_digest": change.after_digest,
+                        }
+                    continue
+                raw_arguments = function.get("arguments")
+                if isinstance(raw_arguments, dict):
+                    arguments = raw_arguments
+                else:
+                    try:
+                        arguments = json.loads(str(raw_arguments or "{}"))
+                    except Exception:
+                        arguments = {}
+                path = str(arguments.get("path") or "").strip()
+                deleted = name == "file__delete"
+                target = Path(path).expanduser() if path else None
+                if target is not None and not target.is_absolute():
+                    target = Path(str(getattr(conversation, "work_dir", "") or ".")) / target
+                if (
+                    path
+                    and path not in latest
+                    and (deleted or (target is not None and target.is_file()))
+                ):
+                    latest[path] = {
+                        "path": path,
+                        "label": labels[name],
+                        "deleted": deleted,
+                        "action": {
+                            "file__write": "write",
+                            "file__edit": "edit",
+                            "file__patch": "patch",
+                            "file__delete": "delete",
+                        }.get(name, "edit"),
+                    }
+        return list(latest.values())
+
+    def _create_input_row(self, ref) -> WorkflowCapsuleRow:
+        path = None
+        if self._content_service is not None and self._conversation is not None:
+            try:
+                if self._content_resolver is not None:
+                    path = self._content_resolver.resolve(self._conversation, ref)
+            except Exception:
+                path = None
+        row = WorkflowCapsuleRow(
+            kind="input",
+            status="completed" if path is not None else "failed",
+            payload=ref,
+            file_path=str(path or ""),
+        )
+        row.set_content(
+            icon=Icons.get_muted(Icons.FILE_LINES),
+            title=str(getattr(ref, "name", "") or "附件"),
+            meta="输入",
+        )
+        row.setToolTip(
+            f"{getattr(ref, 'name', '附件')}\n{getattr(ref, 'ref', '')}\n"
+            f"{getattr(ref, 'mime', '')} · {getattr(ref, 'size', 0)} bytes"
+        )
+        row.set_interactive(path is not None)
+        row.clicked.connect(lambda _payload, capsule=row: capsule.open_file())
+        return row
+
+    def _create_delivery_row(self, ref) -> WorkflowCapsuleRow:
+        path = None
+        if self._content_resolver is not None and self._conversation is not None:
+            try:
+                path = self._content_resolver.resolve(self._conversation, ref)
+            except Exception:
+                path = None
+        row = WorkflowCapsuleRow(
+            kind="output",
+            status="completed" if path is not None else "failed",
+            payload=ref,
+            file_path=str(path or ""),
+            work_dir=str(getattr(self._conversation, "work_dir", "") or ""),
+        )
+        row.set_content(
+            icon=Icons.get_muted(Icons.FILE_LINES),
+            title=str(getattr(ref, "name", "") or "文件"),
+            meta="交付",
+        )
+        row.setToolTip(
+            f"{getattr(ref, 'name', '文件')}\n{getattr(ref, 'ref', '')}\n"
+            f"{getattr(ref, 'mime', '')} · {getattr(ref, 'size', 0)} bytes"
+        )
+        row.set_interactive(path is not None)
+        row.clicked.connect(lambda _payload, capsule=row: capsule.open_file())
+        return row
+
+    def _create_file_change_row(self, change: dict) -> WorkflowCapsuleRow:
+        path = str(change.get("path") or "")
+        deleted = bool(change.get("deleted"))
+        row = WorkflowCapsuleRow(
+            kind="file",
+            status="failed" if deleted else "completed",
+            payload=path,
+            file_path=path,
+            work_dir=str(getattr(self._conversation, "work_dir", "") or ""),
+        )
+        row.set_content(
+            icon="x" if deleted else "±",
+            title=os.path.basename(path.replace("\\", "/")) or path,
+            meta=str(change.get("label") or "变更"),
+        )
+        tooltip = [path]
+        summary = str(change.get("summary") or "").strip()
+        if summary:
+            tooltip.append(summary)
+        before_digest = str(change.get("before_digest") or "").strip()
+        after_digest = str(change.get("after_digest") or "").strip()
+        if before_digest or after_digest:
+            tooltip.append(f"前: {before_digest or '-'}\n后: {after_digest or '-'}")
+        row.setToolTip("\n".join(tooltip))
+        row.set_interactive(not deleted)
+        row.clicked.connect(lambda _payload, capsule=row: capsule.open_file())
+        return row
 
     def _render_channels(self, conversation: Optional[Conversation]) -> None:
         self._clear_layout(self.channels_layout)
-        configured_sources = tuple(getattr(self._app_state, "enabled_channel_sources", ()) or ())
-
         if not conversation:
-            if configured_sources:
-                self.channels_section.set_title(f"通道 ({len(configured_sources)})")
-                self.channels_section.set_summary("已配置外部来源")
-                for source in configured_sources:
-                    self._add_channel_card(source, "已配置")
-            else:
-                self.channels_section.set_title("通道")
-                self.channels_section.set_summary("暂无外部通道")
-                empty = QLabel("-")
-                empty.setProperty("muted", True)
-                self.channels_layout.addWidget(empty)
+            self.channels_section.setVisible(False)
             return
 
         origins = []
@@ -633,218 +901,139 @@ class InspectorPanel(QWidget):
                 break
 
         origins = list(reversed(origins))
-        if configured_sources:
-            count = len(origins) if origins else len(configured_sources)
-            self.channels_section.set_title(f"通道 ({count})")
-            self.channels_section.set_summary("外部来源")
-        else:
-            self.channels_section.set_title(f"通道 ({len(origins)})")
-            self.channels_section.set_summary("外部来源")
         if not origins:
-            if configured_sources:
-                for source in configured_sources:
-                    self._add_channel_card(source, "已配置")
-            else:
-                empty = QLabel("暂无外部通道")
-                empty.setProperty("muted", True)
-                self.channels_layout.addWidget(empty)
+            self.channels_section.setVisible(False)
             return
 
+        self.channels_section.setVisible(True)
+        self.channels_section.set_title(f"外部来源 ({len(origins)})")
+        self.channels_section.set_summary("Channel 会话")
         for origin in origins:
             details = [value for value in (origin.thread_id, origin.message_id) if value]
-            self._add_channel_card(
+            self._add_channel_row(
                 origin.display_name,
                 "\n".join(details) if details else origin.source,
             )
-
-        inactive_sources = [
-            source for source in configured_sources
-            if source not in {origin.source for origin in origins}
-        ]
-        for source in inactive_sources[:4]:
-            self._add_channel_card(source, "已配置")
     
+    def update_processes(self, snapshots: list) -> None:
+        """Replace the Shell process section with a read-only snapshot list."""
+        self._process_snapshots = list(snapshots or [])
+        count = len(self._process_snapshots)
+        self.processes_section.set_title("Shell 进程" if count == 0 else f"Shell 进程 ({count})")
+        self.processes_section.set_summary("无后台进程" if count == 0 else f"{count} 个进行中")
+        self.processes_section.set_collapsed(count == 0)
+        self.processes_count_label.setText(f"{count} 个进行中")
+        self.stop_all_processes_btn.setVisible(count > 0)
+
+        self._clear_layout(self.processes_layout)
+        for snapshot in self._process_snapshots:
+            self.processes_layout.addWidget(self._create_process_row(snapshot))
+
+    def _create_process_row(self, snapshot) -> QFrame:
+        row = QFrame()
+        row.setObjectName("process_row")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(4, 2, 0, 2)
+        row_layout.setSpacing(4)
+
+        text_column = QVBoxLayout()
+        text_column.setContentsMargins(0, 0, 0, 0)
+        text_column.setSpacing(0)
+
+        command = str(getattr(snapshot, "command", "") or "-")
+        command_label = _TwoLineElideLabel(command)
+        command_label.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        command_label.setToolTip(
+            f"{command}\nprocess_id={getattr(snapshot, 'process_id', '')}\nlog={getattr(snapshot, 'log_path', '')}"
+        )
+        text_column.addWidget(command_label)
+
+        status = "运行中" if bool(getattr(snapshot, "running", False)) else f"已退出({getattr(snapshot, 'exit_code', '')})"
+        meta = (
+            f"pid={int(getattr(snapshot, 'pid', 0) or 0)} · {status} · "
+            f"{_format_process_elapsed(float(getattr(snapshot, 'elapsed_sec', 0.0) or 0.0))} · "
+            f"输出 {_format_last_output(getattr(snapshot, 'last_output_at', None))}"
+        )
+        meta_label = QLabel(meta)
+        meta_label.setProperty("muted", True)
+        meta_label.setMinimumWidth(0)
+        meta_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        meta_label.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        text_column.addWidget(meta_label)
+        row_layout.addLayout(text_column, 1)
+
+        stop_btn = QToolButton()
+        stop_btn.setObjectName("process_stop_btn")
+        stop_btn.setIcon(Icons.get(Icons.STOP, color=Icons.COLOR_ERROR, scale_factor=0.85))
+        stop_btn.setAutoRaise(True)
+        stop_btn.setFixedSize(20, 20)
+        stop_btn.setToolTip("停止该进程")
+        process_id = str(getattr(snapshot, "process_id", "") or "")
+        stop_btn.clicked.connect(lambda _checked=False, pid=process_id: self.process_stop_requested.emit(pid))
+        row_layout.addWidget(stop_btn, 0, Qt.AlignmentFlag.AlignTop)
+        return row
+
     def update_stats(self, conversation: Optional[Conversation]):
+        previous_key = self._conversation_workspace_key(self._conversation)
         self._conversation = conversation
+        if self._conversation_workspace_key(conversation) != previous_key:
+            self._invalidate_workspace_memory()
         self._set_task_controls_enabled(bool(conversation))
         self._render_tasks(conversation)
         self._render_memory(conversation)
         self._render_artifacts(conversation)
         self._render_channels(conversation)
         if not conversation:
-            self._clear_stats()
             return
 
-        self.mode_card.set_value(str(getattr(conversation, "mode", "") or "chat"))
-        settings = getattr(conversation, "settings", {}) or {}
-        flags = []
-        if settings.get("show_thinking", True):
-            flags.append("思考")
-        self.capabilities_card.set_value(" / ".join(flags) if flags else "对话")
-        
-        msg_count = len(conversation.messages)
-        self.total_messages.set_value(str(msg_count))
-        snapshot = build_token_usage_snapshot(conversation, providers=self._providers)
-        if snapshot is not None:
-            used = format_token_count(snapshot.context_tokens)
-            window = format_token_count(snapshot.context_window)
-            self.context_summary.set_value(
-                f"{used}/{window} · {snapshot.usage_ratio * 100:.1f}%"
-            )
-        else:
-            self.context_summary.set_value("-")
-
-        tpm = conversation.get_tokens_per_minute()
-        performance_parts = []
-        if tpm > 0:
-            performance_parts.append(f"{tpm:.1f} token/min")
-        
-        last_assistant = None
-        for msg in reversed(conversation.messages):
-            if msg.role == 'assistant' and msg.response_time_ms:
-                last_assistant = msg
-                break
-        
-        if last_assistant and last_assistant.response_time_ms:
-            time_sec = last_assistant.response_time_ms / 1000
-            performance_parts.append(f"{time_sec:.2f}s")
-        self.performance_summary.set_value(" · ".join(performance_parts) if performance_parts else "-")
-        
-        self.overview_section.set_summary(str(getattr(conversation, "mode", "chat") or "chat"))
-    
-    def update_streaming_stats(self, tokens: int, elapsed_ms: int):
-        self.context_summary.set_value(format_token_count(tokens))
-        if elapsed_ms > 0:
-            tpm = (tokens / elapsed_ms) * 60000
-            time_sec = elapsed_ms / 1000
-            self.performance_summary.set_value(f"{tpm:.1f} token/min · {time_sec:.2f}s")
+    def update_conversation_state(
+        self,
+        conversation: Optional[Conversation],
+        changed_fields: set[str] | frozenset[str],
+    ) -> None:
+        self._conversation = conversation
+        self._set_task_controls_enabled(bool(conversation))
+        fields = set(changed_fields or set())
+        if not conversation:
+            self.update_stats(None)
+            return
+        if fields & {"todos", "recent_completed_todos"}:
+            self._render_tasks(conversation)
+        if fields & {"memory", "memory_candidates"}:
+            self._invalidate_workspace_memory()
+            self._render_memory(conversation)
+        if fields & {"artifacts", "messages"}:
+            self._render_artifacts(conversation)
+        if "messages" in fields:
+            self._render_channels(conversation)
 
     def update_app_state(self, app_state) -> None:
+        previous_sources = tuple(
+            getattr(self._app_state, "selected_memory_sources", ("session", "workspace")) or ()
+        )
+        next_sources = tuple(
+            getattr(app_state, "selected_memory_sources", ("session", "workspace")) or ()
+        )
         self._app_state = app_state
-        self._render_memory(self._conversation)
-        self._render_channels(self._conversation)
-
-    def update_runtime_state(self, stream_state) -> None:
-        if stream_state is None:
-            self.timeline_section.set_summary("空闲")
-            self._render_runtime_events(None)
-            return
-
-        active_tool = str(getattr(stream_state, "active_tool", "") or "").strip()
-        last_kind = str(getattr(stream_state, "last_event_kind", "") or "").strip()
-        last_detail = str(getattr(stream_state, "last_event_detail", "") or "").strip()
-        if active_tool:
-            self.timeline_section.set_summary(f"工具中 · {active_tool}")
-        elif last_kind:
-            self.timeline_section.set_summary(self._runtime_event_label(last_kind))
-        else:
-            model = str(getattr(stream_state, "model", "") or "").strip()
-            self.timeline_section.set_summary(model or "生成中")
-
-        self._render_runtime_events(stream_state)
+        if previous_sources != next_sources:
+            self._render_memory(self._conversation)
 
     @staticmethod
-    def _runtime_event_label(kind: str) -> str:
-        labels = {
-            "turn_start": "新一轮开始",
-            "tool_start": "工具开始",
-            "tool_end": "工具完成",
-            "retry": "重试中",
-            "complete": "已完成",
-            "error": "出错",
-            "step": "写入步骤",
-        }
-        return labels.get(str(kind or ""), str(kind or "运行中"))
+    def _conversation_workspace_key(conversation: Optional[Conversation]) -> str:
+        if conversation is None:
+            return ""
+        return str(getattr(conversation, "work_dir", "") or "").strip()
 
-    def _render_runtime_events(self, stream_state) -> None:
-        self._clear_layout(self.timeline_layout)
+    def _invalidate_workspace_memory(self) -> None:
+        self._workspace_memory_key = ""
+        self._workspace_memory_count = None
 
-        if stream_state is None:
-            self.timeline_section.set_title("调试时间线")
-            empty = QLabel("暂无运行事件")
-            empty.setProperty("muted", True)
-            self.timeline_layout.addWidget(empty)
-            return
-
-        events = list(getattr(stream_state, "recent_events", []) or [])
-        self.timeline_section.set_title(f"调试时间线 ({len(events)})")
-        if not events:
-            empty = QLabel("等待本轮事件写入")
-            empty.setProperty("muted", True)
-            self.timeline_layout.addWidget(empty)
-            return
-
-        for event in reversed(events[-8:]):
-            card = QFrame()
-            card.setObjectName("task_card")
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(10, 8, 10, 8)
-            card_layout.setSpacing(4)
-
-            title = QLabel(self._runtime_event_title(event))
-            title.setObjectName("task_text")
-            title.setWordWrap(True)
-            card_layout.addWidget(title)
-
-            meta_text = self._runtime_event_meta(event)
-            if meta_text:
-                meta = QLabel(meta_text)
-                meta.setProperty("muted", True)
-                meta.setWordWrap(True)
-                card_layout.addWidget(meta)
-
-            detail_text = str(event.get("detail") or event.get("summary") or "-")
-            detail = QLabel(detail_text)
-            detail.setProperty("muted", True)
-            detail.setWordWrap(True)
-            card_layout.addWidget(detail)
-
-            self.timeline_layout.addWidget(card)
-
-    def _runtime_event_title(self, event: dict) -> str:
-        kind = str(event.get("kind") or "").strip()
-        label = self._runtime_event_label(kind)
-        tool_name = str(event.get("tool_name") or event.get("name") or "").strip()
-        role = str(event.get("role") or "").strip()
-
-        if kind == "step" and role == "tool_result":
-            return f"工具回写 · {tool_name or 'tool'}"
-        if kind == "step" and role == "assistant":
-            return "助手消息"
-        if tool_name and kind in {"tool_start", "tool_end"}:
-            return f"{label} · {tool_name}"
-        return label
-
-    def _runtime_event_meta(self, event: dict) -> str:
-        parts: list[str] = []
-        try:
-            turn = int(event.get("turn") or 0)
-        except Exception:
-            turn = 0
-        if turn > 0:
-            parts.append(f"T{turn}")
-
-        timestamp = event.get("recorded_at")
-        try:
-            if timestamp:
-                parts.append(datetime.fromtimestamp(float(timestamp)).strftime("%H:%M:%S"))
-        except Exception:
-            pass
-
-        phase = str(event.get("phase") or "").strip()
-        if phase and phase not in {"start", "end"}:
-            parts.append(phase)
-
-        return " · ".join(parts)
-    
-    def _clear_stats(self):
-        self.overview_section.set_summary("模式 / 核心指标")
-        self.mode_card.set_value("-")
-        self.capabilities_card.set_value("-")
-        self.total_messages.set_value("-")
-        self.context_summary.set_value("-")
-        self.performance_summary.set_value("-")
-        self.update_runtime_state(None)
+    def _get_workspace_memory_count(self, conversation: Conversation) -> int:
+        key = self._conversation_workspace_key(conversation)
+        if self._workspace_memory_count is None or key != self._workspace_memory_key:
+            self._workspace_memory_key = key
+            self._workspace_memory_count = len(MemoryStats.workspace_items(key))
+        return int(self._workspace_memory_count or 0)
 
     @staticmethod
     def _memory_sources_text(sources: tuple[str, ...]) -> str:
@@ -856,32 +1045,33 @@ class InspectorPanel(QWidget):
             return "已禁用"
         return " / ".join(labels.get(source, source) for source in sources)
 
-    def _add_channel_card(self, title_text: str, detail_text: str) -> None:
-        card = QFrame()
-        card.setObjectName("task_card")
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(10, 8, 10, 8)
-        card_layout.setSpacing(4)
+    def _add_channel_row(self, title_text: str, detail_text: str) -> None:
+        row = QFrame()
+        row.setObjectName("channel_origin_row")
+        row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        row_layout = QVBoxLayout(row)
+        row_layout.setContentsMargins(0, 2, 0, 2)
+        row_layout.setSpacing(1)
 
-        title = QLabel(self._channel_card_title(str(title_text or "通道")))
-        title.setObjectName("task_text")
-        title.setWordWrap(True)
+        title = QLabel(self._channel_row_title(str(title_text or "通道")))
+        title.setObjectName("channel_origin_title")
+        title.setWordWrap(False)
         title.setMinimumWidth(0)
-        title.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         title.setToolTip(str(title_text or "通道"))
-        card_layout.addWidget(title)
+        row_layout.addWidget(title)
 
         detail_label = _TwoLineElideLabel(str(detail_text or "-"))
+        detail_label.setObjectName("channel_origin_detail")
         detail_label.setProperty("muted", True)
         detail_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
         detail_label.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
-        card_layout.addWidget(detail_label)
+        row_layout.addWidget(detail_label)
 
-        self.channels_layout.addWidget(card)
+        self.channels_layout.addWidget(row)
 
     @staticmethod
-    def _channel_card_title(text: str) -> str:
+    def _channel_row_title(text: str) -> str:
         value = str(text or "").strip() or "通道"
         if " / " in value:
             value = value.split(" / ", 1)[0].strip() or value

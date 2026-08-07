@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from typing import Any
 
 from core.content.archive_store import ArchivedContentRecord, SessionArchiveStore
+from core.content.view_protocol import TOOL_SUMMARY_PROJECTION_CHARS
 from core.state.operations import remember_archive
 from models.conversation import Conversation, normalize_tool_result
 from models.contracts.session_state import SessionState
@@ -21,8 +21,6 @@ class ArchiveViewResult:
 
 
 class ArchiveViewService:
-    _locks: dict[tuple[str, str], asyncio.Lock] = {}
-
     def __init__(
         self,
         *,
@@ -39,7 +37,7 @@ class ArchiveViewService:
         self,
         content_id: str,
         *,
-        purpose: str | None = None,
+        trace_purpose: str | None = None,
     ) -> ArchiveViewResult:
         record = self.store.read_record(content_id)
         if record is None:
@@ -53,33 +51,91 @@ class ArchiveViewService:
             self.sync_state_and_messages(record)
             return ArchiveViewResult(record=record, status=record.summary_status)
 
-        lock_key = (str(self.store.session_root), str(record.id))
-        lock = self._locks.setdefault(lock_key, asyncio.Lock())
-
-        async def _work() -> ArchiveViewResult:
-            async with lock:
-                fresh = self.store.read_record(record.id) or record
-                if fresh.summary:
-                    self.sync_state_and_messages(fresh)
-                    return ArchiveViewResult(record=fresh, text=fresh.summary, status="complete")
-                updated = await self._compress_record(fresh, purpose=purpose or "content_read:summary")
-                self.sync_state_and_messages(updated)
-                return ArchiveViewResult(
-                    record=updated,
-                    text=updated.summary,
-                    status="complete" if updated.summary else updated.summary_status,
-                )
-
-        return await _work()
+        fresh = self.store.read_record(record.id) or record
+        if fresh.summary:
+            self.sync_state_and_messages(fresh)
+            return ArchiveViewResult(record=fresh, text=fresh.summary, status="complete")
+        updated = await self._compress_record(
+            fresh,
+            trace_purpose=trace_purpose or "content_read:summary",
+        )
+        if updated is None:
+            return ArchiveViewResult(
+                record=None,
+                status="not_found",
+                error=f"Archived content disappeared during summary generation: {record.id}",
+            )
+        self.sync_state_and_messages(updated)
+        return ArchiveViewResult(
+            record=updated,
+            text=updated.summary,
+            status="complete" if updated.summary else updated.summary_status,
+        )
 
     def _can_generate_summary(self) -> bool:
         return bool(self.compressor)
 
-    async def _compress_record(self, record: ArchivedContentRecord, *, purpose: str) -> ArchivedContentRecord:
+    async def _compress_record(
+        self,
+        record: ArchivedContentRecord,
+        *,
+        trace_purpose: str,
+    ) -> ArchivedContentRecord | None:
         if not self._can_generate_summary():
             return record
-        result = await self.compressor.summarize_archive(record, conversation=self.conversation, purpose=purpose)
-        return self.compressor.apply_archive_summary(record, result, conversation=self.conversation)
+        result = await self.compressor.compress(
+            self.store.read_original(record),
+            purpose="tool_result",
+            images=self.store.read_images(record),
+            conversation=self.conversation,
+            trace_purpose=trace_purpose,
+            content_id=record.id,
+        )
+        latest = self.store.read_record(record.id)
+        if latest is None:
+            return None
+        if latest.summary:
+            return latest
+        return self._apply_summary(latest, result)
+
+    def _apply_summary(
+        self,
+        record: ArchivedContentRecord,
+        result: Any,
+    ) -> ArchivedContentRecord:
+        record.metadata = dict(record.metadata or {})
+        record.metadata.update(
+            {
+                "compressed_token_estimate": int(getattr(result, "token_estimate", 0) or 0),
+                "compression_calls": int(getattr(result, "calls", 0) or 0),
+                "compression_chunks": int(getattr(result, "chunks", 0) or 0),
+                "compression_reduce_levels": int(getattr(result, "reduce_levels", 0) or 0),
+                "compression_strategy": str(getattr(result, "strategy", "") or ""),
+                "compression_vision_fallback": bool(getattr(result, "vision_fallback", False)),
+            }
+        )
+        summary = str(getattr(result, "summary", "") or "").strip()
+        if summary:
+            self.store.write_summary_view(
+                record,
+                summary=summary,
+                source=f"capability__{getattr(result, 'capability_id', '') or 'compress'}",
+                model=str(getattr(result, "model", "") or ""),
+                metadata={
+                    "fallback": getattr(result, "status", "") == "fallback",
+                    "calls": int(getattr(result, "calls", 0) or 0),
+                    "chunks": int(getattr(result, "chunks", 0) or 0),
+                    "reduce_levels": int(getattr(result, "reduce_levels", 0) or 0),
+                    "strategy": str(getattr(result, "strategy", "") or ""),
+                    "vision_fallback": bool(getattr(result, "vision_fallback", False)),
+                },
+            )
+        else:
+            self.store.mark_summary_failed(
+                record,
+                error=str(getattr(result, "error", "") or getattr(result, "status", "") or "summary_unavailable"),
+            )
+        return self.store.read_record(record.id) or record
 
     def sync_state_and_messages(self, record: ArchivedContentRecord) -> None:
         if self.conversation is None or record is None:
@@ -114,11 +170,16 @@ class ArchiveViewService:
                 metadata["content_id"] = content_id
                 metadata["archive_size"] = int(getattr(record, "size", 0) or 0)
                 metadata["archive_updated_seq"] = int(getattr(record, "updated_seq", 0) or getattr(record, "created_seq", 0) or 0)
-                metadata["tool_result_summary"] = str(getattr(record, "summary", "") or metadata.get("tool_result_summary") or "")
+                summary = str(
+                    getattr(record, "summary", "")
+                    or metadata.get("tool_result_summary")
+                    or ""
+                )[:TOOL_SUMMARY_PROJECTION_CHARS]
+                metadata["tool_result_summary"] = summary
                 metadata.pop("archive_record", None)
                 payload["metadata"] = metadata
-                if getattr(record, "summary", ""):
-                    payload["summary"] = str(record.summary)
-                    tc["result_summary"] = str(record.summary)
+                if summary:
+                    payload["summary"] = summary
+                    tc["result_summary"] = summary
                 tc["result"] = payload
                 tc["result_metadata"] = dict(metadata)

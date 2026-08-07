@@ -8,8 +8,25 @@ from .discovery import SkillsManager
 from .routing import check_skill_execution_availability, resolve_skill_invocation_spec
 
 
-def build_skill_prompt_section(conversation: Any, tools: Iterable[Dict[str, Any]]) -> str:
+def build_skill_prompt_section(
+    conversation: Any,
+    tools: Iterable[Dict[str, Any]],
+    *,
+    pycat_assistant_enabled: bool = True,
+) -> str:
     """Build skill catalog/invocation prompt text for the current request."""
+    tool_list = list(tools or [])
+    visible_tool_names = {
+        str((tool.get("function") or {}).get("name") or "").strip()
+        for tool in tool_list
+        if isinstance(tool, dict) and isinstance(tool.get("function"), dict)
+    }
+    # A Skill catalog is only useful when the model can load the entrypoint.
+    # The request tool list is the authoritative capability boundary.
+    if "skill__load" not in visible_tool_names:
+        return ""
+
+    resource_visible = "skill__read_resource" in visible_tool_names
     work_dir = getattr(conversation, "work_dir", ".") or "."
     skill_manager = SkillsManager(work_dir)
 
@@ -23,13 +40,14 @@ def build_skill_prompt_section(conversation: Any, tools: Iterable[Dict[str, Any]
             latest_skill_run = skill_run
         break
 
-    available_skills = []
-    for skill in skill_manager.list_skills():
-        spec = resolve_skill_invocation_spec(skill)
-        if spec.user_invocable or not spec.disable_model_invocation:
-            available_skills.append(skill)
-
     parts: list[str] = []
+    available_skills = []
+    if pycat_assistant_enabled:
+        for skill in skill_manager.list_skills():
+            spec = resolve_skill_invocation_spec(skill)
+            if spec.user_invocable or not spec.disable_model_invocation:
+                available_skills.append(skill)
+
     if available_skills:
         catalog_lines = ["<available_skills>"]
         for skill in available_skills:
@@ -50,7 +68,7 @@ def build_skill_prompt_section(conversation: Any, tools: Iterable[Dict[str, Any]
     loaded_skill = skill_manager.get(latest_skill_name) if latest_skill_name else None
     if loaded_skill is not None:
         spec = resolve_skill_invocation_spec(loaded_skill)
-        execution = check_skill_execution_availability(loaded_skill, tools)
+        execution = check_skill_execution_availability(loaded_skill, tool_list)
         resource_paths = skill_manager.list_resources(loaded_skill.name)
         runtime_lines = ["<invoked_skill>"]
         runtime_lines.append(f"name: {loaded_skill.name}")
@@ -65,7 +83,7 @@ def build_skill_prompt_section(conversation: Any, tools: Iterable[Dict[str, Any]
         if execution.missing_tools:
             runtime_lines.append(f"missing_tools: {', '.join(execution.missing_tools)}")
         runtime_lines.append("rule: Before taking action for an explicitly invoked skill, call `skill__load` to read its SKILL.md entrypoint.")
-        if resource_paths:
+        if resource_visible and resource_paths:
             runtime_lines.append("rule: Read only referenced supporting files with `skill__read_resource`.")
         if not execution.executable:
             runtime_lines.append("rule: Explain the unavailable dependency; do not invent tools.")

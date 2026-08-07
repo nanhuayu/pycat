@@ -5,6 +5,8 @@ from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from gui.utils.theme import prepare_context_menu
+
 
 class TrayController(QObject):
     """Own the tray icon while leaving final shutdown to MainWindow."""
@@ -69,7 +71,10 @@ class TrayController(QObject):
         self._tray.setToolTip("PyCat Agent")
         self._tray.activated.connect(self._on_activated)
 
-        self._menu = QMenu(self._window)
+        self._menu = prepare_context_menu(QMenu(self._window), self._window)
+        self._menu.aboutToShow.connect(
+            lambda: prepare_context_menu(self._menu, self._window)
+        )
         show_action = QAction("显示 PyCat", self)
         show_action.triggered.connect(self.restore_window)
         self._menu.addAction(show_action)

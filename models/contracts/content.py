@@ -5,7 +5,144 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-ARCHIVE_KINDS: tuple[str, ...] = ("tool_call", "history", "artifact")
+ARCHIVE_KINDS: tuple[str, ...] = ("tool_call", "history")
+FILE_CHANGE_ACTIONS: tuple[str, ...] = ("write", "edit", "patch", "delete")
+FILE_CHANGE_STATUSES: tuple[str, ...] = ("completed", "failed", "cancelled")
+
+
+@dataclass(frozen=True)
+class ContentRef:
+    """Lightweight navigation reference to content owned by another service."""
+
+    id: str
+    name: str
+    mime: str
+    size: int
+    digest: str
+    ref: str
+    kind: str = "input"
+    source: str = "user"
+    status: str = "ready"
+    message_id: str = ""
+    created_at: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "name": self.name,
+            "mime": self.mime,
+            "size": int(self.size or 0),
+            "digest": self.digest,
+            "ref": self.ref,
+            "source": self.source,
+            "status": self.status,
+            "message_id": self.message_id,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "ContentRef":
+        payload = data if isinstance(data, dict) else {}
+        return cls(
+            id=str(payload.get("id") or ""),
+            kind=str(payload.get("kind") or "input"),
+            name=str(payload.get("name") or "attachment"),
+            mime=str(payload.get("mime") or "application/octet-stream"),
+            size=int(payload.get("size", 0) or 0),
+            digest=str(payload.get("digest") or ""),
+            ref=str(payload.get("ref") or ""),
+            source=str(payload.get("source") or "user"),
+            status=str(payload.get("status") or "ready"),
+            message_id=str(payload.get("message_id") or ""),
+            created_at=str(payload.get("created_at") or ""),
+        )
+
+
+@dataclass(frozen=True)
+class FileChange:
+    """A completed workspace mutation emitted by a file tool.
+
+    The contract is intentionally small.  It records the mutation fact used by
+    Chat and Inspector; it does not own the file, watch the workspace, or
+    duplicate file contents.
+    """
+
+    change_id: str = ""
+    path: str = ""
+    action: str = "edit"
+    before_digest: str = ""
+    after_digest: str = ""
+    run_id: str = ""
+    tool_call_id: str = ""
+    created_at: str = ""
+    status: str = "completed"
+    summary: str = ""
+
+    def __post_init__(self) -> None:
+        action = str(self.action or "edit").strip().lower()
+        status = str(self.status or "completed").strip().lower()
+        if action not in FILE_CHANGE_ACTIONS:
+            raise ValueError(f"unsupported file change action: {self.action!r}")
+        if status not in FILE_CHANGE_STATUSES:
+            raise ValueError(f"unsupported file change status: {self.status!r}")
+        object.__setattr__(self, "change_id", str(self.change_id or "").strip())
+        object.__setattr__(self, "path", str(self.path or "").strip())
+        object.__setattr__(self, "action", action)
+        object.__setattr__(self, "before_digest", str(self.before_digest or "").strip())
+        object.__setattr__(self, "after_digest", str(self.after_digest or "").strip())
+        object.__setattr__(self, "run_id", str(self.run_id or "").strip())
+        object.__setattr__(self, "tool_call_id", str(self.tool_call_id or "").strip())
+        object.__setattr__(self, "created_at", str(self.created_at or "").strip())
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "summary", str(self.summary or "").strip())
+
+    @property
+    def is_successful(self) -> bool:
+        return self.status == "completed"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "change_id": self.change_id,
+            "path": self.path,
+            "action": self.action,
+            "before_digest": self.before_digest,
+            "after_digest": self.after_digest,
+            "run_id": self.run_id,
+            "tool_call_id": self.tool_call_id,
+            "created_at": self.created_at,
+            "status": self.status,
+            "summary": self.summary,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "FileChange":
+        payload = data if isinstance(data, dict) else {}
+        return cls(
+            change_id=str(payload.get("change_id") or payload.get("id") or ""),
+            path=str(payload.get("path") or payload.get("relative_path") or ""),
+            action=str(payload.get("action") or "edit"),
+            before_digest=str(payload.get("before_digest") or ""),
+            after_digest=str(payload.get("after_digest") or ""),
+            run_id=str(payload.get("run_id") or ""),
+            tool_call_id=str(payload.get("tool_call_id") or ""),
+            created_at=str(payload.get("created_at") or ""),
+            status=str(payload.get("status") or "completed"),
+            summary=str(payload.get("summary") or ""),
+        )
+
+
+@dataclass(frozen=True)
+class InputPreparationFailure:
+    source: str
+    error: str
+
+
+@dataclass(frozen=True)
+class InputPreparationResult:
+    refs: list[ContentRef] = field(default_factory=list)
+    failures: list[InputPreparationFailure] = field(default_factory=list)
+    created_refs: list[ContentRef] = field(default_factory=list)
 
 
 @dataclass
@@ -210,9 +347,9 @@ def normalize_archive_kind(kind: object) -> str:
         return "tool_call"
     if raw in {"history", "conversation"}:
         return "history"
-    if raw in {"artifact", "artifacts"}:
-        return "artifact"
-    return raw if raw in ARCHIVE_KINDS else "tool_call"
+    if raw not in ARCHIVE_KINDS:
+        raise ValueError(f"unsupported archive kind: {kind}")
+    return raw
 
 
 def trim_index_summary(text: str, limit: int = 1200) -> str:

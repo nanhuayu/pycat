@@ -7,9 +7,8 @@ run policy compression switches, and normalizing thresholds.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from dataclasses import dataclass
+import threading
 from typing import Any
 
 from models.contracts.config import AppConfig
@@ -22,12 +21,6 @@ from models.provider import Provider
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class RuntimeContextBudget:
-    context_window: int = 0
-    prompt_limit: int = 0
-
-
 class ContextMaintainer:
     """Single runtime entry point for context maintenance decisions."""
 
@@ -36,12 +29,16 @@ class ContextMaintainer:
         *,
         client: Any = None,
         app_config: AppConfig,
-        compressor_factory: Any = None,
+        compression_factory: Any = None,
     ) -> None:
         self.client = client
         self._app_config = app_config
-        self.compressor_factory = compressor_factory
-        self._maintenance_lock = asyncio.Lock()
+        self.compression_factory = compression_factory
+        self._active_lock = threading.Lock()
+        self._active_conversations: set[str] = set()
+
+    def update_configuration(self, app_config: AppConfig) -> None:
+        self._app_config = app_config
 
     def auto_enabled(self, policy: RunPolicy | None = None) -> bool:
         try:
@@ -53,22 +50,14 @@ class ContextMaintainer:
             return False
         return cfg_enabled
 
-    def budget(
+    def resolve_prompt_limit(
         self,
         conversation: Conversation,
         *,
         provider: Provider | None = None,
-        policy: RunPolicy | None = None,
-        context_window_limit: int = 0,
-    ) -> RuntimeContextBudget:
-        mode_limit = int(
-            context_window_limit
-            or (getattr(policy, "context_window_limit", 0) if policy is not None else 0)
-            or 0
-        )
-        resolved = resolve_token_budget(conversation, provider=provider, mode_context_window_limit=mode_limit)
-        prompt_limit = int(resolved.effective_prompt_limit or resolved.context_window or mode_limit or 0)
-        return RuntimeContextBudget(context_window=int(resolved.context_window or 0), prompt_limit=prompt_limit)
+    ) -> int:
+        resolved = resolve_token_budget(conversation, provider=provider)
+        return int(resolved.effective_prompt_limit or resolved.context_window or 0)
 
     def maintenance_policy(
         self,
@@ -99,7 +88,7 @@ class ContextMaintainer:
         provider: Provider | None = None,
         policy: RunPolicy | None = None,
         client: Any = None,
-        context_window_limit: int = 0,
+        prompt_limit: int = 0,
         current_seq: int | None = None,
         force: bool = False,
         force_check: bool = False,
@@ -113,31 +102,28 @@ class ContextMaintainer:
     ) -> MaintenanceReport | None:
         if honor_auto_enabled and not self.auto_enabled(policy):
             return None
-        if self._maintenance_lock.locked() and not force:
+        conversation_id = str(getattr(conversation, "id", "") or "").strip()
+        if not self._begin_maintenance(conversation_id):
             return MaintenanceReport(reason="maintenance_in_progress")
-
-        budget = self.budget(
-            conversation,
-            provider=provider,
-            policy=policy,
-            context_window_limit=context_window_limit,
-        )
-        service = ContextMaintenance(
-            self.maintenance_policy(
-                keep_last_turns=keep_last_turns,
-                token_threshold_ratio=token_threshold_ratio,
-            ),
-            compressor_factory=self.compressor_factory,
-            debug_trace=debug_trace,
-        )
-        llm_client = client if client is not None else self.client
-        llm_provider = provider if llm_client is not None else None
-        async with self._maintenance_lock:
+        try:
+            effective_prompt_limit = int(
+                prompt_limit or self.resolve_prompt_limit(conversation, provider=provider) or 0
+            )
+            service = ContextMaintenance(
+                self.maintenance_policy(
+                    keep_last_turns=keep_last_turns,
+                    token_threshold_ratio=token_threshold_ratio,
+                ),
+                compression_factory=self.compression_factory,
+                debug_trace=debug_trace,
+            )
+            llm_client = client if client is not None else self.client
+            llm_provider = provider if llm_client is not None else None
             report = await service.maintain_async(
                 conversation,
                 client=llm_client,
                 provider=llm_provider,
-                context_window_limit=int(context_window_limit or budget.prompt_limit or 0),
+                prompt_limit=effective_prompt_limit,
                 current_seq=conversation.current_seq_id() if current_seq is None else int(current_seq or 0),
                 force=bool(force),
                 force_check=bool(force_check),
@@ -145,8 +131,23 @@ class ContextMaintainer:
                 conversation_token_estimate=int(conversation_token_estimate or 0),
                 exclude_message_ids=set(exclude_message_ids or set()),
             )
+        finally:
+            self._end_maintenance(conversation_id)
         self._record_debug_trace(debug_trace, report)
         return report
+
+    def _begin_maintenance(self, conversation_id: str) -> bool:
+        key = conversation_id or "__anonymous__"
+        with self._active_lock:
+            if key in self._active_conversations:
+                return False
+            self._active_conversations.add(key)
+            return True
+
+    def _end_maintenance(self, conversation_id: str) -> None:
+        key = conversation_id or "__anonymous__"
+        with self._active_lock:
+            self._active_conversations.discard(key)
 
     @staticmethod
     def _record_debug_trace(debug_trace: Any, report: MaintenanceReport) -> None:

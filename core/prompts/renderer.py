@@ -7,10 +7,12 @@ from core.llm.request_builder import (
     build_request_body as _build_request_body,
 )
 from core.prompts.system_builder import build_system_prompt
+from core.prompts.sections import PromptSections
 from models.contracts.config import AppConfig
 from models.conversation import Conversation, Message
 from models.llm_config import LLMConfig
 from models.provider import Provider
+from core.llm.token_budget import TokenBudget
 
 
 class PromptRenderer:
@@ -43,9 +45,8 @@ class PromptRenderer:
         *,
         app_config: AppConfig | None = None,
         llm_config: LLMConfig | None = None,
-        channel_prompt_section: str = "",
-        project_instruction_section: str = "",
-        skill_prompt_section: str = "",
+        sections: PromptSections | None = None,
+        pycat_assistant_enabled: bool | None = None,
     ) -> str:
         cfg = app_config or self.app_config
         explicit_request_config = llm_config is not None
@@ -54,15 +55,15 @@ class PromptRenderer:
             return request_cfg.system_prompt_override.strip()
 
         work_dir = getattr(conversation, "work_dir", "") or self.work_dir
+        sections = sections or PromptSections()
         return build_system_prompt(
             conversation=conversation,
             tools=tools,
             provider=provider,
             app_config=cfg,
             default_work_dir=work_dir,
-            channel_prompt_section=channel_prompt_section,
-            project_instruction_section=project_instruction_section,
-            skill_prompt_section=skill_prompt_section,
+            sections=sections,
+            pycat_assistant_enabled=pycat_assistant_enabled,
         )
 
     def build_request_body(
@@ -74,8 +75,10 @@ class PromptRenderer:
         *,
         app_config: AppConfig | None = None,
         llm_config: LLMConfig | None = None,
-        reasoning_enabled: bool | None = None,
-        reasoning_effort: str | None = None,
+        reasoning_mode: str | None = None,
+        token_budget: TokenBudget | None = None,
+        sections: PromptSections | None = None,
+        pycat_assistant_enabled: bool | None = None,
     ) -> Dict[str, Any]:
         request_cfg = llm_config or LLMConfig.from_conversation(conversation)
         profile = provider.effective_model_profile(request_cfg.resolved_model())
@@ -88,6 +91,8 @@ class PromptRenderer:
                 provider,
                 app_config=app_config,
                 llm_config=request_cfg,
+                sections=sections,
+                pycat_assistant_enabled=pycat_assistant_enabled,
             )
             if system_prompt:
                 prepared_messages.insert(0, {"role": "system", "content": system_prompt})
@@ -97,6 +102,6 @@ class PromptRenderer:
             prepared_messages,
             tools=effective_tools,
             llm_config=request_cfg,
-            reasoning_enabled=reasoning_enabled,
-            reasoning_effort=reasoning_effort,
+            reasoning_mode=reasoning_mode,
+            token_budget=token_budget,
         )

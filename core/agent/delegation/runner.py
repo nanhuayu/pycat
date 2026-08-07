@@ -12,7 +12,7 @@ from core.agent.run.state import AgentRunResult
 from core.agent.events.trace import attach_trace_to_tool_call, build_trace, publish_trace_event
 from models.contracts.agent import RunPolicy, SubtaskTraceStatus, RunEvent, RunResult, RunStatus, RunStopReason
 from core.tools.base import ToolControlAction, ToolResult
-from core.agent.events.debug_trace import DebugTraceContext
+from core.observability.debug_trace import DebugTraceContext
 from models.conversation import Conversation, Message
 from models.provider import Provider
 

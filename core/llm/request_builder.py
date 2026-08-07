@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import copy
-import logging
 import json
+import logging
 import re
 from typing import Any, Callable, Dict, List, Optional
 
-from models.conversation import Conversation, Message, normalize_tool_result
-from models.provider import Provider
-from models.llm_config import LLMConfig
 from core.content.attachments import encode_image_file_to_data_url
 from core.llm.ollama_codec import messages_from_openai as _openai_messages_to_ollama
+from core.llm.reasoning import (
+    CHAT_REASONING_CODEC,
+    apply_reasoning,
+    normalize_reasoning_codec,
+)
+from core.llm.token_budget import TokenBudget, resolve_token_budget
+from models.conversation import Conversation, Message, normalize_tool_result
+from models.llm_config import LLMConfig
+from models.provider import Provider
 
 logger = logging.getLogger(__name__)
 _ANTHROPIC_SYSTEM_ROLE = "system"
@@ -31,6 +37,13 @@ _TOOL_TRANSCRIPT_MARKER_RE = re.compile(
 )
 
 
+def _is_openrouter_provider(provider: Provider) -> bool:
+    # OpenRouter is only a route marker for the Chat Completions envelope.
+    # Keep the check on Provider so discovery and request construction share
+    # exactly the same boundary.
+    return bool(getattr(provider, "is_openrouter_route", False))
+
+
 def _normalize_image_url(image: str) -> str:
     if image.startswith("data:") or image.startswith(("http://", "https://")):
         return image
@@ -44,7 +57,7 @@ def _build_multimodal_content(
     *,
     supports_vision: bool | None = None,
 ) -> Any:
-    vision_enabled = bool(provider.supports_vision) if supports_vision is None else bool(supports_vision)
+    vision_enabled = False if supports_vision is None else bool(supports_vision)
     if not images or not vision_enabled:
         if images and not vision_enabled:
             logger.warning("Images omitted because the selected model does not support vision")
@@ -177,24 +190,51 @@ def _effective_model_profile(
     request_cfg = llm_config or (
         LLMConfig.from_conversation(conversation) if conversation is not None else LLMConfig()
     )
-    return provider.effective_model_profile(request_cfg.resolved_model())
+    model_id = request_cfg.resolved_model()
+    if not model_id:
+        model_ids = provider.model_ids()
+        model_id = model_ids[0] if model_ids else ""
+    return provider.effective_model_profile(model_id)
 
 
 def _assistant_has_reasoning(msg: Message) -> bool:
     if bool(str(getattr(msg, "thinking", "") or "").strip()):
         return True
     metadata = getattr(msg, "metadata", {}) or {}
-    return isinstance(metadata, dict) and bool(metadata.get("thinking_present"))
+    if not isinstance(metadata, dict):
+        return False
+    state = metadata.get("reasoning_state")
+    return bool(metadata.get("thinking_present")) or (
+        isinstance(state, dict) and isinstance(state.get("items"), list) and bool(state["items"])
+    )
 
 
-def _attach_reasoning_replay(payload: dict[str, Any], msg: Message, provider: Provider) -> None:
+def _attach_reasoning_replay(
+    payload: dict[str, Any],
+    msg: Message,
+    provider: Provider,
+    *,
+    profile: Any,
+) -> None:
     metadata = getattr(msg, "metadata", {}) or {}
     state = metadata.get("reasoning_state") if isinstance(metadata, dict) else None
-    if isinstance(state, dict) and str(state.get("api_type") or "") == str(provider.api_type or ""):
+    codec = normalize_reasoning_codec(getattr(profile, "reasoning_codec", "none"))
+    if isinstance(state, dict) and str(state.get("codec") or "") == codec:
         items = state.get("items")
         if isinstance(items, list) and items:
-            payload[_REASONING_ITEMS_KEY] = copy.deepcopy(items)
+            # OpenRouter's compatible endpoint requires its opaque
+            # reasoning_details array.  Other Chat Completions endpoints must
+            # not receive that private field, even though they share the same
+            # canonical codec.
+            if codec == CHAT_REASONING_CODEC and _is_openrouter_provider(provider):
+                payload["reasoning_details"] = copy.deepcopy(items)
+            else:
+                payload[_REASONING_ITEMS_KEY] = copy.deepcopy(items)
             return
+    if codec == CHAT_REASONING_CODEC and _is_openrouter_provider(provider):
+        # A visible thinking string is not a valid OpenRouter continuation;
+        # only the opaque reasoning_details state is safe to replay.
+        return
     if not _assistant_has_reasoning(msg):
         return
     if provider.is_ollama_chat:
@@ -366,9 +406,7 @@ def build_api_messages(
     tool_result_renderer: Callable[[Any], str] | None = None,
 ) -> List[Dict[str, Any]]:
     profile = _effective_model_profile(provider, conversation)
-    supports_vision = bool(
-        getattr(profile, "supports_vision", getattr(provider, "supports_vision", True))
-    )
+    supports_vision = profile.supports_input("image")
     messages = _sanitize_reasoning_history(
         messages,
         provider,
@@ -439,7 +477,7 @@ def build_api_messages(
                     "tool_calls": [tc["clean"] for tc in tool_calls_with_results],
                 }
 
-                _attach_reasoning_replay(assistant_payload, msg, provider)
+                _attach_reasoning_replay(assistant_payload, msg, provider, profile=profile)
 
                 api_messages.append(assistant_payload)
                 for tc in tool_calls_with_results:
@@ -453,7 +491,7 @@ def build_api_messages(
                 continue
 
         if msg.role == "assistant":
-            _attach_reasoning_replay(message_payload, msg, provider)
+            _attach_reasoning_replay(message_payload, msg, provider, profile=profile)
 
         api_messages.append(message_payload)
 
@@ -721,65 +759,6 @@ def _openai_messages_to_responses_input(api_messages: List[Dict[str, Any]]) -> t
     return "\n\n".join(part for part in instructions_parts if part.strip()).strip(), input_items
 
 
-def _resolve_reasoning_settings(
-    *,
-    profile: Any,
-    request_cfg: LLMConfig,
-    reasoning_enabled: bool | None,
-    reasoning_effort: str | None,
-) -> tuple[bool | None, str]:
-    enabled = reasoning_enabled
-    if enabled is None:
-        enabled = request_cfg.reasoning_enabled
-    if enabled is None:
-        profile_enabled = getattr(profile, "reasoning_enabled", None)
-        enabled = profile_enabled if isinstance(profile_enabled, bool) else None
-
-    effort = str(reasoning_effort or "").strip().lower()
-    if not effort:
-        effort = str(request_cfg.reasoning_effort or "").strip().lower()
-    if enabled is False:
-        if effort:
-            raise ValueError("reasoning_effort must be empty when reasoning is disabled")
-        return False, ""
-    if not effort:
-        effort = str(getattr(profile, "reasoning_effort", "") or "").strip().lower()
-    return enabled, effort
-
-
-def _apply_reasoning_settings(
-    body: Dict[str, Any],
-    *,
-    provider: Provider,
-    enabled: bool | None,
-    effort: str,
-) -> None:
-    if provider.is_openai_responses:
-        if enabled is False:
-            body["reasoning"] = {"effort": "none"}
-            return
-        if effort:
-            body["reasoning"] = {"effort": effort}
-        return
-
-    if provider.is_anthropic_native:
-        if enabled is not None or effort:
-            body["thinking"] = {"type": "adaptive" if enabled is not False else "disabled"}
-        if effort:
-            body["output_config"] = {"effort": effort}
-        return
-
-    if provider.is_ollama_chat:
-        if effort:
-            body["think"] = effort
-        elif enabled is not None:
-            body["think"] = bool(enabled)
-        return
-
-    if effort:
-        body["reasoning_effort"] = effort
-
-
 def build_request_body(
     provider: Provider,
     conversation: Conversation,
@@ -787,8 +766,8 @@ def build_request_body(
     tools: Optional[List[Dict[str, Any]]] = None,
     *,
     llm_config: LLMConfig | None = None,
-    reasoning_enabled: bool | None = None,
-    reasoning_effort: str | None = None,
+    reasoning_mode: str | None = None,
+    token_budget: TokenBudget | None = None,
 ) -> Dict[str, Any]:
     request_cfg = llm_config or LLMConfig.from_conversation(conversation)
     payload_messages = list(api_messages)
@@ -796,6 +775,7 @@ def build_request_body(
     if not model:
         raise ValueError("No model selected for this conversation")
     profile = provider.effective_model_profile(model)
+    wire_model = profile.model_id
 
     stream_enabled = request_cfg.resolved_stream(default=True)
     temperature = request_cfg.temperature
@@ -806,23 +786,25 @@ def build_request_body(
     if not isinstance(top_p, (int, float)):
         profile_top_p = getattr(profile, "default_top_p", None)
         top_p = float(profile_top_p) if isinstance(profile_top_p, (int, float)) else None
-    max_tokens = int(request_cfg.max_tokens or getattr(profile, "max_output_tokens", 0) or 0)
+    budget = token_budget or resolve_token_budget(
+        conversation,
+        provider=provider,
+        model_id=model,
+        llm_config=request_cfg,
+    )
+    max_tokens = int(budget.output_limit or 0)
     supports_tools = bool(getattr(profile, "supports_tools", True))
     request_tools = tools if supports_tools else []
-    effective_reasoning_enabled, effective_reasoning_effort = _resolve_reasoning_settings(
-        profile=profile,
-        request_cfg=request_cfg,
-        reasoning_enabled=reasoning_enabled,
-        reasoning_effort=reasoning_effort,
+    effective_reasoning_mode = (
+        reasoning_mode if reasoning_mode is not None else getattr(request_cfg, "reasoning_mode", None)
     )
 
     if provider.is_anthropic_native:
         system_content, anthropic_messages = _openai_messages_to_anthropic(payload_messages)
         body: Dict[str, Any] = {
-            "model": model,
+            "model": wire_model,
             "messages": anthropic_messages,
             "stream": stream_enabled,
-            "max_tokens": max_tokens if max_tokens > 0 else 4096,
         }
         if isinstance(temperature, (int, float)):
             body["temperature"] = float(temperature)
@@ -833,26 +815,25 @@ def build_request_body(
             body["tools"] = anthropic_tools
         if isinstance(top_p, (int, float)):
             body["top_p"] = float(top_p)
-        _apply_reasoning_settings(
+        apply_reasoning(
             body,
-            provider=provider,
-            enabled=effective_reasoning_enabled,
-            effort=effective_reasoning_effort,
+            profile=profile,
+            mode=effective_reasoning_mode,
+            openrouter=_is_openrouter_provider(provider),
         )
-        _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
+        _merge_request_extras(body, profile=profile)
+        _write_output_limit(body, provider=provider, output_limit=max_tokens)
         return body
 
     if provider.is_openai_responses:
         instructions, responses_input = _openai_messages_to_responses_input(payload_messages)
         body = {
-            "model": model,
+            "model": wire_model,
             "input": responses_input,
             "stream": stream_enabled,
         }
         if instructions:
             body["instructions"] = instructions
-        if max_tokens > 0:
-            body["max_output_tokens"] = max_tokens
         responses_tools = _openai_tools_to_responses(request_tools)
         if responses_tools:
             body["tools"] = responses_tools
@@ -861,18 +842,18 @@ def build_request_body(
             body["temperature"] = float(temperature)
         if isinstance(top_p, (int, float)):
             body["top_p"] = float(top_p)
-        _apply_reasoning_settings(
+        apply_reasoning(
             body,
-            provider=provider,
-            enabled=effective_reasoning_enabled,
-            effort=effective_reasoning_effort,
+            profile=profile,
+            mode=effective_reasoning_mode,
         )
-        _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
+        _merge_request_extras(body, profile=profile)
+        _write_output_limit(body, provider=provider, output_limit=max_tokens)
         return body
 
     if provider.is_ollama_chat:
         body = {
-            "model": model,
+            "model": wire_model,
             "messages": _openai_messages_to_ollama(payload_messages),
             "stream": stream_enabled,
         }
@@ -881,23 +862,21 @@ def build_request_body(
             options["temperature"] = float(temperature)
         if isinstance(top_p, (int, float)):
             options["top_p"] = float(top_p)
-        if max_tokens > 0:
-            options["num_predict"] = max_tokens
         if options:
             body["options"] = options
         if request_tools:
             body["tools"] = request_tools
-        _apply_reasoning_settings(
+        apply_reasoning(
             body,
-            provider=provider,
-            enabled=effective_reasoning_enabled,
-            effort=effective_reasoning_effort,
+            profile=profile,
+            mode=effective_reasoning_mode,
         )
-        _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
+        _merge_request_extras(body, profile=profile)
+        _write_output_limit(body, provider=provider, output_limit=max_tokens)
         return body
 
     body = {
-        "model": model,
+        "model": wire_model,
         "messages": [
             {key: value for key, value in message.items() if key != _REASONING_ITEMS_KEY}
             for message in payload_messages
@@ -907,9 +886,6 @@ def build_request_body(
     if isinstance(temperature, (int, float)):
         body["temperature"] = float(temperature)
 
-    if max_tokens > 0:
-        body["max_tokens"] = max_tokens
-    
     if request_tools:
         body["tools"] = request_tools
         # OpenAI-compatible default: let the model decide when to call tools.
@@ -918,51 +894,91 @@ def build_request_body(
     if isinstance(top_p, (int, float)):
         body["top_p"] = float(top_p)
 
-    _apply_reasoning_settings(
+    apply_reasoning(
         body,
-        provider=provider,
-        enabled=effective_reasoning_enabled,
-        effort=effective_reasoning_effort,
+        profile=profile,
+        mode=effective_reasoning_mode,
+        openrouter=_is_openrouter_provider(provider),
     )
-    _merge_request_extras(body, request_cfg=request_cfg, provider=provider)
+    _merge_request_extras(body, profile=profile)
+    _write_output_limit(body, provider=provider, output_limit=max_tokens)
     return body
 
 
-def _merge_request_extras(body: Dict[str, Any], *, request_cfg: LLMConfig, provider: Provider) -> None:
+def _merge_request_extras(body: Dict[str, Any], *, profile: Any) -> None:
     protected = {
         "model",
         "messages",
         "input",
         "instructions",
+        "system",
         "tools",
-        "temperature",
-        "top_p",
-        "max_tokens",
-        "max_output_tokens",
         "stream",
-        "reasoning",
-        "reasoning_effort",
-        "thinking",
-        "think",
-        "output_config",
-        "options",
     }
-    profile = provider.effective_model_profile(request_cfg.resolved_model())
-    layers = (
-        getattr(profile, "request_overrides", None),
-        getattr(request_cfg, "extras", None),
-    )
-    for extras in layers:
-        if not isinstance(extras, dict):
+    extras = getattr(profile, "extra_body", None)
+    if not isinstance(extras, dict):
+        return
+    for key, value in extras.items():
+        name = str(key or "").strip()
+        if not name:
             continue
-        for key, value in extras.items():
-            name = str(key or "").strip()
-            if name == "options" and provider.is_ollama_chat and isinstance(value, dict):
-                options = body.setdefault("options", {})
-                if isinstance(options, dict):
-                    for option_name, option_value in value.items():
-                        options.setdefault(str(option_name), option_value)
-                continue
-            if not name or name in protected:
-                continue
-            body[name] = value
+        if name in protected:
+            logger.warning("忽略 extra_body 中由运行时管理的结构字段: %s", name)
+            continue
+        if name in body:
+            logger.warning("extra_body 覆盖请求字段: %s", name)
+        body[name] = copy.deepcopy(value)
+
+
+def _write_output_limit(
+    body: Dict[str, Any],
+    *,
+    provider: Provider,
+    output_limit: int,
+) -> None:
+    """Freeze the canonical output limit after model-level overrides."""
+
+    value = max(0, int(output_limit or 0))
+    if provider.is_openai_responses:
+        _warn_output_limit_override("max_output_tokens", body.get("max_output_tokens"), value)
+        if value > 0:
+            body["max_output_tokens"] = value
+        else:
+            body.pop("max_output_tokens", None)
+        return
+    if provider.is_ollama_chat:
+        options = body.get("options")
+        if not isinstance(options, dict):
+            options = {}
+            body["options"] = options
+        _warn_output_limit_override("options.num_predict", options.get("num_predict"), value)
+        if value > 0:
+            options["num_predict"] = value
+        else:
+            options.pop("num_predict", None)
+        if not options:
+            body.pop("options", None)
+        return
+    _warn_output_limit_override("max_tokens", body.get("max_tokens"), value)
+    if value > 0:
+        body["max_tokens"] = value
+    else:
+        body.pop("max_tokens", None)
+
+
+def _warn_output_limit_override(field: str, configured: Any, effective: int) -> None:
+    if configured is None:
+        return
+    try:
+        configured_value = int(configured)
+    except (TypeError, ValueError):
+        configured_value = configured
+    if configured_value == effective:
+        logger.warning("extra_body 重复请求字段，运行时预算保持该值: %s", field)
+        return
+    logger.warning(
+        "extra_body 请求字段已按运行时预算归一: %s (%r -> %d)",
+        field,
+        configured,
+        effective,
+    )

@@ -14,18 +14,19 @@ from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
-from models.conversation import Message
-from core.llm.thinking_parser import ThinkingStreamParser
 from core.llm.http_utils import (
+    format_http_error,
+    iter_sse_data_lines,
+    parse_json_safely,
+    parse_sse_json,
     pretty_json,
     read_response_bytes,
-    format_http_error,
-    parse_json_safely,
-    iter_sse_data_lines,
-    parse_sse_json,
 )
-from core.llm.token_budget import estimate_tokens
 from core.llm.ollama_codec import parse_message as parse_ollama_message
+from core.llm.reasoning import CHAT_REASONING_CODEC, normalize_reasoning_codec
+from core.llm.thinking_parser import ThinkingStreamParser
+from core.llm.token_budget import estimate_tokens
+from models.conversation import Message
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,43 @@ def _responses_reasoning_items(payload: Dict[str, Any]) -> list[dict[str, Any]]:
         for item in output
         if isinstance(item, dict) and str(item.get("type") or "") == "reasoning"
     ]
+
+
+def _chat_reasoning_details(message: Any) -> list[dict[str, Any]]:
+    if not isinstance(message, dict) or not isinstance(message.get("reasoning_details"), list):
+        return []
+    return [copy.deepcopy(item) for item in message["reasoning_details"] if isinstance(item, dict)]
+
+
+def _merge_chat_reasoning_details(
+    buffer: dict[int, dict[str, Any]],
+    details: Any,
+) -> None:
+    if not isinstance(details, list):
+        return
+    for position, raw in enumerate(details):
+        if not isinstance(raw, dict):
+            continue
+        try:
+            index = int(raw.get("index", position))
+        except (TypeError, ValueError):
+            index = position
+        target = buffer.setdefault(index, {})
+        for key, value in raw.items():
+            if key == "index":
+                target[key] = value
+            elif key in {"text", "data", "summary", "signature"} and isinstance(value, str):
+                previous = target.get(key)
+                if not isinstance(previous, str) or not previous:
+                    target[key] = value
+                elif not value or value == previous or previous.endswith(value):
+                    continue
+                elif value.startswith(previous):
+                    target[key] = value
+                else:
+                    target[key] = previous + value
+            else:
+                target[key] = copy.deepcopy(value)
 
 
 def _responses_usage_tokens(payload: Dict[str, Any]) -> int:
@@ -295,10 +333,17 @@ def parse_non_stream_response(
     thinking_parser: ThinkingStreamParser,
     show_thinking: bool,
     response_format: str = "chat",
+    reasoning_codec: str = "",
     on_token: Optional[Callable[[str], None]],
     start_time: float,
 ) -> Message:
     """Parse a non-streaming (``stream=false``) HTTP response into a ``Message``."""
+    # Keep direct parser callers on the same canonical contract as LLMClient;
+    # legacy aliases must never leak into persisted reasoning_state.  Preserve
+    # an omitted codec as an empty sentinel so the response-format fallback
+    # (Anthropic/Responses) remains active for low-level callers.
+    raw_reasoning_codec = str(reasoning_codec or "").strip()
+    reasoning_codec = normalize_reasoning_codec(raw_reasoning_codec) if raw_reasoning_codec else ""
     response_content = ""
     thinking_content = ""
     tokens_used = 0
@@ -329,7 +374,10 @@ def parse_non_stream_response(
             content, thinking, tool_calls, tokens_used, detected_thinking_key = _parse_responses_payload(payload)
             reasoning_items = _responses_reasoning_items(payload)
             if reasoning_items:
-                reasoning_state = {"api_type": "openai_responses", "items": reasoning_items}
+                reasoning_state = {
+                    "codec": reasoning_codec or "responses_effort",
+                    "items": reasoning_items,
+                }
             visible, embedded_thinking = thinking_parser.feed(content)
             response_content += visible
             if embedded_thinking:
@@ -356,7 +404,10 @@ def parse_non_stream_response(
         elif isinstance(payload, dict) and isinstance(payload.get("content"), list):
             content, thinking, reasoning_blocks, tool_calls, tokens_used = _parse_anthropic_content_blocks(payload)
             if reasoning_blocks:
-                reasoning_state = {"api_type": "anthropic_messages", "items": reasoning_blocks}
+                reasoning_state = {
+                    "codec": reasoning_codec or "anthropic_adaptive",
+                    "items": reasoning_blocks,
+                }
             visible, embedded_thinking = thinking_parser.feed(content)
             response_content += visible
             if embedded_thinking:
@@ -376,6 +427,12 @@ def parse_non_stream_response(
                     tcs = msg.get("tool_calls")
                     if isinstance(tcs, list) and tcs:
                         response_tool_calls = tcs
+                    reasoning_details = _chat_reasoning_details(msg)
+                    if normalize_reasoning_codec(reasoning_codec) == CHAT_REASONING_CODEC and reasoning_details:
+                        reasoning_state = {
+                            "codec": CHAT_REASONING_CODEC,
+                            "items": reasoning_details,
+                        }
                 content = msg.get("content", "") or ""
                 visible, embedded_thinking = thinking_parser.feed(content)
                 response_content += visible
@@ -430,6 +487,7 @@ async def parse_stream_response(
     thinking_parser: ThinkingStreamParser,
     show_thinking: bool,
     response_format: str = "chat",
+    reasoning_codec: str = "",
     on_token: Optional[Callable[[str], None]],
     on_thinking: Optional[Callable[[str], None]],
     cancel_event,
@@ -437,6 +495,8 @@ async def parse_stream_response(
     start_time: float,
 ) -> Message:
     """Consume an SSE stream and return the final ``Message``."""
+    raw_reasoning_codec = str(reasoning_codec or "").strip()
+    reasoning_codec = normalize_reasoning_codec(raw_reasoning_codec) if raw_reasoning_codec else ""
     response_content = ""
     thinking_content = ""
     tokens_used = 0
@@ -494,6 +554,7 @@ async def parse_stream_response(
     responses_reasoning_items: Dict[str, dict[str, Any]] = {}
     anthropic_reasoning_blocks: Dict[int, dict[str, Any]] = {}
     ollama_calls: dict[str, dict[str, Any]] = {}
+    chat_reasoning_details: dict[int, dict[str, Any]] = {}
 
     async for data in iter_sse_data_lines(response, cancel_event=cancel_event, log_fp=log_fp):
         try:
@@ -650,7 +711,10 @@ async def parse_stream_response(
                     content, thinking, tool_calls, parsed_tokens, detected = _parse_responses_payload(response_payload)
                     native_reasoning = _responses_reasoning_items(response_payload)
                     if native_reasoning:
-                        reasoning_state = {"api_type": "openai_responses", "items": native_reasoning}
+                        reasoning_state = {
+                            "codec": reasoning_codec or "responses_effort",
+                            "items": native_reasoning,
+                        }
                     detected_thinking_key = detected
                     if not response_content and content:
                         visible, embedded_thinking = thinking_parser.feed(content)
@@ -765,6 +829,9 @@ async def parse_stream_response(
         if choices:
             delta = choices[0].get("delta", {}) or {}
 
+            if normalize_reasoning_codec(reasoning_codec) == CHAT_REASONING_CODEC:
+                _merge_chat_reasoning_details(chat_reasoning_details, delta.get("reasoning_details"))
+
             # Accumulate tool calls
             chunk_tool_calls = delta.get("tool_calls")
             if chunk_tool_calls:
@@ -843,13 +910,18 @@ async def parse_stream_response(
         ]
     if reasoning_state is None and responses_reasoning_items:
         reasoning_state = {
-            "api_type": "openai_responses",
+            "codec": reasoning_codec or "responses_effort",
             "items": [item for _, item in sorted(responses_reasoning_items.items())],
         }
     if anthropic_reasoning_blocks:
         reasoning_state = {
-            "api_type": "anthropic_messages",
+            "codec": reasoning_codec or "anthropic_adaptive",
             "items": [item for _, item in sorted(anthropic_reasoning_blocks.items())],
+        }
+    if normalize_reasoning_codec(reasoning_codec) == CHAT_REASONING_CODEC and chat_reasoning_details:
+        reasoning_state = {
+            "codec": CHAT_REASONING_CODEC,
+            "items": [item for _, item in sorted(chat_reasoning_details.items())],
         }
 
     response_time_ms = int((time.time() - start_time) * 1000)

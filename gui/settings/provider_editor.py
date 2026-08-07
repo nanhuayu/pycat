@@ -25,11 +25,18 @@ from PyQt6.QtWidgets import (
 )
 
 from core.app.services.provider import ProviderService
-from gui.settings.components import SettingsActionBar, SettingsStatusListItem, configure_settings_resource_list
+from core.app.services.provider_catalog import ProviderCatalogService
+from gui.settings.components import (
+    RESOURCE_TRAILING_ICONS_ROLE,
+    SettingsActionBar,
+    SettingsStatusListItem,
+    configure_settings_resource_list,
+)
 from gui.settings.model_catalog_dialog import ModelCatalogDialog
 from gui.settings.model_profile_dialog import ModelProfileDialog
 from gui.utils.combo_box import configure_combo_popup
 from gui.utils.icon_manager import Icons
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from models.model_profile import ModelProfile
 from models.provider import (
     ANTHROPIC_NATIVE,
@@ -71,8 +78,9 @@ class _ModelListItem(SettingsStatusListItem):
             label
             for enabled, label in (
                 (profile.supports_tools, "工具"),
-                (profile.supports_vision, "视觉"),
                 (profile.supports_reasoning, "推理"),
+                (profile.supports_input("image"), "图片输入"),
+                (profile.supports_input("audio"), "音频输入"),
             )
             if enabled
         ]
@@ -87,6 +95,20 @@ class _ModelListItem(SettingsStatusListItem):
                 f"最大输出：{profile.max_output_tokens or '未设置'}"
             ),
         )
+        ability_icons = []
+        for enabled, icon_name, color in (
+            (profile.supports_reasoning, Icons.THINKING, Icons.COLOR_PRIMARY),
+            (profile.supports_tools, Icons.WRENCH, Icons.COLOR_WARNING),
+            (profile.supports_input("image"), Icons.IMAGE, Icons.COLOR_SUCCESS),
+            (
+                profile.supports_input("audio"),
+                Icons.AUDIO,
+                Icons.COLOR_MUTED,
+            ),
+        ):
+            if enabled:
+                ability_icons.append(Icons.get(icon_name, color=color, scale_factor=0.85))
+        self.setData(RESOURCE_TRAILING_ICONS_ROLE, ability_icons)
         self.setData(Qt.ItemDataRole.UserRole, profile.model_id)
 
 
@@ -95,9 +117,15 @@ class ProviderEditor(QWidget):
 
     model_catalog_changed = pyqtSignal(object)
 
-    def __init__(self, provider_service: ProviderService, parent=None) -> None:
+    def __init__(
+        self,
+        provider_service: ProviderService,
+        provider_catalog_service: ProviderCatalogService | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
         self._provider_service = provider_service
+        self._provider_catalog_service = provider_catalog_service
         self._provider: Provider | None = None
         self._active_model_id = ""
         self._jobs: set[_AsyncProviderJob] = set()
@@ -136,16 +164,17 @@ class ProviderEditor(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
         form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(8)
 
-        self.name_input = QLineEdit()
+        self.name_input = ThemedLineEdit()
         self.api_type_combo = QComboBox()
         configure_combo_popup(self.api_type_combo, popup_minimum_width=300)
         for label, value in self._api_type_options():
             self.api_type_combo.addItem(label, value)
-        self.api_base_input = QLineEdit()
-        self.api_key_input = QLineEdit()
+        self.api_base_input = ThemedLineEdit()
+        self.api_key_input = ThemedLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
 
         key_widget = QWidget()
@@ -162,7 +191,7 @@ class ProviderEditor(QWidget):
         self.show_key_btn.toggled.connect(self._toggle_key_visibility)
         key_layout.addWidget(self.show_key_btn)
 
-        self.headers_edit = QTextEdit()
+        self.headers_edit = ThemedTextEdit()
         self.headers_edit.setAcceptRichText(False)
         self.headers_edit.setPlaceholderText('{"Header": "value"}')
         self.headers_edit.setMinimumHeight(96)
@@ -455,7 +484,10 @@ class ProviderEditor(QWidget):
         dialog.set_loading(True)
 
         async def operation():
-            return await self._provider_service.fetch_models(provider)
+            profiles = await self._provider_service.fetch_models(provider)
+            if self._provider_catalog_service is not None:
+                profiles = self._provider_catalog_service.enrich_discovered_models(provider, profiles)
+            return profiles
 
         def done(result, error) -> None:
             dialog.set_loading(False)

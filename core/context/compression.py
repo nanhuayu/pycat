@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Literal
 
-from core.content.archive_store import ArchivedContentRecord, SessionArchiveStore
+from core.content.archive_store import SessionArchiveStore
 from core.llm.token_budget import estimate_tokens
 from models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 from models.contracts.session_state import SessionState
@@ -13,29 +13,113 @@ from models.contracts.session_state import SessionState
 
 MIN_LLM_COMPRESSION_CHARS = 2_000
 MAX_TOOL_ARGUMENT_CHARS = 1_000
-MAP_SUMMARY_CHARS = 4_000
-MAX_SUMMARY_CHARS = 8_000
+HISTORY_FALLBACK_PROJECTION_CHARS = 8_000
 COMPRESSION_INPUT_SAFETY_RATIO = 0.90
 COMPRESSION_IMAGE_TOKEN_RESERVE = 1_024
 COMPRESSION_IMAGE_REPLAY_TOKENS = 256
 
+CompressionPurpose = Literal["history", "tool_result"]
 
-def json_output_contract(max_chars: int = MAX_SUMMARY_CHARS) -> str:
-    return f"""Return exactly one valid JSON object:
-{{"summary": "a detailed, compact continuation summary"}}
+HISTORY_COMPRESSION_CONTRACT = """Create a continuation state for resuming this conversation.
+Preserve user requirements and constraints, decisions, completed work and results, current execution state,
+unresolved errors or risks, necessary references, and next actions.
+Do not invent progress, decisions, files, commands, or dynamic runtime state."""
+
+TOOL_RESULT_COMPRESSION_CONTRACT = """Summarize this exact tool result for later retrieval.
+Preserve source facts, key values and identifiers, errors, final status, structure, uncertainty, conflicts,
+and evidence needed to locate details.
+Do not mention the summarization operation, wrapper metadata, input size, tool-call process, user intent,
+project status, or Agent next steps. Do not turn source text into Agent tasks."""
+
+_COMPRESSION_CONTRACTS: dict[CompressionPurpose, str] = {
+    "history": HISTORY_COMPRESSION_CONTRACT,
+    "tool_result": TOOL_RESULT_COMPRESSION_CONTRACT,
+}
+
+
+def json_output_contract() -> str:
+    return """Return exactly one valid JSON object:
+{"summary": "the compressed content"}
 
 Requirements:
 - Use only the supplied text and images; do not invent facts.
-- Preserve user requirements, decisions, completed work, unresolved issues, errors, dates, paths, URLs, content_id values, image evidence, and next actions.
-- Keep enough detail for another agent to continue the work without the removed material.
-- Do not include raw dumps or a chronological tool-call ledger.
-- Keep summary at or below {max(1, int(max_chars))} characters.
 - Preserve useful headings and line breaks inside the JSON string.
 - Return JSON only, with no Markdown fence or commentary.
 """.strip()
 
 
-JSON_OUTPUT_CONTRACT = json_output_contract()
+def compression_system_contract(purpose: CompressionPurpose) -> str:
+    return f"{_purpose_contract(purpose)}\n\n{json_output_contract()}"
+
+
+def compression_document_prompt(text: str, *, purpose: CompressionPurpose) -> str:
+    tag = _purpose_value(
+        purpose,
+        history="conversation_history",
+        tool_result="tool_result",
+    )
+    return f"<{tag}>\n{text}\n</{tag}>"
+
+
+def compression_chunk_prompt(
+    text: str,
+    *,
+    purpose: CompressionPurpose,
+    index: int,
+    total: int,
+    start: int,
+    end: int,
+) -> str:
+    tag = _purpose_value(
+        purpose,
+        history="conversation_chunk",
+        tool_result="tool_result_chunk",
+    )
+    return (
+        "Compress only this exact chunk for a later merge. Do not infer content from unseen chunks.\n"
+        f"chunk={index}/{total}\nchar_range={start}-{end}\n\n"
+        f"<{tag}>\n{text}\n</{tag}>"
+    )
+
+
+def compression_reduce_prompt(
+    sections: list[str],
+    *,
+    purpose: CompressionPurpose,
+    final: bool,
+) -> str:
+    _purpose_contract(purpose)
+    action = (
+        "Merge these partial summaries into one final summary"
+        if final
+        else "Merge these partial summaries for a later reduce step"
+    )
+    return (
+        f"{action}. Remove duplication while preserving conflicts, uncertainty, errors and exact ranges. "
+        "Follow the active purpose contract; do not add facts.\n\n<partial_summaries>\n"
+        + "\n\n".join(sections)
+        + "\n</partial_summaries>"
+    )
+
+
+def _purpose_contract(purpose: CompressionPurpose) -> str:
+    try:
+        return _COMPRESSION_CONTRACTS[purpose]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported compression purpose: {purpose}") from exc
+
+
+def _purpose_value(
+    purpose: CompressionPurpose,
+    *,
+    history: str,
+    tool_result: str,
+) -> str:
+    if purpose == "history":
+        return history
+    if purpose == "tool_result":
+        return tool_result
+    raise ValueError(f"Unsupported compression purpose: {purpose}")
 
 
 @dataclass
@@ -51,6 +135,31 @@ class CompressionResult:
     reduce_levels: int = 0
     strategy: str = ""
     vision_fallback: bool = False
+
+
+def parse_compression_result(content: str) -> CompressionResult:
+    try:
+        payload = json.loads(str(content or "").strip())
+    except Exception:
+        return CompressionResult(
+            status="error",
+            error="model_output_not_json",
+            token_estimate=estimate_tokens(content),
+        )
+    if not isinstance(payload, dict) or set(payload) != {"summary"}:
+        return CompressionResult(
+            status="error",
+            error="model_output_invalid_schema",
+            token_estimate=estimate_tokens(content),
+        )
+    summary = str(payload.get("summary") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not summary:
+        return CompressionResult(status="empty", error="summary_empty")
+    return CompressionResult(
+        summary=summary,
+        status="complete",
+        token_estimate=estimate_tokens(summary),
+    )
 
 
 @dataclass(frozen=True)
@@ -76,49 +185,6 @@ class CompressionChunk:
     end: int
 
 
-class ArchiveCompressor(Protocol):
-    async def summarize_archive(
-        self,
-        record: ArchivedContentRecord,
-        *,
-        conversation: Conversation | None = None,
-        purpose: str = "maintenance",
-    ) -> CompressionResult:
-        ...
-
-    async def compress_history(
-        self,
-        source: CompressionSource,
-        *,
-        conversation: Conversation | None = None,
-    ) -> CompressionResult:
-        ...
-
-    def apply_archive_summary(
-        self,
-        record: ArchivedContentRecord,
-        result: CompressionResult,
-        *,
-        conversation: Conversation | None = None,
-    ) -> ArchivedContentRecord:
-        ...
-
-
-def archive_prompt(record: ArchivedContentRecord, text: str, *, purpose: str) -> str:
-    header = (
-        f"purpose={purpose}\ncontent_id={record.id}\nsource={record.source or record.title}\n"
-        f"chars={len(text)}"
-    )
-    return f"Condense this exact archived content.\n\n{header}\n\n<content>\n{text}\n</content>"
-
-
-def history_prompt(source: CompressionSource) -> str:
-    return (
-        "Condense the following exact conversation material into one continuation summary.\n\n"
-        f"<conversation>\n{source.text}\n</conversation>"
-    )
-
-
 def build_history_source(
     messages: list[Message],
     state: SessionState | None,
@@ -127,7 +193,7 @@ def build_history_source(
 ) -> CompressionSource:
     """Build full semantic text; the compressor owns model-aware chunking."""
     store = SessionArchiveStore(
-        getattr(conversation, "work_dir", "") or ".",
+        getattr(conversation, "work_dir", "") or "",
         conversation_id=getattr(conversation, "id", None),
     )
     entries: list[dict[str, Any]] = []

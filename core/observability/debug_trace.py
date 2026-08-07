@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+import base64
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -15,6 +17,8 @@ import re
 import threading
 import time
 from typing import TYPE_CHECKING, Any, TextIO
+
+from models.session_paths import resolve_session_root
 
 if TYPE_CHECKING:
     from models.conversation import Conversation
@@ -34,6 +38,10 @@ _KEY_VALUE_SECRET_RE = re.compile(
     r"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*[a-z0-9._~+/=-]{8,}"
 )
 _OPENAI_KEY_RE = re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b")
+_DATA_IMAGE_RE = re.compile(
+    r"data:(image/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)",
+    re.IGNORECASE,
+)
 
 
 def _safe_name(value: object, *, limit: int = 120) -> str:
@@ -44,9 +52,10 @@ def _safe_name(value: object, *, limit: int = 120) -> str:
 def resolve_debug_trace_dir(*, conversation_id: str, work_dir: str = ".") -> Path:
     """Return the canonical debug directory for one conversation."""
 
-    root = Path(work_dir or ".").expanduser().resolve()
+    raw = str(work_dir or "").strip()
+    root = Path(raw).expanduser().resolve() if raw else ""
     session_id = _safe_name(conversation_id or "default")
-    return root / ".pycat" / "sessions" / session_id / "debug"
+    return resolve_session_root(root, session_id) / "debug"
 
 
 def _truncate_text(text: str, limit: int) -> str | dict[str, Any]:
@@ -74,6 +83,94 @@ def _json_default(value: Any) -> Any:
         return str(value)
     except Exception:
         return repr(value)
+
+
+def _image_data_ref(value: str, *, archive_content_id: str = "") -> dict[str, Any] | None:
+    match = _DATA_IMAGE_RE.fullmatch(str(value or "").strip())
+    if match is None:
+        return None
+    encoded = match.group(2)
+    try:
+        payload = base64.b64decode(encoded, validate=False)
+        digest = hashlib.sha256(payload).hexdigest()
+        size = len(payload)
+    except Exception:
+        digest = hashlib.sha256(encoded.encode("ascii", errors="ignore")).hexdigest()
+        size = max(0, len(encoded) * 3 // 4)
+    result: dict[str, Any] = {
+        "type": "image_ref",
+        "mime_type": str(match.group(1) or "image/unknown").lower(),
+        "size": size,
+        "digest": digest,
+    }
+    if archive_content_id:
+        result["archive_content_id"] = archive_content_id
+    return result
+
+
+def _redact_embedded_images(value: str, *, archive_content_id: str = "") -> str:
+    def replace_image(match: re.Match[str]) -> str:
+        image = _image_data_ref(match.group(0), archive_content_id=archive_content_id) or {}
+        ref = str(image.get("archive_content_id") or "-")
+        return (
+            f"[image_ref mime={image.get('mime_type', 'image/unknown')} "
+            f"bytes={image.get('size', 0)} sha256={image.get('digest', '')} "
+            f"content_id={ref}]"
+        )
+
+    return _DATA_IMAGE_RE.sub(replace_image, value)
+
+
+def redact_debug_payload(
+    value: Any,
+    *,
+    max_string_chars: int | None = None,
+    archive_content_id: str = "",
+    _depth: int = 0,
+) -> Any:
+    """Return a credential-safe debug value, optionally bounding strings."""
+    if _depth > 12:
+        return "<max-depth>"
+    if isinstance(value, dict):
+        clean: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            normalized_key = key_text.strip().lower().replace("-", "_")
+            generic_secret = normalized_key in _GENERIC_TOKEN_KEYS and not isinstance(item, (int, float))
+            if _SENSITIVE_KEY_RE.search(key_text) or generic_secret:
+                clean[key_text] = "<redacted>"
+            else:
+                clean[key_text] = redact_debug_payload(
+                    item,
+                    max_string_chars=max_string_chars,
+                    archive_content_id=archive_content_id,
+                    _depth=_depth + 1,
+                )
+        return clean
+    if isinstance(value, (list, tuple, set)):
+        return [
+            redact_debug_payload(
+                item,
+                max_string_chars=max_string_chars,
+                archive_content_id=archive_content_id,
+                _depth=_depth + 1,
+            )
+            for item in value
+        ]
+    if isinstance(value, bytes):
+        return {"bytes": len(value), "redacted": True}
+    if isinstance(value, str):
+        image = _image_data_ref(value, archive_content_id=archive_content_id)
+        if image is not None:
+            return image
+        text = _BEARER_RE.sub("Bearer <redacted>", value)
+        text = _OPENAI_KEY_RE.sub("<redacted-api-key>", text)
+        text = _KEY_VALUE_SECRET_RE.sub(lambda m: f"{m.group(1)}=<redacted>", text)
+        text = _redact_embedded_images(text, archive_content_id=archive_content_id)
+        if max_string_chars is not None:
+            return _truncate_text(text, max(1, int(max_string_chars)))
+        return text
+    return value
 
 
 @dataclass(frozen=True)
@@ -263,6 +360,15 @@ class DebugTraceSink:
             return
         ctx = context or self.root_context()
         now = time.time()
+        clean_summary = redact_debug_payload(str(summary or ""))
+        if not isinstance(clean_summary, str):
+            clean_summary = str(clean_summary)
+        if len(clean_summary) > self.max_string_chars:
+            original_length = len(clean_summary)
+            clean_summary = (
+                clean_summary[: self.max_string_chars]
+                + f"\n[truncated; original_length={original_length}]"
+            )
         event = {
             "schema_version": TRACE_SCHEMA_VERSION,
             "time": now,
@@ -281,7 +387,7 @@ class DebugTraceSink:
             "tool_name": str(tool_name or ""),
             "subtask_id": str(subtask_id or ctx.subtask_id or ""),
             "refs": {str(k): str(v) for k, v in (refs or {}).items() if str(v or "").strip()},
-            "summary": str(summary or ""),
+            "summary": clean_summary,
         }
         if data:
             event["data"] = self.redact(data)
@@ -383,8 +489,16 @@ class DebugTraceSink:
             return ""
         try:
             self._ensure_dir()
+            archive_content_id = ""
+            if isinstance(payload, dict) and isinstance(payload.get("archive"), dict):
+                archive_content_id = str(payload["archive"].get("content_id") or "")
             target.write_text(
-                json.dumps(self.redact(payload), ensure_ascii=False, indent=2, default=_json_default),
+                json.dumps(
+                    self.redact_payload(payload, archive_content_id=archive_content_id),
+                    ensure_ascii=False,
+                    indent=2,
+                    default=_json_default,
+                ),
                 encoding="utf-8",
             )
             return rel
@@ -411,30 +525,24 @@ class DebugTraceSink:
             logger.debug("Failed to open debug stream %s: %s", target, exc)
             return None
 
-    def redact(self, value: Any, *, _depth: int = 0) -> Any:
-        if _depth > 12:
-            return "<max-depth>"
-        if isinstance(value, dict):
-            clean: dict[str, Any] = {}
-            for key, item in value.items():
-                key_text = str(key)
-                normalized_key = key_text.strip().lower().replace("-", "_")
-                generic_secret = normalized_key in _GENERIC_TOKEN_KEYS and not isinstance(item, (int, float))
-                if _SENSITIVE_KEY_RE.search(key_text) or generic_secret:
-                    clean[key_text] = "<redacted>"
-                else:
-                    clean[key_text] = self.redact(item, _depth=_depth + 1)
-            return clean
-        if isinstance(value, (list, tuple, set)):
-            return [self.redact(item, _depth=_depth + 1) for item in value]
-        if isinstance(value, bytes):
-            return {"bytes": len(value), "redacted": True}
-        if isinstance(value, str):
-            text = _BEARER_RE.sub("Bearer <redacted>", value)
-            text = _OPENAI_KEY_RE.sub("<redacted-api-key>", text)
-            text = _KEY_VALUE_SECRET_RE.sub(lambda m: f"{m.group(1)}=<redacted>", text)
-            return _truncate_text(text, self.max_string_chars)
-        return value
+    def redact_payload(self, value: Any, *, archive_content_id: str = "") -> Any:
+        """Redact a full payload without applying the event string limit."""
+        return redact_debug_payload(
+            value,
+            archive_content_id=str(archive_content_id or ""),
+        )
+
+    def redact(
+        self,
+        value: Any,
+        *,
+        _depth: int = 0,
+    ) -> Any:
+        return redact_debug_payload(
+            value,
+            max_string_chars=self.max_string_chars,
+            _depth=_depth,
+        )
 
 
 def ensure_debug_trace(value: Any) -> DebugTraceContext | None:

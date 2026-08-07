@@ -1,3 +1,4 @@
+import asyncio
 import json
 import mimetypes
 import re
@@ -5,6 +6,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from core.content.attachments import encode_image_file_to_data_url
+from core.content.office import extract_office_text, is_office_attachment
+from core.content.references import build_workspace_content_ref
 from core.tools.base import BaseTool, ToolContext, ToolResult
 
 
@@ -86,7 +89,7 @@ class ReadFileTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Read a workspace text or image file; text can be limited to an inclusive line range."
+        return "Read a bounded workspace file or current-session input snapshot; text can be limited to an inclusive line range."
 
     @property
     def category(self) -> str:
@@ -97,7 +100,10 @@ class ReadFileTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "Workspace-relative file path."},
+                "path": {
+                    "type": "string",
+                    "description": "Workspace-relative file path or current-session input:<id> reference.",
+                },
                 "start_line": {"type": "integer", "description": "Optional 1-based start line."},
                 "end_line": {"type": "integer", "description": "Optional inclusive end line."},
             },
@@ -110,7 +116,20 @@ class ReadFileTool(BaseTool):
         if not path_text:
             return ToolResult("path is required.", is_error=True)
         try:
-            file_path = context.resolve_path(path_text)
+            content_name = ""
+            content_mime = ""
+            if path_text.startswith("input:"):
+                if context.conversation is None:
+                    return ToolResult("input references require an active conversation.", is_error=True)
+                content_service = getattr(context, "content_service", None)
+                if content_service is None:
+                    return ToolResult("input references require the session content service.", is_error=True)
+                content_ref = content_service.load_ref(context.conversation, path_text)
+                file_path = content_service.resolve_original(context.conversation, content_ref)
+                content_name = str(content_ref.name or "")
+                content_mime = str(content_ref.mime or "")
+            else:
+                file_path = context.resolve_path(path_text)
         except Exception as exc:
             return ToolResult(str(exc), is_error=True)
         if not file_path.is_file():
@@ -118,7 +137,10 @@ class ReadFileTool(BaseTool):
 
         try:
             size = file_path.stat().st_size
-            mime_type, _ = mimetypes.guess_type(str(file_path))
+            guessed_mime = mimetypes.guess_type(content_name or str(file_path))[0]
+            mime_type = content_mime
+            if not mime_type or mime_type.lower() == "application/octet-stream":
+                mime_type = guessed_mime or mime_type
             if str(mime_type or "").startswith("image/"):
                 if size > 20 * 1024 * 1024:
                     return ToolResult("Image file is larger than 20 MB.", is_error=True)
@@ -129,6 +151,28 @@ class ReadFileTool(BaseTool):
                     {"type": "text", "text": f"Image: {path_text}\nMime-Type: {mime_type}\nSize: {size} bytes"},
                     {"type": "image", "mimeType": mime_type or "image/png", "data": image_url},
                 ])
+
+            if is_office_attachment(content_name or file_path.name, str(mime_type or "")):
+                if size > 10 * 1024 * 1024:
+                    return ToolResult(
+                        "Office file is larger than 10 MB; use a smaller source or the desktop application.",
+                        is_error=True,
+                    )
+                extracted = extract_office_text(
+                    file_path.read_bytes(),
+                    name=content_name or file_path.name,
+                    mime=str(mime_type or "application/octet-stream"),
+                    max_bytes=1024 * 1024,
+                )
+                suffix = "\n[truncated=true]" if extracted.truncated else ""
+                return ToolResult(extracted.text + suffix)
+
+            content_suffix = Path(content_name or file_path.name).suffix.lower()
+            if str(mime_type or "").lower() == "application/pdf" or content_suffix == ".pdf":
+                return ToolResult(
+                    "PDF text extraction is not configured; open the original file or provide a text export.",
+                    is_error=True,
+                )
 
             if size > 10 * 1024 * 1024:
                 return ToolResult("File is larger than 10 MB; use file__search or a smaller source.", is_error=True)
@@ -218,3 +262,69 @@ class GrepTool(BaseTool):
                     if len(matches) >= limit:
                         return ToolResult(json.dumps({"matches": matches, "truncated": True}, ensure_ascii=False, indent=2))
         return ToolResult(json.dumps({"matches": matches, "truncated": False}, ensure_ascii=False, indent=2))
+
+
+class DeliverFilesTool(BaseTool):
+    @property
+    def name(self) -> str:
+        return "file__deliver"
+
+    @property
+    def display_name(self) -> str:
+        return "交付文件"
+
+    @property
+    def description(self) -> str:
+        return "Declare existing workspace files as final outputs for the current local task without reading their contents."
+
+    @property
+    def category(self) -> str:
+        return "read"
+
+    @property
+    def input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "description": "Workspace-relative paths to completed output files.",
+                },
+            },
+            "required": ["paths"],
+            "additionalProperties": False,
+        }
+
+    async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
+        source = str(getattr(getattr(context, "runtime", None), "source", "") or "")
+        if source not in {"desktop", "cli"}:
+            return ToolResult("file__deliver is available only to Desktop or CLI root runs.", is_error=True)
+        work_dir = str(getattr(getattr(context, "conversation", None), "work_dir", "") or "").strip()
+        if not work_dir:
+            return ToolResult("file__deliver requires an active workspace.", is_error=True)
+        paths = arguments.get("paths")
+        if not isinstance(paths, list) or not paths or len(paths) > 50:
+            return ToolResult("paths must contain between 1 and 50 file paths.", is_error=True)
+        def build_refs():
+            refs = []
+            for raw_path in paths:
+                path = str(raw_path or "").strip()
+                if not path:
+                    raise ValueError("file path is empty")
+                refs.append(build_workspace_content_ref(work_dir, path))
+            return refs
+
+        try:
+            refs = await asyncio.to_thread(build_refs)
+        except (OSError, ValueError) as exc:
+            return ToolResult(str(exc), is_error=True)
+        return ToolResult(
+            json.dumps(
+                {"delivered": [ref.ref for ref in refs]},
+                ensure_ascii=False,
+            ),
+            metadata={"content_refs": [ref.to_dict() for ref in refs]},
+        )

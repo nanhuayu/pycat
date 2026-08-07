@@ -423,6 +423,7 @@ class Icons:
     # === 附件 ===
     PAPERCLIP = "paperclip"
     IMAGE = "image"
+    AUDIO = "volume-high"
     CAMERA = "camera"
 
     # === 信息 / 关于 ===

@@ -1,34 +1,45 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 import logging
 import threading
 import uuid
+from dataclasses import dataclass
 from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QMessageBox
 
-from models.conversation import Conversation, Message
-from models.provider import Provider, build_model_ref
-from models.streaming import ConversationPatch, ConversationStreamState
-
-from core.llm.client import LLMClient
+from core.agent.events.conversation import conversation_patch_payload
+from core.agent.events.stream_batcher import StreamDeltaBatcher
+from core.agent.run.control import RunControl
 from core.agent.run.runtime import AgentRuntime
-from models.contracts.agent import RunEvent, RunEventKind
-from core.agent.events import create_run_debug_trace, finish_run_debug_trace
-from models.contracts.agent import RunPolicy, RunStatus
-
+from core.observability import create_run_debug_trace, finish_run_debug_trace
+from core.tools.base import ToolApprovalRequest
+from models.contracts.agent import RunEvent, RunEventKind, RunPolicy, RunStatus
+from models.contracts.tooling import ToolPermissionConfig
+from models.conversation import Conversation, Message
+from models.model_ref import build_model_ref
+from models.provider import Provider
+from models.streaming import ConversationPatch, ConversationStreamState
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass
 class _WorkerControl:
     request_id: str
+    run_control: RunControl
+    loop: asyncio.AbstractEventLoop | None = None
+    task: asyncio.Task | None = None
+
+
+@dataclass
+class _PendingApproval:
+    request_id: str
+    request: ToolApprovalRequest
     loop: asyncio.AbstractEventLoop
-    task: asyncio.Task
+    future: asyncio.Future
+    settling: bool = False
 
 
 class MessageRuntime(QObject):
@@ -47,45 +58,54 @@ class MessageRuntime(QObject):
     response_step = pyqtSignal(str, str, object)        # conversation_id, request_id, Message
     response_complete = pyqtSignal(str, str, object)    # conversation_id, request_id, Message
     response_error = pyqtSignal(str, str, str)          # conversation_id, request_id, error
+    run_finished = pyqtSignal(str, str, object)         # conversation_id, request_id, RunStatus
     retry_attempt = pyqtSignal(str, str, str)            # conversation_id, request_id, detail
     runtime_event = pyqtSignal(str, str, object)         # conversation_id, request_id, RunEvent
     conversation_patch = pyqtSignal(str, str, object)    # conversation_id, request_id, ConversationPatch
-    approval_requested = pyqtSignal(str, object)         # message, future
+    approval_requested = pyqtSignal(str, str, object)    # conversation_id, approval_id, request
+    approval_resolved = pyqtSignal(str)                  # approval_id
+    guidance_recovered = pyqtSignal(str, object)         # conversation_id, tuple[str, ...]
     question_requested = pyqtSignal(object, object)      # question spec, future
 
-    _raw_token = pyqtSignal(str, str, str)
-    _raw_thinking = pyqtSignal(str, str, str)
+    _raw_stream_batch = pyqtSignal(str, str, str, str)
     _raw_step = pyqtSignal(str, str, object)
     _raw_complete = pyqtSignal(str, str, object)
     _raw_error = pyqtSignal(str, str, str)
+    _raw_finished = pyqtSignal(str, str, object)
     _raw_retry = pyqtSignal(str, str, str)
     _raw_runtime_event = pyqtSignal(str, str, object)
     _raw_conversation_patch = pyqtSignal(str, str, object)
+    _raw_approval_requested = pyqtSignal(str, str, object)
+    _raw_approval_resolved = pyqtSignal(str)
 
     def __init__(
         self,
-        client: LLMClient,
         agent_runtime: AgentRuntime,
         parent: Optional[QObject] = None,
+        *,
+        activity_service=None,
     ):
         super().__init__(parent)
-        self._client = client
         self._runtime = agent_runtime
+        self._activity_service = activity_service
 
         self._streams: dict[str, ConversationStreamState] = {}
         self._last_request_id: dict[str, str] = {}
         self._worker_controls: dict[str, _WorkerControl] = {}
         self._worker_controls_lock = threading.Lock()
+        self._pending_approvals: dict[str, _PendingApproval] = {}
+        self._pending_approvals_lock = threading.Lock()
 
-        self._raw_token.connect(self._on_raw_token)
-        self._raw_thinking.connect(self._on_raw_thinking)
+        self._raw_stream_batch.connect(self._on_raw_stream_batch)
         self._raw_step.connect(self._on_raw_step)
         self._raw_complete.connect(self._on_raw_complete)
         self._raw_error.connect(self._on_raw_error)
+        self._raw_finished.connect(self._on_raw_finished)
         self._raw_retry.connect(self._on_raw_retry)
         self._raw_runtime_event.connect(self._on_raw_runtime_event)
         self._raw_conversation_patch.connect(self._on_raw_conversation_patch)
-        self.approval_requested.connect(self._on_approval_requested)
+        self._raw_approval_requested.connect(self._on_raw_approval_requested)
+        self._raw_approval_resolved.connect(self._on_raw_approval_resolved)
         self.question_requested.connect(self._on_question_requested)
 
     def is_streaming(self, conversation_id: str) -> bool:
@@ -96,6 +116,31 @@ class MessageRuntime(QObject):
 
     def get_state(self, conversation_id: str) -> Optional[ConversationStreamState]:
         return self._streams.get(conversation_id)
+
+    def pending_guidance_count(self, conversation_id: str) -> int:
+        with self._worker_controls_lock:
+            worker = self._worker_controls.get(str(conversation_id or ""))
+        return worker.run_control.pending_count if worker is not None else 0
+
+    def submit_guidance(self, conversation_id: str, text: str) -> bool:
+        key = str(conversation_id or "").strip()
+        with self._worker_controls_lock:
+            worker = self._worker_controls.get(key)
+        if worker is None or not worker.run_control.submit(text):
+            return False
+        return True
+
+    def update_permissions(
+        self,
+        conversation_id: str,
+        tool_permissions: ToolPermissionConfig,
+    ) -> int | None:
+        key = str(conversation_id or "").strip()
+        with self._worker_controls_lock:
+            worker = self._worker_controls.get(key)
+        if worker is None:
+            return None
+        return worker.run_control.update_permissions(tool_permissions)
 
     def start(
         self,
@@ -110,8 +155,21 @@ class MessageRuntime(QObject):
         if not conversation_id:
             return None
 
+        begin_turn = getattr(self._activity_service, "begin_turn", None)
+        if callable(begin_turn) and not begin_turn(conversation_id):
+            logger.debug("Conversation %s is already active; rejecting Desktop turn", conversation_id)
+            return None
+        activity_claimed = callable(begin_turn)
+
         request_id = str(uuid.uuid4())
         model_name = build_model_ref(provider.name, self._resolve_state_model(provider, conversation, policy))
+        run_control = RunControl(policy.tool_permissions)
+        worker_control = _WorkerControl(
+            request_id=request_id,
+            run_control=run_control,
+        )
+        with self._worker_controls_lock:
+            self._worker_controls[conversation_id] = worker_control
 
         state = ConversationStreamState(
             conversation_id=conversation_id,
@@ -140,15 +198,22 @@ class MessageRuntime(QObject):
         def run_worker() -> None:
             loop: asyncio.AbstractEventLoop | None = None
             task: asyncio.Task | None = None
+            stream_batch: StreamDeltaBatcher | None = None
             terminal_emitted = False
+
+            def flush_stream() -> None:
+                if stream_batch is not None:
+                    stream_batch.flush()
 
             def emit_cancelled() -> None:
                 nonlocal terminal_emitted
                 if terminal_emitted:
                     return
                 terminal_emitted = True
+                flush_stream()
                 finish_run_debug_trace(debug_trace, status="cancelled", summary="Cancelled")
                 self._raw_error.emit(conversation_id, request_id, "已取消生成")
+                self._raw_finished.emit(conversation_id, request_id, RunStatus.CANCELLED)
 
             def emit_error(error: str) -> None:
                 nonlocal terminal_emitted
@@ -156,31 +221,63 @@ class MessageRuntime(QObject):
                     return
                 terminal_emitted = True
                 detail = str(error or "生成失败")
+                flush_stream()
                 finish_run_debug_trace(debug_trace, status="error", summary=detail)
                 self._raw_error.emit(conversation_id, request_id, detail)
+                self._raw_finished.emit(conversation_id, request_id, RunStatus.FAILED)
 
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
+                stream_batch = StreamDeltaBatcher(
+                    schedule=loop.call_later,
+                    emit=lambda visible, thinking: self._raw_stream_batch.emit(
+                        conversation_id,
+                        request_id,
+                        visible,
+                        thinking,
+                    ),
+                )
+
                 def on_token(t: str) -> None:
-                    self._raw_token.emit(conversation_id, request_id, t)
+                    stream_batch.append_visible(t)
 
                 def on_thinking(t: str) -> None:
-                    self._raw_thinking.emit(conversation_id, request_id, t)
+                    stream_batch.append_thinking(t)
 
                 def on_step(m: Message) -> None:
+                    flush_stream()
                     self._raw_step.emit(conversation_id, request_id, m)
 
                 def on_patch(payload: object) -> None:
+                    flush_stream()
                     self._raw_conversation_patch.emit(conversation_id, request_id, payload)
 
-                async def approval_callback(message: str) -> bool:
+                async def approval_callback(request: ToolApprovalRequest) -> bool:
+                    flush_stream()
+                    approval_id = (
+                        f"{request_id}:{request.tool_call_id or 'tool'}:{uuid.uuid4().hex[:12]}"
+                    )
                     future = loop.create_future()
-                    self.approval_requested.emit(str(message or ""), future)
-                    return bool(await future)
+                    pending = _PendingApproval(
+                        request_id=request_id,
+                        request=request,
+                        loop=loop,
+                        future=future,
+                    )
+                    with self._pending_approvals_lock:
+                        self._pending_approvals[approval_id] = pending
+                    self._raw_approval_requested.emit(conversation_id, approval_id, request)
+                    try:
+                        return bool(await future)
+                    finally:
+                        with self._pending_approvals_lock:
+                            self._pending_approvals.pop(approval_id, None)
+                        self._raw_approval_resolved.emit(approval_id)
 
                 async def questions_callback(question: dict) -> dict:
+                    flush_stream()
                     future = loop.create_future()
                     self.question_requested.emit(dict(question or {}), future)
                     result = await future
@@ -192,6 +289,7 @@ class MessageRuntime(QObject):
                     nonlocal terminal_emitted
 
                     def on_event(evt: RunEvent) -> None:
+                        flush_stream()
                         self._raw_runtime_event.emit(conversation_id, request_id, evt)
                         if isinstance(evt.data, dict) and isinstance(evt.data.get("conversation_patch"), dict):
                             on_patch(evt.data.get("conversation_patch") or {})
@@ -213,6 +311,7 @@ class MessageRuntime(QObject):
                         debug_log_path=debug_log_path,
                         debug_trace=debug_trace,
                         initial_runtime_messages=list(initial_runtime_messages or []),
+                        run_control=run_control,
                     )
                     if result.status == RunStatus.CANCELLED:
                         emit_cancelled()
@@ -220,6 +319,7 @@ class MessageRuntime(QObject):
                     if result.status == RunStatus.FAILED:
                         emit_error(result.error or "生成失败")
                         return
+                    flush_stream()
                     final_conversation = getattr(result, "conversation", None)
                     if final_conversation is not None:
                         on_patch(self._build_conversation_patch_payload(final_conversation))
@@ -231,6 +331,7 @@ class MessageRuntime(QObject):
                     terminal_emitted = True
                     finish_run_debug_trace(debug_trace, status=result.status.value, summary=final_summary)
                     self._raw_complete.emit(conversation_id, request_id, result.final_message)
+                    self._raw_finished.emit(conversation_id, request_id, result.status)
 
                 task = loop.create_task(run())
                 self._register_worker_control(
@@ -249,7 +350,15 @@ class MessageRuntime(QObject):
                 else:
                     emit_error(str(exc))
             finally:
+                recovered = run_control.close_and_drain()
+                if recovered:
+                    self.guidance_recovered.emit(conversation_id, recovered)
+                self.reject_pending_approvals(request_id=request_id)
                 self._unregister_worker_control(conversation_id, request_id, task)
+                if activity_claimed:
+                    end_turn = getattr(self._activity_service, "end_turn", None)
+                    if callable(end_turn):
+                        end_turn(conversation_id)
                 if loop is not None and not loop.is_closed():
                     try:
                         loop.run_until_complete(loop.shutdown_asyncgens())
@@ -262,7 +371,18 @@ class MessageRuntime(QObject):
                     asyncio.set_event_loop(None)
                     loop.close()
 
-        threading.Thread(target=run_worker, daemon=True).start()
+        try:
+            threading.Thread(target=run_worker, daemon=True).start()
+        except Exception:
+            with self._worker_controls_lock:
+                current = self._worker_controls.get(conversation_id)
+                if current is worker_control:
+                    self._worker_controls.pop(conversation_id, None)
+            if activity_claimed:
+                end_turn = getattr(self._activity_service, "end_turn", None)
+                if callable(end_turn):
+                    end_turn(conversation_id)
+            raise
         return state
 
     @staticmethod
@@ -283,14 +403,56 @@ class MessageRuntime(QObject):
         if state is None:
             return False
         state.cancel()
+        self.reject_pending_approvals(request_id=state.request_id)
         with self._worker_controls_lock:
             control = self._worker_controls.get(conversation_id)
         if control is not None and control.request_id == state.request_id:
             try:
-                control.loop.call_soon_threadsafe(self._cancel_task, control.task)
+                if control.loop is not None and control.task is not None:
+                    control.loop.call_soon_threadsafe(self._cancel_task, control.task)
             except RuntimeError as exc:
                 logger.debug("Failed to interrupt message runtime task: %s", exc)
         return True
+
+    def pending_approvals(self) -> dict[str, ToolApprovalRequest]:
+        with self._pending_approvals_lock:
+            return {key: item.request for key, item in self._pending_approvals.items()}
+
+    def resolve_approval(self, approval_id: str, approved: bool) -> bool:
+        with self._pending_approvals_lock:
+            pending = self._pending_approvals.get(str(approval_id or ""))
+            if pending is None or pending.settling:
+                return False
+            pending.settling = True
+
+        def settle() -> None:
+            try:
+                if not pending.future.done():
+                    pending.future.set_result(bool(approved))
+            except Exception as exc:
+                logger.debug("Failed to resolve tool approval: %s", exc)
+
+        try:
+            pending.loop.call_soon_threadsafe(settle)
+            return True
+        except RuntimeError as exc:
+            logger.debug("Failed to schedule tool approval result: %s", exc)
+            with self._pending_approvals_lock:
+                self._pending_approvals.pop(str(approval_id or ""), None)
+            self._raw_approval_resolved.emit(str(approval_id or ""))
+            return False
+
+    def reject_pending_approvals(self, *, request_id: str = "") -> int:
+        with self._pending_approvals_lock:
+            approval_ids = [
+                approval_id
+                for approval_id, pending in self._pending_approvals.items()
+                if not request_id or pending.request_id == request_id
+            ]
+        resolved = 0
+        for approval_id in approval_ids:
+            resolved += int(self.resolve_approval(approval_id, False))
+        return resolved
 
     def _register_worker_control(
         self,
@@ -300,9 +462,12 @@ class MessageRuntime(QObject):
         task: asyncio.Task,
         state: ConversationStreamState,
     ) -> None:
-        control = _WorkerControl(request_id=request_id, loop=loop, task=task)
         with self._worker_controls_lock:
-            self._worker_controls[conversation_id] = control
+            control = self._worker_controls.get(conversation_id)
+            if control is None or control.request_id != request_id:
+                return
+            control.loop = loop
+            control.task = task
         if state.cancel_event.is_set():
             task.cancel()
 
@@ -334,27 +499,26 @@ class MessageRuntime(QObject):
             return True
         return self._last_request_id.get(conversation_id) == request_id
 
-    def _on_raw_token(self, conversation_id: str, request_id: str, token: str) -> None:
+    def _on_raw_stream_batch(
+        self,
+        conversation_id: str,
+        request_id: str,
+        visible: str,
+        thinking: str,
+    ) -> None:
         if not self._accept_event(conversation_id, request_id):
             return
         state = self._streams.get(conversation_id)
         if state:
             try:
-                state.visible_text += token
-            except Exception as exc:
-                logger.debug("Failed to append visible streaming token: %s", exc)
-        self.token_received.emit(conversation_id, request_id, token)
-
-    def _on_raw_thinking(self, conversation_id: str, request_id: str, thinking: str) -> None:
-        if not self._accept_event(conversation_id, request_id):
-            return
-        state = self._streams.get(conversation_id)
-        if state:
-            try:
+                state.visible_text += visible
                 state.thinking_text += thinking
             except Exception as exc:
-                logger.debug("Failed to append thinking streaming token: %s", exc)
-        self.thinking_received.emit(conversation_id, request_id, thinking)
+                logger.debug("Failed to append streaming batch: %s", exc)
+        if visible:
+            self.token_received.emit(conversation_id, request_id, visible)
+        if thinking:
+            self.thinking_received.emit(conversation_id, request_id, thinking)
 
     def _on_raw_step(self, conversation_id: str, request_id: str, message: Message) -> None:
         if not self._accept_event(conversation_id, request_id):
@@ -399,6 +563,16 @@ class MessageRuntime(QObject):
             logger.debug("Failed to clear live stream state on error: %s", exc)
         self.response_error.emit(conversation_id, request_id, error)
 
+    def _on_raw_finished(
+        self,
+        conversation_id: str,
+        request_id: str,
+        status: RunStatus,
+    ) -> None:
+        if not self._accept_event(conversation_id, request_id):
+            return
+        self.run_finished.emit(conversation_id, request_id, status)
+
     def _on_raw_retry(self, conversation_id: str, request_id: str, detail: str) -> None:
         if not self._accept_event(conversation_id, request_id):
             return
@@ -429,50 +603,30 @@ class MessageRuntime(QObject):
             return
         self.conversation_patch.emit(conversation_id, request_id, patch)
 
+    def _on_raw_approval_requested(
+        self,
+        conversation_id: str,
+        approval_id: str,
+        request: object,
+    ) -> None:
+        if isinstance(request, ToolApprovalRequest):
+            self.approval_requested.emit(conversation_id, approval_id, request)
+            return
+        self.resolve_approval(approval_id, False)
+
+    def _on_raw_approval_resolved(self, approval_id: str) -> None:
+        self.approval_resolved.emit(approval_id)
+
     @staticmethod
     def _build_conversation_patch_payload(conversation: Conversation) -> dict:
-        condensed: dict[str, str] = {}
-        messages: list[Message] = []
-        for msg in getattr(conversation, "messages", []) or []:
-            clone = Message.from_dict(msg.to_dict())
-            messages.append(clone)
-            parent = str(getattr(clone, "archived_content_id", "") or "").strip()
-            if clone.id and parent:
-                condensed[str(clone.id)] = parent
-        try:
-            state = conversation.get_state().to_dict()
-        except Exception:
-            state = None
-        return {
-            "conversation_id": str(getattr(conversation, "id", "") or ""),
-            "changed_messages": messages,
-            "condensed_message_ids": condensed,
-            "state": state,
-        }
+        payload = conversation_patch_payload(conversation)
+        return dict(payload.get("conversation_patch") or {})
 
     @staticmethod
     def _coerce_conversation_patch(conversation_id: str, payload: object) -> ConversationPatch | None:
-        if isinstance(payload, ConversationPatch):
-            return payload
-        if not isinstance(payload, dict):
-            return None
-        raw_messages = payload.get("changed_messages") or []
-        messages: list[Message] = []
-        for item in raw_messages:
-            try:
-                if isinstance(item, Message):
-                    messages.append(Message.from_dict(item.to_dict()))
-                elif isinstance(item, dict):
-                    messages.append(Message.from_dict(item))
-            except Exception as exc:
-                logger.debug("Failed to normalize patch message: %s", exc)
-        condensed = payload.get("condensed_message_ids") if isinstance(payload.get("condensed_message_ids"), dict) else {}
-        return ConversationPatch(
-            conversation_id=str(payload.get("conversation_id") or conversation_id or ""),
-            changed_messages=messages,
-            state=dict(payload.get("state") or {}) if isinstance(payload.get("state"), dict) else None,
-            condensed_message_ids={str(k): str(v) for k, v in dict(condensed or {}).items()},
-            diagnostics=dict(payload.get("diagnostics") or {}) if isinstance(payload.get("diagnostics"), dict) else {},
+        return ConversationPatch.from_payload(
+            payload,
+            conversation_id=conversation_id,
         )
 
     @staticmethod
@@ -490,20 +644,6 @@ class MessageRuntime(QObject):
                 logger.debug("Failed to settle runtime UI future: %s", exc)
 
         loop.call_soon_threadsafe(_apply_result)
-
-    def _on_approval_requested(self, message: str, future: object) -> None:
-        try:
-            reply = QMessageBox.question(
-                self.parent(),
-                "工具执行确认",
-                str(message or "请确认继续执行工具。"),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            self._settle_ui_future(future, result=reply == QMessageBox.StandardButton.Yes)
-        except Exception as exc:
-            logger.debug("Failed to show tool approval dialog: %s", exc)
-            self._settle_ui_future(future, result=False)
 
     def _on_question_requested(self, question: object, future: object) -> None:
         host = self.parent()
@@ -594,8 +734,6 @@ class MessageRuntime(QObject):
         role = str(payload.get("role") or "").strip()
 
         if kind == "tool_start":
-            if str(payload.get("phase") or "").strip() == "organizing":
-                return "正在整理长结果"
             return f"正在执行 {tool_name or '工具'}"
         if kind == "tool_end":
             return summary or f"{tool_name or '工具'} 已返回结果"

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -17,47 +15,8 @@ from core.config.migrations import (
 )
 
 
-logger = logging.getLogger(__name__)
-
-
 _APP_CACHE: AppConfig | None = None
 _GLOBAL_DATA_DIR_CACHE: Path | None = None
-
-
-def _get_legacy_appdata_dir() -> Path:
-    app_data = os.getenv("APPDATA", os.path.expanduser("~"))
-    return Path(app_data) / "PyCat"
-
-
-def _merge_directory(source: Path, target: Path) -> None:
-    if not source.exists() or not source.is_dir():
-        return
-    target.mkdir(parents=True, exist_ok=True)
-    for child in source.iterdir():
-        destination = target / child.name
-        try:
-            if child.is_dir():
-                _merge_directory(child, destination)
-            elif not destination.exists():
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(child, destination)
-        except Exception as exc:
-            logger.debug("Failed to migrate legacy config artifact %s -> %s: %s", child, destination, exc)
-            continue
-
-
-def _migrate_legacy_global_data(target_dir: Path) -> None:
-    legacy_dir = _get_legacy_appdata_dir()
-    try:
-        if legacy_dir.resolve() == target_dir.resolve():
-            return
-    except Exception as exc:
-        logger.debug("Failed to compare legacy and target config directories: %s", exc)
-
-    if not legacy_dir.exists() or not legacy_dir.is_dir():
-        return
-
-    _merge_directory(legacy_dir, target_dir)
 
 
 def get_global_data_dir() -> Path:
@@ -65,9 +24,8 @@ def get_global_data_dir() -> Path:
     if _GLOBAL_DATA_DIR_CACHE is not None:
         return _GLOBAL_DATA_DIR_CACHE
 
-    target_dir = Path.home() / ".PyCat"
+    target_dir = Path.home() / ".pycat"
     target_dir.mkdir(parents=True, exist_ok=True)
-    _migrate_legacy_global_data(target_dir)
     _GLOBAL_DATA_DIR_CACHE = target_dir
     return target_dir
 

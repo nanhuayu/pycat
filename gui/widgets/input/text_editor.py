@@ -11,7 +11,8 @@ from PyQt6.QtGui import QKeyEvent, QTextCursor
 from core.commands import CommandRegistry
 from core.commands.mentions import MentionCandidate, MentionKind, MentionQuery
 from gui.shortcuts import matches_shortcut
-from gui.utils.image_utils import extract_images_from_mime
+from gui.utils.image_utils import extract_attachment_sources_from_mime
+from gui.widgets.themed_line_edit import ThemedContextMenuMixin
 
 
 logger = logging.getLogger(__name__)
@@ -50,12 +51,13 @@ class FileCompleterPopup(QListWidget):
         super().keyPressEvent(event)
 
 
-class MessageTextEdit(QTextEdit):
+class MessageTextEdit(ThemedContextMenuMixin, QTextEdit):
     """Custom text edit with Ctrl+Enter and inline mention completion."""
 
     _HISTORY_LIMIT = 50
 
     send_requested = pyqtSignal()
+    cancel_requested = pyqtSignal()
     attachments_received = pyqtSignal(list)
     file_reference_added = pyqtSignal(str)
 
@@ -166,7 +168,7 @@ class MessageTextEdit(QTextEdit):
 
     def insertFromMimeData(self, source):
         try:
-            data_urls, file_paths = extract_images_from_mime(source)
+            data_urls, file_paths = extract_attachment_sources_from_mime(source)
             sources: list[str] = []
             sources.extend(data_urls)
             sources.extend(file_paths)
@@ -174,7 +176,7 @@ class MessageTextEdit(QTextEdit):
                 self.attachments_received.emit(sources)
                 return
         except Exception as exc:
-            logger.debug("Failed to extract pasted image attachments in text editor: %s", exc)
+            logger.debug("Failed to extract pasted attachments in text editor: %s", exc)
 
         super().insertFromMimeData(source)
 
@@ -201,6 +203,10 @@ class MessageTextEdit(QTextEdit):
             elif event.key() == Qt.Key.Key_Escape:
                 self.completer_popup.hide()
                 return
+
+        if event.key() == Qt.Key.Key_Escape:
+            self.cancel_requested.emit()
+            return
 
         if matches_shortcut(event, "send_message"):
             self.send_requested.emit()

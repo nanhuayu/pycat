@@ -1,4 +1,5 @@
-from typing import Dict, List, Any, Optional
+import threading
+from typing import Dict, List, Any, Iterable, Optional
 from models.contracts.tooling import ToolPermissionConfig
 from core.tools.base import BaseTool, ToolContext, ToolResult
 from models.contracts.tooling import ToolDescriptor, ToolSelectionPolicy
@@ -6,19 +7,42 @@ from models.contracts.tooling import ToolDescriptor, ToolSelectionPolicy
 class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, BaseTool] = {}
+        self._lock = threading.RLock()
 
     def register(self, tool: BaseTool):
         """Register a tool instance."""
-        self._tools[tool.name] = tool
+        with self._lock:
+            tools = dict(self._tools)
+            tools[tool.name] = tool
+            self._tools = tools
 
     def unregister(self, name: str) -> None:
-        self._tools.pop(name, None)
+        with self._lock:
+            tools = dict(self._tools)
+            tools.pop(name, None)
+            self._tools = tools
 
     def unregister_prefix(self, prefix: str) -> None:
         if not prefix:
             return
-        for name in [tool_name for tool_name in self._tools.keys() if tool_name.startswith(prefix)]:
-            self._tools.pop(name, None)
+        self.replace_prefix(prefix, ())
+
+    def replace_prefix(self, prefix: str, tools: Iterable[BaseTool]) -> None:
+        """Atomically replace every tool under one public-name prefix."""
+        clean_prefix = str(prefix or "")
+        if not clean_prefix:
+            return
+        replacements = {tool.name: tool for tool in tools}
+        if any(not name.startswith(clean_prefix) for name in replacements):
+            raise ValueError(f"replacement tool does not use prefix {clean_prefix!r}")
+        with self._lock:
+            updated = {
+                name: tool
+                for name, tool in self._tools.items()
+                if not name.startswith(clean_prefix)
+            }
+            updated.update(replacements)
+            self._tools = updated
 
     def get_tool(self, name: str) -> Optional[BaseTool]:
         return self._tools.get(name)
@@ -49,7 +73,7 @@ class ToolRegistry:
                 continue
             # Effective visibility filter: per-tool override -> category default.
             policy = permissions.resolve(tool.name, descriptor.category)
-            if policy is not None and not policy.enabled:
+            if policy.action == "deny":
                 continue
             schema = tool.to_openai_tool()
             fn = schema.get("function") if isinstance(schema, dict) else None

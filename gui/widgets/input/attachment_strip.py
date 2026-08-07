@@ -17,11 +17,21 @@ class AttachmentPreviewItem(QFrame):
 
     remove_requested = pyqtSignal(str)
 
-    def __init__(self, source: str, is_image: bool = True, parent=None):
+    def __init__(
+        self,
+        source: str,
+        is_image: bool = True,
+        *,
+        error: str = "",
+        display_name: str = "",
+        parent=None,
+    ):
         super().__init__(parent)
         self.source = source
         self.is_image = is_image
+        self.display_name = str(display_name or "").strip()
         self._setup_ui()
+        self.set_error(error)
 
     def _setup_ui(self) -> None:
         self.setObjectName("image_preview_item")
@@ -32,6 +42,7 @@ class AttachmentPreviewItem(QFrame):
         layout.setSpacing(1)
 
         thumb = QLabel()
+        self._thumb = thumb
         thumb.setObjectName("image_thumb")
         thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -48,15 +59,15 @@ class AttachmentPreviewItem(QFrame):
             else:
                 thumb.setText("IMG")
         else:
-            ext = os.path.splitext(self.source)[1].lower() or "FILE"
+            ext = os.path.splitext(self.display_name or self.source)[1].lower() or "FILE"
             thumb.setObjectName("file_thumb")
             thumb.setText(ext)
-            thumb.setToolTip(os.path.basename(self.source))
+            thumb.setToolTip(self.display_name or os.path.basename(self.source))
 
         layout.addWidget(thumb)
 
         if not self.is_image:
-            name_lbl = QLabel(os.path.basename(self.source))
+            name_lbl = QLabel(self.display_name or os.path.basename(self.source))
             name_lbl.setObjectName("file_name_lbl")
             name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             elided = name_lbl.fontMetrics().elidedText(
@@ -75,6 +86,18 @@ class AttachmentPreviewItem(QFrame):
         remove_btn.move(self.width() - 16, 2)
         remove_btn.show()
 
+    def set_error(self, error: str) -> None:
+        detail = str(error or "").strip()
+        tooltip = (
+            "粘贴图片"
+            if self.source.startswith("data:image")
+            else self.display_name or os.path.basename(self.source)
+        )
+        if detail:
+            tooltip = f"{tooltip}\n准备失败：{detail}"
+        self.setToolTip(tooltip)
+        self._thumb.setToolTip(tooltip)
+
 
 class AttachmentPreviewStrip(QWidget):
     """Preview strip for attached files/images."""
@@ -92,11 +115,24 @@ class AttachmentPreviewStrip(QWidget):
         self._layout.addStretch()
         self.setVisible(False)
 
-    def add_attachment(self, source: str, *, is_image: bool) -> None:
+    def add_attachment(
+        self,
+        source: str,
+        *,
+        is_image: bool,
+        error: str = "",
+        display_name: str = "",
+    ) -> None:
         if source in self._items:
+            self._items[source].set_error(error)
             return
 
-        item = AttachmentPreviewItem(source, is_image=is_image)
+        item = AttachmentPreviewItem(
+            source,
+            is_image=is_image,
+            error=error,
+            display_name=display_name,
+        )
         item.remove_requested.connect(self.remove_requested.emit)
         self._items[source] = item
         self._layout.insertWidget(self._layout.count() - 1, item)

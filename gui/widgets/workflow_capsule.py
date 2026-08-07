@@ -20,14 +20,32 @@ PathResolver = Callable[[str, str], Path]
 
 
 def _local_path(path: str, work_dir: str = "") -> Path:
+    raw_work_dir = str(work_dir or "").strip()
+    root = Path(raw_work_dir or ".").expanduser().resolve()
     candidate = Path(str(path or "").strip()).expanduser()
+    if candidate.is_absolute() and not raw_work_dir:
+        return candidate.resolve()
     if not candidate.is_absolute():
-        candidate = Path(str(work_dir or ".")).expanduser() / candidate
-    return candidate.resolve()
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"path escaped workspace root: {path}") from exc
+    return resolved
 
 
 def _artifact_path(path: str, work_dir: str = "") -> Path:
-    return ArtifactService.resolve_content_path(path, work_dir=str(work_dir or ".")).resolve()
+    raw_work_dir = str(work_dir or "").strip()
+    root = Path(raw_work_dir or ".").expanduser().resolve()
+    resolved = ArtifactService.resolve_content_path(path, work_dir=str(work_dir or ".")).resolve()
+    if resolved.is_absolute() and not raw_work_dir and Path(str(path or "").strip()).is_absolute():
+        return resolved
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"artifact path escaped workspace root: {path}") from exc
+    return resolved
 
 
 def _value(source: object, key: str, default: Any = "") -> Any:

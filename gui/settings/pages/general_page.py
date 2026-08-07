@@ -21,7 +21,6 @@ class GeneralPage(QWidget):
         *,
         theme: str,
         accent: str,
-        show_stats: bool,
         show_thinking: bool,
         close_to_tray: bool,
         log_stream: bool,
@@ -43,7 +42,6 @@ class GeneralPage(QWidget):
         self.appearance_page = AppearancePage(
             theme=theme,
             accent=accent,
-            show_stats=show_stats,
             show_thinking=show_thinking,
             close_to_tray=close_to_tray,
             log_stream=log_stream,

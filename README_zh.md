@@ -13,8 +13,9 @@
    </p>
 
    <p>
-      <a href="./ARCHITECTURE.md">架构说明</a> ·
-      <a href="./docs/CC_HAHA_MIGRATION_NOTES.md">迁移记录</a> ·
+      <a href="./docs/README.md">文档导航</a> ·
+      <a href="./docs/architecture/">架构说明</a> ·
+      <a href="./docs/architecture/modules.md">代码地图</a> ·
       <a href="./docs/releases/">发布说明</a>
    </p>
 </div>
@@ -101,7 +102,7 @@ PyCat 是一款面向桌面场景的原生 AI 工作台，将 LLM 聊天、多�
 | **原生桌面体验** | 暗色 / 亮色主题、高 DPI 支持、会话树侧边栏、Markdown 渲染、清晰的信息布局。 |
 | **性能可观测** | 实时 Token 消耗速度（Tokens/sec）、响应延迟、右侧检查面板的运行时间线。 |
 | **轻量构建** | Nuitka `--standalone` 编译生成 ~80 MB 自包含 `.exe`——不需要 Electron、不需要 Node.js、不需要额外运行时。 |
-| **清晰架构** | 分层的 `models/contracts → core domains → core.app → gui/cli/channel`，以 `ChannelPlatformHost` 作为频道后端唯一门面。 |
+| **清晰架构** | 分层的契约、core 领域、应用服务与适配器，以 `ChannelGateway`/`ChannelService` 作为频道应用边界。 |
 
 ## 🧩 功能概览
 
@@ -117,7 +118,7 @@ PyCat 是一款面向桌面场景的原生 AI 工作台，将 LLM 聊天、多�
 - **微信**：二维码桥接，支持长轮询超时降噪——无需公网回调。
 - **飞书**：WebSocket 长连接，使用自定义轻量 protobuf codec——不依赖 `lark-oapi` 重型 SDK。
 - **Telegram**：Bot API 长轮询（`getUpdates`）——只需 Bot Token，无需 webhook。
-- 所有频道共享统一的 `ChannelPlatformHost` 边界，并自动绑定会话到回发目标。
+- 所有频道共享统一的 `ChannelGateway`/`ChannelService` 边界，并自动绑定会话到回发目标。
 
 ### 扩展能力
 
@@ -149,9 +150,12 @@ PyCat 是一款面向桌面场景的原生 AI 工作台，将 LLM 聊天、多�
 
 更多说明请参考：
 
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md)
-- [`docs/PLAN_AGENT_RUNTIME_REFACTOR.md`](./docs/PLAN_AGENT_RUNTIME_REFACTOR.md)
-- [`docs/ARCHITECTURE_REDESIGN.md`](./docs/ARCHITECTURE_REDESIGN.md)
+- [`docs/README.md`](./docs/README.md)
+- [`docs/architecture/`](./docs/architecture/)
+- [`docs/architecture/modules.md`](./docs/architecture/modules.md) 与 [`docs/architecture/concepts.md`](./docs/architecture/concepts.md)
+- [`docs/STATUS.md`](./docs/STATUS.md)
+- [`AGENTS.md`](./AGENTS.md) 与 [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- [`docs/product/`](./docs/product/) 与 [`docs/engineering/`](./docs/engineering/)
 
 ## 🚀 快速开始
 
@@ -194,7 +198,7 @@ powershell -ExecutionPolicy Bypass -File .\build_nuitka.ps1
 - 使用 Nuitka 生成 Windows 独立运行目录（`--standalone --enable-plugin=pyqt6`），
 - 生成 `pycat.exe` 到输出目录，
 - 打包 `assets/`、`pycat.ico`、`LICENSE`、`README.md` 与 `README_zh.md`，
-- 在项目根目录生成带版本号的压缩包：`pycat-0.0.2-windows-x64.zip`。
+- 在项目根目录生成使用打包脚本版本字段的压缩包。
 
 > **为什么用 Nuitka？** 与 Electron 系应用需要捆绑整个 Chromium + Node.js 运行时（~200MB+）不同，Nuitka 将 Python 代码直接编译为原生机器码，生成自包含的 ~80MB 包，无需外部运行时依赖。结果是更快的启动、更低的内存占用和真正可移植的可执行文件。
 
@@ -207,7 +211,7 @@ pycat/
 │  ├─ agent/               # AgentRuntime、run engine、request pipeline、subagent、events
 │  ├─ app/                 # AppContainer、repositories、应用服务、coordinator
 │  ├─ capabilities/        # capability 默认值、merge、executor、tool adapter
-│  ├─ channel/             # channel gateway、backend host、sources、reply
+│  ├─ channel/             # gateway、lifecycle、scheduler、platforms、reply
 │  ├─ content/             # archive store、content view、markdown、attachments
 │  ├─ context/             # context sections、providers、maintenance、request replay
 │  ├─ llm/                 # transport client、request payload、response parsing、token budget
@@ -217,7 +221,13 @@ pycat/
 │  ├─ skills/              # discovery、manifest、routing、resources、prompt section
 │  ├─ state/               # todo、artifact、work trace 会话状态操作
 │  └─ tools/               # MCP、系统工具、catalog、permissions、execution adapters
-├─ docs/                   # 架构文档、历史设计资料、发布说明
+├─ docs/                   # 产品、架构、状态、决策与证据
+│  ├─ architecture/        # 当前系统与机制文档
+│  ├─ product/             # 产品概览与用户工作流
+│  ├─ engineering/         # 测试与文档治理
+│  ├─ decisions/           # 已采纳架构决策
+│  ├─ reference/           # 外部实现证据
+│  ├─ archive/             # 唯一过期内部证据
 │  └─ releases/            # 版本化发布说明
 ├─ models/                 # 纯数据模型与 models/contracts
 ├─ tests/                  # unit/runtime/channels/gui/cli 测试套件
@@ -254,13 +264,13 @@ pycat/
 
 PyCat 目前处于早期阶段，还在快速迭代中。欢迎各种形式的贡献——新功能、Bug 修复、文档、UI 打磨、频道接入和测试。
 
-**当前状态：** v0.0.2，403 个单元测试通过，四大频道基础功能就绪，`lark-oapi` 依赖已移除。
+**当前状态：** 开发版本；版本号和测试结果以当前 checkout 的源码与实际运行记录为准。
 
 > ⚠️ 项目还有很多不完善的地方：功能深度有限、缺少移动端、社区规模小、文档不全。如果你在寻找成熟稳定的产品，建议优先考虑 Cherry Studio 或 Chatbox。如果你对 Python + Nuitka + IM 频道这条技术路线感兴趣，欢迎一起完善。
 
 **好的首个贡献方向：**
 
-- 新增频道 source（如 Slack、Discord、钉钉），参照 `core/channel/sources/<source>/` 模式。
+- 新增频道平台（如 Slack、Discord、钉钉），遵循 `core/channel/platforms/` 的契约并复用现有 Gateway 流程。
 - 打磨 UI 主题或新增 `assets/styles/` 变体。
 - 用新的可复用技能文件扩充技能库。
 - 提升 `core/channel/`、`core/agent/`、`core/context/` 或 `gui/presenters/` 的测试覆盖率。
@@ -268,10 +278,10 @@ PyCat 目前处于早期阶段，还在快速迭代中。欢迎各种形式的�
 
 ### 开始之前：
 
-1. 阅读 `ARCHITECTURE.md` 理解分层规则。
-2. 遵循 `models/contracts → core domains → core.app → gui/cli/channel` 的依赖方向。
-3. 添加频道时使用 `ChannelPlatformHost` 作为唯一 API 边界——绝不直接访问 runtime 私有状态。
-4. 提交前运行 `python -m unittest discover -s tests` 和 `python -m compileall core models gui cli tests`。聚焦测试命令见 `docs/testing.md`。
+1. 先阅读 `AGENTS.md` 与 `docs/README.md`，再阅读 `docs/architecture/` 和 `docs/architecture/modules.md`。
+2. 遵循 `AGENTS.md` 的依赖和所有权规则，不要依据历史计划推断当前结构。
+3. 添加频道时实现现有平台契约并复用 `ChannelGateway`/`ChannelService`，绝不直接访问 runtime 私有状态。
+4. 提交前运行 `python -m compileall core models gui cli tests -q` 和受影响的 `python -m pytest ...` 分组。依赖、聚焦命令和文档检查见 `docs/engineering/testing.md`。
 
 **迭代速度快，期待你的加入。** 🚀
 

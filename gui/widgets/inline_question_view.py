@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from gui.widgets.themed_line_edit import ThemedLineEdit
+
 class InlineQuestionCard(QFrame):
     """Inline interactive card used by askQuestions as the primary UI path."""
 
@@ -75,7 +77,7 @@ class InlineQuestionCard(QFrame):
         freeform_title.setProperty("muted", True)
         layout.addWidget(freeform_title)
 
-        self._freeform_input = QLineEdit()
+        self._freeform_input = ThemedLineEdit()
         self._freeform_input.setPlaceholderText("可选：输入补充说明…")
         layout.addWidget(self._freeform_input)
 

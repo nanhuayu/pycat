@@ -111,7 +111,6 @@ async def iter_sse_data_lines(
             return
         try:
             log_fp.write(payload + "\n")
-            log_fp.flush()
         except Exception as exc:
             logger.debug("Failed to write SSE debug chunk: %s", exc)
 

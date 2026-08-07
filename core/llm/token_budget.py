@@ -1,21 +1,21 @@
 """Unified token estimation and context budget helpers."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
 import json
 import re
+from dataclasses import dataclass
+from typing import Any, Iterable, Sequence
 
-from models.conversation import Conversation, Message
-from models.provider import Provider, provider_matches_name
-
+from models.conversation import Conversation, Message, normalize_tool_result
+from models.llm_config import LLMConfig
+from models.model_ref import provider_matches_name
+from models.provider import Provider
 
 DEFAULT_CONTEXT_WINDOW = 128_000
-DEFAULT_RESERVED_OUTPUT_TOKENS = 4_096
-MAX_RESERVED_OUTPUT_TOKENS = 20_000
+DEFAULT_OUTPUT_LIMIT = 4_096
 WARNING_THRESHOLD = 0.80
-COMPACT_THRESHOLD = 0.90
 DANGER_THRESHOLD = 0.95
+IMAGE_TOKEN_ESTIMATE = 256
 
 
 def _coerce_positive_int(value: Any) -> int | None:
@@ -53,6 +53,71 @@ def estimate_tokens(value: Any) -> int:
     return _estimate_text_tokens(str(value))
 
 
+def estimate_request_tokens(payload: Any) -> int:
+    """Estimate one provider payload without charging image transport bytes.
+
+    OpenAI-compatible, Responses, Anthropic and Ollama serialize the same
+    logical image through different JSON shapes.  Base64 is transport data,
+    not text visible to the model, so every recognized image part contributes
+    one bounded visual estimate while the remaining payload is estimated as
+    ordinary JSON.
+    """
+
+    budget_view, image_count = _request_budget_view(payload)
+    text_tokens = _estimate_text_tokens(
+        json.dumps(budget_view, ensure_ascii=False, sort_keys=True, default=str)
+    )
+    return max(0, text_tokens + image_count * IMAGE_TOKEN_ESTIMATE)
+
+
+def _request_budget_view(value: Any) -> tuple[Any, int]:
+    if isinstance(value, dict):
+        item_type = str(value.get("type") or "").strip().lower()
+        if item_type == "image_url" and isinstance(value.get("image_url"), dict):
+            image = value.get("image_url") or {}
+            return {"type": "image_url", "detail": image.get("detail")}, 1
+        if item_type == "input_image" and value.get("image_url"):
+            return {"type": "input_image"}, 1
+        if item_type == "image" and isinstance(value.get("source"), dict):
+            source = value.get("source") or {}
+            if str(source.get("type") or "").strip().lower() == "base64" and source.get("data"):
+                return {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": str(source.get("media_type") or ""),
+                    },
+                }, 1
+
+        sanitized: dict[Any, Any] = {}
+        image_count = 0
+        for key, item in value.items():
+            if key == "images" and isinstance(item, list):
+                visual_items = [image for image in item if str(image or "").strip()]
+                sanitized[key] = ["<image>" for _ in visual_items]
+                image_count += len(visual_items)
+                continue
+            child, child_images = _request_budget_view(item)
+            sanitized[key] = child
+            image_count += child_images
+        return sanitized, image_count
+
+    if isinstance(value, (list, tuple)):
+        sanitized_items: list[Any] = []
+        image_count = 0
+        for item in value:
+            child, child_images = _request_budget_view(item)
+            sanitized_items.append(child)
+            image_count += child_images
+        return sanitized_items, image_count
+
+    if isinstance(value, set):
+        return _request_budget_view(sorted(value, key=str))
+    if isinstance(value, str) and value.lower().startswith("data:image/") and ";base64," in value[:128].lower():
+        return "<image>", 1
+    return value, 0
+
+
 def estimate_message_tokens(message: Message | dict[str, Any] | Any) -> int:
     if isinstance(message, Message):
         payload = message.to_dict()
@@ -75,14 +140,30 @@ def estimate_message_tokens(message: Message | dict[str, Any] | Any) -> int:
             if not isinstance(tool_call, dict):
                 continue
             count += 8
-            count += _estimate_text_tokens(json.dumps(tool_call, ensure_ascii=False, sort_keys=True, default=str))
+            visible_call = {
+                key: tool_call[key]
+                for key in ("id", "type", "function")
+                if key in tool_call
+            }
+            count += _estimate_text_tokens(
+                json.dumps(visible_call, ensure_ascii=False, sort_keys=True, default=str)
+            )
             result = tool_call.get("result")
             if result is not None:
-                count += _estimate_text_tokens(json.dumps(result, ensure_ascii=False, sort_keys=True, default=str))
-
-    metadata = payload.get("metadata")
-    if isinstance(metadata, dict):
-        count += _estimate_text_tokens(json.dumps(metadata, ensure_ascii=False, sort_keys=True, default=str))
+                payload = normalize_tool_result(result)
+                content = payload.get("content")
+                if isinstance(content, str):
+                    count += _estimate_text_tokens(content)
+                elif content is not None:
+                    count += _estimate_text_tokens(
+                        json.dumps(content, ensure_ascii=False, sort_keys=True, default=str)
+                    )
+                result_images = {
+                    str(item)
+                    for item in (*list(tool_call.get("result_images") or []), *list(payload.get("images") or []))
+                    if str(item or "").strip()
+                }
+                count += len(result_images) * IMAGE_TOKEN_ESTIMATE
 
     if str(payload.get("role") or "") == "tool":
         count += 4
@@ -151,10 +232,24 @@ def _resolve_model_profile(
         return None
 
 
+def _profile_output_override(provider: Provider | None, profile: Any) -> int | None:
+    extra_body = getattr(profile, "extra_body", None)
+    if not isinstance(extra_body, dict) or provider is None:
+        return None
+    if provider.is_openai_responses:
+        return _coerce_positive_int(extra_body.get("max_output_tokens"))
+    if provider.is_ollama_chat:
+        options = extra_body.get("options")
+        if isinstance(options, dict):
+            return _coerce_positive_int(options.get("num_predict"))
+        return None
+    return _coerce_positive_int(extra_body.get("max_tokens"))
+
+
 @dataclass(frozen=True)
 class TokenBudget:
     context_window: int
-    reserved_output_tokens: int
+    output_limit: int
     effective_prompt_limit: int
     warning_threshold_tokens: int
     compact_threshold_tokens: int
@@ -181,8 +276,8 @@ class TokenUsageSnapshot:
         return int(self.budget.context_window or 0)
 
     @property
-    def reserved_output_tokens(self) -> int:
-        return int(self.budget.reserved_output_tokens or 0)
+    def output_limit(self) -> int:
+        return int(self.budget.output_limit or 0)
 
     @property
     def effective_prompt_limit(self) -> int:
@@ -208,7 +303,7 @@ class TokenUsageSnapshot:
     def detail_text(self) -> str:
         parts = [
             f"窗口 {format_token_count(self.context_window)}",
-            f"预留输出 {format_token_count(self.reserved_output_tokens)}",
+            f"输出上限 {format_token_count(self.output_limit)}",
             f"剩余 {format_token_count(self.remaining_prompt_tokens)}",
         ]
         if self.budget.model_id:
@@ -239,11 +334,20 @@ def resolve_token_budget(
     provider_id: str = "",
     provider_name: str = "",
     model_id: str = "",
-    mode_context_window_limit: int | None = None,
+    llm_config: LLMConfig | None = None,
+    request_output_limit: int | None = None,
+    compact_threshold_ratio: float = 0.80,
 ) -> TokenBudget:
     conversation = conversation if isinstance(conversation, Conversation) else None
     provider_id = provider_id or str(getattr(conversation, "provider_id", "") or "").strip()
     provider_name = provider_name or str(getattr(conversation, "provider_name", "") or "").strip()
+    request_config = llm_config or (
+        LLMConfig.from_conversation(conversation) if conversation is not None else None
+    )
+    if request_config is not None:
+        provider_id = provider_id or request_config.provider_id
+        provider_name = provider_name or request_config.provider_name
+        model_id = model_id or request_config.resolved_model()
     model_id = model_id or str(getattr(conversation, "model", "") or "").strip()
 
     resolved_provider = _resolve_provider(
@@ -261,20 +365,23 @@ def resolve_token_budget(
     )
 
     profile_window = _coerce_positive_int(getattr(profile, "context_window", None)) or 0
-    mode_window = _coerce_positive_int(mode_context_window_limit) or 0
-    context_window = profile_window or mode_window or DEFAULT_CONTEXT_WINDOW
+    context_window = profile_window or DEFAULT_CONTEXT_WINDOW
 
-    reserved_output_tokens = (
-        _coerce_positive_int(getattr(profile, "max_output_tokens", None))
-        or DEFAULT_RESERVED_OUTPUT_TOKENS
-    )
-    reserved_output_tokens = min(reserved_output_tokens, MAX_RESERVED_OUTPUT_TOKENS)
-    if context_window <= reserved_output_tokens:
-        reserved_output_tokens = max(0, min(reserved_output_tokens, max(context_window - 1, 0)))
+    extra_output_limit = _profile_output_override(resolved_provider, profile)
+    configured_output_limit = _coerce_positive_int(request_output_limit)
+    if configured_output_limit is None and request_config is not None:
+        configured_output_limit = _coerce_positive_int(request_config.max_tokens)
+    output_limit = extra_output_limit or configured_output_limit or DEFAULT_OUTPUT_LIMIT
+    profile_output_limit = _coerce_positive_int(getattr(profile, "max_output_tokens", None))
+    if profile_output_limit is not None:
+        output_limit = min(output_limit, profile_output_limit)
+    if context_window <= output_limit:
+        output_limit = max(0, min(output_limit, max(context_window - 1, 0)))
 
-    effective_prompt_limit = max(context_window - reserved_output_tokens, 0)
+    effective_prompt_limit = max(context_window - output_limit, 0)
     warning_threshold_tokens = int(effective_prompt_limit * WARNING_THRESHOLD)
-    compact_threshold_tokens = int(effective_prompt_limit * COMPACT_THRESHOLD)
+    compact_ratio = max(0.10, min(0.95, float(compact_threshold_ratio or 0.80)))
+    compact_threshold_tokens = int(effective_prompt_limit * compact_ratio)
     danger_threshold_tokens = int(effective_prompt_limit * DANGER_THRESHOLD)
 
     provider_name_value = str(getattr(resolved_provider, "name", "") or provider_name or "").strip()
@@ -283,7 +390,7 @@ def resolve_token_budget(
 
     return TokenBudget(
         context_window=context_window,
-        reserved_output_tokens=reserved_output_tokens,
+        output_limit=output_limit,
         effective_prompt_limit=effective_prompt_limit,
         warning_threshold_tokens=warning_threshold_tokens,
         compact_threshold_tokens=compact_threshold_tokens,
@@ -302,7 +409,7 @@ def build_token_usage_snapshot(
     provider_id: str = "",
     provider_name: str = "",
     model_id: str = "",
-    mode_context_window_limit: int | None = None,
+    compact_threshold_ratio: float = 0.80,
 ) -> TokenUsageSnapshot | None:
     if conversation is None:
         return None
@@ -314,7 +421,7 @@ def build_token_usage_snapshot(
         provider_id=provider_id,
         provider_name=provider_name,
         model_id=model_id,
-        mode_context_window_limit=mode_context_window_limit,
+        compact_threshold_ratio=compact_threshold_ratio,
     )
     messages = [msg for msg in getattr(conversation, "messages", []) or [] if not getattr(msg, "archived_content_id", None)]
     context_tokens = estimate_conversation_tokens(messages)
@@ -337,7 +444,7 @@ def build_token_usage_snapshot(
         status = "danger"
     elif usage_ratio >= DANGER_THRESHOLD:
         status = "danger"
-    elif usage_ratio >= COMPACT_THRESHOLD:
+    elif usage_ratio >= max(0.10, min(0.95, float(compact_threshold_ratio or 0.80))):
         status = "compact"
     elif usage_ratio >= WARNING_THRESHOLD:
         status = "warning"

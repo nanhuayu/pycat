@@ -17,6 +17,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from gui.widgets.themed_line_edit import ThemedLineEdit
+
 
 class QuestionsDialog(QDialog):
     """Interactive dialog for a single askQuestions prompt."""
@@ -68,7 +70,7 @@ class QuestionsDialog(QDialog):
         freeform_label.setProperty("muted", True)
         layout.addWidget(freeform_label)
 
-        self._freeform_input = QLineEdit()
+        self._freeform_input = ThemedLineEdit()
         self._freeform_input.setPlaceholderText("可选：直接输入你的回答…")
         layout.addWidget(self._freeform_input)
 

@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import QAbstractScrollArea, QFrame, QSizePolicy, QTextBrows
 
 from models.contracts.config import DEFAULT_ACCENT
 from gui.utils.theme import resolve_accent, resolve_theme, theme_tokens
+from gui.widgets.themed_line_edit import ThemedContextMenuMixin
 
 try:
     import markdown
@@ -215,7 +216,7 @@ def _normalize_markdown_for_view(text: str) -> str:
     return "\n".join(out)
 
 
-class MarkdownView(QTextBrowser):
+class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
     """A compact, auto-height markdown-capable viewer."""
 
     def __init__(self, text: str = "", parent=None):

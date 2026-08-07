@@ -4,7 +4,9 @@ from __future__ import annotations
 from typing import Dict, List
 
 from core.modes.manager import resolve_mode_config
+from core.prompts.sections import PromptSections
 from models.contracts.config import AppConfig
+from models.contracts.agent import effective_pycat_assistant_enabled
 from models.contracts.mode import normalize_mode_slug
 from models.conversation import Conversation
 from models.provider import Provider
@@ -15,7 +17,7 @@ GLOBAL_PRINCIPLES = """You are PyCat, a precise desktop assistant.
 - Follow the user's current request and distinguish facts from assumptions.
 - Use only tools present in the request. Inspect relevant context before changing files, and verify consequential work.
 - Tool failures are evidence: explain the boundary and choose a different valid path instead of repeating the same call.
-- Treat `Current Time` in `<environment_info>` as authoritative. For today/latest news, weather, prices, schedules, or other time-sensitive facts, refresh with available tools, check source publication/update dates, and never label prior-day results as today; state when live verification is unavailable.
+- Treat `captured_at` on the tail `<current_state>` as the request snapshot time. For today/latest news, weather, prices, schedules, or other time-sensitive facts, refresh with available tools, check source publication/update dates, and never label prior-day results as today; state when live verification is unavailable.
 - `web__search` discovers sources; `web__fetch` reads a specific URL. Interactive browser challenges require a separately configured browser tool or another source.
 - `archive__read` reads PyCat session archives; `file__read` reads workspace files.
 - Delegate only focused work to `agent__run`. A sub-agent never gains permissions its parent does not have.
@@ -71,6 +73,13 @@ def _tool_usage_rules(tools: List[Dict]) -> str:
         rules.append(
             "- state__memory: Save only short, stable, reusable information; never save progress, reports, raw outputs, or secrets."
         )
+    if "shell__run" in visible:
+        rules.append(
+            "- shell__run: Waits are bounded; a command that outlives the wait is NOT killed — it keeps "
+            "running in background and returns a process_id. For known long-running work pass wait_seconds=0 "
+            "to go background immediately; poll with shell__read(wait_seconds=..., cursor=...), never re-run "
+            "a command that is already running, and shell__kill processes that are no longer needed."
+        )
     if not rules:
         return ""
     return "\n".join(
@@ -83,22 +92,45 @@ def _tool_usage_rules(tools: List[Dict]) -> str:
     )
 
 
+def _prompt_mode_and_assistant(
+    conversation: Conversation,
+    default_work_dir: str,
+    pycat_assistant_enabled: bool | None,
+):
+    settings = conversation.settings if isinstance(conversation.settings, dict) else {}
+    mode_slug, mode = _mode(conversation, default_work_dir)
+    assistant_enabled = effective_pycat_assistant_enabled(
+        pycat_assistant_enabled
+        if pycat_assistant_enabled is not None
+        else settings.get("pycat_assistant_enabled", True),
+        mode=mode_slug,
+    )
+    return mode, assistant_enabled
+
+
 def resolve_base_system_prompt_text(
     *,
     conversation: Conversation,
     app_config: AppConfig,
     default_work_dir: str = ".",
     include_conversation_override: bool = False,
+    pycat_assistant_enabled: bool | None = None,
 ) -> str:
     """Return stable/global/Mode instructions for read-only UI previews."""
     del include_conversation_override
-    _, mode = _mode(conversation, default_work_dir)
+    mode, assistant_enabled = _prompt_mode_and_assistant(
+        conversation,
+        default_work_dir,
+        pycat_assistant_enabled,
+    )
+    mode_prompt = str(getattr(mode, "prompt", "") or "") if assistant_enabled else ""
+    completion_contract = _completion_contract(mode) if assistant_enabled else ""
     return _join(
         [
-            GLOBAL_PRINCIPLES,
+            GLOBAL_PRINCIPLES if assistant_enabled else "",
             app_config.prompts.global_instructions,
-            str(getattr(mode, "prompt", "") or ""),
-            _completion_contract(mode),
+            mode_prompt,
+            completion_contract,
         ]
     )
 
@@ -110,25 +142,29 @@ def build_system_prompt(
     provider: Provider,
     app_config: AppConfig,
     default_work_dir: str = ".",
-    channel_prompt_section: str = "",
-    project_instruction_section: str = "",
-    skill_prompt_section: str = "",
+    sections: PromptSections | None = None,
+    pycat_assistant_enabled: bool | None = None,
 ) -> str:
     """Compose stable principles followed by append-only instruction layers."""
     del provider
     settings = conversation.settings if isinstance(conversation.settings, dict) else {}
-    _, mode = _mode(conversation, default_work_dir)
+    mode, assistant_enabled = _prompt_mode_and_assistant(
+        conversation,
+        default_work_dir,
+        pycat_assistant_enabled,
+    )
+    sections = sections or PromptSections()
     session_instructions = str(settings.get("session_instructions") or "").strip()
     return _join(
         [
-            GLOBAL_PRINCIPLES,
+            GLOBAL_PRINCIPLES if assistant_enabled else "",
             app_config.prompts.global_instructions,
-            str(getattr(mode, "prompt", "") or ""),
-            _completion_contract(mode),
-            _tool_usage_rules(tools),
-            channel_prompt_section,
-            project_instruction_section,
+            str(getattr(mode, "prompt", "") or "") if assistant_enabled else "",
+            _completion_contract(mode) if assistant_enabled else "",
+            _tool_usage_rules(tools) if assistant_enabled else "",
+            sections.channel,
+            sections.project_instructions if assistant_enabled else "",
             session_instructions,
-            skill_prompt_section,
+            sections.skills,
         ]
     )

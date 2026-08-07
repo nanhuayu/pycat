@@ -22,20 +22,21 @@ except ImportError:
 from models.contracts.mcp import McpServerConfig
 
 from core.tools.registry import ToolRegistry
+from core.tools.process import BackgroundProcessManager
 from models.contracts.tooling import ToolAvailabilityContext, ToolDescriptor, ToolSelectionPolicy
 from core.tools.mcp.proxies import McpProxyTool
 from core.tools.mcp.naming import MCP_TOOL_PUBLIC_PREFIX, build_mcp_tool_name, is_mcp_tool_name, parse_mcp_tool_name
 from core.tools.system.search import FetchUrlTool, WebSearchTool
 
 # System Tools
-from core.tools.system.filesystem import LsTool, ReadFileTool, GrepTool
+from core.tools.system.filesystem import DeliverFilesTool, LsTool, ReadFileTool, GrepTool
 from core.tools.system.python_exec import PythonExecTool
 from core.tools.system.file_ops import WriteToFileTool, EditFileTool, DeleteFileTool
 from core.tools.system.shell_exec import (
     ExecuteCommandTool,
-    ShellStartTool,
     ShellReadTool,
     ShellKillTool,
+    ShellListTool,
 )
 from core.tools.system.patch import PatchTool
 from core.tools.system.multi_agent import AgentCompleteTool, AgentRunTool
@@ -50,6 +51,9 @@ from models.contracts.capability import CapabilitiesConfig
 from models.contracts.tooling import ToolPermissionConfig, ToolPolicy
 
 logger = logging.getLogger(__name__)
+
+MCP_CLOSE_TIMEOUT_SECONDS = 5.0
+MCP_THREAD_JOIN_TIMEOUT_SECONDS = 1.0
 
 
 @dataclass
@@ -108,13 +112,16 @@ class ToolManager:
         self._mcp_loop_lock = threading.Lock()
         self._mcp_loop_ready = threading.Event()
 
+        # Single owner of every background shell process (shell__run/read/list/kill).
+        self.processes = BackgroundProcessManager()
+
     def _register_default_system_tools(self):
         tools = [
-            LsTool(), ReadFileTool(), GrepTool(), FetchUrlTool(),
+            LsTool(), ReadFileTool(), GrepTool(), DeliverFilesTool(), FetchUrlTool(),
             PythonExecTool(),
             WriteToFileTool(), EditFileTool(), DeleteFileTool(),
             ExecuteCommandTool(),
-            ShellStartTool(), ShellReadTool(), ShellKillTool(),
+            ShellReadTool(), ShellKillTool(), ShellListTool(),
             PatchTool(),
             ArchiveListTool(), ArchiveReadTool(),
             ManageMemoryTool(),
@@ -131,9 +138,10 @@ class ToolManager:
 
     def _refresh_capability_tools(self) -> None:
         """Register dynamic capability tools with the ``capability__`` prefix."""
-        self.registry.unregister_prefix(CAPABILITY_TOOL_PREFIX)
-        for tool in build_capability_tools(self.capabilities):
-            self.registry.register(tool)
+        self.registry.replace_prefix(
+            CAPABILITY_TOOL_PREFIX,
+            build_capability_tools(self.capabilities),
+        )
 
     def refresh_capability_tools(self, capabilities: CapabilitiesConfig | None = None) -> None:
         """Re-register capability tools after configuration changes."""
@@ -173,26 +181,22 @@ class ToolManager:
                 mcp_available=MCP_AVAILABLE,
             )
 
-        # Capability tools come from settings and may change while the app is running.
-        self._refresh_capability_tools()
-
-        # 1. Search Tool is always registered so it participates in the same
-        # registry/permission model as other tools. Request-time capability and
-        # provider availability only decide whether it is exposed to the model.
-        self.registry.register(WebSearchTool(self.search_service))
-
-        # 2. MCP Tools
+        # MCP schemas are refreshed only when the current request can expose MCP.
         wants_mcp = tool_selection.allowed_categories is None or "mcp" in tool_selection.allowed_categories
         if wants_mcp and MCP_AVAILABLE:
             await self._run_on_mcp_loop(self._refresh_mcp_tools_impl())
 
         normalized_permissions = tool_permissions or ToolPermissionConfig()
 
-        # 3. Return schemas from Registry with all filters applied
+        # Return schemas from the current immutable registry snapshot.
         descriptors = self.list_tool_descriptors(availability=availability_context)
         selected_tools = {
             name for name, descriptor in descriptors.items()
             if tool_selection.allows(descriptor)
+            or (
+                name == "agent__complete"
+                and availability_context.completion_policy == "explicit"
+            )
         }
 
         all_schemas = self.registry.get_all_tool_schemas(
@@ -228,9 +232,7 @@ class ToolManager:
         availability: Optional[ToolAvailabilityContext] = None,
         include_dynamic: bool = True,
     ) -> Dict[str, ToolDescriptor]:
-        """Return catalog descriptors for built-in, capability, search, and cached MCP tools."""
-        if include_dynamic:
-            self._refresh_capability_tools()
+        """Return a read-only catalog snapshot without refreshing shared tools."""
         if availability is None:
             availability = ToolAvailabilityContext(
                 search_available=self.search_service.is_available(),
@@ -244,6 +246,11 @@ class ToolManager:
             if tool.name == "web__search":
                 available = bool(availability.search_available)
                 source = "search"
+            elif tool.name == "file__deliver":
+                available = bool(
+                    str(availability.work_dir or "").strip()
+                    and str(availability.source or "desktop") in {"desktop", "cli"}
+                )
             elif tool.name == "agent__complete" and availability.completion_policy:
                 available = availability.completion_policy == "explicit"
             elif is_mcp_tool_name(tool.name):
@@ -276,7 +283,7 @@ class ToolManager:
     async def _refresh_mcp_tools_impl(self):
         """Register MCP tool proxies using cached schemas where possible."""
         self.servers = self.mcp_servers.load()
-        self.registry.unregister_prefix(MCP_TOOL_PUBLIC_PREFIX)
+        discovered_tools: list[McpProxyTool] = []
         active_servers: Dict[str, str] = {}
         
         for config in self.servers:
@@ -300,14 +307,14 @@ class ToolManager:
                     self.mcp_servers.save(self.servers)
 
                 for schema in schemas:
-                    proxy = McpProxyTool(self, config, schema["name"], schema)
-                    self.registry.register(proxy)
+                    discovered_tools.append(McpProxyTool(self, config, schema["name"], schema))
             except Exception as e:
                 logger.warning("Error listing tools from %s: %s", config.name, e)
 
         stale_cache_keys = [name for name in self._mcp_schema_cache.keys() if name not in active_servers]
         for name in stale_cache_keys:
             self._mcp_schema_cache.pop(name, None)
+        self.registry.replace_prefix(MCP_TOOL_PUBLIC_PREFIX, discovered_tools)
 
         stale_session_keys = [
             key for key, handle in self._persistent_sessions.items()
@@ -339,22 +346,96 @@ class ToolManager:
             )
         )
 
-    async def close_conversation_sessions(self, conversation_id: Optional[str]) -> None:
+    def list_processes(self, conversation_id: str) -> list:
+        """Read-only snapshot of one conversation's unfinished shell processes."""
         conv_key = (conversation_id or "").strip()
-        if not conv_key or not self._has_mcp_loop():
-            return
-        await self._run_on_mcp_loop(self._close_conversation_sessions_impl(conv_key))
+        if not conv_key:
+            return []
+        return self.processes.list(conversation_id=conv_key)
+
+    def stop_process(self, process_id: str, *, conversation_id: str) -> bool:
+        """Stop one shell process owned by the conversation; False when unknown."""
+        try:
+            self.processes.kill(process_id, conversation_id=(conversation_id or "").strip())
+            return True
+        except KeyError:
+            return False
+        except Exception as exc:
+            logger.debug("Failed to stop shell process %s: %s", process_id, exc)
+            return False
+
+    def stop_all_processes(self, conversation_id: str) -> int:
+        """Stop every unfinished shell process owned by the conversation."""
+        conv_key = (conversation_id or "").strip()
+        if not conv_key:
+            return 0
+        return self.processes.kill_conversation(conv_key)
+
+    async def close_conversation_sessions(self, conversation_id: Optional[str]) -> bool:
+        conv_key = (conversation_id or "").strip()
+        if not conv_key:
+            return True
+        # Shell processes first (their logs live under the session root that the
+        # caller is about to delete), then this conversation's MCP sessions.
+        try:
+            self.processes.kill_conversation(conv_key)
+        except Exception as exc:
+            logger.debug("Failed to kill conversation shell processes for %s: %s", conv_key, exc)
+        if not self._has_mcp_loop():
+            return True
+        try:
+            await asyncio.wait_for(
+                self._run_on_mcp_loop(self._close_conversation_sessions_impl(conv_key)),
+                timeout=MCP_CLOSE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Timed out closing MCP sessions for conversation %s after %.1fs",
+                conv_key,
+                MCP_CLOSE_TIMEOUT_SECONDS,
+            )
+            return False
+        except Exception as exc:
+            logger.debug("Failed to close MCP sessions for %s: %s", conv_key, exc)
+            return False
+        return True
 
     async def shutdown(self) -> None:
+        # Shutdown order: kill background Shell processes first, then close MCP.
+        try:
+            self.processes.kill_all()
+        except Exception as exc:
+            logger.debug("Failed to kill background shell processes on shutdown: %s", exc)
         if not self._has_mcp_loop():
             return
-        await self._run_on_mcp_loop(self._shutdown_impl())
+        try:
+            await asyncio.wait_for(
+                self._run_on_mcp_loop(self._shutdown_impl()),
+                timeout=MCP_CLOSE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Timed out shutting down MCP sessions after %.1fs",
+                MCP_CLOSE_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            logger.debug("Failed to shutdown MCP sessions: %s", exc)
+        finally:
+            # A stuck server must not keep the application close path alive.
+            # The MCP loop is an owner-local daemon thread; stopping it here
+            # also abandons any late completion futures after a timeout.
+            self._stop_mcp_loop()
+
+    def _stop_mcp_loop(self) -> None:
         loop = self._mcp_loop
         thread = self._mcp_loop_thread
         if loop and loop.is_running():
-            loop.call_soon_threadsafe(loop.stop)
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:
+                pass
         if thread and thread.is_alive() and thread is not threading.current_thread():
-            thread.join(timeout=2)
+            thread.join(timeout=MCP_THREAD_JOIN_TIMEOUT_SECONDS)
         self._mcp_loop = None
         self._mcp_loop_thread = None
         self._mcp_loop_ready.clear()

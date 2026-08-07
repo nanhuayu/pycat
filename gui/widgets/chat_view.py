@@ -3,27 +3,44 @@ Chat view widget - Compact responsive layout
 """
 
 import logging
+from PyQt6.QtGui import QPainter, QPalette
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QFrame, QSizePolicy, QPushButton, QToolButton, QFileDialog,
-    QStackedWidget,
+    QStackedWidget, QStyleOption,
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer, QEvent, QSize
 from typing import Callable, List
 import os
 
-from core.llm.token_budget import TokenUsageSnapshot
-from core.llm.token_budget import format_token_count
 from models.conversation import Message, Conversation
+from models.contracts.agent import RunStatus
 from models.provider import Provider
+from core.content.resolver import SessionContentResolver
 from .inline_question_view import InlineQuestionCard
 from .message_widget import MessageWidget
 from .assistant_run_widget import AssistantRunWidget
 from .markdown_view import MarkdownView
 from .chat.streaming_overlay import StreamingOverlay
-from gui.view_models.message_runs import AssistantRunGroup, SingleMessageItem, project_message_runs
-from gui.utils.image_utils import extract_images_from_mime, extract_images_from_clipboard
+from core.content.references import delivery_refs_for_messages
+from core.context.history import (
+    is_real_user_message,
+    is_restartable_user_message,
+    restartable_user_by_id,
+    restartable_user_for_assistant,
+)
+from core.channel.bindings import is_bound_channel_conversation
+from gui.view_models.message_runs import (
+    AssistantRunGroup,
+    SingleMessageItem,
+    project_message_runs,
+)
+from gui.utils.image_utils import (
+    extract_attachment_sources_from_clipboard,
+    extract_attachment_sources_from_mime,
+)
 from gui.utils.icon_manager import Icons
-from gui.about_content import CHAT_EMPTY_DESCRIPTION, CHAT_EMPTY_TITLE, FEATURES
+from gui.about_content import PRODUCT_NAME
+from gui.widgets.themed_line_edit import ThemedSelectableLabel
 
 
 logger = logging.getLogger(__name__)
@@ -34,16 +51,46 @@ RECENT_MESSAGE_WINDOW = 0
 EARLIER_MESSAGE_BATCH = 80
 
 
+class _ElidingLabel(QLabel):
+    """Single-line label that keeps its full text for tooltips and accessibility."""
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        return QSize(0, super().minimumSizeHint().height())
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        del event
+        option = QStyleOption()
+        option.initFrom(self)
+        painter = QPainter(self)
+        text = self.fontMetrics().elidedText(
+            self.text(),
+            Qt.TextElideMode.ElideRight,
+            max(0, self.contentsRect().width()),
+        )
+        self.style().drawItemText(
+            painter,
+            self.contentsRect(),
+            self.alignment(),
+            option.palette,
+            self.isEnabled(),
+            text,
+            QPalette.ColorRole.WindowText,
+        )
+
+
 class ChatView(QWidget):
     """Scrollable view for displaying chat messages"""
     
+    reuse_message = pyqtSignal(str)
     edit_message = pyqtSignal(str)
+    regenerate_message = pyqtSignal(str)
     delete_message = pyqtSignal(str)
     continue_message = pyqtSignal(str)
     images_dropped = pyqtSignal(list)
     work_dir_changed = pyqtSignal(str)  # Signal emitted when workspace directory changes
+    trace_requested = pyqtSignal()
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, content_service=None):
         super().__init__(parent)
         self.setObjectName("chat_container")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -53,8 +100,13 @@ class ChatView(QWidget):
         self._message_container_by_id: dict[str, QWidget] = {}
         self._conversation_messages: List[Message] = []
         self._conversation: Conversation | None = None
+        self._content_service = content_service
+        self._content_resolver = SessionContentResolver(content_service) if content_service is not None else None
         self._show_thinking = True
         self._work_dir = ""
+        self._header_model_ref = ""
+        self._header_message_count = 0
+        self._runtime_detail = "等待下一次请求"
         self._render_start_index = 0
         self._history_window_expanded = False
         self._bulk_loading = False
@@ -64,8 +116,12 @@ class ChatView(QWidget):
         self._nav_update_timer: QTimer | None = None
         self._stream = StreamingOverlay(scroll_area=None, should_auto_scroll=self._should_follow_output)  # scroll_area set after _setup_ui
         self._follow_output = True
+        self._revision_enabled = True
         
         self._setup_ui()
+        self._header_notice_timer = QTimer(self)
+        self._header_notice_timer.setSingleShot(True)
+        self._header_notice_timer.timeout.connect(self.clear_header_notice)
         self._stream._scroll_area = self.scroll_area
     
     def _setup_ui(self):
@@ -84,14 +140,14 @@ class ChatView(QWidget):
         
         # ===== Workspace/Folder Button =====
         self.work_dir_btn = QPushButton()
-        self.work_dir_btn.setIcon(Icons.get(Icons.FOLDER))
-        self.work_dir_btn.setText(" 未设置工作区")
+        self.work_dir_btn.setIcon(Icons.get_muted(Icons.FOLDER))
+        self.work_dir_btn.setText("")
         self.work_dir_btn.setObjectName("work_dir_btn")
+        self.work_dir_btn.setAccessibleName("工作区")
         self.work_dir_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.work_dir_btn.setToolTip("点击设置当前会话的工作目录 (用于 MCP/CMD 执行)")
+        self.work_dir_btn.setToolTip("未设置工作区；当前使用全局会话目录。点击设置")
         self.work_dir_btn.setIconSize(QSize(Icons.SIZE_NAV, Icons.SIZE_NAV))
-        self.work_dir_btn.setFixedHeight(30)
-        self.work_dir_btn.setMaximumWidth(240)
+        self.work_dir_btn.setFixedSize(30, 30)
         self.work_dir_btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.work_dir_btn.clicked.connect(self._select_work_dir)
         header_layout.addWidget(self.work_dir_btn)
@@ -104,23 +160,50 @@ class ChatView(QWidget):
         sep.setFixedHeight(16)
         header_layout.addWidget(sep)
 
-        self.message_count_label = QLabel("0 条")
-        self.message_count_label.setObjectName("context_indicator")
-        self.message_count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.message_count_label.setFixedHeight(30)
-        self.message_count_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        header_layout.addWidget(self.message_count_label)
+        self.conversation_title_label = _ElidingLabel()
+        self.conversation_title_label.setObjectName("conversation_title_label")
+        self.conversation_title_label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.conversation_title_label.setMinimumWidth(0)
+        self.conversation_title_label.setMaximumWidth(320)
+        self.conversation_title_label.setFixedHeight(30)
+        self.conversation_title_label.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.conversation_title_label.setVisible(False)
+        header_layout.addWidget(self.conversation_title_label)
 
-        self.runtime_indicator = QLabel("空闲")
+        self.runtime_indicator = QToolButton()
         self.runtime_indicator.setObjectName("runtime_indicator")
+        self.runtime_indicator.setText("空闲")
         self.runtime_indicator.setProperty("active", False)
         self.runtime_indicator.setToolTip("等待下一次请求")
-        self.runtime_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.runtime_indicator.setAccessibleName("运行状态与调用链路")
+        self.runtime_indicator.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.runtime_indicator.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.runtime_indicator.setFixedHeight(30)
         self.runtime_indicator.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.runtime_indicator.clicked.connect(self.trace_requested.emit)
         header_layout.addWidget(self.runtime_indicator)
-        
-        header_layout.addStretch()
+
+        self.header_notice_slot = QFrame()
+        self.header_notice_slot.setObjectName("header_notice_slot")
+        self.header_notice_slot.setFixedHeight(30)
+        self.header_notice_slot.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        notice_layout = QHBoxLayout(self.header_notice_slot)
+        notice_layout.setContentsMargins(8, 0, 8, 0)
+        notice_layout.setSpacing(0)
+        self.header_notice_label = _ElidingLabel()
+        self.header_notice_label.setObjectName("header_notice_label")
+        self.header_notice_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.header_notice_label.setMinimumWidth(0)
+        self.header_notice_label.setFixedHeight(30)
+        self.header_notice_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.header_notice_label.setVisible(False)
+        notice_layout.addWidget(self.header_notice_label)
+        header_layout.addWidget(self.header_notice_slot, 1)
 
         # ===== Message navigation (toolbar-style group) =====
         header_layout.addWidget(self._create_nav_bar())
@@ -187,7 +270,7 @@ class ChatView(QWidget):
                         key = event.key()
                         mods = event.modifiers()
                         if key == Qt.Key.Key_V and (mods & Qt.KeyboardModifier.ControlModifier):
-                            sources = extract_images_from_clipboard()
+                            sources = extract_attachment_sources_from_clipboard()
                             if sources:
                                 self.images_dropped.emit(sources)
                                 return True
@@ -196,13 +279,13 @@ class ChatView(QWidget):
 
                 if event.type() == QEvent.Type.DragEnter:
                     md = event.mimeData()
-                    data_urls, file_paths = extract_images_from_mime(md)
+                    data_urls, file_paths = extract_attachment_sources_from_mime(md)
                     if data_urls or file_paths:
                         event.acceptProposedAction()
                         return True
                 elif event.type() == QEvent.Type.Drop:
                     md = event.mimeData()
-                    data_urls, file_paths = extract_images_from_mime(md)
+                    data_urls, file_paths = extract_attachment_sources_from_mime(md)
                     sources = data_urls + file_paths
                     if sources:
                         event.acceptProposedAction()
@@ -255,91 +338,22 @@ class ChatView(QWidget):
 
         layout = QVBoxLayout(page)
         layout.setContentsMargins(28, 16, 28, 16)
-        layout.setSpacing(0)
+        layout.setSpacing(10)
         layout.addStretch(1)
-
-        card = QFrame()
-        card.setObjectName("chat_empty_card")
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        card.setMaximumWidth(620)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(22, 18, 22, 26)
-        card_layout.setSpacing(12)
-
-        title_row = QHBoxLayout()
-        title_row.setContentsMargins(0, 0, 0, 0)
-        title_row.setSpacing(8)
-        title_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         hero_icon = QLabel()
         hero_icon.setObjectName("chat_empty_hero_icon")
-        hero_icon.setFixedSize(32, 32)
+        hero_icon.setFixedSize(40, 40)
         hero_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_icon.setPixmap(Icons.get(Icons.PYCAT).pixmap(Icons.SIZE_EMPTY_HERO, Icons.SIZE_EMPTY_HERO))
-        title_row.addWidget(hero_icon)
+        layout.addWidget(hero_icon, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        title = QLabel(CHAT_EMPTY_TITLE)
+        title = QLabel(PRODUCT_NAME)
         title.setObjectName("chat_empty_title")
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        title_row.addWidget(title)
-        card_layout.addLayout(title_row)
-
-        description = QLabel(CHAT_EMPTY_DESCRIPTION)
-        description.setObjectName("chat_empty_description")
-        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        description.setWordWrap(True)
-        card_layout.addWidget(description)
-
-        tips_row = QHBoxLayout()
-        tips_row.setSpacing(8)
-        for feature in FEATURES:
-            tips_row.addWidget(
-                self._create_empty_tip_card(
-                    feature.icon_name,
-                    feature.title,
-                    feature.description,
-                ),
-                1,
-            )
-        card_layout.addLayout(tips_row)
-
-        layout.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addStretch(1)
         return page
-
-    def _create_empty_tip_card(self, icon_name: str, title: str, description: str) -> QFrame:
-        card = QFrame()
-        card.setObjectName("chat_empty_tip_card")
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        card.setMaximumWidth(176)
-
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 9, 12, 10)
-        layout.setSpacing(6)
-
-        title_row = QHBoxLayout()
-        title_row.setContentsMargins(0, 0, 0, 0)
-        title_row.setSpacing(6)
-
-        icon_label = QLabel()
-        icon_label.setObjectName("chat_empty_tip_icon")
-        icon_label.setFixedSize(20, 20)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setPixmap(Icons.get(icon_name, color=Icons.COLOR_MUTED, scale_factor=1.0).pixmap(18, 18))
-        title_row.addWidget(icon_label)
-
-        title_label = QLabel(title)
-        title_label.setObjectName("chat_empty_tip_title")
-        title_label.setWordWrap(True)
-        title_row.addWidget(title_label, 1)
-        layout.addLayout(title_row)
-
-        desc_label = QLabel(description)
-        desc_label.setObjectName("chat_empty_tip_description")
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
-
-        return card
 
     def _update_empty_state(self) -> None:
         if not hasattr(self, "body_stack"):
@@ -371,57 +385,127 @@ class ChatView(QWidget):
         for widget in self._render_widgets:
             widget.set_work_dir(self._work_dir)
         if not path:
-            self.work_dir_btn.setIcon(Icons.get(Icons.FOLDER))
-            self.work_dir_btn.setText(" 未设置工作区")
-            self.work_dir_btn.setToolTip("点击设置当前会话的工作目录")
+            self.work_dir_btn.setIcon(Icons.get_muted(Icons.FOLDER))
+            self.work_dir_btn.setText("")
+            self.work_dir_btn.setProperty("workspace_state", "empty")
+            self.work_dir_btn.setToolTip("未设置工作区；当前使用全局会话目录。点击设置")
         else:
             name = os.path.basename(path)
             if not name: # Root directory like C:/
                 name = path
-            self.work_dir_btn.setIcon(Icons.get_colored(Icons.FOLDER, Icons.COLOR_SUCCESS))
-            self.work_dir_btn.setText(f" {name}")
-            self.work_dir_btn.setToolTip(f"工作区: {path}")
+            accessible = os.path.isdir(path)
+            state = "valid" if accessible else "invalid"
+            color_icon = Icons.get_success(Icons.FOLDER) if accessible else Icons.get_error(Icons.FOLDER)
+            self.work_dir_btn.setIcon(color_icon)
+            self.work_dir_btn.setText("")
+            self.work_dir_btn.setProperty("workspace_state", state)
+            if accessible:
+                self.work_dir_btn.setToolTip(f"工作区：{path}")
+            else:
+                self.work_dir_btn.setToolTip(f"工作区不可访问：{path}。点击重新选择")
+        self.work_dir_btn.style().unpolish(self.work_dir_btn)
+        self.work_dir_btn.style().polish(self.work_dir_btn)
 
-    def update_header(self, model_ref: str, msg_count: int = 0, token_snapshot: TokenUsageSnapshot | None = None):
-        """Update header info"""
-        text = model_ref or "未选择模型"
-        if token_snapshot is not None:
-            used = format_token_count(token_snapshot.context_tokens)
-            limit = format_token_count(token_snapshot.effective_prompt_limit or token_snapshot.context_window)
-            self.message_count_label.setText(f"{used}/{limit}")
-            self.message_count_label.setToolTip(self._format_token_tooltip(token_snapshot))
-        else:
-            self.message_count_label.setText(f"{int(msg_count or 0)} 条")
-            self.message_count_label.setToolTip(f"当前会话消息数：{int(msg_count or 0)}")
+    def update_header(self, model_ref: str, msg_count: int = 0) -> None:
+        """Update status metadata shown in the runtime tooltip.
 
-    def _format_token_tooltip(self, snapshot: TokenUsageSnapshot) -> str:
-        lines = [
-            f"窗口: {format_token_count(snapshot.context_window)}",
-            f"已用: {format_token_count(snapshot.context_tokens)}",
-            f"预留输出: {format_token_count(snapshot.reserved_output_tokens)}",
-            f"剩余: {format_token_count(snapshot.remaining_prompt_tokens)}",
-            f"占用: {snapshot.usage_ratio * 100:.1f}%",
-        ]
-        if snapshot.budget.model_id:
-            lines.append(f"模型: {snapshot.budget.model_id}")
-        if snapshot.budget.provider_name:
-            lines.append(f"提供方: {snapshot.budget.provider_name}")
-        if snapshot.status != "ok":
-            lines.append(f"状态: {snapshot.status}")
-        return "\n".join(lines)
+        The header intentionally has no second model or token display.  The
+        context snapshot is projected to the Composer; model and message count
+        remain discoverable from the single runtime status control.
+        """
+        self._header_model_ref = str(model_ref or "").strip()
+        self._header_message_count = int(msg_count or 0)
+        self._set_conversation_title(getattr(self._conversation, "title", ""))
+        self._refresh_runtime_tooltip()
+
+    def _set_conversation_title(self, title: object) -> None:
+        text = str(title or "").strip()
+        if self._conversation is not None and not text:
+            text = "新会话"
+        self.conversation_title_label.setText(text)
+        self.conversation_title_label.setToolTip(text)
+        self.conversation_title_label.setAccessibleName(
+            f"当前会话：{text}" if text else ""
+        )
+        self.conversation_title_label.setVisible(bool(text))
 
     def set_model_options(self, providers: list[Provider], current_model_ref: str = "") -> None:
         return
 
-    def update_runtime_state(self, stream_state=None) -> None:
-        title, detail, active = self._resolve_runtime_labels(stream_state)
+    def update_runtime_state(
+        self,
+        stream_state=None,
+        *,
+        operation: str = "",
+        pending_guidance: int = 0,
+    ) -> None:
+        title, detail, active = self._resolve_runtime_labels(
+            stream_state,
+            operation=operation,
+            pending_guidance=pending_guidance,
+        )
         self.runtime_indicator.setText(title)
-        self.runtime_indicator.setToolTip(detail or title)
+        self.runtime_indicator.setEnabled(bool(self._conversation))
         self.runtime_indicator.setProperty("active", bool(active))
+        self._runtime_detail = detail or title
+        self._refresh_runtime_tooltip()
         self.runtime_indicator.style().unpolish(self.runtime_indicator)
         self.runtime_indicator.style().polish(self.runtime_indicator)
+
+    def _refresh_runtime_tooltip(self) -> None:
+        detail = str(getattr(self, "_runtime_detail", "等待下一次请求") or "等待下一次请求")
+        lines = [detail]
+        if self._header_model_ref:
+            lines.append(f"模型：{self._header_model_ref}")
+        if self._header_message_count:
+            lines.append(f"消息：{self._header_message_count} 条")
+        self.runtime_indicator.setToolTip("\n".join(lines))
+
+    def show_header_notice(
+        self,
+        text: str,
+        *,
+        tone: str = "info",
+        timeout_ms: int = 4000,
+        conversation_id: str | None = None,
+    ) -> None:
+        """Show one transient notice for the currently projected conversation."""
+        target = str(conversation_id or "").strip()
+        current = str(getattr(self._conversation, "id", "") or "")
+        if target and target != current:
+            return
+        value = str(text or "").strip()
+        if not value:
+            self.clear_header_notice()
+            return
+        normalized_tone = str(tone or "info").strip().lower()
+        if normalized_tone not in {"info", "success", "warning", "error"}:
+            normalized_tone = "info"
+        self._header_notice_timer.stop()
+        self.header_notice_label.setText(value)
+        self.header_notice_label.setToolTip(value)
+        self.header_notice_label.setAccessibleName(f"操作反馈：{value}")
+        self.header_notice_label.setProperty("tone", normalized_tone)
+        self.header_notice_label.setVisible(True)
+        self.header_notice_label.style().unpolish(self.header_notice_label)
+        self.header_notice_label.style().polish(self.header_notice_label)
+        duration = max(0, int(timeout_ms or 0))
+        if duration:
+            self._header_notice_timer.start(duration)
+
+    def clear_header_notice(self) -> None:
+        if hasattr(self, "_header_notice_timer"):
+            self._header_notice_timer.stop()
+        label = getattr(self, "header_notice_label", None)
+        if label is None:
+            return
+        label.clear()
+        label.setToolTip("")
+        label.setAccessibleName("")
+        label.setVisible(False)
     
     def clear(self):
+        self.clear_header_notice()
         self.clear_inline_question(notify=True)
         self._remove_load_earlier_button()
         while self.messages_layout.count() > 1:
@@ -434,6 +518,9 @@ class ChatView(QWidget):
         self._message_container_by_id.clear()
         self._conversation_messages = []
         self._conversation = None
+        self._header_model_ref = ""
+        self._header_message_count = 0
+        self._set_conversation_title("")
         self._render_start_index = 0
         self._history_window_expanded = False
         self._stream.finish()
@@ -444,6 +531,7 @@ class ChatView(QWidget):
     def load_conversation(self, conversation: Conversation):
         self.clear()
         self._conversation = conversation
+        self._set_conversation_title(getattr(conversation, "title", ""))
         setting = (getattr(conversation, "settings", {}) or {}).get("show_thinking")
         if isinstance(setting, bool):
             self._show_thinking = setting
@@ -458,17 +546,28 @@ class ChatView(QWidget):
         visible_messages = self._conversation_messages[self._render_start_index :]
         self._bulk_insert_messages(visible_messages)
         self._ensure_load_earlier_button()
+        self.update_runtime_state(None)
         self._update_empty_state()
         self._update_nav_state()
         QTimer.singleShot(0, self._scroll_to_bottom)
+
+    def _allows_external_revisions(self) -> bool:
+        """Return True only for a conversation explicitly bound to a Channel."""
+        return is_bound_channel_conversation(self._conversation)
     
-    def add_message(self, message: Message):
+    def add_message(self, message: Message, *, run_active: bool = False):
         message_id = str(getattr(message, "id", "") or "")
         if message_id and any(str(getattr(existing, "id", "") or "") == message_id for existing in self._conversation_messages):
             self.update_message(message)
             return
 
         self._conversation_messages.append(message)
+        if (
+            is_real_user_message(message)
+            and not is_restartable_user_message(message, allow_external=self._allows_external_revisions())
+        ):
+            for existing_widget in self._message_widgets:
+                existing_widget.set_restart_action_visible(False)
         merged_into_run = False
         if str(getattr(message, "role", "") or "") == "assistant" and len(self._conversation_messages) > 1:
             previous = self._conversation_messages[-2]
@@ -482,12 +581,17 @@ class ChatView(QWidget):
             ):
                 run_messages = self._assistant_tail_messages()
                 if isinstance(previous_container, AssistantRunWidget):
+                    if run_active:
+                        previous_container.set_active(True)
                     previous_container.set_messages(run_messages)
                     self._sync_message_widget_index()
                 else:
                     self._replace_render_widget(
                         previous_container,
-                        self._create_assistant_run_widget(run_messages),
+                        self._create_assistant_run_widget(
+                            run_messages,
+                            active=run_active,
+                        ),
                     )
                 merged_into_run = True
 
@@ -562,7 +666,7 @@ class ChatView(QWidget):
                 return True
         return False
 
-    def show_runtime_notice(self, text: str, *, kind: str = "runtime") -> None:
+    def append_transcript_notice(self, text: str, *, kind: str = "runtime") -> None:
         """Insert a transient UI-only runtime notice.
 
         These notices are intentionally not persisted as conversation messages
@@ -578,7 +682,7 @@ class ChatView(QWidget):
         layout = QHBoxLayout(row)
         layout.setContentsMargins(9, 4, 9, 4)
         layout.setSpacing(6)
-        label = QLabel(value)
+        label = ThemedSelectableLabel(value)
         label.setObjectName("runtime_notice_text")
         label.setWordWrap(True)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -590,27 +694,89 @@ class ChatView(QWidget):
         self._schedule_nav_update()
 
     def _create_message_widget(self, message: Message) -> MessageWidget:
+        allow_external = self._allows_external_revisions()
+        allow_restart = False
+        if message.role == "user":
+            allow_restart = (
+                restartable_user_by_id(
+                    self._conversation_messages,
+                    message.id,
+                    allow_external=allow_external,
+                )
+                is not None
+            )
+        elif message.role == "assistant":
+            allow_restart = (
+                restartable_user_for_assistant(
+                    self._conversation_messages,
+                    message.id,
+                    allow_external=allow_external,
+                )
+                is not None
+            )
         widget = MessageWidget(
             message,
             show_thinking=self._show_thinking,
             work_dir=self._work_dir,
             artifact_lookup=self._artifact_by_name,
+            content_path_resolver=self._resolve_content_path,
+            delivery_refs=delivery_refs_for_messages([message]),
+            allow_restart=allow_restart,
+            allow_delete=not bool(getattr(message, "metadata", {}).get("synthetic"))
+            if isinstance(getattr(message, "metadata", {}), dict)
+            else True,
         )
+        widget.reuse_requested.connect(self.reuse_message.emit)
         widget.edit_requested.connect(self.edit_message.emit)
+        widget.regenerate_requested.connect(self.regenerate_message.emit)
         widget.delete_requested.connect(self.delete_message.emit)
         widget.continue_requested.connect(self.continue_message.emit)
+        widget.set_revision_enabled(self._revision_enabled)
         return widget
 
-    def _create_assistant_run_widget(self, messages: list[Message]) -> AssistantRunWidget:
+    def set_revision_enabled(self, enabled: bool) -> None:
+        self._revision_enabled = bool(enabled)
+        for container in self._render_widgets:
+            if isinstance(container, AssistantRunWidget):
+                container.set_revision_enabled(self._revision_enabled)
+            elif isinstance(container, MessageWidget):
+                container.set_revision_enabled(self._revision_enabled)
+
+    def _resolve_content_path(self, ref):
+        if self._content_resolver is None or self._conversation is None:
+            raise FileNotFoundError(str(getattr(ref, "ref", "") or ""))
+        return self._content_resolver.resolve(self._conversation, ref)
+
+    def _create_assistant_run_widget(
+        self,
+        messages: list[Message],
+        *,
+        active: bool = False,
+    ) -> AssistantRunWidget:
+        primary_message = messages[-1] if messages else None
+        allow_external = self._allows_external_revisions()
+        allow_restart = bool(
+            primary_message is not None
+            and restartable_user_for_assistant(
+                self._conversation_messages,
+                primary_message.id,
+                allow_external=allow_external,
+            )
+            is not None
+        )
         widget = AssistantRunWidget(
             messages,
             show_thinking=self._show_thinking,
             work_dir=self._work_dir,
             artifact_lookup=self._artifact_by_name,
+            content_path_resolver=self._resolve_content_path,
+            active=active,
+            allow_restart=allow_restart,
         )
-        widget.edit_requested.connect(self.edit_message.emit)
-        widget.delete_requested.connect(self.delete_message.emit)
         widget.continue_requested.connect(self.continue_message.emit)
+        widget.regenerate_requested.connect(self.regenerate_message.emit)
+        widget.delete_requested.connect(self.delete_message.emit)
+        widget.set_revision_enabled(self._revision_enabled)
         return widget
 
     def set_show_thinking(self, enabled: bool, *, refresh: bool = True) -> None:
@@ -857,6 +1023,8 @@ class ChatView(QWidget):
     
     def start_streaming_response(self, model: str = ""):
         self._follow_output = self._is_near_bottom()
+        if self._render_widgets and isinstance(self._render_widgets[-1], AssistantRunWidget):
+            self._render_widgets[-1].set_active(True)
         self._stream.start(model=model, parent_layout=self.messages_layout, insert_index=self._bottom_insert_index())
         self._update_empty_state()
     
@@ -871,13 +1039,21 @@ class ChatView(QWidget):
         self._stream.restore(visible_text, thinking_text)
 
     def finish_streaming_response(self, message: Message, add_to_view: bool = True):
+        run_active = self._stream.active
         self._stream.finish()
         
         # Only add message to view if requested (to avoid duplicates)
         if add_to_view:
-            self.add_message(message)
+            self.add_message(message, run_active=run_active)
         self._update_empty_state()
         self._schedule_nav_update()
+
+    def finish_active_run(self, status: RunStatus) -> None:
+        if not self._render_widgets:
+            return
+        run = self._render_widgets[-1]
+        if isinstance(run, AssistantRunWidget):
+            run.finish(status)
     
     def is_streaming(self) -> bool:
         """Check if currently in streaming mode."""
@@ -1119,18 +1295,48 @@ class ChatView(QWidget):
         }
         return labels.get(str(kind or ""), str(kind or "运行中"))
 
-    def _resolve_runtime_labels(self, stream_state) -> tuple[str, str, bool]:
+    def _resolve_runtime_labels(
+        self,
+        stream_state,
+        *,
+        operation: str = "",
+        pending_guidance: int = 0,
+    ) -> tuple[str, str, bool]:
+        operation_key = str(operation or "").strip().lower()
+        if operation_key and operation_key != "turn":
+            labels = {
+                "prepare-input": ("准备附件", "正在创建会话附件快照"),
+                "revision": ("修订中", "正在替换消息并重建活动会话历史"),
+                "compact": ("压缩中", "正在压缩当前会话上下文"),
+                "workspace": ("迁移中", "正在迁移当前会话文件"),
+                "delete": ("删除中", "正在删除当前会话"),
+            }
+            title, detail = labels.get(operation_key, ("处理中", "正在处理当前会话"))
+            return (title, detail, True)
         if stream_state is None:
             return ("空闲", "等待下一次请求", False)
 
+        pending = max(0, int(pending_guidance or 0))
         active_tool = str(getattr(stream_state, "active_tool", "") or "").strip()
         last_kind = str(getattr(stream_state, "last_event_kind", "") or "").strip()
         last_detail = str(getattr(stream_state, "last_event_detail", "") or "").strip()
         if active_tool:
-            return (f"工具 · {active_tool}", last_detail or "正在等待工具返回", True)
+            title, detail = f"工具 · {active_tool}", last_detail or "正在等待工具返回"
+            if pending:
+                return (f"待处理 {pending}", f"{detail}；当前步骤完成后处理补充要求", True)
+            return (title, detail, True)
         if last_kind:
-            return (self._runtime_event_label(last_kind), last_detail or "-", True)
+            title, detail = self._runtime_event_label(last_kind), last_detail or "-"
+            if pending:
+                return (f"待处理 {pending}", f"{detail}；当前步骤完成后处理补充要求", True)
+            return (title, detail, True)
 
         model = str(getattr(stream_state, "model", "") or "").strip()
+        if pending:
+            return (
+                f"待处理 {pending}",
+                f"{model or '正在等待模型响应'}；当前步骤完成后处理补充要求",
+                True,
+            )
         return ("生成中", model or "正在等待模型响应", True)
 

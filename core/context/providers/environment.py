@@ -9,11 +9,13 @@ class EnvironmentProvider(MessageProviderMixin):
     priority = 10
 
     def build_items(self, context: ProviderContext):
+        if not context.include_environment:
+            return []
         prompt_cfg = getattr(context.app_config, "prompts", None)
         max_depth = max(1, int(getattr(prompt_cfg, "file_tree_max_depth", 2) or 2))
         blocks: list[str] = []
         if bool(getattr(prompt_cfg, "include_environment", True)):
-            blocks.append(build_environment_info(cwd=context.work_dir))
+            blocks.append(build_environment_info(cwd=context.work_dir, include_time=False))
         workspace_block = build_workspace_info(context.work_dir, max_depth=max_depth)
         if workspace_block:
             blocks.append(workspace_block)

@@ -8,15 +8,17 @@ from __future__ import annotations
 import json
 import logging
 import asyncio
+import threading
 from typing import TYPE_CHECKING, Any, Callable
 
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
-from models.contracts.tooling import ToolPermissionConfig
-from models.contracts.tooling import normalize_tool_category
+from models.contracts.tooling import normalize_risk_level, normalize_tool_category
+from core.agent.policy import RunPolicyBuilder
 from core.state.artifact import ArtifactService
 from core.agent.tooling.executor import ToolExecutor
-from models.contracts.agent import RunPolicy
+from core.tools.base import ToolApprovalRequest
 from models.contracts.config import AppConfig
 from models.conversation import Conversation, Message
 
@@ -25,6 +27,10 @@ if TYPE_CHECKING:
     from gui.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
+
+
+class _ShellCommandSignals(QObject):
+    finished = pyqtSignal(object, str, object, object)
 
 
 class ConversationCommandPresenter:
@@ -40,6 +46,8 @@ class ConversationCommandPresenter:
         self._host = host
         self._create_new_conversation = create_new_conversation
         self._compact_current = compact_current
+        self._shell_signals = _ShellCommandSignals()
+        self._shell_signals.finished.connect(self._finish_shell_command)
 
     def export_current(self, fmt: str = "markdown") -> None:
         host = self._host
@@ -67,7 +75,12 @@ class ConversationCommandPresenter:
                 data = conv.to_dict() if hasattr(conv, "to_dict") else {"messages": [m.to_dict() for m in conv.messages]}
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                host.statusBar().showMessage(f"已导出到 {path}", 3000)
+                host.chat_view.show_header_notice(
+                    f"已导出到 {path}",
+                    tone="success",
+                    timeout_ms=5000,
+                    conversation_id=conv.id,
+                )
             return
 
         path, _ = QFileDialog.getSaveFileName(
@@ -88,7 +101,12 @@ class ConversationCommandPresenter:
             lines.append(f"## {role}\n\n{content}\n")
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
-        host.statusBar().showMessage(f"已导出到 {path}", 3000)
+        host.chat_view.show_header_notice(
+            f"已导出到 {path}",
+            tone="success",
+            timeout_ms=5000,
+            conversation_id=conv.id,
+        )
 
     def handle_command_result(self, result) -> None:
         from core.commands import CommandAction, CommandResult, PromptInvocation, ShellInvocation
@@ -157,13 +175,52 @@ class ConversationCommandPresenter:
         tool = registry.get_tool("shell__run") if registry is not None and hasattr(registry, "get_tool") else None
         category = normalize_tool_category(str(getattr(tool, "category", "execute") or "execute"))
 
-        permissions = ToolPermissionConfig.from_settings_dict(getattr(host, "app_settings", {}) or {})
-        effective = permissions.resolve("shell__run", category)
-        if not effective.enabled:
+        policy = RunPolicyBuilder.build(
+            conversation=conversation,
+            app_settings=getattr(host, "app_settings", {}) or {},
+            source="desktop",
+        )
+        effective = policy.tool_permissions.resolve("shell__run", category)
+        if effective.action == "deny":
             self._append_info_message("`shell__run` 已被当前权限设置禁用，无法执行 `!` Shell 命令。")
             return
 
-        work_dir = str(getattr(payload, "cwd", "") or getattr(conversation, "work_dir", "") or ".")
+        if tool_manager is None or tool is None:
+            self._append_info_message("Shell 工具当前不可用。")
+            return
+
+        try:
+            execution_conversation = Conversation.from_dict(conversation.to_dict())
+        except Exception:
+            execution_conversation = conversation
+        executor = ToolExecutor(
+            tool_manager,
+            shell_config=AppConfig.from_dict(getattr(host, "app_settings", {}) or {}).shell,
+        )
+        context = executor.build_tool_context(
+            conversation=execution_conversation,
+            provider=None,
+            approval_callback=None,
+            questions_callback=None,
+            llm_client=None,
+            policy=policy,
+            tool_name="shell__run",
+        )
+        tool_args = {"command": command, "cwd": "."}
+        approved = True
+        if effective.action == "ask":
+            risk = normalize_risk_level(tool.assess_risk(tool_args, context))
+            approved = self._ask_shell_approval(
+                ToolApprovalRequest(
+                    tool_name="shell__run",
+                    tool_call_id="",
+                    arguments=tool_args,
+                    category=category,
+                    risk=risk,
+                    message=tool.approval_message(tool_args, context),
+                )
+            )
+        context.approval_callback = lambda _request: approved
 
         user_msg = Message(
             role="user",
@@ -181,46 +238,65 @@ class ConversationCommandPresenter:
             host.chat_view.add_message(user_msg)
         except Exception as exc:
             logger.debug("Failed to add shell command user message to chat view: %s", exc)
+        try:
+            host.services.conv_service.save(conversation)
+        except Exception as exc:
+            logger.debug("Failed to save conversation before shell invocation: %s", exc)
 
         async def _execute():
-            executor = ToolExecutor(
-                tool_manager,
-                shell_config=AppConfig.from_dict(getattr(host, "app_settings", {}) or {}).shell,
-            )
-            policy = RunPolicy(
-                mode=str(getattr(conversation, "mode", "agent") or "agent"),
-                tool_permissions=permissions,
-                source="desktop",
-            )
-            context = executor.build_tool_context(
-                conversation=conversation,
-                provider=None,
-                approval_callback=self._ask_shell_approval,
-                questions_callback=None,
-                llm_client=None,
-                policy=policy,
-                tool_name="shell__run",
-            )
             result = await executor.execute_tool(
                 tool_name="shell__run",
-                tool_args={"command": command, "cwd": ".", "timeout": 600},
+                tool_args=tool_args,
                 allowed=executor.is_tool_allowed("shell__run", policy),
                 policy=policy,
                 context=context,
             )
-            executor.sync_state(conversation, context)
             return result
 
-        try:
-            if tool_manager is None:
-                raise RuntimeError("Tool manager is not available")
-            result = asyncio.run(_execute())
+        def run() -> None:
+            result = None
+            error = None
+            try:
+                result = asyncio.run(_execute())
+            except Exception as exc:
+                error = exc
+            self._shell_signals.finished.emit(conversation, command, result, error)
+
+        threading.Thread(target=run, name="BangShell", daemon=True).start()
+
+    def _finish_shell_command(
+        self,
+        conversation: Conversation,
+        command: str,
+        result: object,
+        error: object,
+    ) -> None:
+        host = self._host
+        conversation_id = str(getattr(conversation, "id", "") or "")
+        current = getattr(host, "current_conversation", None)
+        if str(getattr(current, "id", "") or "") == conversation_id:
+            target = current
+            visible = True
+        else:
+            loader = getattr(getattr(host.services, "conv_service", None), "load", None)
+            if callable(loader):
+                target = loader(conversation_id)
+                if target is None:
+                    logger.info(
+                        "Discarding Shell completion for deleted conversation %s",
+                        conversation_id,
+                    )
+                    return
+            else:
+                target = conversation
+            visible = False
+        if error is not None:
+            logger.debug("Explicit shell command failed: %s", error)
+            content = f"Shell 执行失败：{error}"
+            is_error = True
+        else:
             content = result.to_string() if hasattr(result, "to_string") else str(result)
             is_error = bool(getattr(result, "is_error", False))
-        except Exception as exc:
-            logger.debug("Explicit shell command failed: %s", exc)
-            content = f"Shell 执行失败：{exc}"
-            is_error = True
 
         assistant_msg = Message(
             role="assistant",
@@ -234,23 +310,28 @@ class ConversationCommandPresenter:
                 }
             },
         )
-        conversation.add_message(assistant_msg)
+        target.add_message(assistant_msg)
+        if visible:
+            try:
+                host.chat_view.add_message(assistant_msg)
+            except Exception as exc:
+                logger.debug("Failed to add shell command result to chat view: %s", exc)
         try:
-            host.chat_view.add_message(assistant_msg)
-        except Exception as exc:
-            logger.debug("Failed to add shell command result to chat view: %s", exc)
-        try:
-            host.services.conv_service.save(conversation)
+            host.services.conv_service.save(target)
         except Exception as exc:
             logger.debug("Failed to save conversation after shell invocation: %s", exc)
-        self._remember_current_conversation(conversation)
+        if visible:
+            self._remember_current_conversation(target)
+            refresh_processes = getattr(getattr(host, "conversation_presenter", None), "refresh_processes", None)
+            if callable(refresh_processes):
+                refresh_processes()
 
-    def _ask_shell_approval(self, message: str) -> bool:
+    def _ask_shell_approval(self, request: ToolApprovalRequest) -> bool:
         try:
             reply = QMessageBox.question(
                 self._host,
                 "Shell 执行确认",
-                str(message or "确认执行 Shell 命令？"),
+                str(request.message or "确认执行 Shell 命令？"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )

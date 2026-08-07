@@ -11,7 +11,7 @@ ChatView,
 #messages_container,
 #settings_content,
 QScrollArea#settings_page_scroll {
-    background-color: $app_bg;
+    background-color: $surface;
     color: $text;
 }
 
@@ -24,7 +24,6 @@ QLabel#collapse_summary,
 QLabel#tool_detail_label,
 QLabel#inspector_subtitle,
 QLabel#stat_label,
-QLabel#metric_label,
 QLabel#empty_state_description,
 QLabel#editor_role_label,
 QLabel#shortcut_group_label,
@@ -42,7 +41,6 @@ QLabel[heading="true"],
 QLabel#settings_page_title,
 QLabel#message_role,
 QLabel#chat_empty_title,
-QLabel#chat_empty_tip_title,
 QLabel#collapse_title,
 QLabel#task_text,
 QLabel#runtime_title,
@@ -75,13 +73,16 @@ QMenu::separator { background-color: $window; border-top: 1px solid $border; }
 /* Shell surfaces */
 #sidebar,
 Sidebar,
-#chat_header,
-#input_container,
-InputArea,
 #settings_sidebar,
 InspectorPanel,
 #inspector_panel {
     background-color: $window;
+}
+
+#chat_header,
+#input_container,
+InputArea {
+    background-color: $surface;
 }
 
 #sidebar, Sidebar, #settings_sidebar { border-right: 1px solid $border; }
@@ -131,25 +132,25 @@ QPushButton#import_btn:hover {
 
 QPushButton[primary="true"],
 QPushButton#new_chat_btn,
-QPushButton#send_btn,
-QToolButton#send_btn {
+QToolButton#primary_action_btn {
     background-color: $primary;
     color: $on_primary;
     border: 1px solid $primary;
 }
 
+QToolButton#primary_action_btn[tone="danger"] { background-color: $danger_bg; color: $error; border-color: $danger_border; }
+
 QPushButton[primary="true"]:hover,
 QPushButton#new_chat_btn:hover,
-QPushButton#send_btn:hover,
-QToolButton#send_btn:hover {
+QToolButton#primary_action_btn:hover {
     background-color: $primary_strong;
     border-color: $primary_strong;
 }
 
+QToolButton#primary_action_btn[tone="danger"]:hover { background-color: $danger_hover; border-color: $danger_border; }
+
 QPushButton:disabled,
-QToolButton:disabled,
-QPushButton#send_btn:disabled,
-QToolButton#send_btn:disabled {
+QToolButton:disabled {
     background-color: $surface_alt;
     color: $disabled;
     border-color: $border;
@@ -347,20 +348,21 @@ QListWidget#model_catalog_list::indicator:checked {
 
 QGroupBox,
 QFrame#settings_detail_card,
-QFrame#settings_form_section,
 QFrame#collapse_section,
 QFrame#task_card,
 QFrame#runtime_strip,
 QFrame#stat_card,
-QFrame#metric_card,
 QFrame#empty_state,
-QFrame#chat_empty_card,
-QFrame#chat_empty_tip_card,
 #streaming_container,
 QFrame#image_preview_item,
 QFrame#image_edit_item {
     background-color: $surface;
     border: 1px solid $border;
+}
+
+QFrame#settings_form_section {
+    background-color: transparent;
+    border: none;
 }
 
 QFrame#settings_section_body {
@@ -369,9 +371,17 @@ QFrame#settings_section_body {
 }
 
 QFrame#settings_list_panel {
-    background-color: transparent;
+    background-color: $window;
     border: none;
 }
+
+QToolButton#task_delete_btn:hover, QToolButton#task_delete_btn:focus { background-color: $danger_bg; color: $error; border-color: $danger_border; }
+
+QFrame#settings_detail_panel { background-color: $surface; border: none; }
+
+QSplitter#settings_list_detail_splitter::handle:horizontal { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 transparent, stop:0.44 transparent, stop:0.45 $border, stop:0.55 $border, stop:0.56 transparent, stop:1 transparent); border: none; }
+
+QSplitter#settings_list_detail_splitter::handle:horizontal:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 transparent, stop:0.44 transparent, stop:0.45 $selected_border, stop:0.55 $selected_border, stop:0.56 transparent, stop:1 transparent); }
 
 QGroupBox::title {
     background-color: $surface;
@@ -417,12 +427,9 @@ QFrame#chat_header_separator {
 }
 
 QPushButton#work_dir_btn,
-QLabel#context_indicator,
-QLabel#runtime_indicator,
+QToolButton#runtime_indicator,
 QFrame#chat_nav_group,
 QComboBox#mode_combo,
-QComboBox#provider_combo,
-QComboBox#model_combo,
 QComboBox#bottom_model_selector,
 QLineEdit#task_input_edit {
     background-color: $surface_alt;
@@ -430,9 +437,12 @@ QLineEdit#task_input_edit {
     border: 1px solid $border;
 }
 
+QToolButton[composer_action="true"] { background-color: transparent; border: 1px solid transparent; }
+
 QPushButton#work_dir_btn:hover,
-QLabel#context_indicator:hover,
-QLabel#runtime_indicator:hover,
+QToolButton#runtime_indicator:hover,
+QToolButton[composer_action="true"]:hover,
+QToolButton[composer_action="true"]:focus,
 QFrame#chat_nav_group:hover,
 QComboBox#mode_combo:hover,
 QComboBox#bottom_model_selector:hover {
@@ -441,11 +451,26 @@ QComboBox#bottom_model_selector:hover {
     color: $selected_text;
 }
 
-QLabel#runtime_indicator[active="true"] {
+QLabel#conversation_title_label { color: $text; }
+
+QFrame#header_notice_slot { background-color: transparent; border: none; }
+QLabel#header_notice_label { color: $muted; background-color: transparent; border: none; }
+QLabel#header_notice_label[tone="success"] { color: $success; }
+QLabel#header_notice_label[tone="warning"] { color: $warning; }
+QLabel#header_notice_label[tone="error"] { color: $error; }
+
+QToolButton#runtime_indicator[active="true"] {
     background-color: $primary_hover;
     color: $selected_text;
     border-color: $selected_border;
 }
+
+QPushButton#work_dir_btn[workspace_state="empty"] { color: $muted; }
+QPushButton#work_dir_btn[workspace_state="valid"] { color: $success; }
+QPushButton#work_dir_btn[workspace_state="invalid"] { color: $error; }
+
+QToolButton[composer_action="true"][tone="warning"] { color: $warning; }
+QToolButton[composer_action="true"][tone="danger"] { color: $error; }
 
 /* Messages and tool rows */
 MessageWidget {
@@ -457,7 +482,7 @@ MessageWidget[role="assistant"] {
 }
 
 MessageWidget[role="user"] {
-    background-color: $selected;
+    background-color: $user_message_bg;
 }
 
 QTextBrowser#message_content,
@@ -501,6 +526,11 @@ QToolButton#msg_delete_btn:hover {
     background-color: $danger_bg;
     border-color: $danger_border;
 }
+
+QFrame#composer_revision_bar { background-color: $primary_hover; border: 1px solid $selected_border; }
+QLabel#composer_revision_label { color: $selected_text; background-color: transparent; }
+QToolButton#composer_revision_cancel { color: $muted; background-color: transparent; border: 1px solid transparent; }
+QToolButton#composer_revision_cancel:hover { color: $selected_text; background-color: $selected; border-color: $selected_border; }
 
 QPushButton#thinking_toggle,
 QToolButton#thinking_toggle,

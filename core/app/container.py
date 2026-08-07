@@ -6,6 +6,7 @@ replacing implicit singleton patterns with explicit ownership.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from core.app import AppBootstrap, AppCoordinator
 from core.app.services.app_settings import AppSettingsService
@@ -17,10 +18,14 @@ from core.app.services.conversation import ConversationService
 from core.app.services.context import ContextService
 from core.app.services.skill import SkillService
 from core.app.services.search import SearchService
+from core.app.services.settings_update import SettingsUpdateService
+from core.app.services.release import ReleaseChecker
 from core.app.repositories import AppRepositories
 from core.app.channel_platforms import build_channel_platforms
 from core.config import load_app_config
+from core.config.app_settings import set_cached_settings
 from core.llm.client import LLMClient
+from core.content.session_content import SessionContentService
 from core.prompts.renderer import PromptRenderer
 from core.agent.run.runtime import AgentRuntime
 from core.capabilities import CapabilitiesConfig, CapabilitiesManager, CapabilityExecutor, default_capabilities_config
@@ -36,23 +41,24 @@ from models.model_ref import split_model_ref
 class AppServices:
     """Runtime services exposed to the UI and presenters."""
 
-    repositories: AppRepositories
+    data_dir: Path
     app_settings_service: AppSettingsService
+    release_checker: ReleaseChecker
     provider_catalog_service: ProviderCatalogService
     provider_service: ProviderService
     mode_catalog_service: ModeCatalogService
     conv_service: ConversationService
     context_service: ContextService
+    content_service: SessionContentService
     skill_service: SkillService
     command_registry: CommandRegistry
     tool_manager: ToolManager
-    prompt_renderer: PromptRenderer
-    client: LLMClient
     capability_executor: CapabilityExecutor
     agent_runtime: AgentRuntime
     channel_gateway: ChannelGateway
     channel_service: ChannelService
     channel_catalog: ChannelCatalog
+    settings_update_service: SettingsUpdateService
     app_coordinator: AppCoordinator
     app_bootstrap: AppBootstrap
 
@@ -87,6 +93,7 @@ class AppContainer:
             return references
 
         app_settings_service = AppSettingsService(repositories.settings)
+        release_checker = ReleaseChecker()
         provider_service = ProviderService()
         provider_catalog_service = ProviderCatalogService(
             repository=repositories.providers,
@@ -111,6 +118,8 @@ class AppContainer:
         client = LLMClient(
             timeout=float(getattr(self.app_config, "llm_timeout_seconds", 600.0) or 600.0),
         )
+        self._prompt_renderer = prompt_renderer
+        self._client = client
         capability_executor = CapabilityExecutor(
             client=client,
             prompt_renderer=prompt_renderer,
@@ -118,6 +127,12 @@ class AppContainer:
             provider_catalog_provider=provider_catalog_service.current,
             default_auxiliary_model=self.app_config.default_auxiliary_model,
         )
+        context_service = ContextService(
+            client,
+            app_config=self.app_config,
+            capability_executor=capability_executor,
+        )
+        content_service = SessionContentService()
         agent_runtime = AgentRuntime(
             client=client,
             tool_manager=tool_manager,
@@ -125,13 +140,15 @@ class AppContainer:
             capability_executor=capability_executor,
             app_config=self.app_config,
             provider_catalog_provider=provider_catalog_service.current,
+            context_maintenance=context_service.maintenance,
+            content_service=content_service,
         )
         capability_executor.bind_agent_runtime(agent_runtime)
-        conv_service = ConversationService(
-            repositories.conversations,
-            workspace_sessions=repositories.workspace_sessions,
+        conv_service = ConversationService(repositories.conversations)
+        app_coordinator = AppCoordinator(
+            conv_service=conv_service,
+            active_processes=tool_manager.list_processes,
         )
-        app_coordinator = AppCoordinator(conv_service=conv_service)
         channel_platforms = build_channel_platforms()
         channel_gateway = ChannelGateway(
             data_dir=repositories.data_dir,
@@ -153,28 +170,37 @@ class AppContainer:
             provider_catalog_service=provider_catalog_service,
             conv_service=conv_service,
         )
-        context_service = ContextService(client, app_config=self.app_config, capability_executor=capability_executor)
+        settings_update_service = SettingsUpdateService(
+            app_settings_service=app_settings_service,
+            provider_catalog_service=provider_catalog_service,
+            mode_catalog_service=mode_catalog_service,
+            repositories=repositories,
+            channel_gateway=channel_gateway,
+            channel_service=channel_service,
+            runtime_config_applier=self.apply_runtime_configuration,
+        )
         skill_service = SkillService()
         command_registry = CommandRegistry()
 
         self.services = AppServices(
-            repositories=repositories,
+            data_dir=repositories.data_dir,
             app_settings_service=app_settings_service,
+            release_checker=release_checker,
             provider_catalog_service=provider_catalog_service,
             provider_service=provider_service,
             mode_catalog_service=mode_catalog_service,
             conv_service=conv_service,
             context_service=context_service,
+            content_service=content_service,
             skill_service=skill_service,
             command_registry=command_registry,
             tool_manager=tool_manager,
-            prompt_renderer=prompt_renderer,
-            client=client,
             capability_executor=capability_executor,
             agent_runtime=agent_runtime,
             channel_gateway=channel_gateway,
             channel_service=channel_service,
             channel_catalog=channel_platforms.catalog,
+            settings_update_service=settings_update_service,
             app_coordinator=app_coordinator,
             app_bootstrap=app_bootstrap,
         )
@@ -189,7 +215,7 @@ class AppContainer:
             config.capabilities,
         )
         services = self.services
-        services.prompt_renderer.app_config = config
+        self._prompt_renderer.app_config = config
         services.capability_executor.update_configuration(
             capabilities=capabilities,
             default_auxiliary_model=config.default_auxiliary_model,
@@ -197,5 +223,7 @@ class AppContainer:
         services.tool_manager.refresh_capability_tools(capabilities)
         services.agent_runtime.update_configuration(config)
         services.context_service.update_configuration(config)
-        services.client.set_timeout(float(config.llm_timeout_seconds or 600.0))
+        self._client.set_timeout(float(config.llm_timeout_seconds or 600.0))
+        services.tool_manager.refresh_search_config()
+        set_cached_settings(dict(settings or {}))
         return config

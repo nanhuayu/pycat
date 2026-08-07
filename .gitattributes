@@ -1,9 +1,9 @@
 # Auto detect text files and use LF in repo, CRLF on checkout (Windows default)
 * text=auto
 
-# Explicitly mark these as text with LF in repo (keep CRLF on Windows checkout)
+# Markdown is also kept as LF in the worktree so docs/check_docs.py is reproducible.
 *.py text
-*.md text
+*.md text eol=lf
 *.txt text
 *.json text
 *.yaml text

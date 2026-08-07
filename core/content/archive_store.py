@@ -21,11 +21,11 @@ from models.contracts.content import (
     ArchivedContentView,
     normalize_archive_kind,
 )
+from models.session_paths import resolve_session_root
 
 ARCHIVE_KIND_DIRS: dict[str, str] = {
     "tool_call": "tool-call",
     "history": "history",
-    "artifact": "artifact",
 }
 
 
@@ -39,9 +39,10 @@ class SessionArchiveStore:
     """Read/write recoverable content under one conversation session."""
 
     def __init__(self, work_dir: str, conversation_id: object = None):
-        self.work_dir = Path(work_dir or ".").expanduser().resolve()
+        raw_work_dir = str(work_dir or "").strip()
+        self.work_dir = Path(raw_work_dir).expanduser().resolve() if raw_work_dir else Path.home()
         self.session_id = safe_name(str(conversation_id or "default")) or "default"
-        self.session_root = self.work_dir / ".pycat" / "sessions" / self.session_id
+        self.session_root = resolve_session_root(self.work_dir, self.session_id)
 
     def write_original(
         self,
@@ -61,6 +62,7 @@ class SessionArchiveStore:
         prepared_images = self._prepare_images(images or [])
         digest = self._content_digest(text, prepared_images)
         content_id = self._content_id(source=source, title=title, digest=digest)
+        existing = self.read_record(content_id, kind=archive_kind)
         ext = normalize_extension(extension or detect_extension(source, text))
         target_dir = self.kind_root(archive_kind) / content_id
         target = (target_dir / f"original{ext}").resolve()
@@ -69,7 +71,8 @@ class SessionArchiveStore:
         target_dir.mkdir(parents=True, exist_ok=True)
         with target.open("w", encoding="utf-8", errors="replace", newline="") as fh:
             fh.write(text)
-        metadata_payload = dict(metadata or {})
+        metadata_payload = dict(getattr(existing, "metadata", {}) or {})
+        metadata_payload.update(dict(metadata or {}))
         image_metadata = self._write_prepared_images(target_dir, prepared_images)
         if image_metadata:
             metadata_payload["image_attachments"] = image_metadata
@@ -85,6 +88,7 @@ class SessionArchiveStore:
 
         now = timestamp()
         original_ref = self.relative_to_work_dir(target)
+        existing_summary = str(getattr(existing, "summary", "") or "")
         record = ArchivedContentRecord(
             id=content_id,
             kind=archive_kind,
@@ -94,11 +98,11 @@ class SessionArchiveStore:
             digest=digest,
             size=len(text),
             token_estimate=estimate_tokens(text),
-            views={},
-            status="original_ready",
-            created_seq=int(seq_id or 0),
-            updated_seq=int(seq_id or 0),
-            created_at=now,
+            views=dict(getattr(existing, "views", {}) or {}),
+            status=str(getattr(existing, "status", "") or "original_ready") if existing_summary else "original_ready",
+            created_seq=int(getattr(existing, "created_seq", 0) or seq_id or 0),
+            updated_seq=max(int(getattr(existing, "updated_seq", 0) or 0), int(seq_id or 0)),
+            created_at=str(getattr(existing, "created_at", "") or now),
             updated_at=now,
             metadata=metadata_payload,
         )
@@ -153,12 +157,19 @@ class SessionArchiveStore:
         if not ref:
             return None
         try:
-            path = self.resolve_ref(ref)
-            if self.session_root not in path.parents or not path.is_file():
+            path = self._resolve_session_ref(ref)
+            if not path.is_file():
                 return None
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return None
+
+    def read_input(self, record_or_id: ArchivedContentRecord | str) -> Any:
+        """Read the archived tool input without exposing storage paths to callers."""
+        record = record_or_id if isinstance(record_or_id, ArchivedContentRecord) else self.read_record(str(record_or_id))
+        if record is None or not isinstance(record.metadata, dict):
+            return None
+        return self._read_json_ref(str(record.metadata.get("input_ref") or ""))
 
     def read_images(self, record_or_id: ArchivedContentRecord | str) -> list[str]:
         record = record_or_id if isinstance(record_or_id, ArchivedContentRecord) else self.read_record(str(record_or_id))
@@ -176,8 +187,11 @@ class SessionArchiveStore:
             mime_type = str(item.get("mime_type") or "image/png").strip() or "image/png"
             if not ref:
                 continue
-            path = self.resolve_ref(ref)
-            if self.session_root not in path.parents or not path.is_file():
+            try:
+                path = self._resolve_session_ref(ref)
+            except ValueError:
+                continue
+            if not path.is_file():
                 continue
             try:
                 encoded = base64.b64encode(path.read_bytes()).decode("ascii")
@@ -209,8 +223,11 @@ class SessionArchiveStore:
             ref = str(item.get("ref") or "").strip()
             if not ref:
                 return False
-            path = self.resolve_ref(ref)
-            if self.session_root not in path.parents or not path.is_file():
+            try:
+                path = self._resolve_session_ref(ref)
+            except ValueError:
+                return False
+            if not path.is_file():
                 return False
         return True
 
@@ -266,7 +283,9 @@ class SessionArchiveStore:
             record = self.read_record(str(record_or_id))
         if record is None:
             raise FileNotFoundError(str(record_or_id))
-        path = self.resolve_ref(record.original_ref)
+        path = self._resolve_session_ref(record.original_ref)
+        if not path.is_file():
+            raise FileNotFoundError(str(record_or_id))
         with path.open("r", encoding="utf-8", errors="replace", newline="") as fh:
             return fh.read()
 
@@ -276,8 +295,8 @@ class SessionArchiveStore:
             return None
         kinds = [normalize_archive_kind(kind)] if kind else list(ARCHIVE_KINDS)
         for archive_kind in kinds:
-            meta = self.kind_root(archive_kind) / content_id / "meta.json"
-            if not meta.exists():
+            meta = self._record_meta_path(archive_kind, content_id)
+            if meta is None or not meta.is_file():
                 continue
             try:
                 return ArchivedContentRecord.from_dict(json.loads(meta.read_text(encoding="utf-8")))
@@ -318,6 +337,20 @@ class SessionArchiveStore:
         if raw.is_absolute():
             return raw
         return (self.work_dir / raw).resolve()
+
+    def _resolve_session_ref(self, ref: str) -> Path:
+        path = self.resolve_ref(ref)
+        if not _is_within(self.session_root, path):
+            raise ValueError("archive reference escaped session root")
+        return path
+
+    def _record_meta_path(self, kind: str, content_id: str) -> Path | None:
+        value = str(content_id or "").strip()
+        if not _is_safe_content_id(value):
+            return None
+        root = self.kind_root(kind).resolve()
+        meta = (root / value / "meta.json").resolve()
+        return meta if _is_within(root, meta) else None
 
     def relative_to_work_dir(self, path: Path) -> str:
         try:
@@ -427,6 +460,20 @@ class SessionArchiveStore:
 
 def safe_name(value: object) -> str:
     return re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(value or "")).strip("._-")[:100]
+
+
+def _is_safe_content_id(value: str) -> bool:
+    """Accept only one generated archive directory name."""
+
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", str(value or "")))
+
+
+def _is_within(root: Path, path: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 def timestamp() -> str:

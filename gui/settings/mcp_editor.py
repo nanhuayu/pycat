@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shlex
+from collections.abc import Callable, Iterable
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
@@ -16,8 +17,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from core.app.repositories import AppRepositories
-from core.app.repositories.mcp_server import McpServerRepository
 from gui.settings.components import (
     SettingsActionBar,
     SettingsListDetailLayout,
@@ -25,25 +24,33 @@ from gui.settings.components import (
     configure_settings_resource_list,
 )
 from gui.utils.icon_manager import Icons
+from gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from models.contracts.mcp import McpServerConfig
 
 
 class McpSettingsWidget(QWidget):
-    def __init__(self, repository: McpServerRepository | None = None, parent=None) -> None:
+    def __init__(
+        self,
+        servers: Iterable[McpServerConfig] = (),
+        *,
+        reload_provider: Callable[[], Iterable[McpServerConfig]] | None = None,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
-        self.repository = repository or AppRepositories.open().mcp_servers
-        self.servers = [McpServerConfig.from_dict(item.to_dict()) for item in self.repository.load()]
+        self._reload_provider = reload_provider
+        self.servers = [self._clone(item) for item in servers]
         self._active_index = -1
         self._loading = False
         self._setup_ui()
         self.refresh_list()
+        self._loaded_fingerprint = self._servers_fingerprint()
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(8)
 
-        split = SettingsListDetailLayout("服务", "配置", list_stretch=2, detail_stretch=4)
+        split = SettingsListDetailLayout(list_stretch=2, detail_stretch=4)
         actions = SettingsActionBar(spacing=4)
         actions.add_icon_action("新增 MCP 服务", Icons.get(Icons.PLUS), self.add_server)
         self.toggle_btn = actions.add_icon_action(
@@ -64,23 +71,27 @@ class McpSettingsWidget(QWidget):
 
         editor = QWidget()
         form = QFormLayout(editor)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(8)
-        self.name_edit = QLineEdit()
-        self.command_edit = QLineEdit()
-        self.args_edit = QLineEdit()
+        self.name_edit = ThemedLineEdit()
+        self.command_edit = ThemedLineEdit()
+        self.args_edit = ThemedLineEdit()
         self.args_edit.setPlaceholderText('JSON 数组或空格分隔参数，例如 ["-y", "pkg"]')
-        self.env_edit = QTextEdit()
+        self.env_edit = ThemedTextEdit()
         self.env_edit.setMaximumHeight(110)
         self.env_edit.setPlaceholderText("KEY=VALUE，每行一个")
-        self.cached_tools_edit = QTextEdit()
+        self.cached_tools_edit = ThemedTextEdit()
         self.cached_tools_edit.setReadOnly(True)
         self.cached_tools_edit.setPlaceholderText("运行服务后显示已发现工具")
+        self.cached_tools_edit.setToolTip("MCP 服务运行后发现的工具目录（只读）")
         form.addRow("名称", self.name_edit)
         form.addRow("命令", self.command_edit)
         form.addRow("参数", self.args_edit)
         form.addRow("环境变量", self.env_edit)
-        form.addRow("已发现工具", self.cached_tools_edit)
+        form.addRow("工具", self.cached_tools_edit)
         split.add_detail_widget(editor, scrollable=True)
         root.addWidget(split, 1)
 
@@ -89,6 +100,7 @@ class McpSettingsWidget(QWidget):
 
     def refresh_list(self, preferred_index: int | None = None) -> None:
         target = self._active_index if preferred_index is None else int(preferred_index)
+        selected_row = -1
         self._loading = True
         try:
             self.list_widget.clear()
@@ -102,11 +114,13 @@ class McpSettingsWidget(QWidget):
                 )
                 self.list_widget.addItem(item)
             if self.list_widget.count():
-                self.list_widget.setCurrentRow(min(max(target, 0), self.list_widget.count() - 1))
+                selected_row = min(max(target, 0), self.list_widget.count() - 1)
+                self.list_widget.setCurrentRow(selected_row)
         finally:
             self._loading = False
-        if self.list_widget.count():
-            self._on_selection_changed(self.list_widget.currentRow())
+        if selected_row >= 0:
+            self._active_index = selected_row
+            self._load_editor(self.servers[selected_row])
         else:
             self._active_index = -1
             self._load_editor(None)
@@ -202,7 +216,7 @@ class McpSettingsWidget(QWidget):
         while name in existing:
             index += 1
             name = f"new-mcp-{index}"
-        self.servers.append(McpServerConfig(name=name, command="npx", enabled=True))
+        self.servers.append(McpServerConfig(name=name, command="", enabled=False))
         self._active_index = len(self.servers) - 1
         self.refresh_list(self._active_index)
         self.name_edit.selectAll()
@@ -231,9 +245,22 @@ class McpSettingsWidget(QWidget):
         self.refresh_list(self._active_index)
 
     def reload_servers(self) -> None:
-        self.servers = [self._clone(server) for server in self.repository.load()]
+        if self._reload_provider is None:
+            return
+        if self.has_unsaved_changes():
+            answer = QMessageBox.question(
+                self,
+                "放弃 MCP 更改",
+                "重新读取会放弃尚未保存的 MCP 更改，是否继续？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        self.servers = [self._clone(server) for server in self._reload_provider()]
         self._active_index = 0 if self.servers else -1
         self.refresh_list(self._active_index)
+        self._loaded_fingerprint = self._servers_fingerprint()
 
     def collect_servers(self) -> list[McpServerConfig]:
         self._commit_active()
@@ -243,6 +270,24 @@ class McpSettingsWidget(QWidget):
                 raise ValueError(f"MCP 服务名称重复：{server.name}")
             names.add(server.name)
         return [self._clone(server) for server in self.servers]
+
+    def has_unsaved_changes(self) -> bool:
+        try:
+            self._commit_active()
+        except ValueError:
+            return True
+        return self._servers_fingerprint() != self._loaded_fingerprint
+
+    def mark_saved(self) -> None:
+        self._commit_active()
+        self._loaded_fingerprint = self._servers_fingerprint()
+
+    def _servers_fingerprint(self) -> str:
+        return json.dumps(
+            [server.to_dict() for server in self.servers],
+            ensure_ascii=False,
+            sort_keys=True,
+        )
 
     def _sync_actions(self) -> None:
         server = self.servers[self._active_index] if 0 <= self._active_index < len(self.servers) else None

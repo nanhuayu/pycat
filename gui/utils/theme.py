@@ -41,10 +41,10 @@ class ThemeTokens:
 
 THEME_COLORS: dict[str, dict[str, str]] = {
     "light": {
-        "window": "#f5f6f8",
+        "window": "#f7f7f8",
         "surface": "#ffffff",
-        "surface_alt": "#f1f3f5",
-        "border": "#d7dce1",
+        "surface_alt": "#f3f4f6",
+        "border": "#e5e7eb",
         "text": "#202428",
         "muted": "#68717a",
         "primary": "#7567c7",
@@ -143,12 +143,12 @@ def theme_colors(theme: object, accent: object = DEFAULT_ACCENT) -> dict[str, st
     error = colors["error"]
     colors.update(
         {
-            "app_bg": colors["surface_alt"],
             "surface_hover": _blend(surface, primary, 0.11 if dark else 0.055),
             "control_border": border,
             "primary_strong": _blend(primary, colors["text"], 0.14 if dark else 0.18),
             "primary_hover": _blend(surface, primary, 0.18 if dark else 0.09),
             "selected": _blend(surface, primary, 0.22 if dark else 0.18),
+            "user_message_bg": _blend(surface, primary, 0.16 if dark else 0.11),
             "selected_text": colors["text"] if dark else _blend(primary, colors["text"], 0.24),
             "selected_meta": primary,
             "selected_border": _blend(border, primary, 0.32),

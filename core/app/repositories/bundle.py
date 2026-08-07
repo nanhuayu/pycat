@@ -9,7 +9,6 @@ from core.app.repositories.mcp_server import McpServerRepository
 from core.app.repositories.provider import ProviderRepository
 from core.app.repositories.search_config import SearchConfigRepository
 from core.app.repositories.settings import SettingsRepository
-from core.app.repositories.workspace_session import WorkspaceSessionService
 
 
 @dataclass(frozen=True)
@@ -22,7 +21,6 @@ class AppRepositories:
     providers: ProviderRepository
     mcp_servers: McpServerRepository
     search_config: SearchConfigRepository
-    workspace_sessions: WorkspaceSessionService
 
     @classmethod
     def open(cls, data_dir: str | Path | None = None) -> "AppRepositories":
@@ -35,5 +33,4 @@ class AppRepositories:
             providers=ProviderRepository(root),
             mcp_servers=McpServerRepository(root),
             search_config=SearchConfigRepository(root),
-            workspace_sessions=WorkspaceSessionService(),
         )

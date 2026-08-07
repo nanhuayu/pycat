@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Tuple
 from core.content.markdown import parse_frontmatter, strip_frontmatter, with_frontmatter
 from core.state.operations import ensure_artifact
 from models.contracts.session_state import SessionArtifact, SessionState
+from models.session_paths import resolve_session_root
 
 
 _MANAGED_FRONTMATTER_KEYS = {
@@ -26,7 +27,9 @@ class ArtifactService:
     @staticmethod
     def artifact_storage_dir(*, work_dir: str, conversation_id: object = None) -> Path:
         session_id = str(conversation_id or "session").strip() or "session"
-        return Path(work_dir or ".").expanduser().resolve() / ".pycat" / "sessions" / session_id / "artifact"
+        raw = str(work_dir or "").strip()
+        root = Path(raw).expanduser().resolve() if raw else ""
+        return resolve_session_root(root, session_id) / "artifact"
 
     @staticmethod
     def artifact_file_path(*, work_dir: str, conversation_id: object = None, name: str) -> Path:

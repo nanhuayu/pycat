@@ -14,8 +14,9 @@
    </p>
 
    <p>
-      <a href="./ARCHITECTURE.md">Architecture</a> ·
-      <a href="./docs/CC_HAHA_MIGRATION_NOTES.md">Migration Notes</a> ·
+      <a href="./docs/README.md">Documentation</a> ·
+      <a href="./docs/architecture/">Architecture</a> ·
+      <a href="./docs/architecture/modules.md">Code Map</a> ·
       <a href="./docs/releases/">Release Notes</a>
    </p>
 </div>
@@ -95,7 +96,7 @@ PyCat is a native desktop AI workbench that brings LLM chat, multi-mode agents (
 | **Native desktop UX** | Dark / light themes, high-DPI support, conversation tree sidebar, Markdown rendering, and a clean information layout. |
 | **Performance observability** | Real-time token throughput (Tokens/sec), response latency, and runtime timeline in the right inspection panel. |
 | **Lightweight build** | Nuitka `--standalone` compilation produces a ~80 MB self-contained `.exe` — no Electron, no Node.js, no extra runtime. |
-| **Clean architecture** | Layered `models/contracts → core domains → core.app → gui/cli/channel`, with `ChannelPlatformHost` as the sole facade for channel backends. |
+| **Clean architecture** | Layered contracts, core domains, application services and adapters, with `ChannelGateway`/`ChannelService` as the Channel application boundary. |
 
 ## 🧩 Feature Overview
 
@@ -111,7 +112,7 @@ PyCat is a native desktop AI workbench that brings LLM chat, multi-mode agents (
 - **WeChat**: QR-code bridge with transient-poll-timeout resilience — no need for a public webhook.
 - **Feishu (Lark)**: WebSocket long-connection using a custom lightweight protobuf codec — no heavy `lark-oapi` SDK dependency.
 - **Telegram**: Bot API long-polling (`getUpdates`) — just a Bot Token, no webhook required.
-- All channels share a unified `ChannelPlatformHost` boundary and auto-bind conversations to reply targets.
+- All channels share the unified `ChannelGateway`/`ChannelService` boundary and auto-bind conversations to reply targets.
 
 ### Extensibility
 
@@ -143,9 +144,12 @@ The project follows a layered architecture for maintainability and future refact
 
 See also:
 
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md)
-- [`docs/PLAN_AGENT_RUNTIME_REFACTOR.md`](./docs/PLAN_AGENT_RUNTIME_REFACTOR.md)
-- [`docs/ARCHITECTURE_REDESIGN.md`](./docs/ARCHITECTURE_REDESIGN.md)
+- [`docs/README.md`](./docs/README.md)
+- [`docs/architecture/`](./docs/architecture/)
+- [`docs/architecture/modules.md`](./docs/architecture/modules.md) and [`docs/architecture/concepts.md`](./docs/architecture/concepts.md)
+- [`docs/STATUS.md`](./docs/STATUS.md)
+- [`AGENTS.md`](./AGENTS.md) and [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- [`docs/product/`](./docs/product/) and [`docs/engineering/`](./docs/engineering/)
 
 ## 🚀 Quick Start
 
@@ -188,7 +192,7 @@ The build script will:
 - compile a standalone Windows distribution with Nuitka (`--standalone --enable-plugin=pyqt6`),
 - produce `pycat.exe` in the output directory,
 - bundle `assets/`, `pycat.ico`, `LICENSE`, `README.md`, and `README_zh.md`,
-- generate a versioned zip archive: `pycat-0.0.2-windows-x64.zip`.
+- generate a versioned zip archive using the version declared in the build script.
 
 > **Why Nuitka?** Unlike Electron-based apps that bundle an entire Chromium + Node.js runtime (~200 MB+), Nuitka compiles Python directly to native machine code, producing a self-contained ~80 MB package with no external runtime dependency. The result is faster startup, lower memory usage, and a genuinely portable executable.
 
@@ -201,7 +205,7 @@ pycat/
 │  ├─ agent/               # AgentRuntime, run engine, request pipeline, subagent, events
 │  ├─ app/                 # AppContainer, repositories, application services, coordinator
 │  ├─ capabilities/        # capability defaults, merge, executor, tool adapter
-│  ├─ channel/             # channel gateway, backend host, sources, replies
+│  ├─ channel/             # gateway, lifecycle, scheduler, platforms, replies
 │  ├─ content/             # archive store, content views, markdown, attachments
 │  ├─ context/             # context sections, providers, maintenance, request replay
 │  ├─ llm/                 # transport client, request payload, response parsing, token budget
@@ -211,7 +215,13 @@ pycat/
 │  ├─ skills/              # discovery, manifest, routing, resources, prompt section
 │  ├─ state/               # todo, artifact, work trace session state operations
 │  └─ tools/               # MCP, system tools, catalog, permissions, execution adapters
-├─ docs/                   # architecture docs, historical design notes, releases
+├─ docs/                   # product, architecture, status, decisions and evidence
+│  ├─ architecture/        # current system and mechanisms
+│  ├─ product/             # overview and user workflows
+│  ├─ engineering/         # testing and documentation governance
+│  ├─ decisions/           # accepted architecture decisions
+│  ├─ reference/           # external implementation evidence
+│  ├─ archive/             # unique obsolete internal evidence
 │  └─ releases/            # versioned release notes
 ├─ models/                 # pure data models and models/contracts
 ├─ tests/                  # unit/runtime/channels/gui/cli suites
@@ -248,13 +258,13 @@ UI styles are mainly located in `assets/styles/`. If you want to move closer to 
 
 PyCat is in early stages and iterating quickly. Contributions of all kinds are welcome — new features, bug fixes, documentation, UI polish, channel integrations, and testing.
 
-**Current status:** v0.0.2, 403 unit tests passing, four channels with basic functionality, `lark-oapi` dependency removed.
+**Current status:** development version; verify the version and test result from the current checkout before reporting them.
 
 > ⚠️ The project still has many rough edges: limited feature depth, no mobile support, small community, incomplete documentation. If you're looking for a production-ready tool, Cherry Studio or Chatbox are better choices today. If you're interested in the Python + Nuitka + IM channels approach, we'd love your help improving it.
 
 **Good first contributions:**
 
-- Add a new channel source (e.g., Slack, Discord, DingTalk) following the `core/channel/sources/<source>/` pattern.
+- Add a new channel platform (e.g., Slack, Discord, DingTalk) following the `core/channel/platforms/` contracts and existing Gateway flow.
 - Polish the UI theme or add new `assets/styles/` variants.
 - Extend the skills library with new reusable skill files.
 - Improve test coverage for `core/channel/`, `core/agent/`, `core/context/`, or `gui/presenters/`.
@@ -262,10 +272,10 @@ PyCat is in early stages and iterating quickly. Contributions of all kinds are w
 
 ### Before you start:
 
-1. Read `ARCHITECTURE.md` to understand the layering rules.
-2. Follow the `models/contracts → core domains → core.app → gui/cli/channel` dependency direction.
-3. When adding a channel, use `ChannelPlatformHost` as the sole API boundary — never access runtime private state directly.
-4. Run `python -m unittest discover -s tests` and `python -m compileall core models gui cli tests` before submitting. See `docs/testing.md` for focused test commands.
+1. Read `AGENTS.md` and `docs/README.md`, then `docs/architecture/` and `docs/architecture/modules.md`.
+2. Follow the dependency and ownership rules in `AGENTS.md`; do not infer them from historical plans.
+3. When adding a channel, implement the existing platform contracts and reuse `ChannelGateway`/`ChannelService` — never access runtime private state directly.
+4. Run `python -m compileall core models gui cli tests -q` and the affected `python -m pytest ...` groups before submitting. See `docs/engineering/testing.md` for dependencies, focused commands, and documentation checks.
 
 **Iterating fast, and we'd love to have you on board.** 🚀
 
@@ -276,4 +286,3 @@ PyCat is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 Commercial use is permitted, provided that all AGPL-3.0 obligations are fully satisfied.
 
 See [`LICENSE`](./LICENSE) for the full license text.
-
