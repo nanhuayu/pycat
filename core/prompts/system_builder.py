@@ -37,8 +37,21 @@ def _join(parts: list[str]) -> str:
     return "\n\n".join(str(part or "").strip() for part in parts if str(part or "").strip())
 
 
-def _completion_contract(mode) -> str:
-    if str(getattr(mode, "completion_policy", "text") or "text") == "explicit":
+def _completion_contract(mode, completion_policy: str | None = None) -> str:
+    """Render the contract from the request's effective policy.
+
+    Prompt previews do not have a ``RunPolicy`` and fall back to the mode
+    configuration. Runtime requests pass the immutable policy explicitly so
+    an entry-point override cannot drift from the instructions shown to the
+    model.
+    """
+    effective_policy = str(
+        completion_policy
+        if completion_policy not in (None, "")
+        else getattr(mode, "completion_policy", "text")
+        or "text"
+    ).strip().lower()
+    if effective_policy == "explicit":
         return (
             "Completion: ordinary assistant text is progress, not completion. "
             "When the task is fully finished, call agent__complete with the final result."
@@ -115,6 +128,7 @@ def resolve_base_system_prompt_text(
     default_work_dir: str = ".",
     include_conversation_override: bool = False,
     pycat_assistant_enabled: bool | None = None,
+    completion_policy: str | None = None,
 ) -> str:
     """Return stable/global/Mode instructions for read-only UI previews."""
     del include_conversation_override
@@ -124,7 +138,7 @@ def resolve_base_system_prompt_text(
         pycat_assistant_enabled,
     )
     mode_prompt = str(getattr(mode, "prompt", "") or "") if assistant_enabled else ""
-    completion_contract = _completion_contract(mode) if assistant_enabled else ""
+    completion_contract = _completion_contract(mode, completion_policy) if assistant_enabled else ""
     return _join(
         [
             GLOBAL_PRINCIPLES if assistant_enabled else "",
@@ -144,6 +158,7 @@ def build_system_prompt(
     default_work_dir: str = ".",
     sections: PromptSections | None = None,
     pycat_assistant_enabled: bool | None = None,
+    completion_policy: str | None = None,
 ) -> str:
     """Compose stable principles followed by append-only instruction layers."""
     del provider
@@ -160,11 +175,11 @@ def build_system_prompt(
             GLOBAL_PRINCIPLES if assistant_enabled else "",
             app_config.prompts.global_instructions,
             str(getattr(mode, "prompt", "") or "") if assistant_enabled else "",
-            _completion_contract(mode) if assistant_enabled else "",
+            _completion_contract(mode, completion_policy) if assistant_enabled else "",
             _tool_usage_rules(tools) if assistant_enabled else "",
             sections.channel,
             sections.project_instructions if assistant_enabled else "",
             session_instructions,
-            sections.skills,
+            sections.skills if assistant_enabled else "",
         ]
     )

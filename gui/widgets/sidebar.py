@@ -7,11 +7,21 @@ from PyQt6.QtWidgets import (
     QLineEdit, QListWidget, QListWidgetItem, QMenu,
     QMessageBox, QFileDialog, QApplication, QStyledItemDelegate, QStyle
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QSize, QRect
-from PyQt6.QtGui import QAction, QColor, QFont, QFontMetrics, QPainter, QPalette, QPen
+from PyQt6.QtCore import pyqtSignal, Qt, QSize, QRect, QUrl
+from PyQt6.QtGui import (
+    QAction,
+    QColor,
+    QDesktopServices,
+    QFont,
+    QFontMetrics,
+    QPainter,
+    QPalette,
+    QPen,
+)
 from typing import Dict, Any, List
 from datetime import datetime
 import os
+from pathlib import Path
 
 from gui.utils.icon_manager import Icons
 from gui.utils.theme import prepare_context_menu, resolve_accent, resolve_theme, theme_colors
@@ -335,7 +345,11 @@ class Sidebar(QWidget):
         item = self.conversation_list.itemAt(position)
         if not isinstance(item, ConversationItem):
             return
-        
+
+        menu = self._build_context_menu(item)
+        menu.exec(self.conversation_list.mapToGlobal(position))
+
+    def _build_context_menu(self, item: ConversationItem) -> QMenu:
         menu = prepare_context_menu(QMenu(self), self)
         conversation_id = str(item.conversation_data.get('id', '') or '')
 
@@ -353,12 +367,28 @@ class Sidebar(QWidget):
         menu.addMenu(export_menu)
         menu.addSeparator()
 
+        open_work_dir_action = QAction("在资源管理器中打开", self)
+        work_dir = Path(item.work_dir).expanduser() if item.work_dir else None
+        open_work_dir_action.setEnabled(bool(work_dir and work_dir.is_dir()))
+        open_work_dir_action.triggered.connect(
+            lambda _checked=False, path=str(work_dir or ""): self._open_work_dir(path)
+        )
+        menu.addAction(open_work_dir_action)
+        menu.addSeparator()
+
         delete_action = QAction("删除", self)
         delete_action.triggered.connect(
             lambda: self._confirm_delete(conversation_id)
         )
         menu.addAction(delete_action)
-        menu.exec(self.conversation_list.mapToGlobal(position))
+        return menu
+
+    @staticmethod
+    def _open_work_dir(work_dir: str) -> None:
+        path = Path(str(work_dir or "")).expanduser()
+        if not path.is_dir():
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.resolve())))
 
     def _copy_session_id(self, conversation_id: str):
         text = str(conversation_id or "").strip()

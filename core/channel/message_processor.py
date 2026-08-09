@@ -164,6 +164,16 @@ class ChannelMessageProcessor:
             elif replies.is_cancelled(result.status):
                 reply_text = replies.cancelled_reply()
                 self._emit_error(channel_id, conversation_id, request_id, reply_text, "channel-cancelled")
+            elif replies.is_interrupted(result.status):
+                final_message = result.final_message
+                if final_message is not None and not self._conversation_has_message(conversation, final_message):
+                    conversation.add_message(final_message)
+                reply_text = replies.interrupted_reply(
+                    final_message,
+                    stop_reason=result.stop_reason,
+                    error=result.error or "",
+                )
+                self._emit_error(channel_id, conversation_id, request_id, reply_text, "channel-interrupted")
             else:
                 reply_text = replies.failed_reply(result.error or "消息已收到，但生成回复时失败。")
                 self._append_error(conversation, channel_id, reply_text)

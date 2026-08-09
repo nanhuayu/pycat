@@ -548,8 +548,66 @@ class AgentRunEngine:
 
         turn_context.runtime_messages = []
         turn_context.state = TurnState.ASSISTANT_RECEIVED
+        response_metadata = getattr(assistant_msg, "metadata", {}) or {}
+        if bool(response_metadata.get("runtime_error")):
+            return TurnOutcome(
+                kind=TurnOutcomeKind.FAILED,
+                context=turn_context,
+                final_message=assistant_msg,
+                error=str(getattr(assistant_msg, "content", "") or "模型接口返回错误。"),
+                stop_reason=RunStopReason.ERROR,
+            )
+
+        response_incomplete = bool(response_metadata.get("incomplete"))
+        if response_incomplete:
+            raw_incomplete_reason = response_metadata.get("incomplete_reason")
+            if not raw_incomplete_reason:
+                finish_reason = str(response_metadata.get("finish_reason") or "").strip().lower()
+                raw_incomplete_reason = (
+                    "output_limit"
+                    if finish_reason in {
+                        "length",
+                        "max_tokens",
+                        "max_output_tokens",
+                        "max_completion_tokens",
+                        "output_limit",
+                        "token_limit",
+                    }
+                    else "incomplete_response"
+                )
+            incomplete_reason = str(raw_incomplete_reason).strip().lower()
+            output_limited = incomplete_reason == "output_limit"
+            interrupt_reason = "output_limit" if output_limited else incomplete_reason
+            assistant_msg.metadata.update(
+                {
+                    "completion": False,
+                    "completion_policy": str(getattr(policy, "completion_policy", "text") or "text"),
+                    "interrupted": True,
+                    "interrupt_reason": interrupt_reason,
+                }
+            )
         conversation.add_message(assistant_msg)
+        if response_incomplete:
+            self._attach_state_snapshot(conversation, assistant_msg)
         emitter.emit(RunEventKind.STEP, turn=turn_context.turn, data=assistant_msg)
+
+        if response_incomplete:
+            turn_context.state = TurnState.TURN_COMPLETE
+            return TurnOutcome(
+                kind=TurnOutcomeKind.INTERRUPTED,
+                context=turn_context,
+                final_message=assistant_msg,
+                error=(
+                    "模型在生成完成前达到输出上限。"
+                    if output_limited
+                    else f"模型响应未完整结束（{interrupt_reason}）。"
+                ),
+                stop_reason=(
+                    RunStopReason.OUTPUT_LIMIT
+                    if output_limited
+                    else RunStopReason.INCOMPLETE_RESPONSE
+                ),
+            )
 
         for hook in self._post_turn_hooks:
             try:
@@ -668,6 +726,24 @@ class AgentRunEngine:
             )
 
         self._attach_state_snapshot(conversation, assistant_msg)
+        if not str(getattr(assistant_msg, "content", "") or "").strip():
+            assistant_msg.metadata.update(
+                {
+                    "incomplete": True,
+                    "completion": False,
+                    "completion_policy": "text",
+                    "interrupted": True,
+                    "interrupt_reason": "empty_response",
+                }
+            )
+            turn_context.state = TurnState.TURN_COMPLETE
+            return TurnOutcome(
+                kind=TurnOutcomeKind.INTERRUPTED,
+                context=turn_context,
+                final_message=assistant_msg,
+                error="模型未返回可见文本。",
+                stop_reason=RunStopReason.EMPTY_RESPONSE,
+            )
         assistant_msg.metadata["completion"] = True
         assistant_msg.metadata["completion_policy"] = "text"
         turn_context.state = TurnState.TURN_COMPLETE

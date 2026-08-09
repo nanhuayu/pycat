@@ -217,9 +217,11 @@ class ConversationSettingsDialog(QDialog):
         self.max_tokens_spin = QSpinBox()
         self.max_tokens_spin.setRange(0, 10_000_000)
         self.max_tokens_spin.setSingleStep(1024)
-        self.max_tokens_spin.setSpecialValueText("产品默认")
+        self.max_tokens_spin.setSpecialValueText("继承模型")
         self.max_tokens_spin.setValue(int(llm_config.max_tokens or 0))
-        self.max_tokens_spin.setToolTip("本次请求允许生成的最大 token；模型档案只提供能力上限。")
+        self.max_tokens_spin.setToolTip(
+            "本次请求输出上限；0 表示使用产品默认 65,536，再按模型档案能力上限和总窗口校准。"
+        )
         section.form.addRow("本次输出上限", self.max_tokens_spin)
 
         hint = QLabel("推理强度和协议统一在“编辑模型”中设置。")

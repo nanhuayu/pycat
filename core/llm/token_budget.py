@@ -12,7 +12,7 @@ from models.model_ref import provider_matches_name
 from models.provider import Provider
 
 DEFAULT_CONTEXT_WINDOW = 128_000
-DEFAULT_OUTPUT_LIMIT = 4_096
+DEFAULT_OUTPUT_LIMIT = 65_536
 WARNING_THRESHOLD = 0.80
 DANGER_THRESHOLD = 0.95
 IMAGE_TOKEN_ESTIMATE = 256
@@ -371,8 +371,11 @@ def resolve_token_budget(
     configured_output_limit = _coerce_positive_int(request_output_limit)
     if configured_output_limit is None and request_config is not None:
         configured_output_limit = _coerce_positive_int(request_config.max_tokens)
-    output_limit = extra_output_limit or configured_output_limit or DEFAULT_OUTPUT_LIMIT
     profile_output_limit = _coerce_positive_int(getattr(profile, "max_output_tokens", None))
+    # A model profile describes a capability ceiling, not the request default.
+    # Keeping the product default independent prevents a stale catalog entry
+    # (for example, an old 4,096 value) from silently truncating reasoning.
+    output_limit = extra_output_limit or configured_output_limit or DEFAULT_OUTPUT_LIMIT
     if profile_output_limit is not None:
         output_limit = min(output_limit, profile_output_limit)
     if context_window <= output_limit:

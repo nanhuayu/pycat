@@ -80,7 +80,7 @@ class ComposerToolbar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        self.attach_btn = self._make_icon_button(Icons.PAPERCLIP, "添加文件/图片")
+        self.attach_btn = self._make_icon_button(Icons.PLUS, "添加文件/图片")
         self.attach_btn.clicked.connect(self.attach_requested.emit)
         layout.addWidget(self.attach_btn)
 
@@ -322,6 +322,7 @@ class ComposerToolbar(QWidget):
         button = QToolButton()
         button.setObjectName("toolbar_btn")
         button.setIcon(Icons.get(icon_name, scale_factor=1.0))
+        button.setProperty("icon_name", icon_name)
         button.setProperty("composer_action", True)
         button.setFixedSize(self._BUTTON_SIZE)
         button.setIconSize(self._ICON_SIZE)

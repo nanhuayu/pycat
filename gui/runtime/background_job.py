@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import threading
 from collections.abc import Callable
 from typing import Any
 
 from PyQt6.QtCore import QObject, QRunnable, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 
 class BackgroundJobSignals(QObject):
@@ -87,8 +90,16 @@ class BackgroundJob(QRunnable):
                 discarded = False
         if discarded:
             self._notify_discarded(result, error)
-        else:
+            return
+        # The owner may drop its last Python reference to this job while the
+        # worker is still here, which destroys the parentless ``signals``
+        # QObject underneath us. A dead receiver is a discard, not a failure:
+        # raising here would escape ``run()`` and abort the whole process.
+        try:
             self.signals.finished.emit(result, error)
+        except RuntimeError as exc:
+            logger.debug("Background job receiver went away before delivery: %s", exc)
+            self._notify_discarded(result, error)
 
     def _notify_discarded(self, result: Any = None, error: Exception | None = None) -> None:
         with self._state_lock:
@@ -102,6 +113,26 @@ class BackgroundJob(QRunnable):
                 return
 
     def run(self) -> None:
+        """Qt virtual boundary: nothing may escape here.
+
+        PyQt turns any exception that leaves ``run()`` into ``qFatal()``, which
+        aborts the process immediately with no traceback and no cleanup. Every
+        failure is therefore contained and downgraded to a discard.
+        """
+
+        try:
+            self._run_guarded()
+        except BaseException as exc:  # noqa: BLE001 - must never reach Qt
+            try:
+                logger.exception("Background job failed without delivering a result: %s", exc)
+            except BaseException:  # noqa: BLE001 - logging is inside the same Qt boundary
+                pass
+            try:
+                self._notify_discarded(None, exc if isinstance(exc, Exception) else None)
+            except BaseException:  # noqa: BLE001 - discard cleanup cannot escape run()
+                pass
+
+    def _run_guarded(self) -> None:
         with self._state_lock:
             self._started = True
             should_run = not self._abandoned and not self._cancel_event.is_set()
@@ -112,9 +143,10 @@ class BackgroundJob(QRunnable):
             result = self._operation()
             if inspect.isawaitable(result):
                 result = asyncio.run(result)
-            self._finish(result)
         except Exception as exc:
-            if self._may_emit():
-                self._emit_finished(None, exc)
-            else:
-                self._notify_discarded(None, exc)
+            # The operation failed. Report that once; delivery itself must not
+            # be retried through the same receiver, which is how the original
+            # double-fault escaped run() and aborted the process.
+            self._emit_finished(None, exc)
+            return
+        self._finish(result)

@@ -227,6 +227,7 @@ class RequestPipeline:
             reasoning_mode=policy.reasoning_mode,
             token_budget=token_budget,
             pycat_assistant_enabled=policy.pycat_assistant_enabled,
+            completion_policy=policy.completion_policy,
         )
         return request_conversation, request_body
 
@@ -246,7 +247,7 @@ class RequestPipeline:
         debug_purpose: str = "main",
     ) -> Message:
         """Send an already prepared request without rebuilding prompt state."""
-        return await self._client.send_request(
+        message = await self._client.send_request(
             provider=provider,
             request_body=request_body,
             on_token=on_token,
@@ -260,6 +261,11 @@ class RequestPipeline:
             conversation_id=str(getattr(request_conversation, "id", "") or ""),
             model_hint=str(getattr(request_conversation, "model", "") or ""),
         )
+        metadata = getattr(message, "metadata", {}) or {}
+        if isinstance(metadata, dict) and metadata.get("runtime_error"):
+            detail = str(getattr(message, "content", "") or "").strip()
+            raise RuntimeError(detail or "模型接口返回错误。")
+        return message
 
     async def _apply_context_gate(
         self,
@@ -349,6 +355,7 @@ class RequestPipeline:
                     tools=tools,
                     app_config=app_config,
                     pycat_assistant_enabled=policy.pycat_assistant_enabled,
+                    completion_policy=policy.completion_policy,
                     token_budget=budget,
                 )
             try:
@@ -406,6 +413,7 @@ class RequestPipeline:
                 tools=tools,
                 app_config=app_config,
                 pycat_assistant_enabled=policy.pycat_assistant_enabled,
+                completion_policy=policy.completion_policy,
                 token_budget=budget,
             )
             if normal_estimate < tight_threshold_tokens:
@@ -425,6 +433,7 @@ class RequestPipeline:
                     tools=tools,
                     app_config=app_config,
                     pycat_assistant_enabled=policy.pycat_assistant_enabled,
+                    completion_policy=policy.completion_policy,
                     token_budget=budget,
                 )
                 if normal_estimate < tight_threshold_tokens:
@@ -438,6 +447,7 @@ class RequestPipeline:
                 app_config=app_config,
                 replay_pressure="tight",
                 pycat_assistant_enabled=policy.pycat_assistant_enabled,
+                completion_policy=policy.completion_policy,
                 token_budget=budget,
             )
             if tight_estimate < normal_estimate and tight_estimate <= prompt_limit:
@@ -503,6 +513,7 @@ class RequestPipeline:
         app_config: AppConfig,
         replay_pressure: str = "normal",
         pycat_assistant_enabled: bool = True,
+        completion_policy: str | None = None,
         token_budget: TokenBudget | None = None,
     ) -> int:
         try:
@@ -524,6 +535,7 @@ class RequestPipeline:
                 tools=tools,
                 app_config=app_config,
                 pycat_assistant_enabled=pycat_assistant_enabled,
+                completion_policy=completion_policy,
                 token_budget=token_budget,
             )
             return estimate_request_tokens(body)
@@ -578,6 +590,7 @@ class RequestPipeline:
             app_config=app_config,
             sections=sections,
             pycat_assistant_enabled=policy.pycat_assistant_enabled,
+            completion_policy=policy.completion_policy,
         )
         if system_content:
             return [Message(role="system", content=system_content)] + context_messages

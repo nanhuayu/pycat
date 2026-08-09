@@ -113,6 +113,9 @@ class ModeManager:
         if builtin is None:
             return mode
         target = mode.model_target if mode.model_target.model_ref else builtin.model_target
+        completion_policy = builtin.completion_policy if builtin.slug == "channel" else (
+            mode.completion_policy or builtin.completion_policy
+        )
         return replace(
             builtin,
             name=mode.name or builtin.name,
@@ -120,7 +123,7 @@ class ModeManager:
             prompt=mode.prompt or builtin.prompt,
             allowed_tool_categories=mode.allowed_tool_categories or builtin.allowed_tool_categories,
             profile_kind=mode.profile_kind or builtin.profile_kind,
-            completion_policy=mode.completion_policy or builtin.completion_policy,
+            completion_policy=completion_policy,
             model_target=target,
             max_turns=mode.max_turns if mode.max_turns is not None else builtin.max_turns,
             shared_context_policy=mode.shared_context_policy or builtin.shared_context_policy,

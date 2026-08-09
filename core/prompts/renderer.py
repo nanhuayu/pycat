@@ -47,6 +47,7 @@ class PromptRenderer:
         llm_config: LLMConfig | None = None,
         sections: PromptSections | None = None,
         pycat_assistant_enabled: bool | None = None,
+        completion_policy: str | None = None,
     ) -> str:
         cfg = app_config or self.app_config
         explicit_request_config = llm_config is not None
@@ -64,6 +65,7 @@ class PromptRenderer:
             default_work_dir=work_dir,
             sections=sections,
             pycat_assistant_enabled=pycat_assistant_enabled,
+            completion_policy=completion_policy,
         )
 
     def build_request_body(
@@ -79,6 +81,7 @@ class PromptRenderer:
         token_budget: TokenBudget | None = None,
         sections: PromptSections | None = None,
         pycat_assistant_enabled: bool | None = None,
+        completion_policy: str | None = None,
     ) -> Dict[str, Any]:
         request_cfg = llm_config or LLMConfig.from_conversation(conversation)
         profile = provider.effective_model_profile(request_cfg.resolved_model())
@@ -93,6 +96,7 @@ class PromptRenderer:
                 llm_config=request_cfg,
                 sections=sections,
                 pycat_assistant_enabled=pycat_assistant_enabled,
+                completion_policy=completion_policy,
             )
             if system_prompt:
                 prepared_messages.insert(0, {"role": "system", "content": system_prompt})

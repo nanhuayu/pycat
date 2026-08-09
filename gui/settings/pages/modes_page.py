@@ -244,6 +244,8 @@ class ModesPage(QWidget):
                 self.prompt_edit.clear()
                 self.model_target_combo.set_model_target(ModelTarget())
                 self.mode_delete_btn.setEnabled(False)
+                self.completion_policy_combo.setEnabled(False)
+                self.completion_policy_combo.setToolTip("")
                 return
             self.slug_edit.setText(mode.slug)
             self.name_edit.setText(mode.name)
@@ -251,8 +253,16 @@ class ModesPage(QWidget):
             self.tool_category_selector.set_categories(set(mode.allowed_tool_categories))
             index = self.profile_kind_combo.findData(mode.profile_kind)
             self.profile_kind_combo.setCurrentIndex(index if index >= 0 else 0)
-            index = self.completion_policy_combo.findData(mode.completion_policy)
+            is_channel = mode.slug == "channel"
+            completion_policy = "explicit" if is_channel else mode.completion_policy
+            index = self.completion_policy_combo.findData(completion_policy)
             self.completion_policy_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.completion_policy_combo.setEnabled(not is_channel)
+            self.completion_policy_combo.setToolTip(
+                "Channel 使用 agent__complete 作为唯一正常完成协议。"
+                if is_channel
+                else ""
+            )
             self.model_target_combo.set_model_target(mode.model_target)
             self.max_turns_spin.setValue(int(mode.max_turns or 0))
             index = self.shared_context_combo.findData(mode.shared_context_policy)
@@ -281,7 +291,11 @@ class ModesPage(QWidget):
             prompt=self.prompt_edit.toPlainText().strip(),
             allowed_tool_categories=tuple(categories),
             profile_kind=current.profile_kind,
-            completion_policy=str(self.completion_policy_combo.currentData() or "text"),
+            completion_policy=(
+                "explicit"
+                if current.slug == "channel"
+                else str(self.completion_policy_combo.currentData() or "text")
+            ),
             model_target=self.model_target_combo.model_target(),
             max_turns=turns or None,
             shared_context_policy=str(

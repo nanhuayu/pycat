@@ -55,6 +55,260 @@ def _mark_reasoning_seen(
     return text, key or detected_thinking_key, True
 
 
+_OUTPUT_LIMIT_REASONS = frozenset(
+    {
+        "length",
+        "max_tokens",
+        "max_output_tokens",
+        "max_completion_tokens",
+        "output_limit",
+        "token_limit",
+    }
+)
+
+_INCOMPLETE_RESPONSE_REASONS = frozenset(
+    {
+        "content_filter",
+        "safety",
+        "cancelled",
+        "canceled",
+    }
+)
+
+_RUNTIME_ERROR_REASONS = frozenset(
+    {
+        "failed",
+        "error",
+    }
+)
+
+
+def _metadata_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_metadata_int(payload: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        value = _metadata_int(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _response_metadata_from_payload(
+    payload: dict[str, Any],
+    *,
+    response_format: str,
+) -> dict[str, Any]:
+    """Normalize completion facts exposed by provider response envelopes.
+
+    The runtime only needs a small portable observation contract.  It keeps
+    provider wire shapes at this boundary instead of making the Agent loop,
+    debug trace, and Channel delivery infer termination independently.
+    """
+
+    if not isinstance(payload, dict):
+        return {}
+
+    event_type = str(payload.get("type") or "").strip().lower()
+    nested_message = payload.get("message")
+    if event_type == "message_start" and isinstance(nested_message, dict):
+        return _response_metadata_from_payload(
+            nested_message,
+            response_format=response_format,
+        )
+    nested_response = payload.get("response")
+    if event_type.startswith("response.") and isinstance(nested_response, dict):
+        observed = _response_metadata_from_payload(
+            nested_response,
+            response_format=response_format,
+        )
+        if event_type == "response.incomplete":
+            observed["incomplete"] = True
+            observed.setdefault("finish_reason", "incomplete")
+            observed.setdefault("incomplete_reason", "incomplete_response")
+        elif event_type in {"response.cancelled", "response.canceled"}:
+            observed["incomplete"] = True
+            observed.setdefault("finish_reason", "cancelled")
+            observed.setdefault("incomplete_reason", "cancelled")
+        elif event_type == "response.failed":
+            observed["runtime_error"] = True
+            observed.setdefault("finish_reason", "failed")
+        return observed
+
+    # Some compatible Responses implementations omit the nested ``response``
+    # envelope on terminal events.  Preserve the terminal state instead of
+    # letting the event look like a clean EOF.
+    if event_type == "response.incomplete":
+        return {
+            "incomplete": True,
+            "runtime_error": False,
+            "finish_reason": "incomplete",
+            "incomplete_reason": "incomplete_response",
+        }
+    if event_type in {"response.cancelled", "response.canceled"}:
+        return {
+            "incomplete": True,
+            "runtime_error": False,
+            "finish_reason": "cancelled",
+            "incomplete_reason": "cancelled",
+        }
+    if event_type == "response.failed":
+        return {
+            "incomplete": False,
+            "runtime_error": True,
+            "finish_reason": "failed",
+        }
+
+    normalized_format = str(response_format or "").strip().lower()
+    usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
+    finish_reason = ""
+    status = str(payload.get("status") or "").strip().lower()
+    if event_type == "response.incomplete" and not status:
+        status = "incomplete"
+
+    if normalized_format in {"responses", "openai_responses"}:
+        if status == "incomplete":
+            details = payload.get("incomplete_details")
+            details = details if isinstance(details, dict) else {}
+            finish_reason = str(details.get("reason") or "incomplete").strip().lower()
+        elif status:
+            finish_reason = status
+    elif normalized_format == "ollama_chat":
+        finish_reason = str(payload.get("done_reason") or "").strip().lower()
+    elif isinstance(payload.get("content"), list):
+        finish_reason = str(payload.get("stop_reason") or "").strip().lower()
+    elif event_type == "message_delta":
+        delta = payload.get("delta") if isinstance(payload.get("delta"), dict) else {}
+        finish_reason = str(delta.get("stop_reason") or "").strip().lower()
+    else:
+        choices = payload.get("choices") if isinstance(payload.get("choices"), list) else []
+        if choices and isinstance(choices[0], dict):
+            finish_reason = str(choices[0].get("finish_reason") or "").strip().lower()
+
+    # A few OpenAI-compatible gateways put the terminal state on the envelope
+    # instead of ``choices[0].finish_reason``.  Preserve only states with a
+    # defined runtime meaning; ordinary progress/status labels must not leak
+    # into the portable metadata contract.
+    if not finish_reason and status in (
+        _OUTPUT_LIMIT_REASONS
+        | _INCOMPLETE_RESPONSE_REASONS
+        | _RUNTIME_ERROR_REASONS
+        | {"incomplete"}
+    ):
+        finish_reason = status
+
+    prompt_tokens = _first_metadata_int(usage, "prompt_tokens", "input_tokens")
+    completion_tokens = _first_metadata_int(usage, "completion_tokens", "output_tokens")
+    if normalized_format == "ollama_chat":
+        prompt_tokens = _metadata_int(payload.get("prompt_eval_count"))
+        completion_tokens = _metadata_int(payload.get("eval_count"))
+
+    details = (
+        usage.get("completion_tokens_details")
+        if isinstance(usage.get("completion_tokens_details"), dict)
+        else usage.get("output_tokens_details")
+        if isinstance(usage.get("output_tokens_details"), dict)
+        else {}
+    )
+    reasoning_tokens = _first_metadata_int(
+        usage,
+        "reasoning_tokens",
+    )
+    if reasoning_tokens is None:
+        reasoning_tokens = _first_metadata_int(details, "reasoning_tokens")
+
+    # Do not derive total_tokens here.  Streaming providers may expose input
+    # and output usage in different events (Anthropic message_start/delta).
+    # Derivation is deferred until the stream is complete so an early output
+    # count cannot become a stale total.
+    total_tokens = _first_metadata_int(usage, "total_tokens")
+
+    incomplete = (
+        status in {"incomplete", "cancelled", "canceled"}
+        or finish_reason in _OUTPUT_LIMIT_REASONS
+        or finish_reason in _INCOMPLETE_RESPONSE_REASONS
+    )
+    runtime_error = status in _RUNTIME_ERROR_REASONS or finish_reason in _RUNTIME_ERROR_REASONS
+    observed: dict[str, Any] = {
+        "incomplete": bool(incomplete),
+        "runtime_error": bool(runtime_error),
+    }
+    if finish_reason:
+        observed["finish_reason"] = finish_reason
+    if prompt_tokens is not None:
+        observed["prompt_tokens"] = prompt_tokens
+    if completion_tokens is not None:
+        observed["completion_tokens"] = completion_tokens
+    if reasoning_tokens is not None:
+        observed["reasoning_tokens"] = reasoning_tokens
+    if total_tokens is not None:
+        observed["total_tokens"] = total_tokens
+    if incomplete:
+        if finish_reason in _OUTPUT_LIMIT_REASONS:
+            observed["incomplete_reason"] = "output_limit"
+        else:
+            observed["incomplete_reason"] = finish_reason or "incomplete_response"
+    return observed
+
+
+def _merge_response_metadata(target: dict[str, Any], observed: dict[str, Any]) -> None:
+    if not observed:
+        return
+    for key in (
+        "finish_reason",
+        "prompt_tokens",
+        "completion_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "incomplete_reason",
+    ):
+        if observed.get(key) is not None and observed.get(key) != "":
+            target[key] = observed[key]
+    if observed.get("runtime_error"):
+        target["runtime_error"] = True
+    else:
+        target.setdefault("runtime_error", False)
+    if observed.get("incomplete"):
+        target["incomplete"] = True
+    else:
+        target.setdefault("incomplete", False)
+
+
+def _complete_response_metadata(metadata: dict[str, Any]) -> None:
+    """Fill a missing total from the final prompt/completion counts."""
+
+    if not isinstance(metadata, dict) or metadata.get("total_tokens") is not None:
+        return
+    prompt_tokens = _metadata_int(metadata.get("prompt_tokens"))
+    completion_tokens = _metadata_int(metadata.get("completion_tokens"))
+    if prompt_tokens is not None and completion_tokens is not None:
+        metadata["total_tokens"] = prompt_tokens + completion_tokens
+
+
+def _response_failure_detail(payload: Any) -> Any:
+    """Return the most useful bounded provider error payload."""
+
+    if not isinstance(payload, dict):
+        return payload
+    error = payload.get("error")
+    if error is not None:
+        return error
+    response = payload.get("response")
+    if isinstance(response, dict) and response.get("error") is not None:
+        return response["error"]
+    return response if isinstance(response, dict) else payload
+
+
+def _format_provider_failure(payload: Any, *, source: str) -> str:
+    return f"接口返回错误（{source}）：\n" + pretty_json(_response_failure_detail(payload))
+
+
 def _finalize_message_metadata(
     msg: Message,
     *,
@@ -64,6 +318,7 @@ def _finalize_message_metadata(
     runtime_error: bool = False,
     http_status: int | None = None,
     reasoning_state: dict[str, Any] | None = None,
+    response_metadata: dict[str, Any] | None = None,
 ) -> Message:
     msg.metadata["thinking_key"] = detected_thinking_key
     if thinking_present:
@@ -76,6 +331,21 @@ def _finalize_message_metadata(
             msg.metadata["http_status"] = http_status
     if reasoning_state:
         msg.metadata["reasoning_state"] = copy.deepcopy(reasoning_state)
+    if response_metadata is not None:
+        for key in (
+            "finish_reason",
+            "prompt_tokens",
+            "completion_tokens",
+            "reasoning_tokens",
+            "total_tokens",
+            "incomplete_reason",
+        ):
+            value = response_metadata.get(key)
+            if value is not None and value != "":
+                msg.metadata[key] = value
+        msg.metadata["incomplete"] = bool(response_metadata.get("incomplete", False))
+        if response_metadata.get("runtime_error"):
+            msg.metadata["runtime_error"] = True
     return msg
 
 
@@ -353,6 +623,7 @@ def parse_non_stream_response(
     reasoning_state: dict[str, Any] | None = None
     runtime_error = False
     http_status: int | None = None
+    response_metadata: dict[str, Any] | None = None
 
     if resp.status_code >= 400:
         runtime_error = True
@@ -370,6 +641,12 @@ def parse_non_stream_response(
         response_content = format_http_error(resp.status_code, payload, text)
     else:
         payload = resp.json()
+        response_metadata = {}
+        if isinstance(payload, dict):
+            _merge_response_metadata(
+                response_metadata,
+                _response_metadata_from_payload(payload, response_format=response_format),
+            )
         if response_format in {"responses", "openai_responses"} and isinstance(payload, dict):
             content, thinking, tool_calls, tokens_used, detected_thinking_key = _parse_responses_payload(payload)
             reasoning_items = _responses_reasoning_items(payload)
@@ -455,11 +732,25 @@ def parse_non_stream_response(
             else:
                 response_content = pretty_json(payload)
 
+        if response_metadata and response_metadata.get("runtime_error"):
+            runtime_error = True
+            # A provider-declared failure is not an assistant answer.  Replace
+            # any best-effort parser output with a bounded diagnostic so the
+            # Agent loop cannot mistake it for a successful turn.
+            response_content = _format_provider_failure(
+                payload,
+                source=response_format or "provider",
+            )
+
     if on_token and response_content:
         on_token(response_content)
 
     response_time_ms = int((time.time() - start_time) * 1000)
-    if tokens_used == 0 and response_content:
+    _complete_response_metadata(response_metadata or {})
+    observed_total = _metadata_int((response_metadata or {}).get("total_tokens"))
+    if observed_total is not None:
+        tokens_used = observed_total
+    elif tokens_used == 0 and response_content:
         tokens_used = estimate_tokens(response_content)
 
     msg = Message(
@@ -478,6 +769,7 @@ def parse_non_stream_response(
         runtime_error=runtime_error,
         http_status=http_status,
         reasoning_state=reasoning_state,
+        response_metadata=response_metadata,
     )
 
 
@@ -506,6 +798,8 @@ async def parse_stream_response(
     reasoning_state: dict[str, Any] | None = None
     runtime_error = False
     http_status: int | None = None
+    response_metadata: dict[str, Any] = {}
+    failure_payload: Any = None
 
     # HTTP error (non-2xx with streaming client)
     if response.status_code >= 400:
@@ -568,8 +862,51 @@ async def parse_stream_response(
                     logger.debug("Failed to write JSON decode marker to stream log: %s", exc)
             continue
 
+        observed_metadata: dict[str, Any] = {}
+        if isinstance(chunk_data, dict):
+            observed_metadata = _response_metadata_from_payload(
+                chunk_data,
+                response_format=response_format,
+            )
+            _merge_response_metadata(
+                response_metadata,
+                observed_metadata,
+            )
+
+            # Stop at the provider's terminal failure event.  In particular,
+            # compatible gateways may report ``status=failed`` without an
+            # ``error`` envelope; preserving this chunk is the only way to
+            # retain its diagnostic details and to avoid buffering partial
+            # tool calls after the failure.
+            if observed_metadata.get("runtime_error"):
+                runtime_error = True
+                failure_payload = chunk_data
+                failure_text = _format_provider_failure(
+                    chunk_data,
+                    source=("responses stream" if response_format in {"responses", "openai_responses"} else "stream"),
+                )
+                response_content = (
+                    f"{response_content.rstrip()}\n\n{failure_text}"
+                    if response_content.strip()
+                    else failure_text
+                )
+                if on_token:
+                    on_token(failure_text)
+                break
+
+            if observed_metadata.get("incomplete") and str(chunk_data.get("type") or "").strip().lower() in {
+                "response.incomplete",
+                "response.cancelled",
+                "response.canceled",
+            }:
+                # The terminal Responses event may contain no useful delta;
+                # keep the partial text/metadata collected so far and stop.
+                break
+
         if isinstance(chunk_data, dict) and chunk_data.get("error") is not None:
-            response_content = "接口返回错误（stream）：\n" + pretty_json(chunk_data.get("error"))
+            runtime_error = True
+            failure_payload = chunk_data
+            response_content = _format_provider_failure(chunk_data, source="stream")
             if on_token:
                 on_token(response_content)
             break
@@ -733,15 +1070,6 @@ async def parse_stream_response(
                     if parsed_tokens:
                         tokens_used = parsed_tokens
                 continue
-
-            if event_type == "response.failed":
-                runtime_error = True
-                response_payload = chunk_data.get("response") if isinstance(chunk_data.get("response"), dict) else {}
-                error = response_payload.get("error") if isinstance(response_payload.get("error"), dict) else chunk_data.get("error")
-                response_content = "接口返回错误（responses stream）：\n" + pretty_json(error or response_payload or chunk_data)
-                if on_token:
-                    on_token(response_content)
-                break
 
             continue
 
@@ -924,8 +1252,21 @@ async def parse_stream_response(
             "items": [item for _, item in sorted(chat_reasoning_details.items())],
         }
 
+    runtime_error = runtime_error or bool(response_metadata.get("runtime_error"))
+    if runtime_error and not response_content.strip():
+        response_content = _format_provider_failure(
+            failure_payload or response_metadata,
+            source="stream",
+        )
+        if on_token:
+            on_token(response_content)
+
     response_time_ms = int((time.time() - start_time) * 1000)
-    if tokens_used == 0:
+    _complete_response_metadata(response_metadata)
+    observed_total = _metadata_int(response_metadata.get("total_tokens"))
+    if observed_total is not None:
+        tokens_used = observed_total
+    elif tokens_used == 0:
         tokens_used = estimate_tokens(response_content)
 
     msg = Message(
@@ -944,4 +1285,5 @@ async def parse_stream_response(
         runtime_error=runtime_error,
         http_status=http_status,
         reasoning_state=reasoning_state,
+        response_metadata=response_metadata,
     )

@@ -378,11 +378,28 @@ def _sanitize_reasoning_history(
     conversation: Conversation | None = None,
     tool_result_renderer: Callable[[Any], str] | None = None,
 ) -> List[Message]:
-    if not _should_replay_reasoning(messages, provider):
-        return messages
+    filtered: List[Message] = []
+    for msg in messages:
+        metadata = getattr(msg, "metadata", {}) or {}
+        if msg.role == "assistant" and bool(metadata.get("incomplete")):
+            content = str(getattr(msg, "content", "") or "").strip()
+            if content:
+                clone = Message.from_dict(msg.to_dict())
+                clone.content = content
+                clone.thinking = None
+                clone.tool_calls = None
+                for key in ("reasoning_state", "thinking_present", "thinking_hidden", "thinking_key"):
+                    clone.metadata.pop(key, None)
+                filtered.append(clone)
+            continue
+        filtered.append(msg)
+
+    if not _should_replay_reasoning(filtered, provider):
+        return filtered
 
     sanitized: List[Message] = []
-    for msg in messages:
+    for msg in filtered:
+
         if msg.role == "assistant" and not _assistant_has_reasoning(msg):
             if _is_runtime_error_message(msg):
                 continue

@@ -267,7 +267,13 @@ class LLMClient:
     ) -> None:
         if debug_trace is None or not debug_trace.enabled:
             return
-        status = "error" if bool((getattr(msg, "metadata", {}) or {}).get("runtime_error")) else "completed"
+        metadata = getattr(msg, "metadata", {}) or {}
+        if bool(metadata.get("incomplete")):
+            status = "interrupted"
+        elif bool(metadata.get("runtime_error")):
+            status = "error"
+        else:
+            status = "completed"
         duration_ms = int((time.time() - start_time) * 1000)
         if refs.get("response"):
             debug_trace.sink.write_json(
@@ -285,17 +291,29 @@ class LLMClient:
                 },
             )
         tool_calls = list(getattr(msg, "tool_calls", None) or [])
+        metrics = {
+            "tokens": int(getattr(msg, "tokens", 0) or 0),
+            "tool_calls": len(tool_calls),
+            "response_time_ms": int(getattr(msg, "response_time_ms", 0) or 0),
+        }
+        for key in (
+            "finish_reason",
+            "prompt_tokens",
+            "completion_tokens",
+            "reasoning_tokens",
+            "total_tokens",
+            "incomplete_reason",
+        ):
+            if metadata.get(key) is not None:
+                metrics[key] = metadata[key]
+        metrics["incomplete"] = bool(metadata.get("incomplete", False))
         debug_trace.sink.finish_llm(
             debug_trace,
             status=status,
             duration_ms=duration_ms,
             refs=refs,
             summary=str(getattr(msg, "summary", "") or getattr(msg, "content", "") or "")[:220],
-            data={
-                "tokens": int(getattr(msg, "tokens", 0) or 0),
-                "tool_calls": len(tool_calls),
-                "response_time_ms": int(getattr(msg, "response_time_ms", 0) or 0),
-            },
+            data=metrics,
         )
 
     @staticmethod

@@ -1,11 +1,10 @@
 """Embedded provider connection and curated-model editor."""
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Callable
 
-from PyQt6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QThreadPool, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -26,6 +25,7 @@ from PyQt6.QtWidgets import (
 
 from core.app.services.provider import ProviderService
 from core.app.services.provider_catalog import ProviderCatalogService
+from gui.runtime.background_job import BackgroundJob
 from gui.settings.components import (
     RESOURCE_TRAILING_ICONS_ROLE,
     SettingsActionBar,
@@ -45,24 +45,6 @@ from models.provider import (
     OLLAMA_CHAT,
     Provider,
 )
-
-
-class _JobSignals(QObject):
-    finished = pyqtSignal(object, object)
-
-
-class _AsyncProviderJob(QRunnable):
-    def __init__(self, operation: Callable[[], object]) -> None:
-        super().__init__()
-        self.operation = operation
-        self.signals = _JobSignals()
-
-    def run(self) -> None:
-        try:
-            result = asyncio.run(self.operation())
-            self.signals.finished.emit(result, None)
-        except Exception as exc:
-            self.signals.finished.emit(None, exc)
 
 
 class _ModelListItem(SettingsStatusListItem):
@@ -128,7 +110,14 @@ class ProviderEditor(QWidget):
         self._provider_catalog_service = provider_catalog_service
         self._provider: Provider | None = None
         self._active_model_id = ""
-        self._jobs: set[_AsyncProviderJob] = set()
+        self._jobs: set[BackgroundJob] = set()
+
+        def abandon_jobs(_object=None, jobs=self._jobs) -> None:
+            for job in tuple(jobs):
+                job.abandon()
+            jobs.clear()
+
+        self.destroyed.connect(abandon_jobs)
         self._setup_ui()
         self.setEnabled(False)
 
@@ -417,7 +406,7 @@ class ProviderEditor(QWidget):
         self.remove_model_btn.setEnabled(has_model)
 
     def _start_job(self, operation: Callable[[], object], callback: Callable[[object, object], None]) -> None:
-        job = _AsyncProviderJob(operation)
+        job = BackgroundJob(operation)
         self._jobs.add(job)
 
         def finished(result, error) -> None:

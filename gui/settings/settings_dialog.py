@@ -188,6 +188,10 @@ class SettingsDialog(QDialog):
         self._allow_close = False
         self._collecting = False
         self._tracking_ready = False
+        self._dirty_refresh_timer = QTimer(self)
+        self._dirty_refresh_timer.setSingleShot(True)
+        self._dirty_refresh_timer.timeout.connect(self._refresh_dirty_state)
+        self._dirty_refresh_timer.destroyed.connect(self._disable_dirty_tracking)
 
         self._setup_ui()
         self._connect_dirty_tracking()
@@ -588,17 +592,20 @@ class SettingsDialog(QDialog):
         return "cancel"
 
     def close_without_prompt(self) -> None:
+        self._prepare_to_close()
         self._allow_close = True
         super().reject()
 
     def closeEvent(self, event) -> None:
         if self._allow_close:
+            self._prepare_to_close()
             event.accept()
             return
         if self._saving:
             event.ignore()
             return
         if not self.is_dirty():
+            self._prepare_to_close()
             event.accept()
             return
         event.ignore()
@@ -649,7 +656,7 @@ class SettingsDialog(QDialog):
         self._close_after_save = False
         self._pending_fingerprints = {}
         if should_close:
-            QTimer.singleShot(0, self.close_without_prompt)
+            self.close_without_prompt()
 
     def apply_save_error(self, error: Exception) -> None:
         self._set_saving(False)
@@ -672,7 +679,23 @@ class SettingsDialog(QDialog):
         if not self._tracking_ready or self._collecting or self._saving:
             return
         self._dirty_hint = True
-        QTimer.singleShot(0, self._refresh_dirty_state)
+        try:
+            self._dirty_refresh_timer.start(0)
+        except RuntimeError:
+            self._disable_dirty_tracking()
+
+    def _prepare_to_close(self) -> None:
+        self._tracking_ready = False
+        self._stop_dirty_refresh_timer()
+
+    def _disable_dirty_tracking(self, _object=None) -> None:
+        self._tracking_ready = False
+
+    def _stop_dirty_refresh_timer(self) -> None:
+        try:
+            self._dirty_refresh_timer.stop()
+        except RuntimeError:
+            self._disable_dirty_tracking()
 
     def _set_saving(self, saving: bool) -> None:
         self._saving = bool(saving)
@@ -695,6 +718,9 @@ class SettingsDialog(QDialog):
 
     def _refresh_dirty_state(self) -> None:
         if not self._tracking_ready or self._collecting or self._saving:
+            return
+        self._stop_dirty_refresh_timer()
+        if not self._tracking_ready:
             return
         was_dirty = bool(self._dirty_domain_cache)
         current = self._current_fingerprints()

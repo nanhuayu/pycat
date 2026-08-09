@@ -25,7 +25,7 @@ DEFAULT_MODES: list[ModeConfig] = [
         prompt="Reply concisely in plain text suitable for an external messaging client.",
         allowed_tool_categories=("read", "web", "state"),
         profile_kind="primary",
-        completion_policy="text",
+        completion_policy="explicit",
         source="builtin",
     ),
     ModeConfig(
