@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>PyCat · 工作台</title>
+  <link rel="icon" href="/brand.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/workbench.css">
+  <link rel="stylesheet" href="/assets/surfaces.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#composer">跳转到输入区</a>
+  <aside id="sidebar">
+    <div class="brand"><button id="about" title="关于 PyCat"><img src="/brand.svg" alt=""><strong>PyCat</strong></button><button id="new" class="brand-action" title="新建会话 · Ctrl N" aria-label="新建会话" data-icon="plus"></button></div>
+    <label class="search"><span data-icon="search"></span><input id="session-search" placeholder="搜索会话" aria-label="搜索会话"></label>
+    <div class="section-label"><span>项目与会话</span><button id="project-new" title="添加项目" aria-label="添加项目" data-icon="plus"></button><button id="resume-all" title="查看所有会话" aria-label="查看所有会话" data-icon="more"></button></div>
+    <nav id="sessions" aria-label="会话列表"></nav>
+    <div class="sidebar-bottom"><button id="materials"><span data-icon="book"></span><span>资料与记忆</span></button><button id="settings"><span data-icon="settings"></span><span>设置</span></button></div>
+    <div class="connection"><i></i><span id="connection-label">正在连接…</span><button id="theme" aria-label="切换深浅主题" title="切换深浅主题" data-icon="sun"></button></div>
+  </aside>
+  <main id="main">
+    <header><div class="heading"><h1 id="session-title">新会话</h1><button id="workspace">个人空间 <span>⌄</span></button></div><div class="header-actions">
+      <button id="trace"><span data-icon="activity"></span><span>运行检查</span></button>
+      <div id="message-navigation"><button id="previous-message" class="icon-button" title="上一条消息 · Alt ↑" aria-label="上一条消息" data-icon="up"></button><button id="next-message" class="icon-button" title="下一条消息 · Alt ↓" aria-label="下一条消息" data-icon="down"></button></div>
+      <button id="toggle-sidebar" class="icon-button" title="切换会话侧栏" aria-label="切换会话侧栏" data-icon="sidebar"></button>
+      <button id="toggle-inspector" class="icon-button" title="辅助栏 · Ctrl Shift I" aria-label="切换辅助栏" aria-expanded="false" data-icon="panel"></button>
+      <button id="session-menu" class="icon-button" title="更多" aria-label="会话操作" data-icon="more"></button>
+    </div></header>
+    <div id="messages" role="log" aria-label="会话内容" tabindex="0">
+      <section id="welcome"><div class="welcome-title"><img src="/brand.svg" alt=""><h2>今天想完成什么？</h2></div><p>描述任务，添加资料，或继续上一次的思路。</p><div class="suggestions"><button data-prompt="请帮我分析这个项目的结构与关键流程">分析项目 <span>↗</span></button><button data-prompt="/plan ">制定计划 <span>↗</span></button><button data-prompt="/review ">检查代码 <span>↗</span></button></div></section>
+    </div>
+    <section id="input-area" aria-label="消息输入">
+      <div id="edit-status" hidden><span>正在编辑消息 · 发送后替换此轮及后续消息</span><button id="cancel-edit">取消编辑</button></div>
+      <div id="run-status" hidden><span class="status-dot"></span><span id="run-label">正在运行</span><button id="pending" hidden>待处理</button><button id="cancel">停止 <kbd>Esc</kbd></button></div>
+      <div class="composer-box"><div id="draft-refs" hidden></div><textarea id="composer" rows="3" placeholder="描述任务… 输入 / 查看命令，@ 添加引用" aria-label="消息"></textarea><div id="completions" role="listbox" aria-label="输入补全" hidden></div><div class="composer-bottom"><button id="attach" class="icon-button" title="添加附件" aria-label="添加附件" data-icon="plus"></button><button id="mention" class="muted-button">@ 引用</button><span class="composer-spacer"></span><button id="context" class="context-button" title="查看上下文预算"><span class="context-ring">◔</span><span id="context-value">—</span></button><button id="send" class="send-button" title="发送消息" aria-label="发送消息" data-icon="up"></button></div></div>
+      <div class="selection-bar"><button id="mode">Chat <span>⌄</span></button><button id="model">选择模型 <span>⌄</span></button><button id="permissions">默认权限 <span>⌄</span></button><span class="selection-spacer"></span><button id="commands">命令 <kbd>Ctrl K</kbd></button></div>
+    </section>
+  </main>
+  <aside id="inspector" aria-label="辅助栏" hidden><div class="inspector-tabs"><button data-inspector="tasks" class="active">任务</button><button data-inspector="materials">资料</button><button data-inspector="memory">记忆</button></div><div id="inspector-content"></div><button id="state-version" class="text-button">查看当前状态</button></aside>
+  <dialog id="dialog"><div class="dialog-header"><div><span id="dialog-eyebrow" class="eyebrow"></span><h2 id="dialog-title"></h2></div><button id="close-dialog" class="icon-button" aria-label="关闭">×</button></div><div id="dialog-body"></div><div id="dialog-actions"></div></dialog>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <input id="file-input" type="file" multiple hidden>
+  <input id="import-input" type="file" accept=".json" hidden>
+  <noscript>请启用 JavaScript 以使用 PyCat 工作台。</noscript>
+</body>
+</html>

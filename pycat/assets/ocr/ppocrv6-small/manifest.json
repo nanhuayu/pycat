@@ -1,0 +1,22 @@
+{
+  "engine": "ppocrv6-small-onnx",
+  "ocr_version": "PP-OCRv6",
+  "profile": "small",
+  "source_package": "rapidocr==3.9.2",
+  "source_revision": "095232a4c94f7f0e6600ba5bba1177010ad696d4",
+  "source_url": "https://pypi.org/project/rapidocr/3.9.2/",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "name": "PP-OCRv6_det_small.onnx",
+      "size": 9929594,
+      "sha256": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f"
+    },
+    {
+      "name": "PP-OCRv6_rec_small.onnx",
+      "size": 21234383,
+      "sha256": "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+      "character_dictionary": "embedded ONNX metadata key: character"
+    }
+  ]
+}

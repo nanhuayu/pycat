@@ -4,28 +4,37 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pycat"
-description = "PyQt6 desktop LLM agent workbench with CLI and channel integrations"
+description = "Unified agent workbench for terminal, desktop, web and channels"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "AGPL-3.0-only" }
 dynamic = ["version", "dependencies", "optional-dependencies"]
 
 [project.scripts]
-pycat = "cli.main:main"
+pycat = "pycat.__main__:main"
+
+[project.gui-scripts]
+pycat-gui = "pycat.gui.application:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "gui*", "cli*", "models*"]
+include = ["pycat*"]
 exclude = ["tests*", "docs*", "scripts*", "temp*", "build*", "release*"]
 
 [tool.setuptools.package-data]
-"core.app" = ["default_models.json"]
+"pycat" = ["py.typed", "assets/**/*", "assets/*.ico"]
+"pycat.tui" = ["*.tcss"]
+
+# Native helpers are copied explicitly by the Windows standalone build. Keep
+# the platform-independent SDK wheel free of developer-prepared executables.
+[tool.setuptools.exclude-package-data]
+"pycat" = ["assets/tools/ripgrep/windows-x64/*"]
 
 # Dependencies are single-sourced from requirements.txt / requirements-dev.txt.
 [tool.setuptools.dynamic]
-version = { attr = "core.version.__version__" }
+version = { attr = "pycat.core.version.__version__" }
 dependencies = { file = ["requirements.txt"] }
-optional-dependencies = { dev = { file = ["requirements-dev.txt"] } }
+optional-dependencies = { dev = { file = ["requirements-dev.txt"] }, gui = { file = ["requirements-gui.txt"] }, ocr = { file = ["requirements-ocr.txt"] }, tui = { file = ["requirements-tui.txt"] }, web = { file = ["requirements-web.txt"] } }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

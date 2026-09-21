@@ -1,0 +1,15 @@
+from __future__ import annotations
+
+from pycat.core.context.providers.base import MessageProviderMixin, ProviderContext, context_item
+from pycat.core.context.sections import build_conversation_summary
+
+
+class SummaryProvider(MessageProviderMixin):
+    name = "summary"
+    priority = 20
+
+    def build_items(self, context: ProviderContext):
+        content = build_conversation_summary(context.conversation)
+        if not content:
+            return []
+        return [context_item(content, kind=self.name, priority=self.priority, item_id="summary", required=True)]

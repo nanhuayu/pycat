@@ -1,288 +1,160 @@
-<div align="center">
-   <img src="./assets/pycat.svg" width="128" height="128" alt="PyCat Logo" />
+# PyCat
 
-   <h1>PyCat</h1>
+**A programmable local agent workbench: Python SDK, native desktop and remote projects.**
 
-   <p><strong>Native Python Desktop AI Workbench — Chat · Agent · Tools · Channels · MCP</strong></p>
+English · [简体中文](README_zh.md) · [Releases](https://github.com/nanhuayu/pycat/releases) · [User guide](docs/product/user-guide.md) · [For developers](docs/product/developers.md) · [Report an issue](https://github.com/nanhuayu/pycat/issues)
 
-   <p>English | <a href="./README_zh.md">简体中文</a></p>
+![PyCat brings your own materials and tasks together into useful results](media/pycat-hero.png)
 
-   <p>
-      PyCat is a <strong>pure-Python, native desktop AI workbench</strong> that unifies
-      LLM chat, autonomous agents, tool orchestration, multi-platform IM channels, MCP,
-      and skills — all in a single, Nuitka-compilable codebase.
-   </p>
+PyCat is for developers, automation builders and advanced users working on real projects. In a local or SSH workspace, analyze code, run commands, organize material and work with images, keeping results as files you can inspect and revise. The Python SDK, CLI, TUI, native desktop, web workbench and messaging channels share task execution and tool capabilities.
 
-   <p>
-      <a href="./docs/README.md">Documentation</a> ·
-      <a href="./docs/architecture/">Architecture</a> ·
-      <a href="./docs/architecture/modules.md">Code Map</a> ·
-      <a href="./docs/releases/">Release Notes</a>
-   </p>
-</div>
+## Why developers might try it
 
-<div align="center">
-      <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&amp;logoColor=white" alt="Python 3.9+" />
-      <img src="https://img.shields.io/badge/UI-PyQt6-41CD52?logo=qt&amp;logoColor=white" alt="PyQt6" />
-      <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-6E56CF" alt="Platform" />
-      <img src="https://img.shields.io/badge/MCP-Supported-7C3AED" alt="MCP Supported" />
-      <img src="https://img.shields.io/badge/Build-Nuitka_Native-EC4899" alt="Nuitka Build" />
-      <img src="https://img.shields.io/badge/Channels-QQ_%7C_WeChat_%7C_Feishu_%7C_Telegram-07C160" alt="Channels" />
-</div>
-
----
-
-## 🧭 Why PyCat
-
-Most AI desktop tools split their tech stack across 3–5 languages and frameworks — Electron for UI, TypeScript for logic, Rust/Tauri for performance, Bun for scripting. PyCat takes a **radically simpler approach**:
-
-> **Everything in Python. One language. One runtime.**
-
-| | Claude Code | Codex | Cherry Studio | Chatbox | **PyCat** |
-|---|---|---|---|---|---|
-| **GUI** | ❌ CLI only | ❌ CLI only | ✅ Electron | ✅ Electron | ✅ **Native PyQt6** |
-| **Tech stack** | Rust + Shell + TS | Rust 96% | TS + Electron | TS + Electron | **Python (single)** |
-| **Binary size** | ~200MB+ | ~200MB+ | ~200MB+ | ~200MB+ | **~70MB (Nuitka)** |
-| **IM Channels** | — | — | **QQ / WeChat / Feishu / Telegram** | — | **QQ / WeChat / Feishu / Telegram** |
-| **MCP / Skills** | ✅ | ✅ | ✅ | — | ✅ |
-| **Native compile** | ❌ | ❌ | ❌ | ❌ | ✅ **Nuitka → .exe** |
-| **Provider mgmt** | API key | ChatGPT plan | ✅ GUI | ✅ GUI | ✅ GUI |
-| **Response formats** | Anthropic | OpenAI | OpenAI compat + Anthropic | OpenAI compat + Anthropic | OpenAI compat + Anthropic |
-
-> ⚠️ **Early-stage disclaimer**: PyCat is still in early development. Feature depth, community size, and stability are nowhere near the mature projects above. This table only illustrates *technical approach differences*, not feature completeness. Cherry Studio has a richer extension ecosystem (MCP / skills / plugins / themes) and broader response format compatibility. Chatbox offers a more polished mobile experience. PyCat's core value is its **Python-only + Nuitka native compilation + built-in IM channels** approach — a different technical path, not a better one.
-
-## ✨ Overview
-
-PyCat is a native desktop AI workbench that brings LLM chat, multi-mode agents (Chat / Agent / Plan / Explore), tool orchestration, and **four mainstream IM channel integrations** into a single Python + PyQt6 application.
-
-**Technical approach differences vs. alternatives:**
-
-- 🐍 **Pure Python — no Electron, no TypeScript, no Rust, no Tauri.** One language, one `pip install`, simpler learning curve for extension and maintenance.
-- ⚡ **Nuitka native compilation** — compiles to a standalone `.exe` (~80 MB), smaller than Electron bundles that ship an entire browser engine.
-- 💬 **Multi-platform IM Channels** — QQ Bot, WeChat (QR bridge), Feishu (WebSocket), and Telegram (Bot API) all built-in. A distinguishing feature among AI desktop clients.
-- 🧠 **Four agent modes** — Chat, Agent (autonomous), Plan (structured planning), and Explore (read-only codebase analysis).
-- 🔌 **Dual API format** — supports both OpenAI API and Anthropic Messages natively.
-
-> ⚠️ To be fair: Cherry Studio offers a more mature extension ecosystem (MCP, skills, plugins, themes) and broader response format compatibility. Chatbox has a more polished mobile experience. PyCat is still in early stages — if you need a production-ready desktop AI client today, Cherry Studio or Chatbox are more solid choices. If you're intrigued by the Python + Nuitka + IM channels approach, we'd love your help shaping it.
-
-## 🖼️ Screenshots
-
-<table>
-   <tr>
-      <td align="center" width="68%">
-         <img src="./assets/mainwindow.png" alt="PyCat main window" width="100%" />
-         <br />
-         <sub><strong>Main window</strong>: conversation list, message flow, and task / memory / document panels in one workspace</sub>
-      </td>
-      <td align="center" width="32%">
-         <img src="./assets/settings.png" alt="PyCat settings window" width="100%" />
-         <br />
-         <sub><strong>Settings</strong>: providers, modes, MCP, web search, and skills management</sub>
-      </td>
-   </tr>
-</table>
-
-## 🌟 Highlights
-
-| Area | Description |
+| Capability | What it enables |
 | --- | --- |
-| **Chat / Agent / Plan / Explore** | Four distinct runtime modes in one desktop workflow — from casual chat to autonomous agents to structured planning to read-only code exploration. |
-| **Four IM Channels** | QQ Bot (official Gateway), WeChat (QR bridge), Feishu (WebSocket), and Telegram (Bot API) — all built-in with auto-binding and replay. |
-| **Multi-provider support** | OpenAI, Claude (Anthropic), Ollama, Google Gemini, DeepSeek, and more — with unified provider management UI. |
-| **Dual API format** | Supports both OpenAI API (`/v1/chat/completions`) and Anthropic Messages API. |
-| **Deep-thinking rendering** | Automatically parses and renders `<think>` / `<analysis>` / reasoning blocks with streaming-friendly display. |
-| **Conversation & context** | Import / export, message editing, branch handling, image upload, multimodal interaction, and `reasoning`-aware history management. |
-| **MCP / Skills / Tools** | MCP via `stdio`, reusable skills files, and a unified tool registry — all extensible from settings. |
-| **Native desktop UX** | Dark / light themes, high-DPI support, conversation tree sidebar, Markdown rendering, and a clean information layout. |
-| **Performance observability** | Real-time token throughput (Tokens/sec), response latency, and runtime timeline in the right inspection panel. |
-| **Lightweight build** | Nuitka `--standalone` compilation produces a ~80 MB self-contained `.exe` — no Electron, no Node.js, no extra runtime. |
-| **Clean architecture** | Layered contracts, core domains, application services and adapters, with `ChannelGateway`/`ChannelService` as the Channel application boundary. |
+| **Python SDK and multiple interfaces** | Submit tasks, consume events and inspect results from scripts or the desktop; the base SDK does not require Qt. |
+| **Multiple model protocols** | Configure OpenAI Chat Completions / Responses, Anthropic Messages and Ollama; image connections also support OpenAI Images, Qwen DashScope and Seedream Ark. |
+| **Modes and subagents** | Choose Chat, Agent, Plan or Review; configure instructions, tool categories, subagent models and context scope. |
+| **Local and remote projects** | Operate on Windows / Linux project files and processes over SSH, or connect browsers and terminal clients to a separate web host. |
+| **Extensible workflows** | Reuse methods with Skills, connect services through MCP, choose dedicated capability models and take over interactive shells. |
+| **Native desktop and visible execution** | Python + PyQt6 integrates screenshots, clipboard, tray, previews and run inspection; desktop terminal and preview widgets need no JS / WebEngine. |
 
-## 🧩 Feature Overview
+These are current integration and configuration capabilities, not a claim of equal compatibility across every service, system or task. See the [developer guide](docs/product/developers.md) for protocol scope, remote requirements and SDK examples.
 
-### Multi-model & agent workflow
+## Start with the work in front of you
 
-- Unified access to mainstream cloud and local models through a single provider management UI.
-- Four built-in agent modes: **Chat** (conversational), **Agent** (autonomous tool-using), **Plan** (structured multi-step), and **Explore** (read-only codebase analysis).
-- Conversation management optimized for desktop: tree sidebar, branch handling, import/export, and multimodal attachments.
+| What you need | Something you can ask |
+| --- | --- |
+| Analyze or change a project | “Locate the relevant code and callers, propose a plan, then implement and verify the agreed change.” |
+| Make sense of a folder of material | “Read these documents. Compare their main points, flag open questions, and save a brief.” |
+| Extract text from images | “Read these screenshots, keep the headings and paragraphs, and mark anything uncertain.” |
+| Create or revise an illustration | “Create an image for this introduction. Keep the subject and simplify the background.” |
+| Handle repetitive file work | “Explain a plan first, then organize these files by date and list the changes.” |
 
-### IM Channels (distinguishing feature)
+These are example tasks. Results depend on the model, the quality of your materials and the tools you have configured. Review important work before relying on it.
 
-- **QQ Bot**: Official Gateway WebSocket with AppID/AppSecret, auto Hello/Identify/Heartbeat/Dispatch, and automatic reply target binding.
-- **WeChat**: QR-code bridge with transient-poll-timeout resilience — no need for a public webhook.
-- **Feishu (Lark)**: WebSocket long-connection using a custom lightweight protobuf codec — no heavy `lark-oapi` SDK dependency.
-- **Telegram**: Bot API long-polling (`getUpdates`) — just a Bot Token, no webhook required.
-- All channels share the unified `ChannelGateway`/`ChannelService` boundary and auto-bind conversations to reply targets.
+![Three steps: bring your materials, describe the task, and review the result](media/pycat-workflow.png)
 
-### Extensibility
+1. **Bring your materials:** choose a project folder and add files or screenshots.
+2. **Describe the task:** explain the goal, the scope and the output you want.
+3. **Review and continue:** inspect the files and progress, then ask for changes.
 
-- **MCP server configuration**: connect external tools or services through `stdio`.
-- **Skills system**: reusable instruction files for capabilities such as browser automation, PR testing, and code review.
-- **Mode configuration**: customize runtime modes, tool groups, permissions, and custom instructions per mode.
-- **Native Python extensibility**: write tools, skills, and channel sources directly in Python — no IPC, no SDK bridge.
+## See the work and keep the result
 
-### Data and rendering
+Organize conversations by project. Inspect the steps and status of longer tasks. Generated images appear directly in the conversation; files can be previewed, copied or saved. Continue in the same conversation with the materials already at hand.
 
-- Multiple conversation import formats: ChatGPT Export, OpenAI Payload, project backup JSON.
-- Markdown, code syntax highlighting, Mermaid diagrams, and structured content.
-- `assets/styles/` for UI theme customization.
+![An actual image-generation task with an inline result and a delivered file](media/screenshots/image-generation.png)
 
-### Observability & debugging
+*This user-supplied screenshot shows an actual image-generation task and file delivery. The generic AI agent architecture diagram is task output, not documentation of PyCat's architecture; image content and replies still need review. The paper illustrations explain use cases, while settings screenshots use isolated demonstration configurations. Consult release notes for the features in a downloaded package.*
 
-- Real-time token throughput and response latency in the right inspection panel.
-- Tool timeline: `TOOL_START` / `TOOL_END` events with structured metadata.
-- Stream debugging log toggle for diagnosing provider interactions.
+<details>
+<summary>View screenshot recognition, SSH workspaces and run inspection</summary>
 
-## 🏗️ Architecture
+**Screenshot recognition:** switch between image and text views after capture, then select or copy extracted text. This screenshot shows the image view and extraction-complete status.
 
-The project follows a layered architecture for maintainability and future refactoring:
+![Screenshot window with image/text views and extraction-complete status](media/screenshots/capture-ocr.png)
 
-- **`gui/`**: presentation layer for windows, widgets, input collection, and interaction forwarding.
-- **`core/`**: domain core for agent orchestration, context, content, tools, skills, channels, capabilities, and LLM integration.
-- **`core/app/`**: composition root, repositories, and application services for persistence, providers, conversations, context, and search.
-- **`models/`**: pure data models and cross-layer contracts such as Conversation, Provider, RunPolicy, and SessionState.
+**SSH workspaces:** configure the host, port and remote directory to use file and process tools on a remote project. This is the connection setup screen; see the [developer guide](docs/product/developers.md) for requirements.
 
-See also:
+<img src="media/screenshots/ssh-workspace.png" width="522" alt="SSH workspace connection settings" />
 
-- [`docs/README.md`](./docs/README.md)
-- [`docs/architecture/`](./docs/architecture/)
-- [`docs/architecture/modules.md`](./docs/architecture/modules.md) and [`docs/architecture/concepts.md`](./docs/architecture/concepts.md)
-- [`docs/STATUS.md`](./docs/STATUS.md)
-- [`AGENTS.md`](./AGENTS.md) and [`CONTRIBUTING.md`](./CONTRIBUTING.md)
-- [`docs/product/`](./docs/product/) and [`docs/engineering/`](./docs/engineering/)
+**Run inspection:** follow model and tool steps in the run tree, then inspect requests, responses and events to understand task behavior and failures.
 
-## 🚀 Quick Start
+![An actual task's run tree and structured event inspection](media/screenshots/run-inspector.png)
 
-### Requirements
+*These user-supplied interface screenshots show specific features. They are not benchmarks of OCR accuracy, remote connectivity or task quality.*
 
-- Python 3.9+
-- Windows / macOS / Linux
+</details>
 
-### Install and run
+## Add capabilities when you need them
 
-```bash
-git clone <repository-url>
-cd pycat
-python -m venv .venv
+- **Choose your models.** Connect a cloud service or a local model you have deployed. Configure chat, image generation and text recognition separately.
+- **Reuse working methods.** Manage skills and connect external tools in settings. Skills and MCP have management, discovery and update entrypoints.
+- **Keep useful material.** Organize results as project material, and manage reusable memories and preferences.
+- **Work through longer tasks.** Inspect run records. When a task needs commands, view its shell, provide more input or stop the process.
 
-# Windows
-.venv\Scripts\activate
+## Define how the work gets done
 
-# macOS / Linux
-source .venv/bin/activate
+Configure models, modes, tools and permissions separately. Changing a model need not rebuild the workflow; adding a skill does not automatically expand permissions. Images and OCR can use dedicated models instead of the chat model.
 
-pip install -r requirements.txt
-python main.py
+<details>
+<summary>View the actual model, Agent mode and skill settings</summary>
+
+**Models & services:** separate chat protocols and image interfaces, with model capabilities and reasoning options.
+
+![Model settings with separate chat and image interfaces](media/screenshots/models.png)
+
+**Modes & permissions:** configure main modes, subagents, tool categories, instructions and completion behavior.
+
+![Agent mode and tool category settings](media/screenshots/modes.png)
+
+**Tools & capabilities:** manage Skills, MCP, model capabilities, search, computer/browser tools and OCR.
+
+![Skills management and the built-in find-skills entry](media/screenshots/settings.png)
+
+*These screenshots use isolated demonstration settings without real credentials. Configure other settings as your tasks require.*
+
+</details>
+
+## Connect Python or the terminal
+
+Install from the source root with Python 3.11+. With a model configured:
+
+```shell
+python -m pip install .
+pycat exec "Investigate this project and propose a refactoring plan" -C . --mode plan --output-format json
+pycat resume --last
 ```
 
-If you just want to try it quickly, the happy path is straightforward: install dependencies and run `python main.py`.
+Use `from pycat import PyCat, RunRequest` to embed execution in a Python host, consume events, cancel work and continue conversations. The [developer guide](docs/product/developers.md) includes model setup, runnable examples and remote access details.
 
-## 🛠️ Build for Windows (Nuitka)
+Python source and structured results also make it practical to connect external evaluators and compare models, modes or skills. **PyCat provides foundations for agent iteration experiments.** It does not currently provide a complete RSI loop for self-modification, independent evaluation, selection, deployment and rollback.
 
-To generate a standalone Windows build and a versioned zip package with Nuitka:
+## Use a familiar messaging app
 
-```powershell
-python -m pip install -r requirements.txt
-python -m pip install nuitka ordered-set zstandard
-powershell -ExecutionPolicy Bypass -File .\build_nuitka.ps1
-```
+After configuring a bot and binding it to a project, interact with PyCat through **Feishu / Lark, DingTalk, Telegram, QQ or WeChat**. Supported images and files can be sent as input, and explicitly delivered results can return to the same chat.
 
-The build script will:
+![A desktop project connected to a messaging conversation that receives a file result](media/pycat-connected.png)
 
-- compile a standalone Windows distribution with Nuitka (`--standalone --enable-plugin=pyqt6`),
-- produce `pycat.exe` in the output directory,
-- bundle `assets/`, `pycat.ico`, `LICENSE`, `README.md`, and `README_zh.md`,
-- generate a versioned zip archive using the version declared in the build script.
+The computer running PyCat must remain online, and the platform connection must be configured. This is not a separate mobile app. Supported attachments, permissions and size limits vary by platform.
 
-> **Why Nuitka?** Unlike Electron-based apps that bundle an entire Chromium + Node.js runtime (~200 MB+), Nuitka compiles Python directly to native machine code, producing a self-contained ~80 MB package with no external runtime dependency. The result is faster startup, lower memory usage, and a genuinely portable executable.
+<details>
+<summary>View an actual image exchange through WeChat</summary>
 
-## 📁 Project Structure
+This user-supplied conversation shows an image sent to a WeChat bot and a reply about its content. Recognition and response quality should be checked for the intended use.
 
-```text
-pycat/
-├─ assets/                 # icons, screenshots, style assets
-├─ core/                   # domain core and app composition
-│  ├─ agent/               # AgentRuntime, run engine, request pipeline, subagent, events
-│  ├─ app/                 # AppContainer, repositories, application services, coordinator
-│  ├─ capabilities/        # capability defaults, merge, executor, tool adapter
-│  ├─ channel/             # gateway, lifecycle, scheduler, platforms, replies
-│  ├─ content/             # archive store, content views, markdown, attachments
-│  ├─ context/             # context sections, providers, maintenance, request replay
-│  ├─ llm/                 # transport client, request payload, response parsing, token budget
-│  ├─ memory/              # long-term short facts and memory prompt input
-│  ├─ modes/               # mode registry and defaults
-│  ├─ prompts/             # system prompt and provider message rendering
-│  ├─ skills/              # discovery, manifest, routing, resources, prompt section
-│  ├─ state/               # todo, artifact, work trace session state operations
-│  └─ tools/               # MCP, system tools, catalog, permissions, execution adapters
-├─ docs/                   # product, architecture, status, decisions and evidence
-│  ├─ architecture/        # current system and mechanisms
-│  ├─ product/             # overview and user workflows
-│  ├─ engineering/         # testing and documentation governance
-│  ├─ decisions/           # accepted architecture decisions
-│  ├─ reference/           # external implementation evidence
-│  ├─ archive/             # unique obsolete internal evidence
-│  └─ releases/            # versioned release notes
-├─ models/                 # pure data models and models/contracts
-├─ tests/                  # unit/runtime/channels/gui/cli suites
-├─ gui/                    # PyQt6 presentation layer
-│  ├─ dialogs/             # modal dialogs
-│  ├─ presenters/          # message / streaming / event presenters
-│  ├─ runtime/             # Qt thread bridges
-│  ├─ settings/            # settings pages
-│  └─ widgets/             # reusable GUI components
-├─ build_nuitka.ps1        # Windows packaging script
-├─ main.py                 # application entry point
-└─ requirements.txt        # Python dependencies
-```
+<img src="media/screenshots/wechat-image.jpg" width="320" alt="A real WeChat conversation with an image attachment and a content-related reply" />
 
-## ⚙️ Notes
+*The bot name is the display name in this conversation. This demonstrates messaging integration, not a separate PyCat mobile application.*
 
-### MCP server configuration
+</details>
 
-You can add MCP servers from the settings page. PyCat communicates with MCP services through `stdio`, allowing web search, local file operations, and other external tools to be integrated into the conversation workflow.
+## Get started
 
-### Conversation import
+1. Check [Releases](https://github.com/nanhuayu/pycat/releases) for an available package. For the Windows portable build, extract the whole archive and run **`pycat.exe`** inside `pycat-windows-x64`.
+2. Configure a working model connection in **Settings → Models & services**. PyCat does not include model credits; charges depend on the service you choose.
+3. Pick a project folder and try a small set of sample materials before expanding the task.
 
-PyCat currently supports multiple import formats, including:
+Use the permission menu beside the composer to choose confirmation prompts or a narrower file scope. The current desktop defaults allow automatic execution and access to all local paths.
 
-- **ChatGPT Export**: import official exported JSON bundles.
-- **OpenAI Payload**: create conversations from API request payloads.
-- **Conversation JSON**: project-specific backup format.
+See the [user guide](docs/product/user-guide.md) for practical steps. Available operating-system packages are those actually listed on the release page.
 
-### Style customization
+## Before you begin
 
-UI styles are mainly located in `assets/styles/`. If you want to move closer to a Cherry Studio-inspired look or build your own branded appearance, this is where the fun starts.
+**Does everything stay on my computer?**
 
-## 🤝 Contributing
+Projects and conversations are stored locally. Cloud models, online tools and messaging platforms receive the relevant content sent to them. A local model does not make every extension offline.
 
-PyCat is in early stages and iterating quickly. Contributions of all kinds are welcome — new features, bug fixes, documentation, UI polish, channel integrations, and testing.
+**Can it generate images or operate a browser immediately?**
 
-**Current status:** development version; verify the version and test result from the current checkout before reporting them.
+Configure an image service or a browser/computer tool first. A chat model does not automatically provide these capabilities.
 
-> ⚠️ The project still has many rough edges: limited feature depth, no mobile support, small community, incomplete documentation. If you're looking for a production-ready tool, Cherry Studio or Chatbox are better choices today. If you're interested in the Python + Nuitka + IM channels approach, we'd love your help improving it.
+**Can I leave it entirely unattended?**
 
-**Good first contributions:**
+Define the scope and review important results. Models can misunderstand a request; file operations and external tools have real effects.
 
-- Add a new channel platform (e.g., Slack, Discord, DingTalk) following the `core/channel/platforms/` contracts and existing Gateway flow.
-- Polish the UI theme or add new `assets/styles/` variants.
-- Extend the skills library with new reusable skill files.
-- Improve test coverage for `core/channel/`, `core/agent/`, `core/context/`, or `gui/presenters/`.
-- Write documentation or tutorials.
+**How do I get help?**
 
-### Before you start:
+Open an [issue](https://github.com/nanhuayu/pycat/issues) with your version, system and reproduction steps. Remove credentials and private material before sharing screenshots or logs.
 
-1. Read `AGENTS.md` and `docs/README.md`, then `docs/architecture/` and `docs/architecture/modules.md`.
-2. Follow the dependency and ownership rules in `AGENTS.md`; do not infer them from historical plans.
-3. When adding a channel, implement the existing platform contracts and reuse `ChannelGateway`/`ChannelService` — never access runtime private state directly.
-4. Run `python -m compileall core models gui cli tests -q` and the affected `python -m pytest ...` groups before submitting. See `docs/engineering/testing.md` for dependencies, focused commands, and documentation checks.
-
-**Iterating fast, and we'd love to have you on board.** 🚀
-
-## 📜 License
-
-PyCat is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
-
-Commercial use is permitted, provided that all AGPL-3.0 obligations are fully satisfied.
-
-See [`LICENSE`](./LICENSE) for the full license text.
+PyCat is licensed under [AGPL-3.0-only](LICENSE). Contributions to protocol compatibility, native desktop interactions, remote workspaces, skills and reproducible task examples are welcome through [pull requests](https://github.com/nanhuayu/pycat/pulls), alongside feedback and practical use cases.

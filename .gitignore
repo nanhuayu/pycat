@@ -1,7 +1,13 @@
 # 常见 Python + PyQt6 .gitignore
 *.json
 # This package seed is copied to ~/.pycat/default_models.json on first use.
-!core/app/default_models.json
+!pycat/assets/default_models.json
+# Bundled OCR assets require a versioned provenance and integrity manifest.
+!pycat/assets/ocr/ppocrv6-small/manifest.json
+!pycat/assets/tools/ripgrep/manifest.json
+!pycat/assets/web/vendor/manifest.json
+!pycat/assets/extensions/browser.json
+pycat/assets/tools/ripgrep/windows-x64/
 
 *.zip
 *.tar.gz
@@ -16,6 +22,8 @@ debug/
 .pycat/
 .vscode/
 .playwright-mcp/
+/.playwright-cli/
+/output/playwright/
 
 # Byte-compiled / optimized
 __pycache__/

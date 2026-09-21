@@ -1,0 +1,57 @@
+Screen { background: $background; color: $text; }
+#main { height: 1fr; padding: 0 1; }
+#session-title { height: 1; color: $text-muted; }
+#transcript { height: 1fr; scrollbar-size: 1 1; }
+#welcome { height: auto; padding: 1 1; color: $text; }
+#messages, #live-output, .message-view, .fold, .fold-body { height: auto; }
+.message-view { margin-bottom: 1; }
+.message-role { height: 1; color: $accent; text-style: bold; }
+.user { border-left: solid $accent; padding-left: 1; }
+Markdown { background: transparent; margin: 0; padding: 0; }
+MarkdownH1, MarkdownH2, MarkdownH3 { margin-top: 0; }
+MarkdownParagraph { margin: 0 0 1 0; }
+.fold { margin: 0; }
+.fold-preview { height: auto; max-height: 3; padding-left: 2; color: $text-muted; }
+.fold-body { padding-left: 2; border-left: solid $panel; }
+.fold-toggle, .fold-full, .message-full, .content-ref, #history-older, #history-newer {
+    height: 1; min-width: 1; width: auto; max-width: 100%; border: none;
+    background: transparent; color: $accent; padding: 0 1; text-align: left;
+}
+.fold-toggle:focus, .content-ref:focus, #history-older:focus, #history-newer:focus { background: $boost; }
+.tool-result .fold-toggle { color: $text; }
+.thinking .fold-toggle, #live-thinking { color: $text-muted; }
+#live-thinking { height: 1; }
+#live-tools { height: auto; max-height: 6; color: $accent; }
+#activity { height: 1; color: $warning; }
+#attachments { height: auto; max-height: 2; color: $text-muted; }
+#input-panel { height: auto; }
+#composer { height: 3; padding: 0; border-top: solid $accent; border-bottom: solid $accent; border-left: none; border-right: none; background: transparent; }
+#composer:focus { border-top: solid $accent; border-bottom: solid $accent; }
+#completions { height: auto; max-height: 8; margin: 0; padding: 0; border: none; background: $surface; scrollbar-size: 1 1; }
+#completions > .option-list--option { padding: 0 1; }
+#completions > .option-list--option-highlighted { background: $accent 20%; color: $text; }
+#status-line, #input-hints { height: 1; color: $text-muted; }
+#resume-screen { padding: 1 2; }
+#resume-heading { height: 1; }
+#resume-heading .section-title { width: 1fr; text-style: bold; color: $accent; }
+#resume-heading Button, #resume-actions Button { height: 1; width: auto; min-width: 4; padding: 0 1; border: none; background: transparent; color: $accent; }
+#resume-search { height: 3; margin: 1 0 0 0; }
+#resume-columns { height: 1; color: $text-muted; }
+#resume-list { height: 1fr; border: none; padding: 0; background: transparent; scrollbar-size: 1 1; }
+#resume-list > .option-list--option { padding: 0; }
+#resume-list > .option-list--option-highlighted { background: $accent 20%; color: $text; }
+#resume-detail { height: auto; max-height: 5; margin-top: 1; color: $text-muted; }
+#resume-error { height: auto; max-height: 2; color: $warning; }
+#resume-actions { height: 1; margin-top: 1; }
+ModalScreen { align: center middle; background: $background 75%; }
+.dialog { width: 76; max-width: 94%; height: auto; max-height: 90%; background: $surface; border: round $accent; padding: 1 2; }
+.dialog-title { text-style: bold; color: $accent; margin-bottom: 1; }
+.dialog #choices { height: 16; margin: 1 0; }
+.dialog Input { margin: 0 0 1 0; }
+.dialog-actions { height: 3; align-horizontal: right; margin-top: 1; }
+.dialog-actions Button { margin-left: 1; }
+.dialog .json-editor { height: 10; margin-bottom: 1; }
+.form-dialog { height: 30; }
+.reader-dialog { height: 34; width: 100; }
+.reader-body { height: 1fr; }
+#reader-error, #form-error { color: $error; height: auto; }

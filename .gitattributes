@@ -17,6 +17,7 @@
 *.css text
 *.html text
 *.js text
+pycat/assets/web/vendor/* text eol=lf
 *.svg text
 *.gitignore text
 
@@ -34,3 +35,4 @@
 *.ttf binary
 *.otf binary
 *.pdf binary
+*.onnx binary

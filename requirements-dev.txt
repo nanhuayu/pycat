@@ -2,3 +2,5 @@
 #   pip install -r requirements.txt -r requirements-dev.txt
 pytest>=8.0
 ruff>=0.5
+# Standard sdist -> wheel build; never a runtime dependency.
+build>=1.2,<2

@@ -1,0 +1,8 @@
+{
+  "markdown-it": {
+    "version": "15.0.2",
+    "source": "https://registry.npmjs.org/markdown-it/-/markdown-it-15.0.2.tgz",
+    "integrity": "sha512-q4IGxMv56jCqT4OCRCADBoDP3LO4MhmTXjFbphHPXs4g3j9Xg5RDnxqN8IF/3vIWEU+VCnUq+7JUg/cfy2E6Qw==",
+    "sha256": "85feb50fd6ce1b7c49acb02b0337eb622ecc4fc2ed4ae0dcbb8c084556d463b6"
+  }
+}

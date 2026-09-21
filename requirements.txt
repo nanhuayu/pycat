@@ -1,13 +1,14 @@
-PyQt6>=6.5.0
 httpx>=0.25.0
+cryptography>=43
 Pillow>=10.0.0
-tiktoken>=0.5.0
-python-dotenv>=1.0.0
+PyMuPDF>=1.24.0
 markdown>=3.5.0
-mcp>=1.0.0
-pathspec>=0.10.0
+python-docx>=1.2,<2
+mcp>=2.2,<3
+httpx2>=2.5,<3
+pathspec>=0.12.1
 websockets>=11.0.0
-qrcode>=7.4.0
 jsonschema>=4.22.0
-# duckduckgo-search>=7.0.0
+psutil>=6.1,<8
 ddgs>=9.0.0
+pywinpty>=3.0,<4; sys_platform == "win32"
