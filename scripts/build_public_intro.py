@@ -20,6 +20,7 @@ PUBLIC_FILES = (
     "docs/product/developers.md",
     "docs/product/developers_zh.md",
     "media/pycat-hero.png",
+    "media/pycat-architecture.png",
     "media/pycat-workflow.png",
     "media/pycat-connected.png",
     "media/screenshots/workspace.png",

@@ -20,11 +20,12 @@ PyCat is for developers, automation builders and advanced users working on real 
 
 - **A Python core you can call directly:** embed the SDK in scripts, debug it and change its behavior in the same language as the native desktop.
 - **Multiple interfaces, shared capabilities:** desktop, terminal, browser and messaging adapters reuse execution, tools and permission rules.
+- **Sign in with an existing account:** connect ChatGPT / Codex or WorkBuddy / CodeBuddy, use an API key, or connect a local model service from the same workbench.
 - **Files you can inspect and reuse:** conversations, input snapshots, original tool results, run records and delivered files stay locally available for search, backup and further work.
 
-![An actual image task: the result appears in the conversation and is delivered as a reusable file](media/screenshots/image-generation.png)
+![PyCat brings project files, tasks and results together](media/pycat-hero.png)
 
-*An actual task screenshot supplied by a user. The agent diagram is that task's output, not a diagram of PyCat's architecture.*
+*A product illustration. Actual interfaces and task examples appear in the capability sections below.*
 
 ## Quick start
 
@@ -53,6 +54,18 @@ pycat resume --last
 
 The base SDK does not require Qt, Textual, FastAPI or local OCR. See the [developer guide](docs/product/developers.md) for model configuration and a runnable SDK example.
 
+## Use an existing account or your own model service
+
+Choose a connection in **Settings → Models and services → Login method**. Account sign-in authorizes in your browser; return to PyCat and select an available model. You do not need to launch a Codex or CodeBuddy CLI process first.
+
+| Connection | How you can use it |
+| --- | --- |
+| **ChatGPT / Codex sign-in** | Sign in with an existing ChatGPT account and use models available to that account |
+| **WorkBuddy / CodeBuddy sign-in** | Connect a mainland China WorkBuddy / CodeBuddy account and use its available models |
+| **API key / local service** | Configure the address, protocol and model for a cloud API or an existing local service such as Ollama |
+
+Account sign-in and API keys are separate access methods. The service determines quotas and available models; PyCat does not supply credits or guarantee that a subscription includes every model. Account integrations are experimental and may change with upstream services. See the [user guide](docs/product/user-guide.md#1-install-and-connect-a-model) for setup.
+
 ## What Python makes practical
 
 Agent orchestration, tools, model adapters, application services and desktop interactions live in a Python codebase. Developers with existing Python projects can make agent capabilities part of their own programs.
@@ -80,6 +93,12 @@ Agent orchestration, tools, model adapters, application services and desktop int
 Feishu / Lark, DingTalk, Telegram, QQ and WeChat can also serve as task entry points. Interfaces expose controls suited to their use cases; not every interface has the same settings panels.
 
 Python, Qt and terminal tooling provide a basis for cross-platform work. **Windows portable builds are available; SSH remote hosts support Windows / Linux.** Source use on other systems requires appropriate dependencies and validation of system features. The web host and desktop manage separate data directories; they must not concurrently write to the same directory.
+
+## Architecture overview
+
+![PyCat architecture, with Chinese labels: five interfaces and messaging channels share a Python core, connecting model accounts, tools and workspaces to inspectable files](media/pycat-architecture.png)
+
+*A capability overview based on the current implementation. Interfaces reuse the same core code; independently running applications still own separate data directories. Arrows show calls and data exchange, not a mandatory sequence through every module.*
 
 ## Keep the process and results inspectable
 
@@ -110,6 +129,14 @@ Lightweight run events are recorded by default. Enable detailed logging for full
 | **Images and OCR** | Screenshot recognition, local or vision-model OCR, SVG / image previews and inline Markdown images |
 | **Local and remote work** | Local workspaces, SSH file and process operations, and an independent web host |
 | **Knowledge and memory** | Project deliverables, knowledge pages, reusable memories and preferences |
+
+### Image generation and delivery
+
+Generated images appear inline in Markdown conversations. Delivered files remain available for preview, further editing and use in your project.
+
+![An actual image task: the result appears in the conversation and is delivered as a reusable file](media/screenshots/image-generation.png)
+
+*An actual user-supplied task screenshot. The generic agent diagram is that task's output, separate from the PyCat architecture overview above.*
 
 ### Screenshot recognition
 

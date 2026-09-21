@@ -10,6 +10,14 @@ Choose an available package for your system from Releases. Extract the complete 
 
 In **Settings → Models & services**, configure a service you can access and select a default model. A local model service must already be installed and running. PyCat does not include model credits; availability and costs depend on your provider or local setup.
 
+Choose a **Login method** on the service's connection page:
+
+- **ChatGPT / Codex:** sign in, complete ChatGPT authorization in the browser, then return to PyCat and select an available model.
+- **WorkBuddy / CodeBuddy (mainland China, experimental):** authorize with a mainland China account in the browser, then select an available model. This integration uses the CodeBuddy CLI client identity.
+- **API key:** enter the service address, API type and the provider's key. Follow the authentication requirements of any local service.
+
+Use “Sync models” to inspect the account's model catalog, and “Sign out” to disconnect the account. Account plans and API-key quotas are managed separately by the provider.
+
 Try a short question before processing larger files. Account-login integrations are experimental and may change with upstream services. If one fails, use a supported standard connection offered by your provider.
 
 ## 2. Choose your materials and scope
