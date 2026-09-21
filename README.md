@@ -1,160 +1,178 @@
-# PyCat
+<div align="center">
+  <img src="pycat/assets/pycat.svg" width="96" height="96" alt="PyCat 猫形标志" />
+  <h1>PyCat</h1>
+  <p><strong>Python 原生 Agent 工作台 · 一个内核，五种入口，文件中的透明过程</strong></p>
+  <p>用桌面完成工作，用 Python 接入自动化，让过程与成果留在自己的项目里。</p>
+  <p>
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&amp;logoColor=white" alt="Python 3.11+" /></a>
+    <a href="https://www.riverbankcomputing.com/software/pyqt/"><img src="https://img.shields.io/badge/Desktop-PyQt6-41CD52?logo=qt&amp;logoColor=white" alt="PyQt6 原生桌面" /></a>
+    <a href="https://nuitka.net/"><img src="https://img.shields.io/badge/Build-Nuitka-146C43" alt="Nuitka 独立发行" /></a>
+    <a href="https://github.com/nanhuayu/pycat/releases"><img src="https://img.shields.io/github/v/release/nanhuayu/pycat" alt="最新公开版本" /></a>
+    <a href="https://github.com/nanhuayu/pycat/stargazers"><img src="https://img.shields.io/github/stars/nanhuayu/pycat?style=flat" alt="GitHub Stars" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue" alt="AGPL-3.0-only" /></a>
+  </p>
+  <p>简体中文 · <a href="README_en.md">English</a> · <a href="https://github.com/nanhuayu/pycat/releases">下载</a> · <a href="docs/product/user-guide_zh.md">使用指南</a> · <a href="docs/product/developers_zh.md">开发者使用</a></p>
+</div>
 
-**A programmable local agent workbench: Python SDK, native desktop and remote projects.**
+**Py = Python，CAT = Chat · Agent · Tools。** 对话理解目标，Agent 推进任务，工具连接真实的文件、程序和服务；猫形标志也表达了这个项目希望成为日常工作伙伴的想法。
 
-English · [简体中文](README_zh.md) · [Releases](https://github.com/nanhuayu/pycat/releases) · [User guide](docs/product/user-guide.md) · [For developers](docs/product/developers.md) · [Report an issue](https://github.com/nanhuayu/pycat/issues)
+PyCat 面向开发者、自动化实践者和处理真实项目的进阶用户。它把 **Python SDK、GUI、TUI、WebUI、CLI** 连接到同一套 Agent 执行能力：从本地或 SSH 项目出发，分析代码、运行命令、整理资料、生成图片，并检查每一步发生了什么。
 
-![PyCat brings your own materials and tasks together into useful results](media/pycat-hero.png)
+- **Python 核心，直接调用**：应用核心、SDK 与原生桌面以 Python 实现，便于嵌入脚本、调试和修改。
+- **多种入口，共享能力**：桌面操作、终端任务、浏览器访问和消息机器人复用执行、工具与权限规则。
+- **文件保存，可检查可接续**：会话、输入快照、工具原文、运行记录和交付文件保存在本地，便于检索、备份、追溯和继续加工。
 
-PyCat is for developers, automation builders and advanced users working on real projects. In a local or SSH workspace, analyze code, run commands, organize material and work with images, keeping results as files you can inspect and revise. The Python SDK, CLI, TUI, native desktop, web workbench and messaging channels share task execution and tool capabilities.
+![实际生图任务：图片直接显示在对话中，并交付可继续使用的文件](media/screenshots/image-generation.png)
 
-## Why developers might try it
+*使用者提供的实际任务截图。图中的 Agent 架构图是该次任务产出，并非 PyCat 自身架构说明。*
 
-| Capability | What it enables |
-| --- | --- |
-| **Python SDK and multiple interfaces** | Submit tasks, consume events and inspect results from scripts or the desktop; the base SDK does not require Qt. |
-| **Multiple model protocols** | Configure OpenAI Chat Completions / Responses, Anthropic Messages and Ollama; image connections also support OpenAI Images, Qwen DashScope and Seedream Ark. |
-| **Modes and subagents** | Choose Chat, Agent, Plan or Review; configure instructions, tool categories, subagent models and context scope. |
-| **Local and remote projects** | Operate on Windows / Linux project files and processes over SSH, or connect browsers and terminal clients to a separate web host. |
-| **Extensible workflows** | Reuse methods with Skills, connect services through MCP, choose dedicated capability models and take over interactive shells. |
-| **Native desktop and visible execution** | Python + PyQt6 integrates screenshots, clipboard, tray, previews and run inspection; desktop terminal and preview widgets need no JS / WebEngine. |
+## 快速开始
 
-These are current integration and configuration capabilities, not a claim of equal compatibility across every service, system or task. See the [developer guide](docs/product/developers.md) for protocol scope, remote requirements and SDK examples.
+**直接使用桌面版**
 
-## Start with the work in front of you
+1. 从 [Releases](https://github.com/nanhuayu/pycat/releases) 下载 Windows 便携包，完整解压，在 `pycat-windows-x64` 中运行 **`pycat.exe`**。
+2. 在 **设置 → 模型与服务** 配置模型连接，选择一个项目文件夹。
+3. 描述目标，检查执行过程和生成的文件，再继续提出修改要求。
 
-| What you need | Something you can ask |
-| --- | --- |
-| Analyze or change a project | “Locate the relevant code and callers, propose a plan, then implement and verify the agreed change.” |
-| Make sense of a folder of material | “Read these documents. Compare their main points, flag open questions, and save a brief.” |
-| Extract text from images | “Read these screenshots, keep the headings and paragraphs, and mark anything uncertain.” |
-| Create or revise an illustration | “Create an image for this introduction. Keep the subject and simplify the background.” |
-| Handle repetitive file work | “Explain a plan first, then organize these files by date and list the changes.” |
+PyCat 不附带模型额度。当前桌面默认允许自动执行和访问所有本地路径，可在输入区的权限菜单中收窄范围或改为逐次确认。具体操作见[使用指南](docs/product/user-guide_zh.md)。
 
-These are example tasks. Results depend on the model, the quality of your materials and the tools you have configured. Review important work before relying on it.
+**从 Python 或终端开始**
 
-![Three steps: bring your materials, describe the task, and review the result](media/pycat-workflow.png)
-
-1. **Bring your materials:** choose a project folder and add files or screenshots.
-2. **Describe the task:** explain the goal, the scope and the output you want.
-3. **Review and continue:** inspect the files and progress, then ask for changes.
-
-## See the work and keep the result
-
-Organize conversations by project. Inspect the steps and status of longer tasks. Generated images appear directly in the conversation; files can be previewed, copied or saved. Continue in the same conversation with the materials already at hand.
-
-![An actual image-generation task with an inline result and a delivered file](media/screenshots/image-generation.png)
-
-*This user-supplied screenshot shows an actual image-generation task and file delivery. The generic AI agent architecture diagram is task output, not documentation of PyCat's architecture; image content and replies still need review. The paper illustrations explain use cases, while settings screenshots use isolated demonstration configurations. Consult release notes for the features in a downloaded package.*
-
-<details>
-<summary>View screenshot recognition, SSH workspaces and run inspection</summary>
-
-**Screenshot recognition:** switch between image and text views after capture, then select or copy extracted text. This screenshot shows the image view and extraction-complete status.
-
-![Screenshot window with image/text views and extraction-complete status](media/screenshots/capture-ocr.png)
-
-**SSH workspaces:** configure the host, port and remote directory to use file and process tools on a remote project. This is the connection setup screen; see the [developer guide](docs/product/developers.md) for requirements.
-
-<img src="media/screenshots/ssh-workspace.png" width="522" alt="SSH workspace connection settings" />
-
-**Run inspection:** follow model and tool steps in the run tree, then inspect requests, responses and events to understand task behavior and failures.
-
-![An actual task's run tree and structured event inspection](media/screenshots/run-inspector.png)
-
-*These user-supplied interface screenshots show specific features. They are not benchmarks of OCR accuracy, remote connectivity or task quality.*
-
-</details>
-
-## Add capabilities when you need them
-
-- **Choose your models.** Connect a cloud service or a local model you have deployed. Configure chat, image generation and text recognition separately.
-- **Reuse working methods.** Manage skills and connect external tools in settings. Skills and MCP have management, discovery and update entrypoints.
-- **Keep useful material.** Organize results as project material, and manage reusable memories and preferences.
-- **Work through longer tasks.** Inspect run records. When a task needs commands, view its shell, provide more input or stop the process.
-
-## Define how the work gets done
-
-Configure models, modes, tools and permissions separately. Changing a model need not rebuild the workflow; adding a skill does not automatically expand permissions. Images and OCR can use dedicated models instead of the chat model.
-
-<details>
-<summary>View the actual model, Agent mode and skill settings</summary>
-
-**Models & services:** separate chat protocols and image interfaces, with model capabilities and reasoning options.
-
-![Model settings with separate chat and image interfaces](media/screenshots/models.png)
-
-**Modes & permissions:** configure main modes, subagents, tool categories, instructions and completion behavior.
-
-![Agent mode and tool category settings](media/screenshots/modes.png)
-
-**Tools & capabilities:** manage Skills, MCP, model capabilities, search, computer/browser tools and OCR.
-
-![Skills management and the built-in find-skills entry](media/screenshots/settings.png)
-
-*These screenshots use isolated demonstration settings without real credentials. Configure other settings as your tasks require.*
-
-</details>
-
-## Connect Python or the terminal
-
-Install from the source root with Python 3.11+. With a model configured:
+在克隆后的源码目录中，使用 Python 3.11+ 安装：
 
 ```shell
-python -m pip install .
-pycat exec "Investigate this project and propose a refactoring plan" -C . --mode plan --output-format json
+git clone https://github.com/nanhuayu/pycat.git
+cd pycat
+python -m pip install .                 # SDK + CLI
+python -m pip install ".[gui,tui,web]"   # 按需增加桌面、TUI 和 WebUI
+
+# 配置模型后
+pycat exec "分析当前项目，给出重构计划" -C . --mode plan --output-format json
 pycat resume --last
 ```
 
-Use `from pycat import PyCat, RunRequest` to embed execution in a Python host, consume events, cancel work and continue conversations. The [developer guide](docs/product/developers.md) includes model setup, runnable examples and remote access details.
+基础 SDK 无需 Qt、Textual、FastAPI 或本地 OCR。完整的模型配置和可运行 SDK 示例见[开发者使用指南](docs/product/developers_zh.md)。
 
-Python source and structured results also make it practical to connect external evaluators and compare models, modes or skills. **PyCat provides foundations for agent iteration experiments.** It does not currently provide a complete RSI loop for self-modification, independent evaluation, selection, deployment and rollback.
+## Python 带来的实际价值
 
-## Use a familiar messaging app
+PyCat 将 Agent 编排、工具、模型适配、应用服务和桌面交互放在 Python 代码体系中。对已有 Python 工程的开发者，模型能力可以成为自己的程序的一部分。
 
-After configuring a bot and binding it to a project, interact with PyCat through **Feishu / Lark, DingTalk, Telegram, QQ or WeChat**. Supported images and files can be sent as input, and explicitly delivered results can return to the same chat.
+| 你要做的事 | PyCat 提供的方式 | 实际价值 |
+| --- | --- | --- |
+| 把 Agent 嵌入已有程序 | `from pycat import PyCat, RunRequest`，在进程内调用 | 复用 Python 对象、异常处理与调试工具，无需先启动桌面或另建 HTTP 桥接 |
+| 改模型策略、工具或执行行为 | 修改 Python 核心，通过 SDK / CLI 验证 | 在同一语言中阅读、实验和检查行为变化 |
+| 增加截图、剪贴板、托盘等交互 | Python + PyQt6 原生组件 | 直接接入桌面能力；桌面终端与内容预览无需 WebEngine |
+| 从手动操作走向批量自动化 | GUI 验证工作方式，SDK / CLI 驱动任务 | 多个入口复用 Agent 内核、工具边界和配置契约 |
+| 交付给不安装 Python 的使用者 | Nuitka 构建独立 Windows 发行包 | 解压运行，桌面包无需 Electron、Node.js 或浏览器内核 |
 
-![A desktop project connected to a messaging conversation that receives a file result](media/pycat-connected.png)
+**这里的“Python 原生”指核心与桌面实现。** 可选 WebUI 包含 HTML / CSS / JavaScript，Qt、OCR 等依赖也包含原生代码；部分外部 MCP 服务可能需要 Node.js。这个选择减少了核心与桌面的跨语言维护面，实际速度、内存和包体积仍取决于功能与依赖。
 
-The computer running PyCat must remain online, and the platform connection must be configured. This is not a separate mobile app. Supported attachments, permissions and size limits vary by platform.
+## 一个内核，五种入口
 
-<details>
-<summary>View an actual image exchange through WeChat</summary>
+| 入口 | 适合的工作 | 使用方式 |
+| --- | --- | --- |
+| **SDK** | 嵌入 Python 应用、批处理、评估实验 | 异步调用，读取事件与结果，取消任务、继续会话 |
+| **GUI** | 日常项目操作、设置、图片和运行检查 | 原生 PyQt6；源码安装后运行 `pycat-gui` |
+| **TUI** | 在交互终端中持续工作 | 安装 `tui` 后运行 `pycat` |
+| **WebUI** | 从浏览器访问运行中的 PyCat 宿主 | 安装 `web` 后运行 `pycat serve` |
+| **CLI** | 自动化脚本、管道、计划任务 | `pycat exec` / `resume`，支持 JSON 和逐行事件输出 |
 
-This user-supplied conversation shows an image sent to a WeChat bot and a reply about its content. Recognition and response quality should be checked for the intended use.
+此外，飞书 / Lark、钉钉、Telegram、QQ 和微信也可以作为任务入口。不同界面围绕各自场景提供操作，并非每个界面都具有相同的设置控件。
 
-<img src="media/screenshots/wechat-image.jpg" width="320" alt="A real WeChat conversation with an image attachment and a content-related reply" />
+Python、Qt 和终端生态便于持续完善跨平台体验；**当前提供 Windows 便携包，SSH 远端支持 Windows / Linux**。其他系统的源码运行仍需按平台安装依赖、验证系统能力，不将“多入口”当作所有系统均已验收的承诺。Web 宿主与桌面各自管理自己的数据目录，不支持并发写同一个目录。
 
-*The bot name is the display name in this conversation. This demonstrates messaging integration, not a separate PyCat mobile application.*
+## 让过程与结果成为可检查的文件
 
-</details>
+**文件是 PyCat 保存工作成果和运行证据的基本载体。** 对话结束后，可以继续用编辑器、文件管理器、脚本或版本管理工具处理这些材料。
 
-## Get started
+| 内容 | 保存形式 | 可以怎样使用 |
+| --- | --- | --- |
+| 会话与配置 | 本地 JSON | 查看、导出和备份；继续已有会话 |
+| 输入与工具结果 | 会话目录中的输入快照、原文与图片归档 | 对照来源，读取完整工具输出，检查摘要之外的内容 |
+| 运行过程 | JSONL 事件及可选请求 / 响应附件 | 在“运行检查”中定位步骤，也可用脚本分析 |
+| 交付成果与知识 | 普通项目文件、Markdown 知识页和记忆文件 | 搜索、比较、编辑、归档或用于后续任务 |
 
-1. Check [Releases](https://github.com/nanhuayu/pycat/releases) for an available package. For the Windows portable build, extract the whole archive and run **`pycat.exe`** inside `pycat-windows-x64`.
-2. Configure a working model connection in **Settings → Models & services**. PyCat does not include model credits; charges depend on the service you choose.
-3. Pick a project folder and try a small set of sample materials before expanding the task.
+本地项目的大体积会话资料集中在 `.pycat/sessions/<会话 ID>/`。原文归档与压缩摘要分开保存，界面展示和模型上下文可以精简，同时保留已归档的来源。
 
-Use the permission menu beside the composer to choose confirmation prompts or a narrower file scope. The current desktop defaults allow automatic execution and access to all local paths.
+默认记录轻量运行事件；需要完整请求 / 响应诊断时开启详细日志。运行记录可帮助解释行为，但不等于完整机器快照或一键重放所有外部操作。数据位置、SQLite 索引和备份范围见[开发者指南](docs/product/developers_zh.md#文件数据与可检查的运行)。
 
-See the [user guide](docs/product/user-guide.md) for practical steps. Available operating-system packages are those actually listed on the release page.
+![运行检查：调用树、请求、响应与结构化事件](media/screenshots/run-inspector.png)
 
-## Before you begin
+## 面向真实项目的能力
 
-**Does everything stay on my computer?**
+| 能力 | 当前支持 |
+| --- | --- |
+| **多模型协议** | OpenAI Chat Completions / Responses、Anthropic Messages、Ollama |
+| **图像生成与编辑** | OpenAI Images、Qwen DashScope、Seedream Ark；生成与编辑地址独立配置 |
+| **模式与子 Agent** | Chat、Agent、Plan、Review；可配置模型、指令、工具类别与委派范围 |
+| **Skills 与 MCP** | 管理、发现与更新入口；内置 find-skills / skill-creator；MCP stdio、SSE、Streamable HTTP |
+| **交互 Shell** | 新建 Shell、查看状态、继续输入、接管和结束进程 |
+| **图片与 OCR** | 截图识别、本地 OCR 或视觉模型 OCR、SVG / 图片预览、Markdown 内嵌图片 |
+| **本地与远程** | 本地工作区、SSH 文件与进程操作、独立 Web 宿主 |
+| **资料与记忆** | 项目成果、知识页、可复用记忆与偏好 |
 
-Projects and conversations are stored locally. Cloud models, online tools and messaging platforms receive the relevant content sent to them. A local model does not make every extension offline.
+### 截图识别
 
-**Can it generate images or operate a browser immediately?**
+截取内容后，可以在图片与文字视图间切换，选择或复制识别结果；OCR 也可单独指定视觉模型和提示词。
 
-Configure an image service or a browser/computer tool first. A chat model does not automatically provide these capabilities.
+![截图窗口：图片、文字与提取完成状态](media/screenshots/capture-ocr.png)
 
-**Can I leave it entirely unattended?**
+### SSH 项目
 
-Define the scope and review important results. Models can misunderstand a request; file operations and external tools have real effects.
+连接远端项目，在熟悉的本地界面中操作远端文件与进程。远端需 SSH 和 Python 3.11+，无需安装完整 PyCat。
 
-**How do I get help?**
+<img src="media/screenshots/ssh-workspace.png" width="522" alt="SSH 工作区的主机、端口与目录配置" />
 
-Open an [issue](https://github.com/nanhuayu/pycat/issues) with your version, system and reproduction steps. Remove credentials and private material before sharing screenshots or logs.
+### 在设置中定义工作方式
 
-PyCat is licensed under [AGPL-3.0-only](LICENSE). Contributions to protocol compatibility, native desktop interactions, remote workspaces, skills and reproducible task examples are welcome through [pull requests](https://github.com/nanhuayu/pycat/pulls), alongside feedback and practical use cases.
+**模型与服务**：聊天协议和图像接口分别配置；模型用途、推理参数与专用能力可以独立选择。
+
+![模型与服务设置](media/screenshots/models.png)
+
+**运行与权限**：配置主模式、子 Agent、工具类别、指令和完成方式。
+
+![模式、工具类别和指令设置](media/screenshots/modes.png)
+
+**工具与能力**：管理 Skills、MCP、模型能力、搜索、电脑与浏览器和 OCR。
+
+![技能管理与内置 find-skills](media/screenshots/settings.png)
+
+### 从消息平台发起任务
+
+配置机器人并绑定项目后，可以在 **飞书 / Lark、钉钉、Telegram、QQ 或微信** 中发起任务，传入平台支持的图片与文件，并接收明确交付的成果。
+
+<img src="media/screenshots/wechat-image.jpg" width="320" alt="实际微信聊天：发送图片后收到与图片内容相关的回复" />
+
+PyCat 所在电脑需要保持运行并联网，各平台的附件和权限限制不同。上图展示使用者提供的微信机器人交互案例，机器人名称为聊天显示名称。
+
+*本页生图、截图识别、SSH、运行检查与微信图片来自使用者选定的实际界面；设置截图使用隔离示例配置。截图说明具体操作，模型输出和 OCR 内容仍需复核。*
+
+## 技术路线如何取舍
+
+选择工具时，可以先比较自己的集成需求，而不是只比较功能数量：
+
+| 关注点 | 需要权衡什么 | PyCat 的选择 |
+| --- | --- | --- |
+| **已有 Python 工程** | 使用远程 API、跨进程接口，还是进程内 SDK | 提供进程内 Python SDK，也保留 CLI 与 Web 接口 |
+| **原生桌面与网页体验** | 系统集成、网页复用和各端维护成本 | PyQt6 桌面与可选 WebUI 分开适配，共用 Python 核心 |
+| **数据可检查性** | 如何取得会话、工具原文和交付结果 | 以本地文件保存主要业务内容，提供运行检查和结构化输出 |
+| **定制与迭代** | 能否修改策略，并用自己的任务集验证 | Python 源码、模型与模式配置、Skills / MCP 扩展 |
+| **部署与维护** | 需要哪些运行环境、依赖和系统验证 | SDK 按需安装，Windows 发行包包含已选择的界面与本地 OCR |
+
+不同语言与 UI 框架有各自适合的场景。PyCat 的优势在于 **Python 工程中的直接集成、统一执行能力和透明的文件工作流**；不以未经同条件测试的体积、速度或成功率作为对比结论。
+
+## 适合持续迭代的 Agent 基础
+
+可以用 SDK 固定任务集和预算，比较不同模型、模式、技能或代码候选，再从文件结果与运行记录中分析差异。Python 源码便于 Agent 读取、修改、运行和检查，原生桌面便于人参与验收。
+
+这让 PyCat 适合作为 **Agent 自改进与 RSI 研究的工程基础**。当前可用的是执行、扩展、记录与评估接入能力；候选管理、独立评估、自动选择、发布和回滚组成的完整自主进化闭环仍需自行搭建。详见[开发者使用指南](docs/product/developers_zh.md)。
+
+## 参与 PyCat
+
+欢迎贡献真实任务示例、模型协议适配、技能、MCP 接入、跨平台修复和原生桌面改进。报告问题时，请提供版本、复现步骤、期望结果和脱敏材料。
+
+如果 Python 原生、多入口和透明文件工作流对你有帮助，欢迎 **Star**、试用并分享可以复现的反馈。可在 [Star History](https://www.star-history.com/#nanhuayu/pycat&Date) 查看项目的关注趋势。
+
+[反馈问题](https://github.com/nanhuayu/pycat/issues) · [参与改进](https://github.com/nanhuayu/pycat/pulls) · [开发者使用](docs/product/developers_zh.md) · [使用指南](docs/product/user-guide_zh.md)
+
+PyCat 采用 [AGPL-3.0-only](LICENSE) 许可证。项目与会话保存在本地；使用云端模型、联网工具或消息平台时，相关内容会发送到所配置的服务。

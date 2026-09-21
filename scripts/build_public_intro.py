@@ -12,8 +12,9 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = (
     "README.md",
-    "README_zh.md",
+    "README_en.md",
     "LICENSE",
+    "pycat/assets/pycat.svg",
     "docs/product/user-guide.md",
     "docs/product/user-guide_zh.md",
     "docs/product/developers.md",
@@ -94,12 +95,30 @@ def build(root: Path) -> Path:
     return output
 
 
+def write_directory(root: Path, directory: Path) -> int:
+    """Add the reviewed, linked material to an existing portable distribution."""
+    files = collect(root)
+    directory = directory.absolute()
+    targets = {name: directory / name for name in files}
+    for name, path in targets.items():
+        if path.resolve() != path:
+            raise ValueError(f"Redirected public destination: {name}")
+    for name, path in targets.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(files[name])
+    return len(files)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Validate without writing a ZIP")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="Validate without writing a ZIP")
+    mode.add_argument("--directory", type=Path, help="Add reviewed material to a portable distribution")
     args = parser.parse_args()
     if args.check:
         print(f"Public introduction OK: {len(collect(ROOT))} reviewed files")
+    elif args.directory is not None:
+        print(f"Public introduction copied: {write_directory(ROOT, args.directory)} reviewed files")
     else:
         print(build(ROOT))
 

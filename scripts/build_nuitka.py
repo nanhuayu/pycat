@@ -64,7 +64,7 @@ def entry_plan(frontend="all", ocr=True, compiler="auto", jobs=4, analyze=False,
         "--nofollow-import-to=tkinter", "--assume-yes-for-downloads",
         "--include-data-files=LICENSE=LICENSE",
         "--include-data-files=README.md=README.md",
-        "--include-data-files=README_zh.md=README_zh.md",
+        "--include-data-files=README_en.md=README_en.md",
         "--include-package-data=pycat:assets/default_models.json",
         "--include-package-data=pycat:assets/skills/*",
         "--include-package-data=pycat:assets/extensions/*",
@@ -213,6 +213,8 @@ def main(argv=None) -> int:
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
     if not args.analyze:
+        subprocess.run([sys.executable, str(ROOT / 'scripts/build_public_intro.py'), '--check'],
+                       cwd=ROOT, env=env, check=True)
         subprocess.run([sys.executable, str(ROOT / 'scripts/prepare_ripgrep.py')], cwd=ROOT, check=True)
     # Nuitka owns compiler discovery and platform/Conda DLL handling.
     plans = build_plans(args.frontend, not args.without_ocr, args.compiler, args.jobs, args.analyze)
@@ -236,6 +238,8 @@ def main(argv=None) -> int:
     final = output_root / label
     # A unique output preserves previous releases, including when verification fails.
     merge_distributions(directories, final)
+    subprocess.run([sys.executable, str(ROOT / 'scripts/build_public_intro.py'), '--directory', str(final)],
+                   cwd=ROOT, env=env, check=True)
     # This source runs on the remote system's Python, never the frozen host.
     # Nuitka deliberately excludes .py data; ship the single canonical source explicitly.
     helper = Path("pycat/core/hosts/remote_helper.py")

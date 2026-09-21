@@ -1,6 +1,6 @@
 # PyCat 使用指南
 
-[返回项目介绍](../../README_zh.md) · [English](user-guide.md) · [查看发布版本](https://github.com/nanhuayu/pycat/releases)
+[返回项目介绍](../../README.md) · [English](user-guide.md) · [查看发布版本](https://github.com/nanhuayu/pycat/releases)
 
 这份指南从桌面操作开始。不同版本的功能可能有所差异，请同时查看所安装版本的发布说明。
 
@@ -32,7 +32,7 @@
 
 ![桌面基本布局：项目、对话、正文成果和任务输入](../../media/screenshots/workspace.png)
 
-*这是使用隔离示例资料生成的实际界面截图，用于介绍布局；真实使用案例见[项目介绍](../../README_zh.md)。*
+*这是使用隔离示例资料生成的实际界面截图，用于介绍布局；真实使用案例见[项目介绍](../../README.md)。*
 
 ## 4. 查看和继续使用成果
 

@@ -1,6 +1,6 @@
 # Python, terminal and remote workspaces
 
-[Project introduction](../../README.md) · [Desktop user guide](user-guide.md) · [简体中文](developers_zh.md)
+[Project introduction](../../README_en.md) · [Desktop user guide](user-guide.md) · [简体中文](developers_zh.md)
 
 PyCat is for developers who want to use agents, build automation and extend tools. Its Python SDK, CLI, TUI, native desktop, web workbench and messaging channels share application services, task execution, tool permissions and conversation content. Try a task in the interface, then connect the same capabilities to your own Python or terminal workflow.
 
@@ -111,6 +111,24 @@ async with app.start(RunRequest(
 ```
 
 Request cancellation with `run.cancel()`. Leaving the run context cleans up unfinished work. Each run has one event consumer, which should keep up with the stream. Cancellation does not undo file changes or external actions. Check result status, saved content and task acceptance criteria, rather than relying on a final statement of completion.
+
+## File storage and inspectable runs
+
+PyCat stores primary business content in files that editors, scripts and other tools can inspect and reuse:
+
+| Content | Storage and purpose |
+| --- | --- |
+| Configuration and conversations | JSON in the application data directory, including model configuration and saved conversation state |
+| Session inputs and archives | `.pycat/sessions/<conversation-id>/` in local projects, containing input snapshots, original tool output, images and metadata |
+| Execution evidence | JSONL events and optional diagnostic attachments under the session's `debug/` directory; the inspector and SDK share the reading interface |
+| Knowledge and memory | Markdown files that can be read, searched and backed up |
+| Deliverables | Ordinary project files that existing editors and version control can use |
+
+Archived originals are separate from compressed summaries, which can be regenerated. Lightweight events are the default; detailed logging captures redacted requests, responses and stream attachments. Records reflect what was captured, not a guarantee of replaying external systems or access to internal reasoning a model did not return.
+
+File storage does not mean every state is plain text. Search indexes and some background job ledgers use SQLite; active processes and network connections remain in memory. Source users can specify `data_dir`. Sessions without local projects, and SSH workspace resources, are managed under the application data directory. Back up both that directory and project `.pycat` directories after closing their application; deliverables alone are not a complete backup. Do not publish an entire `.pycat` directory or manually modify internal state files while the application is running.
+
+Files and structured results make external analysis practical. The SDK exposes run traces and node details, while CLI JSON and streamed events can feed evaluation workflows. Consult the public API signatures and `--help` for exact parameters.
 
 ## Two kinds of remote use
 

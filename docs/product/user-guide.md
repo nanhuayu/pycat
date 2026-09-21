@@ -1,6 +1,6 @@
 # PyCat user guide
 
-[Back to the introduction](../../README.md) · [简体中文](user-guide_zh.md) · [Releases](https://github.com/nanhuayu/pycat/releases)
+[Back to the introduction](../../README_en.md) · [简体中文](user-guide_zh.md) · [Releases](https://github.com/nanhuayu/pycat/releases)
 
 This guide starts with desktop use. Features can differ between versions; also read the notes for the version you install. English setting names below describe the corresponding controls shown in the screenshots.
 
@@ -32,7 +32,7 @@ Inspect progress and tool steps while it works. Stopping a run does not undo fil
 
 ![Desktop layout: projects, conversation, inline results and the task composer](../../media/screenshots/workspace.png)
 
-*This actual interface uses isolated demonstration materials to explain the layout. See the [project introduction](../../README.md) for user-supplied task screenshots.*
+*This actual interface uses isolated demonstration materials to explain the layout. See the [project introduction](../../README_en.md) for user-supplied task screenshots.*
 
 ## 4. Review and reuse results
 
