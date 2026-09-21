@@ -151,6 +151,74 @@ def check_gui_shell(worker):
     """)
 
 
+def check_gui_settings(worker):
+    """Destroy real embedded settings pages; compilation changes Qt callback ownership."""
+    worker("""
+        import time
+        from PyQt6 import sip
+        from PyQt6.QtCore import QCoreApplication, QEvent
+        from PyQt6.QtWidgets import QApplication, QPushButton
+        from pycat.gui.main_window import MainWindow
+        app = QApplication([])
+        app.setQuitOnLastWindowClosed(False)
+        window = MainWindow()
+        window.app_settings['close_to_tray'] = False
+        window.show()
+        chat = window.chat_view
+        window.input_area.text_input.setPlainText('settings return draft')
+        pages = ('appearance', 'models', 'modes', 'skills', 'mcp',
+                 'capabilities', 'automation', 'channels', 'about')
+        def drain():
+            app.processEvents()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            app.processEvents()
+        for index in range(20):
+            window.resize(*((960, 720) if index % 2 else (1440, 900)))
+            window.settings_presenter.open_settings(initial_page=pages[index % len(pages)])
+            drain()
+            dialog = window.settings_presenter._settings_dialog
+            assert not dialog.isWindow() and not dialog.is_dirty()
+            assert window.workspace_stack.currentWidget() is dialog
+            back = dialog.findChild(QPushButton, 'settings_back')
+            assert back is not None
+            case = index % 4
+            if case:
+                dialog.strategy_page.max_turns_spin.setValue(100 + index)
+                assert dialog.is_dirty()
+                if case == 2:
+                    dialog._confirm_close = lambda: 'cancel'
+                    back.click()
+                    drain()
+                    assert window.settings_presenter._settings_dialog is dialog
+                    assert dialog.isVisible() and dialog.is_dirty()
+                dialog._confirm_close = lambda: 'save' if case == 3 else 'discard'
+            if case == 1:
+                window.cancel_action.trigger()
+            elif case == 2:
+                dialog.close()
+            else:
+                back.click()
+            deadline = time.monotonic() + 10
+            while window.settings_presenter._settings_dialog is not None and time.monotonic() < deadline:
+                drain()
+                time.sleep(.005)
+            drain()
+            assert window.settings_presenter._settings_dialog is None, index
+            assert sip.isdeleted(dialog), index
+            assert window.isVisible() and not window._shutdown_started
+            assert window.workspace_stack.currentWidget() is window.splitter
+            assert window.chat_view is chat
+            assert window.input_area.text_input.toPlainText() == 'settings return draft'
+            assert window.new_conversation_action.isEnabled()
+        window.close()
+        deadline = time.monotonic() + 10
+        while not window._shutdown_complete and time.monotonic() < deadline:
+            drain()
+            time.sleep(.005)
+        assert window._shutdown_complete
+    """)
+
+
 def check_web(worker):
     """Exercise Uvicorn's dynamic imports and serve the bundled browser assets."""
     worker("""
@@ -490,6 +558,8 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
             """)
             checks.append("OCR omission is explicit and reported unavailable")
         if frontend != "cli":
+            check_gui_settings(lambda code: worker(code, binary=directory / "pycat.exe"))
+            checks.append("GUI Settings return/back/Escape, dirty cancel/discard/save and native destruction across 20 cycles")
             check_gui_shell(lambda code: worker(code, binary=directory / "pycat.exe"))
             checks.append("GUI Shell creation, native output, pinned session, hide/reopen and retained stopped tab")
             worker("""

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PyQt6.QtCore import QRect, QSize, Qt
+from PyQt6 import sip
+from PyQt6.QtCore import QRect, QSize, Qt, pyqtSlot
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
@@ -151,9 +152,8 @@ class SettingsListDetailLayout(QWidget):
         widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         widget.itemClicked.connect(lambda item: self._click(item, toggle))
         widget.itemActivated.connect(lambda _: self.show_detail())
-        widget.selectionModel().currentChanged.connect(self._sync_selection)
-        widget.model().dataChanged.connect(self._sync_selection)
-        widget.model().modelReset.connect(self._sync_selection)
+        widget.currentItemChanged.connect(self._sync_selection)
+        widget.itemChanged.connect(self._sync_selection)
         if toggle:
             QShortcut(QKeySequence("Space"), widget, context=Qt.ShortcutContext.WidgetShortcut, activated=lambda: toggle() if widget.currentItem() and
                 widget.currentItem().data(RESOURCE_TOGGLE_ROLE) else None)
@@ -178,7 +178,12 @@ class SettingsListDetailLayout(QWidget):
         self._apply_layout()
         self.list_widget.setFocus()
 
-    def _sync_selection(self, *_):
+    @pyqtSlot()
+    def _sync_selection(self):
+        # The view can already be invalid while Qt tears down its model.
+        # A native slot owns the connection; also reject partial child teardown.
+        if sip.isdeleted(self) or sip.isdeleted(self.list_widget):
+            return
         item = self.list_widget.currentItem()
         self.detail_title.setText(str(item.data(RESOURCE_TITLE_ROLE) or item.text()) if item else "选择条目查看详情")
         self.detail_panel.setEnabled(item is not None)
