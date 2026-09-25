@@ -3,13 +3,25 @@ import os
 import threading
 import time
 
-from PyQt6.QtCore import Qt, QThreadPool, QTimer, pyqtSignal
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QFileDialog, QTabWidget, QWidget, QLineEdit
+from PyQt6.QtCore import QCoreApplication, Qt, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtWidgets import (
+    QDialog,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
+from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.window_geometry import apply_window_size
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
-from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.models.workspace import WorkspaceLocation, workspace_identity
 
 
@@ -24,7 +36,7 @@ class WorkspacePickerDialog(QDialog):
         self.auth_requested.connect(self._authenticate)
         self.selected_path = ""
         self.current = current
-        self.setWindowTitle("选择工作区")
+        self.setWindowTitle(QCoreApplication.translate('WorkspacePickerDialog', '选择工作区'))
         apply_window_size(self, preferred=(520, 430), minimum=(360, 280))
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 12)
@@ -32,14 +44,14 @@ class WorkspacePickerDialog(QDialog):
         local = QWidget()
         local_layout = QVBoxLayout(local)
         local_layout.setContentsMargins(0, 8, 0, 0)
-        self.tabs.addTab(local, "最近与本地")
+        self.tabs.addTab(local, QCoreApplication.translate('WorkspacePickerDialog', '最近与本地'))
         root.addWidget(self.tabs, 1)
         self.search = ThemedLineEdit()
-        self.search.setPlaceholderText("搜索最近工作区")
+        self.search.setPlaceholderText(QCoreApplication.translate('WorkspacePickerDialog', '搜索最近工作区'))
         self.search.setClearButtonEnabled(True)
         local_layout.addWidget(self.search)
         self.recent_list = QListWidget()
-        self.recent_list.setAccessibleName("最近工作区")
+        self.recent_list.setAccessibleName(QCoreApplication.translate('WorkspacePickerDialog', '最近工作区'))
         self.recent_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.recent_list.setTextElideMode(Qt.TextElideMode.ElideMiddle)
         rows = sorted(summaries, key=lambda row: str(row.get("updated_at") or ""), reverse=True)
@@ -60,20 +72,20 @@ class WorkspacePickerDialog(QDialog):
             self.recent_list.addItem(item)
         local_layout.addWidget(self.recent_list, 1)
         self._build_ssh_tab()
-        self.notice = QLabel("暂无最近工作区，请浏览文件夹。" if not seen else "")
+        self.notice = QLabel(QCoreApplication.translate('WorkspacePickerDialog', '暂无最近工作区，请浏览文件夹。') if not seen else "")
         self.notice.setObjectName("workspace_notice")
         self.notice.setTextFormat(Qt.TextFormat.PlainText)
         self.notice.setWordWrap(True)
         self.notice.setProperty("muted", True)
         root.addWidget(self.notice)
         actions = QHBoxLayout()
-        self.browse = QPushButton("浏览文件夹…")
+        self.browse = QPushButton(QCoreApplication.translate('WorkspacePickerDialog', '浏览文件夹…'))
         self.browse.setIcon(Icons.get_muted(Icons.FOLDER))
         self.browse.clicked.connect(self._browse)
         self.tabs.currentChanged.connect(lambda index: self.browse.setVisible(index == 0))
         actions.addWidget(self.browse)
         actions.addStretch()
-        cancel = QPushButton("取消")
+        cancel = QPushButton(QCoreApplication.translate('WorkspacePickerDialog', '取消'))
         cancel.clicked.connect(self.reject)
         actions.addWidget(cancel)
         root.addLayout(actions)
@@ -96,15 +108,15 @@ class WorkspacePickerDialog(QDialog):
         layout.setContentsMargins(0, 8, 0, 0)
         host_row = QHBoxLayout()
         self.ssh_host = ThemedLineEdit()
-        self.ssh_host.setPlaceholderText("SSH 别名或 user@host")
-        self.ssh_host.setAccessibleName("SSH 主机")
+        self.ssh_host.setPlaceholderText(QCoreApplication.translate('WorkspacePickerDialog', 'SSH 别名或 user@host'))
+        self.ssh_host.setAccessibleName(QCoreApplication.translate('WorkspacePickerDialog', 'SSH 主机'))
         self.ssh_port = ThemedLineEdit()
-        self.ssh_port.setPlaceholderText("端口")
-        self.ssh_port.setAccessibleName("SSH 端口")
-        self.ssh_port.setToolTip("1–65535；留空沿用 SSH 配置，未配置时使用 22")
+        self.ssh_port.setPlaceholderText(QCoreApplication.translate('WorkspacePickerDialog', '端口'))
+        self.ssh_port.setAccessibleName(QCoreApplication.translate('WorkspacePickerDialog', 'SSH 端口'))
+        self.ssh_port.setToolTip(QCoreApplication.translate('WorkspacePickerDialog', '1–65535；留空沿用 SSH 配置，未配置时使用 22'))
         self.ssh_port.setFixedWidth(80)
         self.ssh_port.setInputMethodHints(Qt.InputMethodHint.ImhDigitsOnly)
-        self.ssh_connect = QPushButton("连接")
+        self.ssh_connect = QPushButton(QCoreApplication.translate('WorkspacePickerDialog', '连接'))
         self.ssh_connect.clicked.connect(lambda: self._connect_ssh())
         self.ssh_host.returnPressed.connect(lambda: self._connect_ssh())
         self.ssh_port.returnPressed.connect(lambda: self._connect_ssh())
@@ -113,32 +125,32 @@ class WorkspacePickerDialog(QDialog):
         host_row.addWidget(self.ssh_connect)
         layout.addLayout(host_row)
         self.ssh_password = ThemedLineEdit()
-        self.ssh_password.setPlaceholderText("登录密码（可选，仅用于本次连接）")
-        self.ssh_password.setAccessibleName("SSH 登录密码")
+        self.ssh_password.setPlaceholderText(QCoreApplication.translate('WorkspacePickerDialog', '登录密码（可选，仅用于本次连接）'))
+        self.ssh_password.setAccessibleName(QCoreApplication.translate('WorkspacePickerDialog', 'SSH 登录密码'))
         self.ssh_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.ssh_password.setToolTip("留空使用 SSH 配置或按提示认证；填写后优先尝试密码登录，不保存密码")
+        self.ssh_password.setToolTip(QCoreApplication.translate('WorkspacePickerDialog', '留空使用 SSH 配置或按提示认证；填写后优先尝试密码登录，不保存密码'))
         self.ssh_password.returnPressed.connect(lambda: self._connect_ssh())
         layout.addWidget(self.ssh_password)
         self.ssh_path = ThemedLineEdit()
-        self.ssh_path.setPlaceholderText("远端目录，留空使用主目录")
-        self.ssh_path.setAccessibleName("远端工作区目录")
-        self.ssh_path.setToolTip("例如 /home/ubuntu/project 或 C:/Users/HP/project；留空使用远端主目录")
+        self.ssh_path.setPlaceholderText(QCoreApplication.translate('WorkspacePickerDialog', '远端目录，留空使用主目录'))
+        self.ssh_path.setAccessibleName(QCoreApplication.translate('WorkspacePickerDialog', '远端工作区目录'))
+        self.ssh_path.setToolTip(QCoreApplication.translate('WorkspacePickerDialog', '例如 /home/ubuntu/project 或 C:/Users/HP/project；留空使用远端主目录'))
         self.ssh_path.returnPressed.connect(lambda: self._connect_ssh())
         layout.addWidget(self.ssh_path)
         self.remote_list = QListWidget()
-        self.remote_list.setAccessibleName("远端文件夹")
+        self.remote_list.setAccessibleName(QCoreApplication.translate('WorkspacePickerDialog', '远端文件夹'))
         self.remote_list.itemActivated.connect(self._open_directory)
         self.remote_list.itemDoubleClicked.connect(self._open_directory)
         layout.addWidget(self.remote_list, 1)
-        hint = QLabel("端口留空沿用 SSH 配置，未配置时使用 22。\n支持 Windows / Linux，需 Python 3.11+；密码不保存。")
+        hint = QLabel(QCoreApplication.translate('WorkspacePickerDialog', '端口留空沿用 SSH 配置，未配置时使用 22。\n支持 Windows / Linux，需 Python 3.11+；密码不保存。'))
         hint.setWordWrap(True)
         hint.setProperty("muted", True)
         layout.addWidget(hint)
-        self.ssh_use = QPushButton("使用此目录")
+        self.ssh_use = QPushButton(QCoreApplication.translate('WorkspacePickerDialog', '使用此目录'))
         self.ssh_use.setEnabled(False)
         self.ssh_use.clicked.connect(lambda: self._connect_ssh(select=True))
         layout.addWidget(self.ssh_use)
-        self.tabs.addTab(page, "SSH 远程")
+        self.tabs.addTab(page, QCoreApplication.translate('WorkspacePickerDialog', 'SSH 远程'))
         self.ssh_connect.setEnabled(self._workspaces is not None)
         self.ssh_host.textChanged.connect(lambda: self.ssh_use.setEnabled(False))
         self.ssh_port.textChanged.connect(lambda: self.ssh_use.setEnabled(False))
@@ -156,7 +168,7 @@ class WorkspacePickerDialog(QDialog):
         try:
             port_text = self.ssh_port.text().strip()
             if port_text and not (port_text.isascii() and port_text.isdecimal()):
-                raise ValueError("SSH 端口必须是 1–65535 的整数；留空沿用 SSH 配置")
+                raise ValueError(QCoreApplication.translate('WorkspacePickerDialog', 'SSH 端口必须是 1–65535 的整数；留空沿用 SSH 配置'))
             port = int(port_text) if port_text else None
             target = WorkspaceLocation.ssh(host, path or "/", port=port)
         except ValueError as exc:
@@ -172,7 +184,7 @@ class WorkspacePickerDialog(QDialog):
         # The worker consumes this once; a job cancelled before starting clears it too.
         password = [self.ssh_password.text() or None]
         self.ssh_password.clear()
-        self._set_notice("正在连接并检查远端环境…")
+        self._set_notice(QCoreApplication.translate('WorkspacePickerDialog', '正在连接并检查远端环境…'))
         service = self._workspaces
         def operation():
             info = service.connect(host, port=port, password=password.pop(),
@@ -202,7 +214,7 @@ class WorkspacePickerDialog(QDialog):
             self.remote_list.clear()
             folder = parsed.remote_path
             if folder.parent != folder:
-                item = QListWidgetItem("..  上一级")
+                item = QListWidgetItem(QCoreApplication.translate('WorkspacePickerDialog', '..  上一级'))
                 item.setData(Qt.ItemDataRole.UserRole, folder.parent.as_posix())
                 self.remote_list.addItem(item)
             for path in directories:
@@ -210,7 +222,7 @@ class WorkspacePickerDialog(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, path)
                 self.remote_list.addItem(item)
             self.ssh_use.setEnabled(self.ssh_host.text().strip() == host)
-            self._set_notice(f"已连接 {target.endpoint} · 聊天记录保存在本机")
+            self._set_notice(QCoreApplication.translate('WorkspacePickerDialog', '已连接 {endpoint} · 聊天记录保存在本机').format(endpoint=target.endpoint))
         job.signals.finished.connect(complete)
         QThreadPool.globalInstance().start(job)
 
@@ -235,7 +247,7 @@ class WorkspacePickerDialog(QDialog):
         prompt = request["prompt"]
         confirm = request["confirm"] or "yes/no" in prompt.lower()
         dialog = QDialog(self)
-        dialog.setWindowTitle("确认 SSH 主机" if confirm else "SSH 身份验证")
+        dialog.setWindowTitle(QCoreApplication.translate('WorkspacePickerDialog', '确认 SSH 主机') if confirm else QCoreApplication.translate('WorkspacePickerDialog', 'SSH 身份验证'))
         layout = QVBoxLayout(dialog)
         label = QLabel(prompt)
         label.setTextFormat(Qt.TextFormat.PlainText)
@@ -247,9 +259,9 @@ class WorkspacePickerDialog(QDialog):
         if not confirm:
             layout.addWidget(entry)
         buttons = QHBoxLayout()
-        cancel = QPushButton("取消")
+        cancel = QPushButton(QCoreApplication.translate('WorkspacePickerDialog', '取消'))
         cancel.clicked.connect(dialog.reject)
-        accept = QPushButton("信任并连接" if confirm else "继续")
+        accept = QPushButton(QCoreApplication.translate('WorkspacePickerDialog', '信任并连接') if confirm else QCoreApplication.translate('WorkspacePickerDialog', '继续'))
         accept.clicked.connect(dialog.accept)
         entry.returnPressed.connect(dialog.accept)
         buttons.addWidget(cancel)
@@ -276,7 +288,7 @@ class WorkspacePickerDialog(QDialog):
             hidden = text.casefold() not in item.text().casefold()
             item.setHidden(hidden)
             visible += not hidden
-        self._set_notice("没有匹配的最近工作区，可浏览文件夹。" if not visible else "")
+        self._set_notice(QCoreApplication.translate('WorkspacePickerDialog', '没有匹配的最近工作区，可浏览文件夹。') if not visible else "")
 
     def _select_first(self):
         for index in range(self.recent_list.count()):
@@ -300,11 +312,11 @@ class WorkspacePickerDialog(QDialog):
             self._connect_ssh(select=True)
             return
         if not os.path.isdir(path):
-            self._set_notice("此工作区不存在或暂时无法访问，请重新选择。", error=True)
+            self._set_notice(QCoreApplication.translate('WorkspacePickerDialog', '此工作区不存在或暂时无法访问，请重新选择。'), error=True)
             return
         self.selected_path = path
         self.accept()
 
     def _browse(self):
         initial = "" if WorkspaceLocation.parse(self.current).is_remote else self.current
-        self._choose(QFileDialog.getExistingDirectory(self, "选择工作区文件夹", initial))
+        self._choose(QFileDialog.getExistingDirectory(self, QCoreApplication.translate('WorkspacePickerDialog', '选择工作区文件夹'), initial))

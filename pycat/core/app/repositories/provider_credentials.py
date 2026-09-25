@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import ctypes
-from ctypes import wintypes
 import hashlib
 import json
 import os
-from pathlib import Path
 import tempfile
+from ctypes import wintypes
+from pathlib import Path
 
 
 def _windows_protect(raw: bytes, *, decrypt: bool = False) -> bytes:

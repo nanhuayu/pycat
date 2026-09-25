@@ -8,13 +8,15 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
+from PyQt6.QtCore import QCoreApplication
+
+from pycat.core.agent.policy import RunPolicyBuilder
+from pycat.core.app.runtime_paths import get_debug_log_path
+from pycat.models.contracts.agent import RunEvent, RunStatus
+from pycat.models.contracts.session_state import SessionState
 from pycat.models.conversation import Conversation, Message
 from pycat.models.provider import Provider
-from pycat.models.contracts.session_state import SessionState
 from pycat.models.streaming import ConversationPatch
-from pycat.core.app.runtime_paths import get_debug_log_path
-from pycat.core.agent.policy import RunPolicyBuilder
-from pycat.models.contracts.agent import RunEvent, RunStatus
 
 if TYPE_CHECKING:
     from pycat.gui.main_window import MainWindow
@@ -164,17 +166,13 @@ class StreamingMessagePresenter:
         if isinstance(metadata, dict) and metadata.get("subtask_trace_only"):
             return
 
-        target_conv = (
-            host.current_conversation
-            if self._is_current(conversation_id)
-            else host.services.conv_service.load(conversation_id)
-        )
+        target_conv = self._target_conversation(conversation_id)
         if not target_conv:
             return
 
         if getattr(message, "role", "") == "tool":
             self._apply_tool_result_step(target_conv, message)
-            host.services.app_coordinator.remember_current_conversation(
+            self._remember_selected(
                 target_conv,
                 providers=host.providers,
                 app_settings=host.app_settings,
@@ -208,7 +206,7 @@ class StreamingMessagePresenter:
 
         target_conv.add_message(message)
         self._apply_runtime_message_updates(target_conv, message)
-        host.services.app_coordinator.remember_current_conversation(
+        self._remember_selected(
             target_conv,
             providers=host.providers,
             app_settings=host.app_settings,
@@ -270,7 +268,7 @@ class StreamingMessagePresenter:
             target.add_message(response)
         self._apply_runtime_message_updates(target, response)
         host.services.app_coordinator.set_streaming(conversation_id, is_streaming=False)
-        host.services.app_coordinator.remember_current_conversation(
+        self._remember_selected(
             target,
             providers=host.providers,
             app_settings=host.app_settings,
@@ -322,6 +320,8 @@ class StreamingMessagePresenter:
         error_message = Message(role="assistant", content=content)
         try:
             error_message.metadata["runtime_error"] = True
+            if error.strip() == "已取消生成":
+                error_message.metadata["run_status"] = RunStatus.CANCELLED.value
         except Exception as exc:
             logger.debug("Failed to mark runtime error metadata: %s", exc)
 
@@ -338,7 +338,7 @@ class StreamingMessagePresenter:
             else:
                 target.add_message(error_message)
             host.services.app_coordinator.set_streaming(conversation_id, is_streaming=False)
-            host.services.app_coordinator.remember_current_conversation(
+            self._remember_selected(
                 target,
                 providers=host.providers,
                 app_settings=host.app_settings,
@@ -373,7 +373,9 @@ class StreamingMessagePresenter:
     def on_retry_attempt(
         self, conversation_id: str, request_id: str, detail: str
     ) -> None:
-        del request_id, detail
+        state = self._host.message_runtime.get_state(conversation_id)
+        if self._is_current(conversation_id) and state and state.request_id == request_id:
+            self._host.chat_view.restore_streaming_state("", "")
         self._sync_runtime_state(conversation_id)
 
     def on_runtime_event(
@@ -388,7 +390,7 @@ class StreamingMessagePresenter:
         data = getattr(event, "data", None)
         kind_value = str(getattr(getattr(event, "kind", ""), "value", getattr(event, "kind", "")))
         if kind_value == "condense":
-            self._show_condense_notice(data)
+            self._show_condense_notice(conversation_id, data)
         if isinstance(data, dict) and isinstance(data.get("subtask"), dict):
             try:
                 host.chat_view.update_subtask_trace(data.get("subtask") or {})
@@ -412,11 +414,7 @@ class StreamingMessagePresenter:
         if active_request_id and request_id and active_request_id != str(request_id):
             return
         is_current = self._is_current(conversation_id)
-        target = (
-            host.current_conversation
-            if is_current
-            else host.services.conv_service.load(conversation_id)
-        )
+        target = self._target_conversation(conversation_id)
         if target is None:
             return
         try:
@@ -442,17 +440,28 @@ class StreamingMessagePresenter:
             )
             if new_condensed:
                 self._show_condense_notice(
-                    {
-                        "archived_messages": len(new_condensed),
-                        "history_ids": list(dict.fromkeys(str(v) for v in new_condensed.values() if str(v).strip())),
-                        "reason": "conversation_patch",
-                    }
+                    conversation_id,
+                    {"archived_messages": len(new_condensed)},
                 )
             changed_fields = set(changed_fields) | domains
             self._refresh_inspector_state(target, changed_fields)
             self._update_header(conversation_id)
         except Exception as exc:
             logger.debug("Failed to apply runtime conversation patch: %s", exc)
+
+    def _target_conversation(self, conversation_id: str) -> Conversation | None:
+        host = self._host
+        state = host.message_runtime.get_state(conversation_id)
+        projection = getattr(state, "conversation", None)
+        if isinstance(projection, Conversation):
+            return projection
+        if self._is_current(conversation_id):
+            return host.current_conversation
+        return host.services.conv_service.load(conversation_id)
+
+    def _remember_selected(self, conversation: Conversation, **kwargs) -> None:
+        if self._is_current(conversation.id):
+            self._host.services.app_coordinator.remember_current_conversation(conversation, **kwargs)
 
     @staticmethod
     def _new_condensed_message_ids(
@@ -569,33 +578,24 @@ class StreamingMessagePresenter:
             return False
         return any(str(tc.get("id") or "").strip() == call_id for tc in (getattr(message, "tool_calls", None) or []) if isinstance(tc, dict))
 
-    def _show_condense_notice(self, data: Any) -> None:
+    def _show_condense_notice(self, conversation_id: str, data: Any) -> None:
         host = self._host
         if not isinstance(data, dict):
             return
         archived = int(data.get("archived_messages") or 0)
         snipped = int(data.get("snipped_messages") or 0)
         archive_updates = int(data.get("archive_updates") or 0)
-        reason = str(data.get("reason") or "").strip()
-        history_ids = [str(item) for item in (data.get("history_ids") or []) if str(item).strip()]
-        parts = []
         if archived:
-            parts.append(f"archived {archived} message(s)")
-        if snipped:
-            parts.append(f"removed {snipped} folded message(s)")
-        if archive_updates and not archived:
-            parts.append(f"updated {archive_updates} archive summary view(s)")
-        if not parts:
+            text = QCoreApplication.translate('StreamingMessagePresenter', '上下文已压缩 · {count} 条消息').format(count=archived)
+        elif snipped:
+            text = QCoreApplication.translate('StreamingMessagePresenter', '已清理 {count} 条折叠消息').format(count=snipped)
+        elif archive_updates:
+            text = QCoreApplication.translate('StreamingMessagePresenter', '上下文摘要已更新')
+        else:
             return
-        target = history_ids[-1] if history_ids else ""
-        text = "上下文已压缩：" + ", ".join(parts)
-        if target:
-            text += f" -> {target}"
-        if reason:
-            text += f" ({reason})"
         chat_view = getattr(host, "chat_view", None)
-        if chat_view is not None and hasattr(chat_view, "append_transcript_notice"):
-            chat_view.append_transcript_notice(text, kind="condense")
+        if chat_view is not None:
+            chat_view.show_notice(text, conversation_id=conversation_id)
 
     def _build_request_policy(
         self,

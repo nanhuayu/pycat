@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QMessageBox
 
-from pycat.core.llm.model_selection import resolve_model_target
 from pycat.core.capabilities.defaults import default_capabilities_config
+from pycat.core.llm.model_selection import resolve_model_target
 
 if TYPE_CHECKING:
     from pycat.gui.main_window import MainWindow

@@ -6,7 +6,6 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
-
 logger = logging.getLogger(__name__)
 
 

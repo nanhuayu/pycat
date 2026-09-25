@@ -1,7 +1,7 @@
 """System tray integration for the desktop window lifecycle."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -83,11 +83,11 @@ class TrayController(QObject):
         self._menu.aboutToShow.connect(
             lambda: prepare_context_menu(self._menu, self._window)
         )
-        show_action = QAction("显示 PyCat", self)
+        show_action = QAction(QCoreApplication.translate('TrayController', "显示 PyCat"), self)
         show_action.triggered.connect(self.restore_window)
         self._menu.addAction(show_action)
         self._menu.addSeparator()
-        quit_action = QAction("退出", self)
+        quit_action = QAction(QCoreApplication.translate('TrayController', "退出"), self)
         quit_action.triggered.connect(self.quit_requested.emit)
         self._menu.addAction(quit_action)
         self._tray.setContextMenu(self._menu)

@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-
 ARCHIVE_KINDS: tuple[str, ...] = ("tool_call", "history")
 FILE_CHANGE_ACTIONS: tuple[str, ...] = ("write", "edit", "patch", "delete")
 FILE_CHANGE_STATUSES: tuple[str, ...] = ("completed", "failed", "cancelled")

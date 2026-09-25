@@ -2,9 +2,9 @@
 MCP Server Configuration Model
 """
 
-from dataclasses import dataclass, field
 from collections.abc import Mapping
-from typing import Any, List, Dict
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
 
 TRANSPORT_STDIO = "stdio"
 TRANSPORT_STREAMABLE_HTTP = "streamable_http"

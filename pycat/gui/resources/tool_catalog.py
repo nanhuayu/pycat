@@ -3,8 +3,17 @@ from __future__ import annotations
 
 import json
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
+from PyQt6.QtCore import QCoreApplication, Qt
+from PyQt6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class ToolCatalog(QWidget):
@@ -15,7 +24,7 @@ class ToolCatalog(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         header = QHBoxLayout()
         self.heading = QToolButton()
-        self.heading.setText("工具 · 0")
+        self.heading.setText(QCoreApplication.translate('ToolCatalog', '工具 · {count}').format(count=self.count))
         self.heading.setCheckable(True)
         self.heading.setChecked(True)
         self.heading.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -24,8 +33,8 @@ class ToolCatalog(QWidget):
         header.addWidget(self.heading)
         header.addStretch()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("搜索工具")
-        self.search.setAccessibleName("搜索工具")
+        self.search.setPlaceholderText(QCoreApplication.translate('ToolCatalog', '搜索工具'))
+        self.search.setAccessibleName(QCoreApplication.translate('ToolCatalog', '搜索工具'))
         self.search.setClearButtonEnabled(True)
         self.search.setMaximumWidth(220)
         self.search.textChanged.connect(self._filter)
@@ -40,7 +49,7 @@ class ToolCatalog(QWidget):
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tree.itemExpanded.connect(self._expand)
         layout.addWidget(self.tree)
-        self.hint = QLabel("测试连接后显示工具说明和参数。")
+        self.hint = QLabel(QCoreApplication.translate('ToolCatalog', '测试连接后显示工具说明和参数。'))
         self.hint.setProperty("muted", True)
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
@@ -57,8 +66,8 @@ class ToolCatalog(QWidget):
                 item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
             self.tree.addTopLevelItem(item)
         self.count = len(names)
-        self.heading.setText(f"工具 · {self.count}")
-        self.hint.setText("暂无工具，请测试连接。" if not names else "点击工具查看说明和参数。" if by_name else "缓存的工具名称；测试连接后可查看说明和参数。")
+        self.heading.setText(QCoreApplication.translate('ToolCatalog', '工具 · {count}').format(count=self.count))
+        self.hint.setText(QCoreApplication.translate('ToolCatalog', '暂无工具，请测试连接。') if not names else QCoreApplication.translate('ToolCatalog', '点击工具查看说明和参数。') if by_name else QCoreApplication.translate('ToolCatalog', '缓存的工具名称；测试连接后可查看说明和参数。'))
         self._filter()
 
     def _toggle(self, expanded):
@@ -83,7 +92,7 @@ class ToolCatalog(QWidget):
             return
         detail = QTreeWidgetItem()
         item.addChild(detail)
-        label = QLabel(str(schema.get("description") or "暂无说明") + "\n\n参数\n" +
+        label = QLabel(str(schema.get("description") or QCoreApplication.translate('ToolCatalog', '暂无说明')) + QCoreApplication.translate('ToolCatalog', '\n\n参数\n') +
                        json.dumps(schema.get("inputSchema") or {}, ensure_ascii=False, indent=2))
         label.setTextFormat(Qt.TextFormat.PlainText)
         label.setWordWrap(True)

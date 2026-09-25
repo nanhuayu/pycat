@@ -1,7 +1,7 @@
 """Compact context budget indicator for the composer toolbar."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import QToolButton
 
@@ -20,7 +20,7 @@ class ContextUsageButton(QToolButton):
         self.setFixedSize(106, 24)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setAccessibleName("上下文占用")
+        self.setAccessibleName(QCoreApplication.translate('ContextUsageButton', "上下文占用"))
         self._snapshot: TokenUsageSnapshot | None = None
         self._streaming = False
         self._busy = False
@@ -55,10 +55,10 @@ class ContextUsageButton(QToolButton):
         )
         if self._busy:
             self.setProperty("status", "compact")
-            self.setToolTip("正在压缩上下文…")
+            self.setToolTip(QCoreApplication.translate('ContextUsageButton', "正在压缩上下文…"))
         elif snapshot is None:
             self.setProperty("status", "empty")
-            self.setToolTip("上下文占用：暂无消息")
+            self.setToolTip(QCoreApplication.translate('ContextUsageButton', "上下文占用：暂无消息"))
         else:
             status = str(snapshot.status or "ok")
             self.setProperty("status", status)
@@ -73,24 +73,24 @@ class ContextUsageButton(QToolButton):
         threshold = snapshot.compact_threshold_tokens
         threshold_ratio = (threshold / limit * 100.0) if limit > 0 else 0.0
         lines = [
-            f"上下文占用：{snapshot.usage_ratio * 100:.1f}%",
-            f"已用输入：{format_token_count(snapshot.context_tokens)}",
-            f"模型窗口：{format_token_count(snapshot.context_window)}",
-            f"本次输出上限：{format_token_count(snapshot.output_limit)}",
-            f"可用输入：{format_token_count(limit)}",
-            f"剩余输入：{format_token_count(snapshot.remaining_prompt_tokens)}",
-            f"自动压缩：{format_token_count(threshold)}（可用输入的 {threshold_ratio:.0f}%）",
+            QCoreApplication.translate('ContextUsageButton', '上下文占用：{value:.1f}%').format(value=snapshot.usage_ratio * 100),
+            QCoreApplication.translate('ContextUsageButton', '已用输入：{value}').format(value=format_token_count(snapshot.context_tokens)),
+            QCoreApplication.translate('ContextUsageButton', '模型窗口：{value}').format(value=format_token_count(snapshot.context_window)),
+            QCoreApplication.translate('ContextUsageButton', '本次输出上限：{value}').format(value=format_token_count(snapshot.output_limit)),
+            QCoreApplication.translate('ContextUsageButton', '可用输入：{value}').format(value=format_token_count(limit)),
+            QCoreApplication.translate('ContextUsageButton', '剩余输入：{value}').format(value=format_token_count(snapshot.remaining_prompt_tokens)),
+            QCoreApplication.translate('ContextUsageButton', '自动压缩：{value}（可用输入的 {threshold_ratio:.0f}%）').format(value=format_token_count(threshold), threshold_ratio=threshold_ratio),
         ]
         if snapshot.source == "provider_request":
-            pressure = "紧张" if snapshot.replay_pressure == "tight" else "充裕"
-            lines.append(f"口径：最近一次实际请求体估算（{pressure}视图）")
+            pressure = QCoreApplication.translate('ContextUsageButton', "紧张") if snapshot.replay_pressure == "tight" else QCoreApplication.translate('ContextUsageButton', "充裕")
+            lines.append(QCoreApplication.translate('ContextUsageButton', '口径：最近一次实际请求体估算（{pressure}视图）').format(pressure=pressure))
         else:
-            lines.append("口径：当前会话粗略估算（发送前会按实际请求重算）")
-        lines.append("点击压缩上下文 (/compact)")
+            lines.append(QCoreApplication.translate('ContextUsageButton', "口径：当前会话粗略估算（发送前会按实际请求重算）"))
+        lines.append(QCoreApplication.translate('ContextUsageButton', "点击压缩上下文 (/compact)"))
         if snapshot.budget.model_id:
-            lines.append(f"模型：{snapshot.budget.model_id}")
+            lines.append(QCoreApplication.translate('ContextUsageButton', '模型：{model_id}').format(model_id=snapshot.budget.model_id))
         if snapshot.status != "ok":
-            lines.append(f"状态：{snapshot.status}")
+            lines.append(QCoreApplication.translate('ContextUsageButton', '状态：{status}').format(status=snapshot.status))
         return "\n".join(lines)
 
     def _status_color(self, tokens) -> str:
@@ -129,12 +129,12 @@ class ContextUsageButton(QToolButton):
             painter.drawText(
                 QRectF(24, 0, 82, 24),
                 Qt.AlignmentFlag.AlignVCenter,
-                "正在压缩…" if self._busy else f"上下文 {round(ratio * 100)}%",
+                QCoreApplication.translate('ContextUsageButton', "正在压缩…") if self._busy else QCoreApplication.translate('ContextUsageButton', '上下文 {value}%').format(value=round(ratio * 100)),
             )
         else:
             painter.setPen(QColor(tokens.color("muted")))
             font = painter.font()
             font.setPixelSize(11)
             painter.setFont(font)
-            painter.drawText(QRectF(24, 0, 82, 24), Qt.AlignmentFlag.AlignVCenter, "上下文 0%")
+            painter.drawText(QRectF(24, 0, 82, 24), Qt.AlignmentFlag.AlignVCenter, QCoreApplication.translate('ContextUsageButton', "上下文 0%"))
         painter.end()

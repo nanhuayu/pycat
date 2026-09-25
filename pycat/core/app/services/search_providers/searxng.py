@@ -1,7 +1,8 @@
 """SearXNG self-hosted search provider."""
 
+from typing import List, Optional
+
 import httpx
-from typing import List, Dict, Any, Optional
 
 from pycat.core.app.services.search_providers.base import BaseSearchProvider, SearchResult
 

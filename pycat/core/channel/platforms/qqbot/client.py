@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import time
 import base64
+import time
 from typing import Any
 
 import httpx
 
-from pycat.models.contracts.channel import ChannelConfig
 from pycat.core.channel.media import download_public_media, save_attachment
-
+from pycat.core.channel.replies import fit_reply_text
+from pycat.models.coercion import as_bool
+from pycat.models.contracts.channel import ChannelConfig
 
 QQBOT_OPEN_BASE = "https://api.sgroup.qq.com"
 QQBOT_SANDBOX_OPEN_BASE = "https://sandbox.api.sgroup.qq.com"
@@ -226,16 +227,11 @@ class QQBotChannelClient:
 
     @staticmethod
     def normalize_reply_text(content: Any, *, limit: int = 2000) -> str:
-        text = str(content or "").replace("\r\n", "\n").strip()
-        if not text:
-            return "已收到消息，但暂时没有可发送的文本回复。"
-        if len(text) <= limit:
-            return text
-        return text[: max(1, limit - 1)].rstrip() + "…"
+        return fit_reply_text(content, limit)
 
 
 def _truthy(value: Any) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "sandbox"}
+    return as_bool(value) or str(value or "").strip().lower() == "sandbox"
 
 
 __all__ = ["QQBOT_OPEN_BASE", "QQBOT_SANDBOX_OPEN_BASE", "QQBOT_TOKEN_URL", "QQBotChannelClient"]

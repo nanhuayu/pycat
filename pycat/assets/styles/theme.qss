@@ -37,21 +37,10 @@ QWidget, QLabel { color: $text; }
 
 QLabel[muted="true"],
 QLabel#settings_page_description,
-QLabel#model_indicator,
 QLabel#collapse_summary,
 QLabel#tool_detail_label,
-QLabel#inspector_subtitle,
-QLabel#empty_state_description,
-QLabel#editor_role_label,
-QLabel#shortcut_group_label,
 QLabel#provider_status_label {
     color: $muted;
-}
-
-QLabel#shortcut_key {
-    background-color: $surface_alt;
-    color: $text;
-    border: 1px solid $border;
 }
 
 QLabel[heading="true"],
@@ -59,10 +48,7 @@ QLabel#settings_page_title,
 QLabel#message_role,
 QLabel#chat_empty_title,
 QLabel#collapse_title,
-QLabel#task_text,
-QLabel#runtime_title,
-QLabel#metric_value,
-QLabel#empty_state_title {
+QLabel#task_text {
     color: $text;
 }
 
@@ -119,8 +105,6 @@ InputArea {
     border: none;
 }
 
-#sidebar_header,
-#sidebar_footer,
 #conversation_list,
 QScrollArea#inspector_scroll,
 QWidget#inspector_scroll_content,
@@ -133,28 +117,29 @@ QPushButton#brand_btn, QPushButton#sidebar_footer_btn {
     background: transparent; border: 1px solid transparent; text-align: left;
 }
 QPushButton#brand_btn:hover, QPushButton#sidebar_footer_btn:hover { background: $surface_hover; }
+QFrame#sidebar_footer_separator { background-color: $border; border: none; }
 QPushButton#sidebar_search_btn { background: transparent; }
 QPushButton#sidebar_search_btn:hover { background: $surface_hover; }
 QFrame#trace_metrics { border: none; border-bottom: 1px solid $border; }
+QTextBrowser#trace_summary { background: transparent; border: none; }
 QTreeWidget#trace_tree::item:selected { background: $selected; color: $selected_text; }
 QLabel#trace_node_title { border-left: 2px solid $primary; padding-left: 8px; }
 QPushButton#new_chat_btn { background: $primary_hover; color: $primary; border: none; }
 
 /* Primary controls */
-QPushButton,
-QPushButton#import_btn {
+QPushButton {
     background-color: $surface;
     color: $text;
     border: 1px solid $control_border;
 }
 
-QPushButton:hover,
-QPushButton#import_btn:hover {
+QPushButton:hover {
     background-color: $surface_hover;
     border-color: $selected_border;
 }
 
 QPushButton[primary="true"],
+QToolButton[primary="true"],
 QToolButton#primary_action_btn {
     background-color: $primary;
     color: $on_primary;
@@ -164,19 +149,13 @@ QToolButton#primary_action_btn {
 QToolButton#primary_action_btn[tone="danger"] { background-color: $danger_bg; color: $error; border-color: $danger_border; }
 
 QPushButton[primary="true"]:hover,
+QToolButton[primary="true"]:hover,
 QToolButton#primary_action_btn:hover {
     background-color: $primary_strong;
     border-color: $primary_strong;
 }
 
 QToolButton#primary_action_btn[tone="danger"]:hover { background-color: $danger_hover; border-color: $danger_border; }
-
-QPushButton:disabled,
-QToolButton:disabled {
-    background-color: $surface_alt;
-    color: $disabled;
-    border-color: $border;
-}
 
 QPushButton[danger="true"] {
     background-color: $danger_bg;
@@ -186,29 +165,6 @@ QPushButton[danger="true"] {
 
 QPushButton[danger="true"]:hover {
     background-color: $danger_hover;
-}
-
-QPushButton#settings_action_btn {
-    background-color: $surface;
-    color: $text;
-    border: 1px solid $control_border;
-}
-
-QPushButton#settings_action_btn:hover {
-    background-color: $surface_hover;
-    border-color: $selected_border;
-}
-
-QPushButton#settings_action_btn[primary="true"] {
-    background-color: $primary;
-    color: $on_primary;
-    border-color: $primary;
-}
-
-QPushButton#settings_action_btn[danger="true"] {
-    background-color: $danger_bg;
-    color: $error;
-    border-color: $danger_border;
 }
 
 QToolButton,
@@ -239,6 +195,11 @@ QToolButton#toolbar_btn:checked {
 }
 
 QToolButton#toolbar_btn[nav="true"]:hover { background-color: $primary_hover; color: $selected_text; border-color: $selected_border; }
+
+QPushButton[menuCommand="true"]::menu-indicator { image: url($chevron_icon); }
+QPushButton:focus { border-color: $primary; }
+QToolButton[danger="true"], QToolButton#toolbar_btn[danger="true"] { color: $error; }
+QToolButton[danger="true"]:hover, QToolButton#toolbar_btn[danger="true"]:hover { background-color: $danger_bg; border-color: $danger_border; }
 
 /* Form controls */
 QComboBox,
@@ -375,14 +336,12 @@ QWidget[settings_toggle="true"]:disabled QLabel#settings_toggle_label {
 }
 
 QCheckBox::indicator,
-QTreeWidget#permission_matrix::indicator,
 QListWidget#model_catalog_list::indicator {
     background-color: $transparent;
     border: 1px solid $selected_border;
 }
 
 QCheckBox::indicator:checked,
-QTreeWidget#permission_matrix::indicator:checked,
 QListWidget#model_catalog_list::indicator:checked {
     background-color: $primary;
     border-color: $primary;
@@ -391,16 +350,13 @@ QListWidget#model_catalog_list::indicator:checked {
 
 QGroupBox,
 QFrame#task_card,
-QFrame#runtime_strip,
-QFrame#empty_state,
-QFrame#image_preview_item,
-QFrame#image_edit_item {
+QFrame#image_preview_item {
     background-color: $surface;
     border: 1px solid $border;
 }
 
 #streaming_container { background: transparent; border: none; }
-QLabel#streaming_status { color: $muted; background: transparent; border: none; }
+QLabel#run_status_hint { color: $muted; background: transparent; border: none; }
 QFrame#capture_toolbar { background-color: $surface; border: 1px solid $border; border-radius: 8px; }
 
 /* Compact settings rows share a quiet bottom divider. */
@@ -445,16 +401,6 @@ QWidget#subagent_trace_content {
     border-left: 2px solid $primary;
     border-top-left-radius: 0; border-bottom-left-radius: 0;
 }
-
-QToolButton#icon_tool_button:hover {
-    background-color: $primary_hover;
-    border-color: $selected_border;
-}
-
-QLabel#status_pill { background-color: $primary_hover; color: $selected_text; }
-QLabel#status_pill[tone="success"] { color: $success; }
-QLabel#status_pill[tone="danger"] { color: $error; }
-QLabel#status_pill[tone="warning"] { color: $warning; }
 
 QLabel#task_status_icon[status="completed"] {
     color: $success;
@@ -508,6 +454,7 @@ QLabel#status_notice { color: $muted; background-color: transparent; border: non
 QLabel#status_notice[tone="success"] { color: $success; }
 QLabel#status_notice[tone="warning"] { color: $warning; }
 QLabel#status_notice[tone="error"] { color: $error; }
+QLabel#message_interruption_notice { color: $warning; background-color: transparent; }
 
 QToolButton#runtime_indicator[active="true"] {
     background-color: $primary_hover;
@@ -579,15 +526,6 @@ QToolButton[messageAction="true"]:hover {
 
 QToolButton[messageAction="true"]:focus { outline: 1px solid $primary; }
 
-QToolButton#msg_delete_btn {
-    color: $error;
-}
-
-QToolButton#msg_delete_btn:hover {
-    background-color: $danger_bg;
-    border-color: $danger_border;
-}
-
 QFrame#composer_revision_bar { background-color: $primary_hover; border: 1px solid $selected_border; }
 QLabel#composer_revision_label { color: $selected_text; background-color: transparent; }
 QToolButton#composer_revision_cancel { color: $muted; background-color: transparent; border: 1px solid transparent; }
@@ -610,9 +548,9 @@ QToolButton#tool_call_header[kind="subagent"] {
 }
 
 QPushButton#thinking_toggle:hover,
-QToolButton#thinking_toggle:hover,
 QPushButton#tool_call_header:hover,
-QToolButton#tool_call_header:hover {
+QPushButton#thinking_toggle:focus,
+QPushButton#tool_call_header:focus {
     background-color: $surface_hover;
     color: $selected_text;
 }
@@ -624,6 +562,8 @@ QToolButton#tool_call_header[expanded="true"] {
     background-color: $surface; color: $text;
     border-bottom: 1px solid $border;
 }
+
+QPushButton#tool_call_header[status="failed"] { color: $error; }
 
 QTextBrowser#tool_args_view,
 QTextBrowser#tool_result_view {
@@ -651,6 +591,23 @@ QFrame#task_card:hover {
 QFrame#tool_capsule_row:focus,
 QToolButton[compactCommand="true"]:focus { border-color: $primary; }
 QToolButton[compactCommand="true"]:checked { background-color: $selected; border-color: $selected_border; }
+/* Disabled state wins over primary, danger, hover, and toolbar object names.
+   Filled buttons keep a muted fill; flat tool buttons stay flat so a disabled
+   command never looks more prominent than an enabled one. */
+QToolButton:disabled, QToolButton[danger="true"]:disabled,
+QToolButton[compactCommand="true"]:disabled, QToolButton#toolbar_btn:disabled,
+QToolButton#toolbar_btn[danger="true"]:disabled, QToolButton#title_tool_btn:disabled {
+    background-color: transparent;
+    color: $disabled;
+    border-color: transparent;
+}
+QPushButton:disabled, QPushButton[primary="true"]:disabled, QPushButton[danger="true"]:disabled,
+QToolButton[primary="true"]:disabled,
+QToolButton#primary_action_btn:disabled, QToolButton#primary_action_btn[tone="danger"]:disabled {
+    background-color: $surface_alt;
+    color: $disabled;
+    border-color: $border;
+}
 QListWidget#capsule_list { border: none; background-color: $surface; outline: none; }
 #inspector_panel QWidget#collapse_body[expanded="true"] { border: none; }
 

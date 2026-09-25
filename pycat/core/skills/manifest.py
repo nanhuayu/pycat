@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import logging
 from importlib.resources import files
-from pycat.models.session_paths import resolve_project_data_root
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from pycat.core.config import get_global_subdir
 from pycat.core.content.markdown import parse_frontmatter
 from pycat.models.contracts.skill import Skill
+from pycat.models.session_paths import resolve_project_data_root
 
 logger = logging.getLogger(__name__)
 

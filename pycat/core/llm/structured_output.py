@@ -7,7 +7,7 @@ machine-readable envelope returned by an LLM.
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable
+from typing import Any
 
 
 def load_json_object(content: str) -> Any:
@@ -37,32 +37,6 @@ def load_json_object(content: str) -> Any:
             except Exception:
                 return None
     return None
-
-
-def one_line(value: Any, limit: int) -> str:
-    """Normalize a value to one whitespace-collapsed line with a hard cap."""
-    text = " ".join(str(value or "").split()).strip()
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 3)].rstrip() + "..."
-
-
-def string_list(value: Any, *, limit: int, item_limit: int) -> list[str]:
-    """Normalize JSON string/list fields into a deduplicated string list."""
-    if isinstance(value, str):
-        raw_items: Iterable[Any] = [value]
-    elif isinstance(value, (list, tuple)):
-        raw_items = value
-    else:
-        raw_items = []
-    items: list[str] = []
-    for item in raw_items:
-        text = one_line(item, item_limit)
-        if text and text not in items:
-            items.append(text)
-        if len(items) >= limit:
-            break
-    return items
 
 
 def confidence(value: Any, default: float = 0.0) -> float:

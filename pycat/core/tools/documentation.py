@@ -13,7 +13,6 @@ from pycat.models.contracts.tooling import (
     TOOL_CATEGORY_SORT_ORDER,
 )
 
-
 TOOL_CATALOG_START = "<!-- BEGIN GENERATED TOOL CATALOG -->"
 TOOL_CATALOG_END = "<!-- END GENERATED TOOL CATALOG -->"
 

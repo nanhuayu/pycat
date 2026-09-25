@@ -9,7 +9,6 @@ from pycat.core.tools.process import CommandExecutionRequest, CommandExecutor, i
 from pycat.models.contracts.config import ShellConfig
 from pycat.models.session_paths import resolve_session_root
 
-
 _FOREGROUND_WAIT_MAX = 600
 
 

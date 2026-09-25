@@ -1,11 +1,11 @@
 """Permission-aware file adapter for the shared OCR workflow."""
 from __future__ import annotations
 
-import mimetypes
 from pathlib import Path
 from typing import Any
 
-from pycat.core.content.ocr import OcrService, OcrError
+from pycat.core.content.mime import guess_mime
+from pycat.core.content.ocr import OcrError, OcrService
 from pycat.core.content.resolver import ResolvedContent, SessionContentResolver
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
 from pycat.models.contracts.content import ContentRef
@@ -32,6 +32,7 @@ class FileOcrTool(BaseTool):
         return (
             f"Extract text using the configured {'vision model service' if self.service.config.backend == 'vision' else 'local PP-OCR'} "
             "from an authorized image/PDF or current-session input/archive image reference. "
+            "For PDFs use file__read for native text first, then OCR relevant scanned pages or images. "
             "PDFs are processed in page batches and return next_page when more pages remain."
         )
 
@@ -130,7 +131,7 @@ class FileOcrTool(BaseTool):
 
         path = context.resolve_read_path(path_text.removeprefix("workspace:"))
         if context.files:
-            ref = ContentRef(id=str(path), name=path.name, mime=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            ref = ContentRef(id=str(path), name=path.name, mime=guess_mime(path.name),
                 size=0, digest="", ref=f"workspace:{path}", kind="workspace", workspace=context.work_dir)
             return SessionContentResolver(context.content_service).resolve_content(context.conversation, ref)
         if not path.is_file():
@@ -149,7 +150,7 @@ class FileOcrTool(BaseTool):
             ref = ContentRef(
                 id=relative,
                 name=name,
-                mime=mimetypes.guess_type(name)[0] or "application/octet-stream",
+                mime=guess_mime(name),
                 size=int(path.stat().st_size),
                 digest="",
                 ref=f"workspace:{relative}",
@@ -161,7 +162,7 @@ class FileOcrTool(BaseTool):
             ref = ContentRef(
                 id=local_id,
                 name=name,
-                mime=mimetypes.guess_type(name)[0] or "application/octet-stream",
+                mime=guess_mime(name),
                 size=int(path.stat().st_size),
                 digest="",
                 ref=f"file:{path.as_posix()}",

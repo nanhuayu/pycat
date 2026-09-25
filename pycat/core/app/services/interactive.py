@@ -6,14 +6,15 @@ files remain canonical; replay is a short-lived projection, not another store.
 from __future__ import annotations
 
 import asyncio
-from collections import deque
-from dataclasses import dataclass, field
 import hashlib
 import json
 import time
 import uuid
+from collections import deque
+from dataclasses import dataclass, field
 
 from pycat.core.app.serialization import json_value
+from pycat.core.app.services.commands import CommandExecution
 from pycat.core.content.references import latest_turn_deliveries
 from pycat.core.tools.base import ApprovalDecision
 from pycat.models.contracts.agent import InvalidRequestError, RunResult, RunStatus, RunStopReason
@@ -70,7 +71,6 @@ class InteractiveService:
     async def operation(self, name, arguments, *, request_id, source):
         if not self.workbench.catalog().get(name, {}).get('observed'):
             return await self.workbench.execute(name, arguments)
-        from pycat.core.app.services.commands import CommandExecution
         async def dispatch(approve, question):
             async def execute(handle):
                 value = await self.workbench.execute(name, arguments, approval_callback=approve)

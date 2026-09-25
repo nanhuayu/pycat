@@ -23,7 +23,6 @@ from PyQt6.QtWidgets import (
 
 from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
 
-
 # Settings use a small, stable geometry vocabulary.  Individual pages may
 # widen a resource selector, but should not invent another baseline height or
 # field width.

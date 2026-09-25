@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 import html
 import re
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import Any, Dict
 from urllib.parse import quote, urlparse, urlunparse
 

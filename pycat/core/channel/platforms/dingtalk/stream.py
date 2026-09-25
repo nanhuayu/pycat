@@ -11,7 +11,6 @@ from pycat.core.channel.connection import ChannelConnectionSnapshot, ChannelConn
 from pycat.core.channel.platforms.dingtalk.client import DINGTALK_API
 from pycat.core.channel.platforms.dingtalk.router import normalize_dingtalk_message
 
-
 BOT_TOPIC = '/v1.0/im/bot/messages/get'
 
 

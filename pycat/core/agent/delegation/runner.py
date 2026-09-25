@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Callable
 
-from pycat.core.state.artifact import ArtifactService
 from pycat.core.agent.delegation.subagent import build_child_run, run_child_agent
-from pycat.core.agent.run.state import AgentRunResult
 from pycat.core.agent.events.trace import attach_trace_to_tool_call, build_trace, publish_trace_event
-from pycat.models.contracts.agent import RunPolicy, SubtaskTraceStatus, RunEvent, RunResult, RunStatus, RunStopReason
-from pycat.core.tools.base import ToolControlAction, ToolResult
+from pycat.core.agent.run.state import AgentRunResult
 from pycat.core.observability.debug_trace import DebugTraceContext
+from pycat.core.state.artifact import ArtifactService
+from pycat.core.tools.base import ToolControlAction, ToolResult
+from pycat.models.contracts.agent import RunEvent, RunPolicy, RunResult, RunStatus, RunStopReason, SubtaskTraceStatus
 from pycat.models.conversation import Conversation, Message
 from pycat.models.provider import Provider
 

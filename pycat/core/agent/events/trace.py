@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pycat.models.contracts.agent import RunEvent, RunEventKind, SubtaskTrace
 from pycat.models.conversation import Message, get_tool_call_result, set_tool_call_result
-from pycat.models.contracts.agent import SubtaskTrace, RunEvent, RunEventKind
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,6 @@ def build_trace(payload: dict[str, Any]) -> SubtaskTrace:
             "context_refs": list(payload.get("context_refs") or []),
             "shared_context_policy": str(payload.get("shared_context_policy") or ""),
             "effective_max_turns": payload.get("effective_max_turns"),
-            "profile_max_turns": payload.get("profile_max_turns"),
         },
     )
 

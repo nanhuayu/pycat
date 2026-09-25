@@ -22,14 +22,16 @@ from urllib.parse import quote, urlencode, urljoin, urlparse
 
 import httpx
 
-from pycat.core.app.services.skill import (
-    MAX_IMPORT_FILE_BYTES, MAX_IMPORT_MEMBERS, MAX_IMPORT_TOTAL_BYTES, SkillService,
-)
 from pycat.core.app.services.extension_market import mcp_rows
+from pycat.core.app.services.skill import (
+    MAX_IMPORT_FILE_BYTES,
+    MAX_IMPORT_MEMBERS,
+    MAX_IMPORT_TOTAL_BYTES,
+    SkillService,
+)
 from pycat.core.persistence import atomic_write_text
 from pycat.core.skills.manage import SKILL_NAME_RE, is_link_or_reparse
 from pycat.models.contracts.mcp import McpServerConfig
-
 
 CATALOG = (
     {"id": "agent-browser", "kind": "mcp", "title": "浏览器 · agent-browser", "management": "managed",

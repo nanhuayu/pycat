@@ -10,14 +10,13 @@ from pathlib import Path
 from pycat.core.agent.policy import RunPolicyBuilder
 from pycat.core.agent.tooling.executor import ToolExecutor
 from pycat.core.agent.tooling.result_recorder import ToolResultRecorder
+from pycat.core.hosts.shell import available_shells
+from pycat.core.llm.model_selection import resolve_provider_model_ref, select_default_provider_model
 from pycat.core.tools.base import ToolResult
 from pycat.core.tools.manager import MCP_AVAILABLE
-from pycat.core.llm.model_selection import resolve_provider_model_ref, select_default_provider_model
-from pycat.models.conversation import Message
 from pycat.models.contracts.agent import ConversationBusyError, InvalidRequestError, PersistenceError, ToolCallResult
 from pycat.models.contracts.tooling import ToolAvailabilityContext
-from pycat.core.tools.shell import available_shells
-
+from pycat.models.conversation import Message
 
 _RUN_CONTROL_PREFIXES = ("agent__", "user__", "context__")
 

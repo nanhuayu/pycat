@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
 import json
 import os
+import uuid
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, urlunsplit
-import uuid
 
 import httpx
 
@@ -108,7 +108,8 @@ class RemoteClient:
                         if line.startswith('data: '):
                             data.append(line[6:])
                         elif not line and data:
-                            value = json.loads('\n'.join(data)); data.clear()
+                            value = json.loads('\n'.join(data))
+                            data.clear()
                             cursor, failures = value.get('cursor', cursor), 0
                             yield value
                             if value['type'] == 'final' or value['type'] == 'reset' and value['done']:

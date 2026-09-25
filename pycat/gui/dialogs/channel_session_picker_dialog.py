@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import QCoreApplication, QSize, Qt
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -12,8 +12,9 @@ from PyQt6.QtWidgets import (
 
 from pycat.core.app.services.channel import ChannelService
 from pycat.core.channel.sessions import ChannelConversationSummary
-from pycat.models.contracts.channel import ChannelConfig
+from pycat.gui.settings.components import build_dialog_button_box
 from pycat.gui.utils.icon_manager import Icons
+from pycat.models.contracts.channel import ChannelConfig
 
 
 class ChannelSessionChoiceItem(QListWidgetItem):
@@ -23,31 +24,29 @@ class ChannelSessionChoiceItem(QListWidgetItem):
         self.is_new = bool(is_new)
 
         if self.is_new:
-            self.setText("新建对话\n保存后自动创建频道主会话")
+            self.setText(QCoreApplication.translate('ChannelSessionPickerDialog', '新建对话\n保存后自动创建频道主会话'))
             self.setIcon(Icons.get(Icons.PLUS, scale_factor=0.95))
-            self.setToolTip("创建一个新的 PyCat 对话作为该频道的主绑定对话。")
+            self.setToolTip(QCoreApplication.translate('ChannelSessionPickerDialog', '创建一个新的 PyCat 对话作为该频道的主绑定对话。'))
             self.setSizeHint(QSize(0, 48))
             return
 
         assert summary is not None
         badges: list[str] = []
         if summary.is_primary_session:
-            badges.append("当前绑定")
+            badges.append(QCoreApplication.translate('ChannelSessionPickerDialog', '当前绑定'))
         if summary.is_manual_test_session:
-            badges.append("手动会话")
+            badges.append(QCoreApplication.translate('ChannelSessionPickerDialog', '手动会话'))
         if summary.is_bound_to_other_channel:
-            badges.append(f"已占用：{summary.bound_channel_name or summary.bound_channel_id}")
+            badges.append(QCoreApplication.translate('ChannelSessionPickerDialog', '已占用：{value}').format(value=summary.bound_channel_name or summary.bound_channel_id))
         if summary.participant_label:
             badges.append(summary.participant_label)
 
-        subtitle = " · ".join(badges) if badges else "可绑定"
+        subtitle = " · ".join(badges) if badges else QCoreApplication.translate('ChannelSessionPickerDialog', '可绑定')
         self.setText(f"{summary.title}\n{subtitle}")
         self.setIcon(Icons.get(Icons.CHAT, scale_factor=0.9))
         self.setSizeHint(QSize(0, 52))
         self.setToolTip(
-            f"会话 ID: {summary.conversation_id}\n"
-            f"更新时间: {int(summary.updated_at) if summary.updated_at else '-'}\n"
-            f"预览: {summary.preview or '-'}"
+            QCoreApplication.translate('ChannelSessionPickerDialog', '会话 ID: {conversation_id}\n更新时间: {value}\n预览: {value_}').format(conversation_id=summary.conversation_id, value=int(summary.updated_at) if summary.updated_at else '-', value_=summary.preview or '-')
         )
         if summary.is_bound_to_other_channel:
             self.setFlags(self.flags() & ~Qt.ItemFlag.ItemIsEnabled)
@@ -73,7 +72,7 @@ class ChannelSessionPickerDialog(QDialog):
         return str(self._selected_conversation_id or "").strip()
 
     def _setup_ui(self) -> None:
-        self.setWindowTitle("选择绑定对话")
+        self.setWindowTitle(QCoreApplication.translate('ChannelSessionPickerDialog', '选择绑定对话'))
         self.setModal(True)
         self.resize(520, 520)
 
@@ -81,7 +80,7 @@ class ChannelSessionPickerDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QLabel("默认新建对话；也可以选择现有 PyCat 对话作为主绑定。")
+        title = QLabel(QCoreApplication.translate('ChannelSessionPickerDialog', '默认新建对话；也可以选择现有 PyCat 对话作为主绑定。'))
         title.setWordWrap(True)
         title.setProperty("muted", True)
         layout.addWidget(title)
@@ -92,14 +91,7 @@ class ChannelSessionPickerDialog(QDialog):
         self.list_widget.itemDoubleClicked.connect(lambda _item: self.accept())
         layout.addWidget(self.list_widget, 1)
 
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        ok_btn = button_box.button(QDialogButtonBox.StandardButton.Ok)
-        if ok_btn is not None:
-            ok_btn.setText("使用选中对话")
-            ok_btn.setProperty("primary", True)
-        cancel_btn = button_box.button(QDialogButtonBox.StandardButton.Cancel)
-        if cancel_btn is not None:
-            cancel_btn.setText("取消")
+        button_box = build_dialog_button_box(self, accept_text=QCoreApplication.translate('ChannelSessionPickerDialog', '使用选中对话'), accept_button=QDialogButtonBox.StandardButton.Ok)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)

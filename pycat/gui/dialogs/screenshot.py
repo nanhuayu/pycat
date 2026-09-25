@@ -5,14 +5,27 @@ import base64
 import threading
 from datetime import datetime
 
-from PyQt6.QtCore import QBuffer, QIODevice, QPointF, QRect, QRectF, QSize, Qt, QThreadPool, QSignalBlocker, pyqtSignal
+from PyQt6.QtCore import QBuffer, QIODevice, QPointF, QRect, QRectF, QSignalBlocker, QSize, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QImage, QKeySequence, QPainter, QPainterPath, QPen, QShortcut
-from PyQt6.QtWidgets import QAbstractSpinBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QMenu, QSpinBox, QToolButton, QTabWidget, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QSpinBox,
+    QTabWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.runtime.screen_capture import crop_capture
-from pycat.gui.utils.theme import prepare_context_menu, configure_icon_button
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button, prepare_context_menu
 from pycat.gui.utils.window_geometry import apply_window_size
 from pycat.gui.widgets.content_viewer import ImageCanvas
 from pycat.gui.widgets.themed_line_edit import ThemedPlainTextEdit

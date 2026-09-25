@@ -5,7 +5,6 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
-
 TOOL_SUMMARY_PROJECTION_CHARS = 3_000
 
 
@@ -49,18 +48,6 @@ class ContentViewLabel:
             kind, desc = text.split(":", 1)
             return cls(kind.strip(), desc.strip())
         return cls(text.strip(), "")
-
-def range_desc(start: object, end: object) -> str:
-    return f"{int(start)}-{int(end)}"
-
-
-def line_view_value(start: object, end: object) -> str:
-    return ContentViewLabel("line", range_desc(start, end)).value
-
-
-def char_view_value(start: object, end: object) -> str:
-    return ContentViewLabel("char", range_desc(start, end)).value
-
 
 def exact_view_from_text(tool_name: str, text: str) -> ContentViewLabel:
     if str(tool_name or "") == "file__read":

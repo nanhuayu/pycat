@@ -6,19 +6,22 @@ into the parent trace sink.
 """
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
 import time
 import uuid
+from dataclasses import replace
 from typing import Any, Callable
 
-from pycat.core.agent.run.state import AgentRunContext, AgentRunParent, AgentRunResult
 from pycat.core.agent.events.trace import build_trace, publish_trace_event, record_trace_event, update_running_thinking
-from pycat.models.contracts.agent import RunPolicy, SubtaskTraceStatus, RunEvent, RunStatus, RunStopReason
+from pycat.core.agent.policy import RunPolicyBuilder
+from pycat.core.agent.run.state import AgentRunContext, AgentRunParent, AgentRunResult
+from pycat.core.llm.model_selection import resolve_model_target
+from pycat.core.modes.manager import ModeManager
 from pycat.core.observability.debug_trace import DebugTraceContext
+from pycat.models.contracts.agent import RunEvent, RunEventKind, RunPolicy, RunStatus, RunStopReason, SubtaskTraceStatus
+from pycat.models.contracts.session_state import SessionState
 from pycat.models.contracts.tooling import ToolSelectionPolicy
 from pycat.models.conversation import Conversation, Message
-from pycat.core.llm.model_selection import resolve_model_target
 from pycat.models.provider import Provider
 
 logger = logging.getLogger(__name__)
@@ -82,6 +85,8 @@ def _append_parent_context_notice(
         f"- shared_context_policy: {shared_context_policy or 'indexes_only'}",
         "- You may use state__artifact(action=\"list\"|\"read\") for shared artifacts and archive__list/archive__read for shared archived content.",
         "- Do not assume access to the parent's full conversation unless an explicit context_ref is provided.",
+        "- For a substantial investigation or report, create a session Artifact early, update the same draft at meaningful checkpoints, and return a concise conclusion plus its references. Short lookups need no document.",
+        "- A read-only workspace constraint prevents source edits; session Artifacts remain available for findings unless the user explicitly forbids saving documents. Do not copy full tool logs into them.",
     ]
     if context_refs:
         lines.append("- explicit context_refs:")
@@ -104,8 +109,8 @@ def _artifact_index_snapshot(artifacts: dict[str, Any]) -> dict[str, Any]:
     return index
 
 
-def _shared_parent_state(parent_conversation: Conversation, shared_context_policy: str) -> tuple[dict[str, Any], set[str], set[str]]:
-    """Return a read-oriented state snapshot for a child run plus baseline ids."""
+def _shared_parent_state(parent_conversation: Conversation, shared_context_policy: str) -> tuple[dict[str, Any], dict[str, tuple[str, str]], set[str]]:
+    """Return a read-oriented child snapshot plus baseline artifact versions and archive ids."""
     try:
         source = parent_conversation.get_state().to_dict()
     except Exception:
@@ -115,7 +120,10 @@ def _shared_parent_state(parent_conversation: Conversation, shared_context_polic
 
     artifacts = dict(source.get("artifacts") or {}) if isinstance(source.get("artifacts"), dict) else {}
     archive_index = dict(source.get("archive_index") or {}) if isinstance(source.get("archive_index"), dict) else {}
-    baseline_artifacts = {str(key) for key in artifacts.keys()}
+    baseline_artifacts = {
+        str(key): (str(item.get("content_path") or ""), str(item.get("content_digest") or ""))
+        for key, item in artifacts.items()
+    }
     baseline_archives = {str(key) for key in archive_index.keys()}
 
     policy = str(shared_context_policy or "indexes_only").strip().lower() or "indexes_only"
@@ -143,29 +151,29 @@ def _apply_shared_parent_state(
     shared_context_policy: str,
 ) -> None:
     try:
-        from pycat.models.contracts.session_state import SessionState
 
         shared_state, baseline_artifacts, baseline_archives = _shared_parent_state(
             parent_conversation,
             shared_context_policy,
         )
         child_conversation.set_state(SessionState.from_dict(shared_state))
-        request["_parent_artifact_names"] = sorted(baseline_artifacts)
+        request["_parent_artifact_versions"] = baseline_artifacts
         request["_parent_archive_ids"] = sorted(baseline_archives)
     except Exception as exc:
         logger.debug("Failed to copy parent context indexes for nested agent: %s", exc)
 
 
-def _collect_produced_refs(run: AgentRunContext) -> list[dict[str, Any]]:
+def _collect_produced_refs(run: AgentRunContext, *, include_archives: bool = True) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
     metadata = dict(run.metadata or {})
-    baseline_artifacts = {str(item) for item in metadata.get("_parent_artifact_names") or []}
+    baseline_artifacts = metadata.get("_parent_artifact_versions") or {}
     baseline_archives = {str(item) for item in metadata.get("_parent_archive_ids") or []}
     try:
         state = run.conversation.get_state()
         for name, artifact in (state.artifacts or {}).items():
             artifact_name = str(name or "").strip()
-            if not artifact_name or artifact_name in baseline_artifacts:
+            version = (str(artifact.content_path or ""), str(artifact.content_digest or ""))
+            if not artifact_name or version == baseline_artifacts.get(artifact_name):
                 continue
             refs.append(
                 {
@@ -176,11 +184,12 @@ def _collect_produced_refs(run: AgentRunContext) -> list[dict[str, Any]]:
                     "status": str(getattr(artifact, "status", "") or ""),
                     "path": str(getattr(artifact, "content_path", "") or ""),
                     "source_session_id": str(getattr(run.conversation, "id", "") or ""),
+                    "workspace": str(run.conversation.work_dir or ""),
                     "digest": str(getattr(artifact, "content_digest", "") or ""),
                     "chars": int(getattr(artifact, "content_chars", 0) or 0),
                 }
             )
-        for content_id, record in (state.archive_index or {}).items():
+        for content_id, record in (state.archive_index if include_archives else {}).items():
             archive_id = str(content_id or "").strip()
             if not archive_id or archive_id in baseline_archives:
                 continue
@@ -205,9 +214,6 @@ def _sync_trace_runtime_metadata(trace, run: AgentRunContext) -> None:
     metadata.setdefault("mode", str(run.mode or ""))
     metadata.setdefault("child_session_id", str(getattr(run.conversation, "id", "") or ""))
     metadata.setdefault("parent_session_id", str((run.metadata or {}).get("parent_session_id") or ""))
-    profile_max_turns = _positive_int((run.metadata or {}).get("profile_max_turns"))
-    if profile_max_turns is not None:
-        metadata["profile_max_turns"] = profile_max_turns
     effective_max_turns = _positive_int(getattr(run.policy, "max_turns", None))
     if effective_max_turns is not None:
         metadata["effective_max_turns"] = effective_max_turns
@@ -236,8 +242,6 @@ def build_child_run(
     app_settings: dict[str, Any] | None = None,
     providers: list[Provider] | tuple[Provider, ...] = (),
 ) -> AgentRunContext:
-    from pycat.core.modes.manager import ModeManager
-    from pycat.core.agent.policy import RunPolicyBuilder
 
     request = dict(payload or {})
     request.setdefault("id", f"subtask-{uuid.uuid4().hex[:12]}")
@@ -247,7 +251,6 @@ def build_child_run(
     mode_cfg = mode_manager.find(mode)
     if mode_cfg is None or not mode_cfg.is_subagent_profile():
         raise ValueError(f"Unknown sub-agent profile: {mode}")
-    profile_max_turns = _positive_int(getattr(mode_cfg, "max_turns", None))
 
     shared_context_policy = str(
         request.get("shared_context_policy")
@@ -260,8 +263,6 @@ def build_child_run(
     request["parent_session_id"] = parent_session_id
     request["shared_context_policy"] = shared_context_policy
     request["profile"] = mode
-    if profile_max_turns is not None:
-        request["profile_max_turns"] = profile_max_turns
     message = _append_parent_context_notice(
         str(request.get("message") or ""),
         parent_session_id=parent_session_id,
@@ -311,6 +312,7 @@ def build_child_run(
         filesystem_scope=base_policy.filesystem_scope if base_policy is not None else None,
         mode_manager=mode_manager,
         source="sub_task",
+        parent_policy=base_policy,
     )
     updates: dict[str, Any] = {}
     selection = resolve_model_target(
@@ -410,7 +412,18 @@ async def run_child_agent(
                 event.parent_tool_call_id = run.parent.tool_call_id
                 event.root_tool_call_id = run.parent.root_tool_call_id or run.parent.tool_call_id
             record_trace_event(trace, event)
-            publish(str(getattr(event, "detail", "") or "Agent run updated."))
+            artifacts_changed = (
+                event.kind == RunEventKind.TOOL_END and isinstance(event.data, dict)
+                and (
+                    event.data.get("tool_name") == "agent__run"
+                    or (event.data.get("tool_name") == "state__artifact" and not event.data.get("is_error"))
+                )
+            )
+            if artifacts_changed:
+                # Refresh only on committed tool results, not on every text/thinking update.
+                # A failed nested task may still have imported valid partial artifacts.
+                trace.metadata["produced_refs"] = _collect_produced_refs(run, include_archives=False)
+            publish(str(getattr(event, "detail", "") or "Agent run updated."), force=artifacts_changed)
         except Exception as exc:
             logger.debug("Failed to record nested agent event: %s", exc)
 
@@ -459,9 +472,7 @@ async def run_child_agent(
     interrupted = result.status == RunStatus.INTERRUPTED
     stop_reason = getattr(result, "stop_reason", RunStopReason.COMPLETED)
     max_turns_interruption = interrupted and stop_reason == RunStopReason.MAX_TURNS
-    produced_refs = _collect_produced_refs(run)
-    if produced_refs:
-        trace.metadata["produced_refs"] = produced_refs
+    trace.metadata["produced_refs"] = _collect_produced_refs(run)
     if interrupted:
         trace.metadata.update(
             {

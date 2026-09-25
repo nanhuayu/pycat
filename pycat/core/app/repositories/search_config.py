@@ -6,7 +6,6 @@ from pathlib import Path
 
 from pycat.models.search_config import SearchConfig
 
-
 logger = logging.getLogger(__name__)
 
 

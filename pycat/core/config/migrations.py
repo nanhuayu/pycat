@@ -1,14 +1,21 @@
-"""One-way persisted configuration migration to the v6 runtime contracts."""
+"""One-way persisted configuration migration to the v8 runtime contracts."""
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
 from typing import Any, Mapping
 
 from pycat.models.contracts.config import DEFAULT_ACCENT, SUPPORTED_ACCENTS, AgentRuntimeConfig
 from pycat.models.contracts.tooling import TOOL_CATEGORIES
 
+SCHEMA_VERSION = 8
 
-SCHEMA_VERSION = 6
+# Exact previous builtin prompts only. User-authored prompts remain untouched.
+_V6_KNOWLEDGE_PROMPTS = {
+    "memory_review": "6bde12edc7d255d5b3d3efed2f39a3d91d23fe9a3ba82a842c92f818e0b5dced",
+    "wiki_synthesize": "398af039882fd00ebe5202215a942a383014a60f102f16b9591e39aa0730a22a",
+}
+_V7_MEMORY_REVIEW_PROMPT = "9edcd729d095bde46201bafe0748f673a93f14ef85d044b92017f204d70f367f"
 
 _CATEGORY_MAP = {
     "read": "read",
@@ -68,25 +75,6 @@ def migrate_tool_name(value: Any) -> str:
     if not name or name in _REMOVED_TOOLS:
         return ""
     return _TOOL_NAME_MAP.get(name, name)
-
-
-def migrate_tool_selection_payload(data: Mapping[str, Any] | None) -> dict[str, Any]:
-    payload = dict(data) if isinstance(data, Mapping) else {}
-    categories = payload.get("allowed_categories")
-    tools = payload.get("allowed_tools")
-    sources = payload.get("allowed_sources")
-    return {
-        "allowed_categories": sorted({migrate_category(item) for item in categories or ()})
-        if categories is not None
-        else None,
-        "allowed_tools": sorted({name for item in tools or () if (name := migrate_tool_name(item))})
-        if tools is not None
-        else None,
-        "allowed_sources": sorted({str(item).strip() for item in sources or () if str(item).strip()})
-        if sources is not None
-        else None,
-        "require_available": bool(payload.get("require_available", True)),
-    }
 
 
 def _policy(data: Any) -> dict[str, bool]:
@@ -186,6 +174,20 @@ def migrate_capabilities_payload(data: Mapping[str, Any] | None) -> tuple[dict[s
         if capability_id == "memory_review" and int(payload.get("schema_version") or 0) < 6:
             for key in ("prompt", "system_prompt", "systemPrompt", "input_schema", "inputSchema", "output_schema", "outputSchema"):
                 item.pop(key, None)
+        if capability_id in _V6_KNOWLEDGE_PROMPTS and int(payload.get("schema_version") or 0) < 7:
+            prompt = str(item.get("prompt") or item.get("system_prompt") or item.get("systemPrompt") or "")
+            if not prompt or hashlib.sha256(prompt.encode()).hexdigest() == _V6_KNOWLEDGE_PROMPTS[capability_id]:
+                for key in ("prompt", "system_prompt", "systemPrompt"):
+                    item.pop(key, None)
+                if item.get("max_tokens") == 2000:
+                    item.pop("max_tokens")
+            for key in ("output_schema", "outputSchema"):
+                item.pop(key, None)
+        if capability_id == "memory_review" and int(payload.get("schema_version") or 0) < 8:
+            prompt = str(item.get("prompt") or item.get("system_prompt") or item.get("systemPrompt") or "")
+            if hashlib.sha256(prompt.encode()).hexdigest() == _V7_MEMORY_REVIEW_PROMPT:
+                for key in ("prompt", "system_prompt", "systemPrompt"):
+                    item.pop(key, None)
         categories = [migrate_category(value) for value in item.get("allowed_tool_categories") or []]
         raw_runtime = str(
             item.get("runtime")
@@ -205,7 +207,7 @@ def migrate_capabilities_payload(data: Mapping[str, Any] | None) -> tuple[dict[s
         exposure = str(item.get("exposure") or "").strip().lower()
         if exposure not in {"internal", "tool"}:
             exposure = "internal" if visibility == "internal" or capability_id in {
-                "prompt_optimize", "title", "compress", "memory_review",
+                "prompt_optimize", "title", "compress", "memory_review", "wiki_synthesize",
             } else "tool"
         enabled = bool(item.get("enabled", visibility != "hidden"))
         capabilities.append(
@@ -416,5 +418,7 @@ def migrate_settings_payload(data: Mapping[str, Any] | None) -> tuple[dict[str, 
     payload.pop("prompt_optimizer", None)
     payload.pop("prompt_optimizer_model", None)
     payload.pop("shell_backend", None)
+    payload.pop("memory_char_limit", None)
+    payload.pop("user_memory_char_limit", None)
     payload["schema_version"] = SCHEMA_VERSION
     return payload, profiles

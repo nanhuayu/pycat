@@ -9,22 +9,25 @@ import asyncio
 import codecs
 import inspect
 import types
-from typing import get_args, get_origin, get_type_hints, Union
 from pathlib import Path
+from typing import Union, get_args, get_origin, get_type_hints
 
-from pycat.core.app.serialization import json_value, redact, merge_draft
-from pycat.models.provider import Provider, SUPPORTED_API_TYPES, api_type_label
-from pycat.models.model_profile import reasoning_codecs_for_provider, MODEL_INPUT_MODALITIES
-from pycat.models.search_config import SearchConfig
-from pycat.models.contracts.mcp import McpServerConfig
+from pycat.core.agent.policy import RunPolicyBuilder
+from pycat.core.app.serialization import json_value, merge_draft, redact
 from pycat.core.app.services.search import SearchService
-from pycat.core.llm.token_budget import build_token_usage_snapshot
+from pycat.core.capabilities import default_capabilities_config
+from pycat.core.commands.mentions import MentionCandidate, MentionKind, MentionResolver, utf16_to_python
 from pycat.core.content.resolver import SessionContentResolver
-from pycat.models.contracts.agent import InvalidRequestError, ConversationBusyError
+from pycat.core.llm.token_budget import build_token_usage_snapshot
+from pycat.core.version import __version__
+from pycat.models.contracts.agent import ConversationBusyError, InvalidRequestError
 from pycat.models.contracts.config import AppConfig
 from pycat.models.contracts.content import ContentRef
+from pycat.models.contracts.mcp import McpServerConfig
+from pycat.models.model_profile import MODEL_INPUT_MODALITIES, reasoning_codecs_for_provider
 from pycat.models.model_ref import build_model_ref
-from pycat.core.commands.mentions import MentionCandidate, MentionKind, MentionResolver, utf16_to_python
+from pycat.models.provider import SUPPORTED_API_TYPES, Provider, api_type_label
+from pycat.models.search_config import SearchConfig
 
 
 def operation(name, label, *, observed=False):
@@ -273,7 +276,6 @@ class WorkbenchService:
 
     @operation('config.schema', '设置选项')
     def configuration_schema(self):
-        from pycat.core.capabilities import default_capabilities_config
         return {'api_types': [{'value': key, 'label': api_type_label(key)} for key in sorted(SUPPORTED_API_TYPES)],
                 'reasoning_codecs': {key: reasoning_codecs_for_provider(key) for key in SUPPORTED_API_TYPES},
                 'input_modalities': sorted(MODEL_INPUT_MODALITIES),
@@ -513,7 +515,6 @@ class WorkbenchService:
 
     @operation('skills.evaluate', '评测技能候选', observed=True)
     async def skill_evaluate(self, session: str, proposal: str, scope: str, suite: list):
-        from pycat.core.agent.policy import RunPolicyBuilder
         conversation = self._session(session)
         provider = self._provider(conversation.provider_id)
         settings = self.settings.load()
@@ -647,14 +648,12 @@ class WorkbenchService:
         current = self.settings.view()
         if current['revision'] != expected_revision:
             raise InvalidRequestError('Configuration changed; reload before saving.')
-        from pycat.core.app.serialization import merge_draft
         existing = json_value(AppConfig.from_dict(self.settings.load()).channels)
         prepared = self.channels.prepare_for_save(merge_draft(existing, channels))
         return self.settings.update({'app_settings': {'channels': json_value(prepared.channels)}}, expected_revision=expected_revision)
 
     @operation('updates.check', '检查更新')
     def check_update(self):
-        from pycat.core.version import __version__
         return self.release.check(current_version=__version__)
 
     @operation('doctor', '诊断')

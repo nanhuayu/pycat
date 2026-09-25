@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -8,6 +10,9 @@ from pycat.models.contracts.session_state.artifact import SessionArtifact
 from pycat.models.contracts.session_state.todo import RECENT_COMPLETED_TODO_LIMIT, TodoDigest, TodoItem
 from pycat.models.contracts.session_state.work_trace import WorkTrace
 
+
+def _short_sha1(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8", errors="replace")).hexdigest()[:16]
 
 @dataclass
 class SessionState:
@@ -88,6 +93,32 @@ class SessionState:
             state_version=int(data.get('state_version', 0) or 0),
             last_maintenance_seq=int(data.get('last_maintenance_seq', 0) or 0),
         )
+
+    def checkpoint(self) -> Dict[str, Any]:
+        """Bounded fingerprint of this state for message diagnostics."""
+        archive_digest = _short_sha1(json.dumps(
+            [
+                {
+                    "id": getattr(record, "id", ""),
+                    "digest": getattr(record, "digest", ""),
+                    "updated_seq": getattr(record, "updated_seq", 0),
+                }
+                for record in (self.archive_index or {}).values()
+            ],
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ))
+        return {
+            "_snapshot_kind": "checkpoint",
+            "state_version": int(self.state_version or 0),
+            "last_updated_seq": int(self.last_updated_seq or 0),
+            "last_maintenance_seq": int(self.last_maintenance_seq or 0),
+            "summary_digest": _short_sha1(str(self.summary or "")),
+            "archive_count": len(self.archive_index or {}),
+            "archive_digest": archive_digest,
+            "work_trace_updated_seq": int(getattr(self.work_trace, "updated_seq", 0) or 0),
+        }
 
     @staticmethod
     def _archive_entry_to_dict(record: object) -> Dict[str, Any]:

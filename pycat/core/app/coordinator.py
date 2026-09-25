@@ -135,10 +135,6 @@ class AppCoordinator:
         )
         return conversation
 
-    def apply_toggle(self, conversation: Conversation, *, key: str, value: bool) -> Conversation:
-        self._conv_service.set_setting(conversation, key, bool(value))
-        return conversation
-
     def apply_mode(self, conversation: Conversation, mode_slug: str) -> Conversation:
         self._conv_service.set_mode(conversation, mode_slug)
         return conversation

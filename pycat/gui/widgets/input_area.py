@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
     QFileDialog,
@@ -22,14 +22,15 @@ from pycat.core.commands.types import CommandAction, CommandResult, ShellInvocat
 from pycat.core.content.attachments import extract_composer_text
 from pycat.core.context.sections import extract_user_request
 from pycat.core.modes.manager import ModeManager
+from pycat.gui.shortcuts import shortcut_sequence, validate_shortcuts
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.image_utils import extract_attachment_sources_from_mime, is_supported_image_path
+from pycat.gui.utils.theme import configure_icon_button
 
 # Extracted sub-components
 from pycat.gui.widgets.input.attachment_strip import AttachmentPreviewStrip
 from pycat.gui.widgets.input.composer_toolbar import ComposerToolbar
 from pycat.gui.widgets.input.text_editor import MessageTextEdit
-from pycat.gui.shortcuts import shortcut_sequence, validate_shortcuts
 from pycat.models.model_ref import build_model_ref, provider_matches_name, split_model_ref
 
 logger = logging.getLogger(__name__)
@@ -84,12 +85,18 @@ class InputArea(QWidget):
             overrides = {}
         self.text_input.shortcut_overrides = overrides
         sequence = shortcut_sequence("send_message", overrides)
-        self.send_hint.setText(f"· {sequence} 发送" if sequence else "")
+        self.send_hint.setText(QCoreApplication.translate('InputArea', '· {sequence} 发送').format(sequence=sequence) if sequence else "")
         self.send_hint.setVisible(bool(sequence))
         self.toolbar.set_send_shortcut(sequence)
 
     def refresh_theme(self) -> None:
         self.toolbar.refresh_theme()
+        self.shell_button.setIcon(Icons.get_muted(Icons.TERMINAL))
+        self.revision_cancel_btn.setIcon(Icons.get_muted(Icons.XMARK))
+
+    def set_running_shell_count(self, count: int) -> None:
+        self.shell_button.setToolTip(
+            QCoreApplication.translate('InputArea', "打开 Shell · {count} 个运行中").format(count=count))
 
     def _bang_command_behavior(self) -> str:
         try:
@@ -163,7 +170,7 @@ class InputArea(QWidget):
         self.revision_cancel_btn.setIcon(Icons.get_muted(Icons.XMARK))
         self.revision_cancel_btn.setIconSize(QSize(16, 16))
         self.revision_cancel_btn.setFixedSize(24, 24)
-        self.revision_cancel_btn.setToolTip("取消编辑")
+        self.revision_cancel_btn.setToolTip(QCoreApplication.translate('InputArea', "取消编辑"))
         self.revision_cancel_btn.clicked.connect(self.cancel_revision)
         revision_layout.addWidget(self.revision_cancel_btn)
         self.revision_bar.setVisible(False)
@@ -185,7 +192,7 @@ class InputArea(QWidget):
         # Text input
         self.text_input = MessageTextEdit()
         self.text_input.setObjectName("message_input")
-        self.text_input.setPlaceholderText(self._command_registry.build_input_placeholder())
+        self.text_input.setPlaceholderText(self._input_placeholder())
         self.text_input.setMinimumHeight(40)
         self.text_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.text_input.configure_command_registry(self._command_registry, self._build_command_context)
@@ -221,13 +228,12 @@ class InputArea(QWidget):
         meta.addStretch()
         self.shell_button = QToolButton()
         self.shell_button.setObjectName("composer_shell_button")
-        self.shell_button.setIcon(Icons.get_muted(Icons.TERMINAL))
-        self.shell_button.setToolTip("打开当前会话的 Shell")
-        self.shell_button.setAutoRaise(True)
+        configure_icon_button(self.shell_button, Icons.get_muted(Icons.TERMINAL),
+                              QCoreApplication.translate('InputArea', "打开当前会话的 Shell"))
         self.shell_button.clicked.connect(self.shell_requested.emit)
         meta.addWidget(self.shell_button)
         meta.addWidget(self.context_usage_btn)
-        hint = self.send_hint = QLabel(f"· {shortcut_sequence('send_message')} 发送")
+        hint = self.send_hint = QLabel(QCoreApplication.translate('InputArea', '· {value} 发送').format(value=shortcut_sequence('send_message')))
         hint.setProperty("muted", True)
         meta.addWidget(hint)
         layout.addLayout(meta)
@@ -238,6 +244,7 @@ class InputArea(QWidget):
         for m in self._mode_manager.list_ui_modes():
             self.mode_combo.addItem(m.name, m.slug)
 
+        self.set_mode_selection('agent')
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
     def resizeEvent(self, event):
@@ -256,13 +263,18 @@ class InputArea(QWidget):
         self.toolbar.set_streaming_state(self._is_streaming)
         self.text_input.setAcceptDrops(not is_streaming)
         self.text_input.setPlaceholderText(
-            "追加要求，将在当前步骤完成后处理"
+            QCoreApplication.translate('InputArea', "追加要求，将在当前步骤完成后处理")
             if is_streaming
-            else self._command_registry.build_input_placeholder()
+            else self._input_placeholder()
         )
         self._sync_interaction_state()
         if self.text_input.isEnabled():
             self.text_input.setFocus()
+
+    def _input_placeholder(self) -> str:
+        hints = ", ".join(self._command_registry.get_placeholder_hints(limit=4))
+        return QCoreApplication.translate("InputArea", "输入消息… ({commands}@文件或 Agent, /skill-name)").format(
+            commands=hints + ", " if hints else "")
 
     def set_context_busy(self, busy: bool) -> None:
         self._context_busy = bool(busy)
@@ -458,8 +470,8 @@ class InputArea(QWidget):
         if self._is_streaming:
             return
         file_paths, _ = QFileDialog.getOpenFileNames(
-            self, '添加文件', '',
-            '所有文件 (*);;Word/Excel (*.doc *.docx *.docm *.dotx *.dotm *.xls *.xlsx *.xlsm *.xltx *.xltm);;图片 (*.png *.jpg *.jpeg *.gif *.webp)'
+            self, QCoreApplication.translate('InputArea', '添加文件'), '',
+            QCoreApplication.translate('InputArea', '所有文件 (*);;Word/Excel (*.doc *.docx *.docm *.dotx *.dotm *.xls *.xlsx *.xlsm *.xltx *.xltm);;图片 (*.png *.jpg *.jpeg *.gif *.webp)')
         )
         for file_path in file_paths:
             self._add_attachment_file(file_path)
@@ -594,6 +606,15 @@ class InputArea(QWidget):
         if result is None:
             return False
 
+        if result.action == CommandAction.BACKGROUND:
+            if self._attachments or self.text_input.bound_mentions():
+                self.slash_command_result.emit(CommandResult(CommandAction.DISPLAY,
+                    display_text=QCoreApplication.translate('InputArea', '请把必要资料写入任务简报。独立任务暂不接收附件或 @ 引用，草稿已保留。')))
+            else:
+                # Clear only after durable acceptance, not when parsing a command.
+                self.slash_command_result.emit(result)
+            return True
+
         self.text_input.remember_history_entry(content)
         self.text_input.clear()
         self.slash_command_result.emit(result)
@@ -656,8 +677,7 @@ class InputArea(QWidget):
                 mime=str(item.get("mime") or ""),
             )
         self.revision_label.setText(
-            f"编辑第 {max(1, int(turn_number or 1))} 轮 · "
-            f"发送后将移除后续 {max(0, int(following_turns or 0))} 轮"
+            QCoreApplication.translate('InputArea', '编辑第 {value} 轮 · 发送后将移除后续 {value_} 轮').format(value=max(1, int(turn_number or 1)), value_=max(0, int(following_turns or 0)))
         )
         self._update_revision_bar()
         self.toolbar.set_revision_state(True)

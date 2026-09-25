@@ -5,10 +5,11 @@ import asyncio
 import logging
 import re
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional
+
+import httpx
 
 from pycat.models.contracts.agent import RetryPolicy
-
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,27 @@ _TRANSIENT_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
 
 def classify_error(error: str | Exception) -> ErrorKind:
     """Classify an LLM/HTTP error into a retry category."""
-    msg = str(error)
+    # Display wrappers can hide empty/localized transport messages. Follow the
+    # original cause instead of relying on English exception text alone.
+    current = error
+    seen: set[int] = set()
+    messages: list[str] = []
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        messages.append(str(current))
+        if isinstance(current, httpx.HTTPStatusError):
+            status = current.response.status_code
+            if status == 429:
+                return ErrorKind.RATE_LIMIT
+            if status in {401, 403}:
+                return ErrorKind.AUTH
+            if 500 <= status < 600:
+                return ErrorKind.TRANSIENT
+        if isinstance(current, (httpx.TimeoutException, httpx.NetworkError,
+                                httpx.RemoteProtocolError, ConnectionError, TimeoutError)):
+            return ErrorKind.TRANSIENT
+        current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
+    msg = "\n".join(messages) if messages else str(error)
     for p in _RATE_PATTERNS:
         if p.search(msg):
             return ErrorKind.RATE_LIMIT
@@ -79,7 +100,7 @@ async def retry_with_backoff(
     coro_factory,
     *,
     policy: RetryPolicy,
-    on_retry: Optional[callable] = None,
+    on_retry: Callable[[int, float, Exception], None] | None = None,
 ):
     """Run an async callable with retry + exponential backoff.
 
@@ -103,7 +124,7 @@ async def retry_with_backoff(
             delay = compute_delay(policy, attempt, kind)
             if on_retry:
                 try:
-                    on_retry(attempt + 1, delay, str(exc))
+                    on_retry(attempt + 1, delay, exc)
                 except Exception as callback_exc:
                     logger.debug("Retry callback failed on attempt %s: %s", attempt + 1, callback_exc)
 

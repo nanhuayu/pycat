@@ -3,16 +3,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import sqlite3
-import logging
 import tempfile
 import threading
 from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from pycat.core.content.markdown import parse_frontmatter, render_frontmatter
 from pycat.core.persistence import atomic_write_text, exclusive_file_lock
 from pycat.core.security.threats import first_threat_message
 from pycat.models.contracts.content import ContentRef
@@ -22,7 +23,7 @@ from pycat.models.workspace import workspace_identity
 
 _HEADER = re.compile(r"\A<!-- pycat-wiki-v1 (.*?) -->\r?\n", re.DOTALL)
 _ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,79}\Z")
-MAX_PAGE_BYTES = 64 * 1024
+MAX_PAGE_BYTES = 1024 * 1024
 logger = logging.getLogger(__name__)
 
 
@@ -50,25 +51,56 @@ class WikiService:
     @staticmethod
     def _read(path: Path) -> dict:
         if path.stat().st_size > MAX_PAGE_BYTES:
-            raise ValueError("knowledge page exceeds 64 KiB")
+            raise ValueError("knowledge page exceeds 1 MiB")
         raw = path.read_bytes()
         text = raw.decode("utf-8-sig")
-        match = _HEADER.match(text)
-        if not match:
-            raise ValueError("knowledge metadata is unreadable")
-        data = json.loads(match[1])
-        if not isinstance(data, dict) or data.get("id") != path.stem:
-            raise ValueError("knowledge page identity mismatch")
-        if any(not isinstance(data.get(key), str) or not data[key] for key in ("title", "summary")) or not isinstance(data.get("sources"), list):
-            raise ValueError("knowledge metadata fields are unreadable")
-        if len(data["sources"]) > 16 or any(not isinstance(source, dict) for source in data["sources"]):
-            raise ValueError("knowledge sources are unreadable")
-        return {**data, "body": text[match.end():], "digest": hashlib.sha256(raw).hexdigest()}
+        legacy = _HEADER.match(text)
+        if legacy:
+            # Deserialize old documents here only; every publication writes OKF.
+            data = json.loads(legacy[1])
+            if not isinstance(data, dict) or data.get("id") != path.stem:
+                raise ValueError("knowledge page identity mismatch")
+            if any(not isinstance(data.get(key), str) or not data[key] for key in ("title", "summary")) or not isinstance(data.get("sources"), list):
+                raise ValueError("knowledge metadata fields are unreadable")
+            data["validation"] = "unverified" if data.get("validation") == "supported" else data.get("validation", "unverified")
+            return {**data, "body": text[legacy.end():], "digest": hashlib.sha256(raw).hexdigest(), "_frontmatter": {}}
+        metadata, body = parse_frontmatter(text, strict=True)
+        if not isinstance(metadata.get("type"), str) or not metadata["type"].strip():
+            raise ValueError("knowledge requires OKF frontmatter with a type")
+        sources = metadata.get("sources", [])
+        if not isinstance(sources, list) or any(not isinstance(ref, dict) or not ref.get("resource") for ref in sources):
+            raise ValueError("knowledge sources require resource references")
+        extension = metadata.get("pycat") or {}
+        generated = metadata.get("generated") or {}
+        verified = metadata.get("verified") or []
+        if not isinstance(extension, dict) or not isinstance(generated, dict) or not isinstance(verified, (list, dict)):
+            raise ValueError("knowledge provenance must use mappings and verification events")
+        verified = [verified] if isinstance(verified, dict) else verified
+        trust = "unverified"
+        if verified:
+            trust = "human-reviewed" if any(str(item.get("by", "")).startswith("human:") for item in verified if isinstance(item, dict)) else "machine-confirmed"
+        return {"id": path.stem, "title": str(metadata.get("title") or path.stem),
+                "summary": str(metadata.get("description") or ""), "body": body,
+                "sources": [dict(ref.get("pycat") or ref) for ref in sources],
+                "validation": extension.get("validation") or trust, "trust": trust,
+                "status": metadata.get("status", "stable"), "updated_at": generated.get("at", ""),
+                "operation_id": extension.get("operation_id", ""), "_frontmatter": metadata,
+                "digest": hashlib.sha256(raw).hexdigest()}
+
+    @staticmethod
+    def _source_metadata(source: dict) -> dict:
+        if source.get("resource") and not source.get("kind"):
+            return dict(source)
+        owner = str(source.get("conversation_id") or "")
+        resource = f"pycat:{source.get('kind', 'archive')}/{owner}/{source.get('id', '')}"
+        return {"resource": resource, "pycat": source}
 
     def _source_errors(self, work_dir: str, sources: list[dict]) -> list[str]:
         errors = []
         conversation = Conversation(work_dir=work_dir)
         for source in sources:
+            if source.get("resource") and not source.get("kind"):
+                continue
             try:
                 ref = ContentRef.from_dict(source)
                 if not ref.digest or not ref.workspace:
@@ -82,7 +114,7 @@ class WikiService:
 
     @staticmethod
     def _source_keys(sources) -> set[tuple]:
-        return {(str(ref.get("kind")), str(ref.get("conversation_id")), str(ref.get("id")), str(ref.get("digest")), str(ref.get("locator", "")))
+        return {tuple(str(ref.get(key, "")) for key in ("kind", "workspace", "conversation_id", "id", "digest", "locator", "resource", "ref"))
                 for ref in sources}
 
     def _index(self, work_dir: str, *, reindex: bool = False) -> list[dict]:
@@ -118,7 +150,7 @@ class WikiService:
         try:
             db = sqlite3.connect(path, timeout=1)
             try:
-                version = db.execute("SELECT value FROM metadata WHERE name='stamp-v1'").fetchone()
+                version = db.execute("SELECT value FROM metadata WHERE name='stamp-v2'").fetchone()
                 if version and version[0] == str(stamp):
                     return [json.loads(row[0]) for row in db.execute("SELECT payload FROM pages")]
             finally:
@@ -149,7 +181,7 @@ class WikiService:
                         db.execute("INSERT OR REPLACE INTO pages VALUES(?,?)", (page["id"], json.dumps(page, ensure_ascii=False)))
                     if deleted:
                         db.execute("DELETE FROM pages WHERE id=?", (deleted,))
-                    db.execute("INSERT OR REPLACE INTO metadata VALUES('stamp-v1',?)", (str(stamp),))
+                    db.execute("INSERT OR REPLACE INTO metadata VALUES('stamp-v2',?)", (str(stamp),))
             finally:
                 db.close()
             if temporary is not None:
@@ -180,7 +212,7 @@ class WikiService:
         rows.sort(key=lambda item: (item[0], item[1].get("updated_at", ""), item[1]["id"]), reverse=True)
         result = []
         for _, page in rows[max(0, offset):max(0, offset) + min(1000, max(1, limit))]:
-            row = {key: value for key, value in page.items() if key not in {"body", "operation_id"}}
+            row = {key: value for key, value in page.items() if key not in {"body", "operation_id", "_frontmatter"}}
             row["ref"] = self.content_ref(work_dir, page).to_dict()
             result.append(row)
         return result
@@ -188,7 +220,33 @@ class WikiService:
     def content_ref(self, work_dir: str, page: dict) -> ContentRef:
         return ContentRef(id=page["id"], name=page["title"], mime="text/markdown", size=len(page.get("body", "")),
                           digest=page.get("digest", ""), ref=f"wiki:{page['id']}", kind="wiki", source="wiki",
-                          status=page.get("validation", "supported"), workspace=workspace_identity(work_dir))
+                          status=page.get("validation", "unverified"), workspace=workspace_identity(work_dir))
+
+    def review_context(self, work_dir: str, evidence: str, *, char_budget: int = 16000) -> list[dict]:
+        """Supply a few relevant complete pages through the existing index."""
+        if not normalize_work_dir(work_dir):
+            return []
+        def terms(text):
+            words = set(re.findall(r"[a-z0-9_]{3,}", text.casefold()))
+            for run in re.findall(r"[\u4e00-\u9fff]+", text):
+                words.update(run[index:index + 2] for index in range(len(run) - 1))
+            return words
+        wanted = terms(evidence)
+        ranked = []
+        for page in self._index(work_dir):
+            if page.get("error") or page.get("status") == "deprecated":
+                continue
+            score = len(wanted & terms(page["title"])) * 4 + len(wanted & terms(page["summary"]))
+            if score:
+                ranked.append((score, page))
+        result = []
+        for _, page in sorted(ranked, key=lambda pair: pair[0], reverse=True)[:3]:
+            complete = len(page["body"]) <= char_budget
+            result.append({key: page[key] for key in ("id", "title", "summary", "digest", "validation")}
+                          | {"body": page["body"] if complete else "", "complete": complete})
+            if complete:
+                char_budget -= len(page["body"])
+        return result
 
     def read(self, work_dir: str, page_id: str) -> dict:
         page = self._read(self.path_for(work_dir, page_id))
@@ -202,15 +260,18 @@ class WikiService:
     def apply(self, work_dir: str, payload: dict, *, operation_id: str = "") -> tuple[bool, str]:
         try:
             title, summary, body = (str(payload.get(key) or "").strip() for key in ("title", "summary", "body"))
-            if not title or len(title) > 120 or not summary or len(summary) > 300 or not body or len(body) > 12000:
-                raise ValueError("provide title (1–120), summary (1–300) and synthesized body (1–12000 chars)")
+            if not title or not body:
+                raise ValueError("provide a title and a complete Markdown body")
+            if not summary:
+                summary = title
             threat = first_threat_message("\n".join((title, summary, body)), scope="strict")
             if threat:
                 raise ValueError(threat)
             sources = payload.get("sources")
             if not isinstance(sources, list) or not 1 <= len(sources) <= 16 or any(not isinstance(ref, dict) for ref in sources):
                 raise ValueError("provide 1–16 versioned source references")
-            page_id = str(payload.get("id") or hashlib.sha256(title.casefold().encode()).hexdigest()[:16])
+            slug = re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")[:64].rstrip("-")
+            page_id = str(payload.get("id") or slug or "note-" + hashlib.sha256(title.encode()).hexdigest()[:12])
             path = self.path_for(work_dir, page_id)
             # The lock is workspace-local so simultaneous source promotions deduplicate.
             with exclusive_file_lock(self.root(work_dir) / ".publish"):
@@ -220,30 +281,38 @@ class WikiService:
                     return True, page_id
                 if payload.get("expected_digest") is not None and (existing or {}).get("digest", "") != payload["expected_digest"]:
                     raise ValueError("knowledge changed; reload before editing")
-                source_keys = self._source_keys(sources)
-                if not payload.get("expected_digest"):
-                    for page in self._index(work_dir):
-                        if source_keys and source_keys <= self._source_keys(page.get("sources", [])):
-                            return True, page["id"]
-                    if existing:
-                        raise ValueError("knowledge already exists; read its digest before updating")
+                if existing and not payload.get("expected_digest"):
+                    if (existing["title"], existing["summary"], existing["body"].strip(), self._source_keys(existing["sources"])) == (title, summary, body, self._source_keys(sources)):
+                        return True, page_id
+                    raise ValueError("knowledge already exists; read its digest before updating")
                 errors = self._source_errors(work_dir, sources)
                 if errors:
                     raise ValueError("; ".join(errors))
-                validation = str(payload.get("validation") or "supported")
-                if validation not in {"supported", "conflicted", "stale"}:
+                validation = str(payload.get("validation") or "unverified")
+                if validation not in {"unverified", "conflicted", "stale"}:
                     raise ValueError("invalid knowledge validation state")
-                metadata = {"id": page_id, "title": title, "summary": summary, "sources": sources,
-                            "validation": validation, "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                            "operation_id": operation_id}
-                encoded = json.dumps(metadata, ensure_ascii=True, separators=(",", ":")).replace("--", "\\u002d\\u002d")
-                text = f"<!-- pycat-wiki-v1 {encoded} -->\n{body}\n"
+                metadata = dict((existing or {}).get("_frontmatter") or {})
+                metadata.pop("verified", None)  # Authorship and source availability are not verification.
+                metadata.update({"type": metadata.get("type") or "Reference", "title": title, "description": summary,
+                                 "sources": [self._source_metadata(ref) for ref in sources],
+                                 "generated": {"by": "process:pycat", "at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+                                 "status": "draft"})
+                extension = dict(metadata.get("pycat") or {})
+                extension.pop("validation", None)
+                extension.pop("operation_id", None)
+                if validation != "unverified":
+                    extension["validation"] = validation
+                if operation_id:
+                    extension["operation_id"] = operation_id
+                metadata.pop("pycat", None)
+                if extension:
+                    metadata["pycat"] = extension
+                text = render_frontmatter(metadata) + body + "\n"
                 if len(text.encode("utf-8")) > MAX_PAGE_BYTES:
-                    raise ValueError("knowledge page and metadata exceed 64 KiB")
+                    raise ValueError("knowledge page and metadata exceed 1 MiB; split into linked topics")
                 atomic_write_text(path, text)
                 with self._lock:
-                    self._write_index(self.root(work_dir), self.root(work_dir).stat().st_mtime_ns,
-                                      page={**metadata, "body": body + "\n", "digest": hashlib.sha256(text.encode("utf-8")).hexdigest()})
+                    self._write_index(self.root(work_dir), self.root(work_dir).stat().st_mtime_ns, page=self._read(path))
                     self._cache.pop(str(self.root(work_dir)), None)
                 return True, page_id
         except (OSError, ValueError, TypeError) as exc:

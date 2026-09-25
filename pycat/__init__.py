@@ -1,7 +1,8 @@
 """PyCat's embedded Python application API. GUI imports are intentionally separate."""
 
-from .application import PyCat, run_sync
+from pycat.core.app.services.run import RunHandle
 from pycat.core.content.export import export_document
+from pycat.core.tools.base import ApprovalDecision, ToolApprovalRequest
 from pycat.models.contracts.agent import (
     ApplicationError,
     ConversationBusyError,
@@ -16,11 +17,11 @@ from pycat.models.contracts.agent import (
     SlowConsumerError,
     ToolCallResult,
 )
-from pycat.core.app.services.run import RunHandle
-from pycat.core.tools.base import ApprovalDecision, ToolApprovalRequest
 from pycat.models.contracts.content import ContentRef
-from pycat.models.provider import Provider
 from pycat.models.model_profile import ModelProfile
+from pycat.models.provider import Provider
+
+from .application import PyCat, run_sync
 
 __all__ = [
     "PyCat",

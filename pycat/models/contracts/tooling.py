@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Literal, Mapping, Optional, Set
 
-
 TOOL_CATEGORIES: tuple[str, ...] = (
     "read",
     "web",
@@ -61,6 +60,12 @@ DEFAULT_FILESYSTEM_MODE: FilesystemScopeMode = "full_access"
 def normalize_tool_category(category: str | None) -> str:
     raw = str(category or "").strip().lower()
     return raw if raw in TOOL_CATEGORIES else "capability"
+
+
+def canonical_tool_categories(categories: Iterable[str] | None) -> tuple[str, ...]:
+    """Category sets in ``TOOL_CATEGORIES`` order, so equal sets compare equal."""
+    selected = {normalize_tool_category(str(item)) for item in categories or ()}
+    return tuple(category for category in TOOL_CATEGORIES if category in selected)
 
 
 def normalize_risk_level(value: str | None) -> RiskLevel:
@@ -160,15 +165,6 @@ class ToolSelectionPolicy:
         if categories is None:
             return cls()
         return cls(allowed_categories={normalize_tool_category(item) for item in categories})
-
-    def with_categories(self, categories: Iterable[str] | None) -> "ToolSelectionPolicy":
-        return ToolSelectionPolicy(
-            allowed_categories={normalize_tool_category(item) for item in categories or ()},
-            allowed_tools=self.allowed_tools,
-            allowed_sources=self.allowed_sources,
-            denied_tools=self.denied_tools,
-            require_available=self.require_available,
-        )
 
     def intersect(self, other: "ToolSelectionPolicy | None") -> "ToolSelectionPolicy":
         if other is None:

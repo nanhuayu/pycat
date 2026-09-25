@@ -1,9 +1,9 @@
 """Typed @ references; positions use Python character indices at the core boundary."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import Enum
-import os
 from pathlib import Path
 
 from pycat.core.commands.parser import inside_code

@@ -1,10 +1,10 @@
-import shutil
 import re
+import shutil
 import unicodedata
 from typing import Any, Dict
 
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.core.tools.system.file_change import digest_bytes, digest_path, file_change_metadata
+from pycat.core.tools.system.file_change import digest_bytes, file_change_metadata
 
 
 def _canonical_units(text: str) -> tuple[str, dict[int, int]]:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -24,7 +25,6 @@ from pycat.core.llm.model_selection import ResolvedModelSelection
 from pycat.core.llm.token_budget import estimate_tokens, resolve_token_budget
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
-
 
 logger = logging.getLogger(__name__)
 MAX_REDUCE_LEVELS = 8
@@ -82,6 +82,52 @@ class CapabilityCompressor:
             purpose=purpose,
             image_count=len(usable_images),
         )
+        calls = 0
+        for attempt in range(3):
+            result = await self._compress_document(
+                text, capability=capability, selection=selection, conversation=conversation,
+                images=usable_images, purpose=purpose, prompt_budget=prompt_budget,
+            )
+            calls += result.calls
+            smaller = self._upstream_prompt_budget(result.error, capability, selection,
+                                                   purpose=purpose, image_count=len(usable_images))
+            if result.summary or attempt == 2 or smaller is None:
+                break
+            # Recover only an explicit numeric input/context limit. Transport,
+            # quota and incomplete-output failures never trigger a map restart.
+            smaller = min(smaller, prompt_budget // 2)
+            if smaller < 256 or estimate_tokens(text) <= smaller:
+                break
+            prompt_budget = smaller
+        result.calls = calls
+        result.vision_fallback = vision_fallback
+        self._append_image_note(result, image_note)
+        self._record_trace(result, input_chars=len(text), content_id=content_id,
+                           purpose=trace_name, started_at=started_at)
+        return result
+
+    def _upstream_prompt_budget(self, error: str, capability: CapabilityConfig,
+                                selection: ResolvedModelSelection, *, purpose: CompressionPurpose,
+                                image_count: int) -> int | None:
+        text = str(error or "").casefold()
+        prompt = re.search(r"prompt (?:is )?too long.*?>\s*([\d,]+)\s*(?:maximum|max\b)", text, re.DOTALL)
+        context = re.search(r"maximum context length (?:is|of)\s*([\d,]+)\s*tokens", text)
+        match = prompt or context
+        if match is None:
+            return None
+        limit = int(match[1].replace(",", ""))
+        if not prompt:
+            budget = resolve_token_budget(provider=selection.provider or self.provider, model_id=selection.model,
+                                          request_output_limit=capability.max_tokens)
+            limit -= budget.output_limit
+        overhead = estimate_tokens(capability.prompt) + estimate_tokens(compression_system_contract(purpose))
+        overhead += image_count * COMPRESSION_IMAGE_TOKEN_RESERVE
+        return max(0, int(limit * COMPRESSION_INPUT_SAFETY_RATIO) - overhead)
+
+    async def _compress_document(
+        self, text: str, *, capability: CapabilityConfig, selection: ResolvedModelSelection,
+        conversation: Conversation | None, images: list[str], purpose: CompressionPurpose, prompt_budget: int,
+    ) -> CompressionResult:
         full_prompt = compression_document_prompt(
             text,
             purpose=purpose,
@@ -92,21 +138,11 @@ class CapabilityCompressor:
                 full_prompt,
                 conversation=conversation,
                 selection=selection,
-                images=usable_images,
+                images=images,
                 purpose=purpose,
             )
-            result.calls = 1
             result.chunks = 1
             result.strategy = "single"
-            result.vision_fallback = vision_fallback
-            self._append_image_note(result, image_note)
-            self._record_trace(
-                result,
-                input_chars=len(text),
-                content_id=content_id,
-                purpose=trace_name,
-                started_at=started_at,
-            )
             return result
 
         chunk_overhead = estimate_tokens(
@@ -126,14 +162,6 @@ class CapabilityCompressor:
                 capability_id=capability.id,
                 error="compression_context_too_small",
                 strategy="map_reduce",
-                vision_fallback=vision_fallback,
-            )
-            self._record_trace(
-                failed,
-                input_chars=len(text),
-                content_id=content_id,
-                purpose=trace_name,
-                started_at=started_at,
             )
             return failed
         chunks = split_text_by_token_budget(text, body_budget)
@@ -153,22 +181,14 @@ class CapabilityCompressor:
                 prompt,
                 conversation=conversation,
                 selection=selection,
-                images=usable_images if index == 1 else [],
+                images=images if index == 1 else [],
                 purpose=purpose,
             )
-            calls += 1
+            calls += result.calls
             if not result.summary:
                 result.calls = calls
                 result.chunks = len(chunks)
                 result.strategy = "map_reduce"
-                result.vision_fallback = vision_fallback
-                self._record_trace(
-                    result,
-                    input_chars=len(text),
-                    content_id=content_id,
-                    purpose=trace_name,
-                    started_at=started_at,
-                )
                 return result
             partials.append(
                 f"## Chunk {index}/{len(chunks)} char_range={chunk.start}-{chunk.end}\n{result.summary}"
@@ -191,20 +211,11 @@ class CapabilityCompressor:
                     images=[],
                     purpose=purpose,
                 )
-                calls += 1
+                calls += final.calls
                 final.calls = calls
                 final.chunks = len(chunks)
                 final.reduce_levels = reduce_levels + 1
                 final.strategy = "map_reduce"
-                final.vision_fallback = vision_fallback
-                self._append_image_note(final, image_note)
-                self._record_trace(
-                    final,
-                    input_chars=len(text),
-                    content_id=content_id,
-                    purpose=trace_name,
-                    started_at=started_at,
-                )
                 return final
 
             reduce_levels += 1
@@ -236,20 +247,12 @@ class CapabilityCompressor:
                     images=[],
                     purpose=purpose,
                 )
-                calls += 1
+                calls += result.calls
                 if not result.summary:
                     result.calls = calls
                     result.chunks = len(chunks)
                     result.reduce_levels = reduce_levels
                     result.strategy = "map_reduce"
-                    result.vision_fallback = vision_fallback
-                    self._record_trace(
-                        result,
-                        input_chars=len(text),
-                        content_id=content_id,
-                        purpose=trace_name,
-                        started_at=started_at,
-                    )
                     return result
                 reduced.append(f"## Reduced group {index}/{len(groups)}\n{result.summary}")
             sections = reduced
@@ -262,14 +265,6 @@ class CapabilityCompressor:
             chunks=len(chunks),
             reduce_levels=reduce_levels,
             strategy="map_reduce",
-            vision_fallback=vision_fallback,
-        )
-        self._record_trace(
-            failed,
-            input_chars=len(text),
-            content_id=content_id,
-            purpose=trace_name,
-            started_at=started_at,
         )
         return failed
 
@@ -293,6 +288,7 @@ class CapabilityCompressor:
             images=images,
             purpose=purpose,
         )
+        result.calls = 1
         if result.summary or result.status != "error":
             return result
         # One strict-contract retry: the first answer was structurally
@@ -311,6 +307,7 @@ class CapabilityCompressor:
             images=images,
             purpose=purpose,
         )
+        retried.calls = result.calls + 1
         if retried.summary or retried.status != "error":
             return retried
         return result if result.summary else retried
@@ -348,8 +345,13 @@ class CapabilityCompressor:
             logger.warning("Capability compression failed via %s: %s", capability.id, exc)
             return CompressionResult(status="error", capability_id=capability.id, error=str(exc))
 
-        result = parse_compression_result(getattr(response, "content", ""))
-        metadata = getattr(response, "metadata", {})
+        metadata = dict(getattr(response, "metadata", {}) or {})
+        if metadata.get("runtime_error") or metadata.get("incomplete") or metadata.get("status") in {"failed", "cancelled", "interrupted"}:
+            result = CompressionResult(status="error", error=str(
+                getattr(response, "validation_error", "") or metadata.get("incomplete_reason")
+                or getattr(response, "content", "") or "compression_request_failed"))
+        else:
+            result = parse_compression_result(getattr(response, "content", ""))
         result.model = str(
             getattr(response, "model", "")
             or (metadata.get("model") if isinstance(metadata, dict) else "")
@@ -368,7 +370,8 @@ class CapabilityCompressor:
         image_count: int,
     ) -> int:
         provider = selection.provider or self.provider
-        budget = resolve_token_budget(provider=provider, model_id=selection.model)
+        budget = resolve_token_budget(provider=provider, model_id=selection.model,
+                                      request_output_limit=capability.max_tokens)
         effective = int(budget.effective_prompt_limit or budget.context_window or 0)
         safe = int(effective * COMPRESSION_INPUT_SAFETY_RATIO)
         overhead = estimate_tokens(str(capability.prompt or "")) + estimate_tokens(

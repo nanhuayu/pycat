@@ -1,16 +1,14 @@
 import hashlib
 import re
-from pycat.models.session_paths import resolve_project_data_root
-from pycat.models.workspace import WorkspaceLocation
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from pycat.core.content.markdown import parse_frontmatter, strip_frontmatter, with_frontmatter
-from pycat.core.state.operations import ensure_artifact
 from pycat.core.persistence import atomic_write_text
+from pycat.core.state.operations import ensure_artifact
 from pycat.models.contracts.session_state import SessionArtifact, SessionState
-from pycat.models.session_paths import normalize_work_dir, resolve_session_root
-
+from pycat.models.session_paths import normalize_work_dir, resolve_project_data_root, resolve_session_root
+from pycat.models.workspace import WorkspaceLocation
 
 _MANAGED_FRONTMATTER_KEYS = {
     "name",
@@ -356,6 +354,20 @@ class ArtifactService:
         return imported, True
 
     @staticmethod
+    def _owned_content_path(
+        artifact: SessionArtifact, *, work_dir: str, conversation_id: object,
+        data_dir: str | Path | None = None,
+    ) -> Path | None:
+        """Shared indexes grant reads, not mutations of another session's file."""
+        if not artifact.content_path:
+            return None
+        path = ArtifactService.resolve_content_path(artifact.content_path, work_dir=work_dir, data_dir=data_dir).resolve()
+        root = ArtifactService.artifact_storage_dir(
+            work_dir=work_dir, conversation_id=conversation_id, data_dir=data_dir,
+        ).resolve()
+        return path if path.is_relative_to(root) else None
+
+    @staticmethod
     def _content_write_path(
         artifact: SessionArtifact,
         *,
@@ -364,8 +376,11 @@ class ArtifactService:
         conversation_id: object = None,
         data_dir: str | Path | None = None,
     ) -> Path:
-        if artifact.content_path:
-            return ArtifactService.resolve_content_path(artifact.content_path, work_dir=work_dir, data_dir=data_dir)
+        owned_path = ArtifactService._owned_content_path(
+            artifact, work_dir=work_dir, conversation_id=conversation_id, data_dir=data_dir,
+        )
+        if owned_path is not None:
+            return owned_path
 
         target = ArtifactService.artifact_file_path(
             work_dir=work_dir,
@@ -588,15 +603,6 @@ class ArtifactService:
         return "\n".join(lines).strip()
 
     @staticmethod
-    def delete_content_file(artifact: SessionArtifact, *, work_dir: str, data_dir: str | Path | None = None) -> None:
-        if not artifact.content_path:
-            return
-        try:
-            ArtifactService.resolve_content_path(artifact.content_path, work_dir=work_dir, data_dir=data_dir).unlink(missing_ok=True)
-        except Exception:
-            return
-
-    @staticmethod
     def default_abstract(content: str) -> str:
         text = strip_frontmatter(str(content or "")).strip()
         if not text:
@@ -796,12 +802,20 @@ class ArtifactService:
         return artifact
 
     @staticmethod
-    def delete_artifact(state: SessionState, *, name: str, work_dir: str = ".", data_dir: str | Path | None = None) -> bool:
+    def delete_artifact(
+        state: SessionState, *, name: str, conversation_id: object,
+        work_dir: str = ".", data_dir: str | Path | None = None,
+    ) -> bool:
         normalized = ArtifactService.normalize_name(name)
         if normalized not in state.artifacts:
             return False
-        artifact = state.artifacts.pop(normalized)
-        ArtifactService.delete_content_file(artifact, work_dir=work_dir, data_dir=data_dir)
+        artifact = state.artifacts[normalized]
+        owned_path = ArtifactService._owned_content_path(
+            artifact, work_dir=work_dir, conversation_id=conversation_id, data_dir=data_dir,
+        )
+        if owned_path is not None:
+            owned_path.unlink(missing_ok=True)
+        del state.artifacts[normalized]
         return True
 
     @staticmethod

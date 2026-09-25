@@ -17,7 +17,6 @@ from pycat.core.channel.platforms.wechat.client import (
 )
 from pycat.models.contracts.channel import ChannelConfig
 
-
 LOGIN_TTL_SECONDS = 5 * 60
 
 

@@ -8,7 +8,6 @@ from pathlib import Path
 from pycat.core.persistence import atomic_write_text
 from pycat.models.contracts.mcp import McpServerConfig
 
-
 logger = logging.getLogger(__name__)
 
 

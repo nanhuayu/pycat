@@ -1,17 +1,79 @@
 """Unified tool manager with persistent conversation-scoped MCP sessions."""
 
+import asyncio
+import hashlib
+import json
 import logging
 import os
-import asyncio
-import json
-import threading
 import sys
-import hashlib
+import threading
 import uuid
-from importlib import metadata
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
+from importlib import metadata
 from importlib.util import find_spec
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from pycat.core.capabilities.tool_adapter import CAPABILITY_TOOL_PREFIX, build_capability_tools
+from pycat.core.content.ocr import OcrService, OcrStatus
+from pycat.core.tools.base import ToolResult
+from pycat.core.tools.mcp.browser import (
+    prepare_browser_daemon,
+    reap_browser_processes,
+    scoped_arguments,
+    scoped_config,
+    scoped_schema,
+)
+from pycat.core.tools.mcp.naming import (
+    MCP_TOOL_PUBLIC_PREFIX,
+    build_mcp_tool_name,
+    is_mcp_tool_name,
+    parse_mcp_tool_name,
+)
+from pycat.core.tools.mcp.proxies import McpProxyTool
+from pycat.core.tools.process import BackgroundProcessManager
+from pycat.core.tools.registry import ToolRegistry
+from pycat.core.tools.system.artifact_tools import ManageArtifactTool
+from pycat.core.tools.system.ask_questions import AskQuestionsTool
+from pycat.core.tools.system.content_tools import ArchiveListTool, ArchiveReadTool
+from pycat.core.tools.system.file_ops import DeleteFileTool, EditFileTool, WriteToFileTool
+
+# System Tools
+from pycat.core.tools.system.filesystem import DeliverFilesTool, GrepTool, LsTool, ReadFileTool
+from pycat.core.tools.system.memory_tools import ManageMemoryTool
+from pycat.core.tools.system.multi_agent import AgentCompleteTool, AgentRunTool, AgentTaskTool
+from pycat.core.tools.system.ocr import FileOcrTool
+from pycat.core.tools.system.patch import PatchTool
+from pycat.core.tools.system.python_exec import PythonExecTool
+from pycat.core.tools.system.search import FetchUrlTool, WebSearchTool
+from pycat.core.tools.system.shell_exec import (
+    ExecuteCommandTool,
+    ShellKillTool,
+    ShellListTool,
+    ShellReadTool,
+    ShellWriteTool,
+)
+from pycat.core.tools.system.skill_manage import ManageSkillTool
+from pycat.core.tools.system.skills import LoadSkillTool, ReadSkillResourceTool
+from pycat.core.tools.system.todo_tools import ManageTodoTool
+from pycat.core.tools.system.wiki_tools import ManageWikiTool
+from pycat.models.contracts.capability import CapabilitiesConfig
+from pycat.models.contracts.config import OcrConfig
+from pycat.models.contracts.mcp import (
+    TRANSPORT_SSE,
+    TRANSPORT_STDIO,
+    TRANSPORT_STREAMABLE_HTTP,
+    McpServerConfig,
+)
+from pycat.models.contracts.tooling import (
+    ToolAvailabilityContext,
+    ToolDescriptor,
+    ToolPermissionConfig,
+    ToolSelectionPolicy,
+)
+from pycat.models.session_paths import has_active_workspace
+
+logger = logging.getLogger(__name__)
 
 # The catalog needs package availability, not an initialized protocol client.
 # SDK imports and errors belong to the connection operation below.
@@ -21,56 +83,6 @@ MCP_TRANSPORTS_AVAILABLE = {
     "streamable_http": MCP_AVAILABLE,
     "sse": MCP_AVAILABLE,
 }
-
-from contextlib import AsyncExitStack, asynccontextmanager
-
-from pycat.models.contracts.mcp import (
-    TRANSPORT_SSE,
-    TRANSPORT_STDIO,
-    TRANSPORT_STREAMABLE_HTTP,
-    McpServerConfig,
-)
-
-from pycat.core.tools.registry import ToolRegistry
-from pycat.core.tools.base import ToolResult
-from pycat.core.tools.process import BackgroundProcessManager
-from pycat.models.contracts.tooling import ToolAvailabilityContext, ToolDescriptor, ToolSelectionPolicy
-from pycat.core.tools.mcp.proxies import McpProxyTool
-from pycat.core.tools.mcp.browser import prepare_browser_daemon, reap_browser_processes, scoped_arguments, scoped_config, scoped_schema
-from pycat.core.tools.mcp.naming import MCP_TOOL_PUBLIC_PREFIX, build_mcp_tool_name, is_mcp_tool_name, parse_mcp_tool_name
-from pycat.core.tools.system.search import FetchUrlTool, WebSearchTool
-
-# System Tools
-from pycat.core.tools.system.filesystem import DeliverFilesTool, LsTool, ReadFileTool, GrepTool
-from pycat.core.tools.system.python_exec import PythonExecTool
-from pycat.core.tools.system.file_ops import WriteToFileTool, EditFileTool, DeleteFileTool
-from pycat.core.tools.system.shell_exec import (
-    ExecuteCommandTool,
-    ShellReadTool,
-    ShellKillTool,
-    ShellListTool,
-    ShellWriteTool,
-)
-from pycat.core.tools.system.patch import PatchTool
-from pycat.core.tools.system.multi_agent import AgentCompleteTool, AgentRunTool
-from pycat.core.tools.system.artifact_tools import ManageArtifactTool
-from pycat.core.tools.system.todo_tools import ManageTodoTool
-from pycat.core.tools.system.memory_tools import ManageMemoryTool
-from pycat.core.tools.system.wiki_tools import ManageWikiTool
-from pycat.core.tools.system.content_tools import ArchiveListTool, ArchiveReadTool
-from pycat.core.tools.system.ask_questions import AskQuestionsTool
-from pycat.core.tools.system.skills import LoadSkillTool, ReadSkillResourceTool
-from pycat.core.tools.system.skill_manage import ManageSkillTool
-from pycat.core.tools.system.ocr import FileOcrTool
-from pycat.core.content.ocr import OcrService, OcrStatus
-from pycat.core.capabilities.tool_adapter import CAPABILITY_TOOL_PREFIX, build_capability_tools
-from pycat.models.contracts.capability import CapabilitiesConfig
-from pycat.models.contracts.tooling import ToolPermissionConfig
-from pycat.models.contracts.config import OcrConfig
-from pycat.models.session_paths import has_active_workspace
-
-logger = logging.getLogger(__name__)
-
 MCP_CLOSE_TIMEOUT_SECONDS = 5.0
 MCP_THREAD_JOIN_TIMEOUT_SECONDS = 1.0
 MCP_TEST_CONNECTION_TIMEOUT_SECONDS = 60.0
@@ -200,7 +212,7 @@ class ToolManager:
             AskQuestionsTool(),
             ManageArtifactTool(),
             LoadSkillTool(), ReadSkillResourceTool(), ManageSkillTool(self._skill_service),
-            AgentRunTool(), AgentCompleteTool(),
+            AgentRunTool(), AgentCompleteTool(), AgentTaskTool(),
         ]
         for tool in tools:
             self.registry.register(tool)

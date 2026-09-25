@@ -30,10 +30,6 @@ class ChannelWorker:
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
 
-    def is_worker_thread(self) -> bool:
-        thread = self._thread
-        return thread is not None and threading.current_thread() is thread
-
     def start(self) -> None:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():

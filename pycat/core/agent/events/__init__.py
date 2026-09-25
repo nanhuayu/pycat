@@ -3,7 +3,3 @@
 Debug trace sinks live in ``pycat.core.observability`` (infrastructure); this package
 keeps only agent-domain event emission.
 """
-
-from .emitter import EventEmitter
-
-__all__ = ["EventEmitter"]

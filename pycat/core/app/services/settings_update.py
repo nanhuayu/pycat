@@ -10,24 +10,23 @@ the returned snapshot always describes the state adapters should show.
 """
 from __future__ import annotations
 
-import json
 import hashlib
-import threading
+import json
 import logging
+import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from pycat.core.app.serialization import json_value, merge_draft, redact
 from pycat.core.app.state import AppSettingsUpdate
+from pycat.models.contracts.agent import InvalidRequestError
 from pycat.models.contracts.config import AppConfig
 from pycat.models.contracts.mcp import McpServerConfig
 from pycat.models.contracts.mode import ModeConfig
+from pycat.models.contracts.model_target import ModelTarget
 from pycat.models.provider import Provider
 from pycat.models.search_config import SearchConfig
-from pycat.models.contracts.agent import InvalidRequestError
-from pycat.models.contracts.model_target import ModelTarget
-from pycat.core.app.serialization import json_value, redact, merge_draft
-
 
 logger = logging.getLogger(__name__)
 

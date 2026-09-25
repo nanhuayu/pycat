@@ -4,9 +4,10 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Dict, Iterable
 
+from pycat.core.security.threats import scan_for_threats
+
 from .discovery import SkillsManager
 from .routing import check_skill_execution_availability, resolve_skill_invocation_spec
-from pycat.core.security.threats import scan_for_threats
 
 
 def build_skill_prompt_section(

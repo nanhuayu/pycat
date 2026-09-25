@@ -6,7 +6,7 @@ import re
 from dataclasses import replace
 from typing import Iterable
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -39,12 +39,13 @@ from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.form_builder import FormSection
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.settings_controls import SettingsFormLayout, SettingsToggle
+from pycat.gui.view_models.tooling_labels import capability_display_name, tool_category_label
 from pycat.gui.widgets.model_ref_selector import ModelTargetCombo, build_model_ref_options
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from pycat.models.contracts.capability import ImageGenerationOptions
 from pycat.models.contracts.config import PromptsConfig
 from pycat.models.contracts.model_target import ModelTarget
-from pycat.models.contracts.tooling import TOOL_CATEGORIES, TOOL_CATEGORY_LABELS
+from pycat.models.contracts.tooling import TOOL_CATEGORIES
 from pycat.models.provider import Provider
 
 
@@ -83,13 +84,13 @@ class CapabilitiesPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
-        root.addWidget(build_page_header("能力", "为固定任务指定模型和指令。图像生成与编辑也可供对话调用；文字识别在 OCR 中配置。"))
+        root.addWidget(build_page_header(QCoreApplication.translate('CapabilitiesPage', '能力'), QCoreApplication.translate('CapabilitiesPage', '为固定任务指定模型和指令。图像生成与编辑也可供对话调用；文字识别在 OCR 中配置。')))
 
         body = SettingsListDetailLayout()
         actions = SettingsActionBar(spacing=4)
-        actions.add_icon_action("新增", Icons.get(Icons.PLUS), self._add_capability)
+        actions.add_icon_action(QCoreApplication.translate('CapabilitiesPage', '添加模型能力'), Icons.get(Icons.PLUS), self._add_capability)
         self.delete_button = actions.add_icon_action(
-            "删除", Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR), self._delete_capability, danger=True
+            QCoreApplication.translate('CapabilitiesPage', '删除模型能力'), Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR), self._delete_capability, danger=True
         )
         actions.add_stretch()
         body.list_layout.addWidget(actions)
@@ -115,23 +116,23 @@ class CapabilitiesPage(QWidget):
         self.id_edit = ThemedLineEdit()
         self.id_edit.setReadOnly(True)
         self.name_edit = ThemedLineEdit()
-        self.enabled_check = SettingsToggle("启用")
+        self.enabled_check = SettingsToggle(QCoreApplication.translate('CapabilitiesPage', '启用'))
         self.exposure_combo = QComboBox()
-        self.exposure_combo.addItem("模型工具", "tool")
-        self.exposure_combo.addItem("仅内部", "internal")
+        self.exposure_combo.addItem(QCoreApplication.translate('CapabilitiesPage', '模型工具'), "tool")
+        self.exposure_combo.addItem(QCoreApplication.translate('CapabilitiesPage', '仅内部'), "internal")
         configure_combo_popup(self.exposure_combo)
         self.runtime_combo = QComboBox()
-        self.runtime_combo.addItem("单轮 LLM", "single_turn")
-        self.runtime_combo.addItem("Agent 循环", "agent_loop")
+        self.runtime_combo.addItem(QCoreApplication.translate('CapabilitiesPage', '单轮 LLM'), "single_turn")
+        self.runtime_combo.addItem(QCoreApplication.translate('CapabilitiesPage', 'Agent 循环'), "agent_loop")
         configure_combo_popup(self.runtime_combo)
         self.runtime_combo.currentIndexChanged.connect(self._sync_runtime_fields)
         self.operation_combo = QComboBox()
-        self.operation_combo.addItem("文字与视觉理解", "text")
-        self.operation_combo.addItem("图像生成与编辑", "image")
+        self.operation_combo.addItem(QCoreApplication.translate('CapabilitiesPage', '文字与视觉理解'), "text")
+        self.operation_combo.addItem(QCoreApplication.translate('CapabilitiesPage', '图像生成与编辑'), "image")
         configure_combo_popup(self.operation_combo)
         self.model_target_combo = ModelTargetCombo(self._providers, current_target=ModelTarget())
         self.description_edit = ThemedLineEdit()
-        self.description_edit.setPlaceholderText("一句用途和关键约束")
+        self.description_edit.setPlaceholderText(QCoreApplication.translate('CapabilitiesPage', '一句用途和关键约束'))
         self.tool_categories_widget = QWidget()
         category_layout = QGridLayout(self.tool_categories_widget)
         category_layout.setContentsMargins(0, 0, 0, 0)
@@ -139,7 +140,7 @@ class CapabilitiesPage(QWidget):
         category_layout.setVerticalSpacing(6)
         self.tool_category_checks: dict[str, QCheckBox] = {}
         for index, category in enumerate(TOOL_CATEGORIES):
-            checkbox = QCheckBox(TOOL_CATEGORY_LABELS.get(category, category))
+            checkbox = QCheckBox(tool_category_label(category))
             checkbox.setToolTip(category)
             category_layout.addWidget(checkbox, index // 4, index % 4)
             self.tool_category_checks[category] = checkbox
@@ -147,19 +148,19 @@ class CapabilitiesPage(QWidget):
         self.max_turns_spin.setRange(1, 1000)
         self.max_turns_spin.setValue(20)
 
-        form.addRow("标识", self.id_edit)
-        form.addRow("名称", self.name_edit)
-        form.addRow("状态", self.enabled_check)
-        form.addRow("暴露", self.exposure_combo)
-        form.addRow("用途", self.operation_combo)
-        form.addRow("执行方式", self.runtime_combo)
-        form.addRow("模型", self.model_target_combo)
-        form.addRow("描述", self.description_edit)
-        self.tool_categories_label = QLabel("工具类别")
-        self.max_turns_label = QLabel("最大轮次")
+        form.addRow(QCoreApplication.translate('CapabilitiesPage', '标识'), self.id_edit)
+        form.addRow(QCoreApplication.translate('CapabilitiesPage', '名称'), self.name_edit)
+        form.addRow(self.enabled_check)
+        form.addRow(QCoreApplication.translate('CapabilitiesPage', '暴露'), self.exposure_combo)
+        form.addRow(QCoreApplication.translate('CapabilitiesPage', '用途'), self.operation_combo)
+        form.addRow(QCoreApplication.translate('CapabilitiesPage', '执行方式'), self.runtime_combo)
+        form.addRow(QCoreApplication.translate('CapabilitiesPage', '模型'), self.model_target_combo)
+        form.addRow(QCoreApplication.translate('CapabilitiesPage', '描述'), self.description_edit)
+        self.tool_categories_label = QLabel(QCoreApplication.translate('CapabilitiesPage', '工具类别'))
+        self.max_turns_label = QLabel(QCoreApplication.translate('CapabilitiesPage', '最大轮次'))
         form.addRow(self.tool_categories_label, self.tool_categories_widget)
         form.addRow(self.max_turns_label, self.max_turns_spin)
-        self.editor_tabs.addTab(general_page, "配置")
+        self.editor_tabs.addTab(general_page, QCoreApplication.translate('CapabilitiesPage', '配置'))
 
         prompt_page = QWidget()
         prompt_layout = QVBoxLayout(prompt_page)
@@ -167,9 +168,9 @@ class CapabilitiesPage(QWidget):
         self.prompt_edit = ThemedTextEdit()
         self.prompt_edit.setAcceptRichText(False)
         self.prompt_edit.setMinimumHeight(190)
-        self.prompt_edit.setPlaceholderText("Capability 系统指令")
+        self.prompt_edit.setPlaceholderText(QCoreApplication.translate('CapabilitiesPage', 'Capability 系统指令'))
         prompt_layout.addWidget(self.prompt_edit)
-        self.editor_tabs.addTab(prompt_page, "Prompt")
+        self.editor_tabs.addTab(prompt_page, QCoreApplication.translate('CapabilitiesPage', '提示词'))
 
         schema_page = QWidget()
         schema_form = SettingsFormLayout(schema_page, stacked_labels=True)
@@ -187,19 +188,19 @@ class CapabilitiesPage(QWidget):
         self.editor_tabs.addTab(schema_page, "Schema")
         image_page = QWidget()
         image_layout = QVBoxLayout(image_page)
-        image_section = FormSection("默认图像参数")
-        self.image_size_combo = image_section.add_combo("尺寸", items=["auto", "1024x1024", "1536x1024", "1024x1536", "1K", "2K", "4K"], editable=True)
-        self.image_quality_combo = image_section.add_combo("质量", items=["auto", "low", "medium", "high", "xhigh", "max"])
-        self.image_format_combo = image_section.add_combo("格式", items=["auto", "png", "jpeg", "webp"])
-        self.image_background_combo = image_section.add_combo("背景", items=["auto", "opaque", "transparent"])
-        self.image_count_spin = image_section.add_spin("最多输出", value=1, range=(1, 4))
-        note = QLabel("auto 使用服务默认。尺寸可填写宽x高；1K/2K/4K 仅用于 Seedream。Qwen / Seedream 的质量和背景保持 auto。ChatGPT 账号接口输出 PNG，暂不支持蒙版；PNG 蒙版适用于 OpenAI Images API。Seedream 组图可能少于指定数量。")
+        image_section = FormSection(QCoreApplication.translate('CapabilitiesPage', '默认图像参数'))
+        self.image_size_combo = image_section.add_combo(QCoreApplication.translate('CapabilitiesPage', '尺寸'), items=["auto", "1024x1024", "1536x1024", "1024x1536", "1K", "2K", "4K"], editable=True)
+        self.image_quality_combo = image_section.add_combo(QCoreApplication.translate('CapabilitiesPage', '质量'), items=["auto", "low", "medium", "high", "xhigh", "max"])
+        self.image_format_combo = image_section.add_combo(QCoreApplication.translate('CapabilitiesPage', '格式'), items=["auto", "png", "jpeg", "webp"])
+        self.image_background_combo = image_section.add_combo(QCoreApplication.translate('CapabilitiesPage', '背景'), items=["auto", "opaque", "transparent"])
+        self.image_count_spin = image_section.add_spin(QCoreApplication.translate('CapabilitiesPage', '最多输出'), value=1, range=(1, 4))
+        note = QLabel(QCoreApplication.translate('CapabilitiesPage', 'auto 使用服务默认。尺寸可填写宽x高；1K/2K/4K 仅用于 Seedream。Qwen / Seedream 的质量和背景保持 auto。ChatGPT 账号接口输出 PNG，暂不支持蒙版；PNG 蒙版适用于 OpenAI Images API。Seedream 组图可能少于指定数量。'))
         note.setWordWrap(True)
         note.setProperty("muted", True)
         image_layout.addWidget(image_section.group)
         image_layout.addWidget(note)
         image_layout.addStretch()
-        self.editor_tabs.addTab(image_page, "图像参数")
+        self.editor_tabs.addTab(image_page, QCoreApplication.translate('CapabilitiesPage', '图像参数'))
         self.operation_combo.currentIndexChanged.connect(self._sync_operation_fields)
         body.add_detail_widget(self.editor, scrollable=True)
         root.addWidget(body, 1)
@@ -230,10 +231,10 @@ class CapabilitiesPage(QWidget):
         self.capability_list.clear()
         for capability in self._items.values():
             item = SettingsStatusListItem(capability.id)
-            exposure = "内部" if capability.exposure == "internal" else "工具"
-            runtime = "图像" if capability.operation == "image" else "Agent" if capability.runtime == "agent_loop" else "单轮"
+            exposure = QCoreApplication.translate('CapabilitiesPage', '内部') if capability.exposure == "internal" else QCoreApplication.translate('CapabilitiesPage', '工具')
+            runtime = QCoreApplication.translate('CapabilitiesPage', '图像') if capability.operation == "image" else "Agent" if capability.runtime == "agent_loop" else QCoreApplication.translate('CapabilitiesPage', '单轮')
             item.set_status(
-                capability.name,
+                capability_display_name(capability),
                 enabled=capability.enabled,
                 detail=f"{runtime} · {exposure} · {capability.id}",
                 tooltip=capability.description,
@@ -258,7 +259,7 @@ class CapabilitiesPage(QWidget):
             self.capability_list.blockSignals(True)
             self.capability_list.setCurrentItem(_previous)
             self.capability_list.blockSignals(False)
-            QMessageBox.warning(self, "能力配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('CapabilitiesPage', '能力配置无效'), str(exc))
             return
         self._current_id = str(current.data(Qt.ItemDataRole.UserRole) or "") if current else ""
         self._load_current()
@@ -302,8 +303,8 @@ class CapabilitiesPage(QWidget):
         if self._loading or self._current_id not in self._items:
             return
         image = self.operation_combo.currentData() == "image"
-        input_schema = {} if image else self._parse_schema(self.input_schema_edit, "输入")
-        output_schema = {} if image else self._parse_schema(self.output_schema_edit, "输出")
+        input_schema = {} if image else self._parse_schema(self.input_schema_edit, QCoreApplication.translate('CapabilitiesPage', '输入'))
+        output_schema = {} if image else self._parse_schema(self.output_schema_edit, QCoreApplication.translate('CapabilitiesPage', '输出'))
         current = self._items[self._current_id]
         runtime = str(self.runtime_combo.currentData() or "single_turn")
         self._items[self._current_id] = replace(
@@ -333,16 +334,16 @@ class CapabilitiesPage(QWidget):
         try:
             schema = json.loads(text) if text else {}
         except json.JSONDecodeError as exc:
-            raise ValueError(f"{self._current_id} 的{label} Schema 不是有效 JSON：{exc.msg}") from exc
+            raise ValueError(QCoreApplication.translate('CapabilitiesPage', '{_current_id} 的{label} Schema 不是有效 JSON：{msg}').format(_current_id=self._current_id, label=label, msg=exc.msg)) from exc
         if not isinstance(schema, dict):
-            raise ValueError(f"{self._current_id} 的{label} Schema 必须是对象")
+            raise ValueError(QCoreApplication.translate('CapabilitiesPage', '{_current_id} 的{label} Schema 必须是对象').format(_current_id=self._current_id, label=label))
         return schema
 
     def _add_capability(self) -> None:
         try:
             self._save_current()
         except ValueError as exc:
-            QMessageBox.warning(self, "能力配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('CapabilitiesPage', '能力配置无效'), str(exc))
             return
         index = 1
         capability_id = "custom"
@@ -352,7 +353,7 @@ class CapabilitiesPage(QWidget):
         capability_id = re.sub(r"[^a-z0-9_]+", "_", capability_id)
         self._items[capability_id] = CapabilityConfig(
             id=capability_id,
-            name="自定义能力",
+            name=QCoreApplication.translate('CapabilitiesPage', '自定义能力'),
             exposure="tool",
             description="Run a single text transformation without tools.",
             prompt="",
@@ -370,7 +371,7 @@ class CapabilitiesPage(QWidget):
         capability = self._items.get(self._current_id)
         if capability is None or capability.id in self._builtin_ids:
             return
-        if QMessageBox.question(self, "删除能力", f"确定删除“{capability.name}”吗？") != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, QCoreApplication.translate('CapabilitiesPage', '删除能力'), QCoreApplication.translate('CapabilitiesPage', '确定删除“{name}”吗？').format(name=capability.name)) != QMessageBox.StandardButton.Yes:
             return
         del self._items[capability.id]
         self._current_id = ""
@@ -381,5 +382,5 @@ class CapabilitiesPage(QWidget):
         available = {option.value for option in build_model_ref_options(self._providers, model_type="image")}
         for item in self._items.values():
             if item.enabled and item.operation == "image" and item.model_target.model_ref not in available:
-                raise ValueError(f"请为“{item.name}”选择可用的图像模型；先在模型与服务中添加并启用。")
+                raise ValueError(QCoreApplication.translate('CapabilitiesPage', '请为“{name}”选择可用的图像模型；先在模型与服务中添加并启用。').format(name=item.name))
         return CapabilitiesConfig(capabilities=tuple(self._items.values()))

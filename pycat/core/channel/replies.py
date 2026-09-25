@@ -12,6 +12,19 @@ from pycat.models.conversation import Message
 
 logger = logging.getLogger(__name__)
 
+EMPTY_REPLY_TEXT = "已收到消息，但暂时没有可发送的文本回复。"
+
+
+def fit_reply_text(content: Any, limit: int) -> str:
+    """Fit a reply into one platform message; truncation is marked with an ellipsis."""
+    text = str(content or "").replace("\r\n", "\n").strip()
+    if not text:
+        return EMPTY_REPLY_TEXT
+    limit = max(1, int(limit))
+    if len(text) <= limit:
+        return text
+    return text[: max(1, limit - 1)].rstrip() + "…"
+
 
 def normalize_reply_text(
     content: Any,

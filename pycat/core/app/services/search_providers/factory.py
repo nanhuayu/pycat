@@ -1,14 +1,13 @@
 """Search provider factory — creates provider instances by ID."""
 
-from typing import Dict, Any, Optional, Type
+from typing import Any, Dict, Optional, Type
 
 from pycat.core.app.services.search_providers.base import BaseSearchProvider
-from pycat.core.app.services.search_providers.tavily import TavilyProvider
-from pycat.core.app.services.search_providers.ddgs_search import DuckDuckGoProvider, GoogleProvider
 from pycat.core.app.services.search_providers.bing import BingProvider
 from pycat.core.app.services.search_providers.brave import BraveProvider
+from pycat.core.app.services.search_providers.ddgs_search import DuckDuckGoProvider, GoogleProvider
 from pycat.core.app.services.search_providers.searxng import SearxngProvider
-
+from pycat.core.app.services.search_providers.tavily import TavilyProvider
 
 # Registry of all available providers
 _PROVIDER_REGISTRY: Dict[str, Type[BaseSearchProvider]] = {
@@ -46,10 +45,6 @@ class SearchProviderFactory:
         return provider_cls(config)
 
     @classmethod
-    def get_provider_class(cls, provider_id: str) -> Optional[Type[BaseSearchProvider]]:
-        return _PROVIDER_REGISTRY.get(provider_id)
-
-    @classmethod
     def list_providers(cls) -> list[dict]:
         """Return list of provider metadata for UI configuration.
         
@@ -68,7 +63,3 @@ class SearchProviderFactory:
                     "api_key_url": pcls.api_key_url,
                 })
         return result
-
-    @classmethod
-    def is_valid_provider(cls, provider_id: str) -> bool:
-        return provider_id in _PROVIDER_REGISTRY

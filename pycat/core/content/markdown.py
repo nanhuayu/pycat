@@ -1,9 +1,7 @@
 """Shared Markdown parsing helpers for PyCat runtime content.
 
-The helpers in this module are intentionally small and deterministic.  They
-cover the subset of Markdown/YAML-frontmatter behavior PyCat uses for skills,
-memory notes, and project instructions without adding a runtime dependency on a
-full Markdown or YAML parser.
+Markdown documents share safe YAML frontmatter parsing and serialization.
+Nested provenance and extension fields round-trip without a private format.
 """
 from __future__ import annotations
 
@@ -12,59 +10,51 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from urllib.parse import unquote
 
+import yaml
+
+
+class _FrontmatterLoader(yaml.SafeLoader):
+    """Keep timestamps portable strings instead of implicit datetime objects."""
+
+
+_FrontmatterLoader.yaml_implicit_resolvers = {
+    key: [(tag, pattern) for tag, pattern in values if tag != "tag:yaml.org,2002:timestamp"]
+    for key, values in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+
 FRONTMATTER_RE = re.compile(r"^\ufeff?\s*---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
 
-def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:
-    """Return ``(metadata, body)`` for a Markdown document.
-
-    Supported metadata syntax is the simple frontmatter subset already used by
-    PyCat: ``key: value``, ``key:`` followed by ``- item`` list lines, inline
-    ``[a, b]`` lists, booleans, quoted strings, and pipe blocks. Unknown or
-    malformed lines are ignored instead of raising.
-    """
+def parse_frontmatter(text: str, *, strict: bool = False) -> Tuple[Dict[str, Any], str]:
+    """Read safe YAML; strict document stores reject malformed metadata."""
     raw = str(text or "")
     match = FRONTMATTER_RE.match(raw)
     if not match:
         return {}, raw
-
-    metadata = _parse_frontmatter_block(match.group(1))
-    return metadata, raw[match.end() :]
+    try:
+        metadata = yaml.load(match.group(1), Loader=_FrontmatterLoader) or {}
+        if not isinstance(metadata, dict) or any(not isinstance(key, str) for key in metadata):
+            raise ValueError("frontmatter must be a string-keyed mapping")
+    except (yaml.YAMLError, ValueError) as exc:
+        if strict:
+            raise ValueError(f"invalid YAML frontmatter: {exc}") from exc
+        metadata = {}
+    return metadata, raw[match.end():]
 
 
 def strip_frontmatter(text: str) -> str:
-    """Remove a leading frontmatter block from ``text`` if present."""
-    _metadata, body = parse_frontmatter(text)
-    return body.strip()
+    """Remove a leading frontmatter block from a Markdown document."""
+    return parse_frontmatter(text)[1].strip()
 
 
 def render_frontmatter(metadata: Dict[str, Any]) -> str:
-    """Render simple deterministic YAML frontmatter from ``metadata``.
-
-    This intentionally supports the same small scalar/list subset accepted by
-    :func:`parse_frontmatter`. Empty values are skipped so generated Markdown is
-    compact and stable.
-    """
-    lines: list[str] = []
-    for raw_key in sorted((metadata or {}).keys()):
-        key = str(raw_key or "").strip().lower()
-        if not key:
-            continue
-        value = metadata.get(raw_key)
-        if value is None or value == "" or value == []:
-            continue
-        if isinstance(value, (list, tuple, set)):
-            items = [str(item).strip() for item in value if str(item).strip()]
-            if not items:
-                continue
-            lines.append(f"{key}:")
-            lines.extend(f"  - {_format_frontmatter_scalar(item)}" for item in items)
-            continue
-        lines.append(f"{key}: {_format_frontmatter_scalar(value)}")
-    if not lines:
+    """Serialize structured metadata as readable, portable YAML."""
+    values = {key: value for key, value in (metadata or {}).items() if value not in (None, "", [])}
+    if not values:
         return ""
-    return "---\n" + "\n".join(lines) + "\n---\n\n"
+    block = yaml.safe_dump(values, allow_unicode=True, sort_keys=False, width=100).rstrip()
+    return f"---\n{block}\n---\n\n"
 
 
 def with_frontmatter(content: str, metadata: Dict[str, Any]) -> str:
@@ -141,81 +131,3 @@ def trim_text(text: str, max_chars: int) -> str:
     if len(raw) <= max_chars:
         return raw
     return raw[: max(0, max_chars - 3)].rstrip() + "..."
-
-
-def _parse_frontmatter_block(block: str) -> Dict[str, Any]:
-    metadata: dict[str, Any] = {}
-    lines = str(block or "").splitlines()
-    index = 0
-    while index < len(lines):
-        raw_line = lines[index]
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#") or ":" not in stripped:
-            index += 1
-            continue
-
-        key, value = stripped.split(":", 1)
-        key = key.strip().lower()
-        value = value.strip()
-        if not key:
-            index += 1
-            continue
-
-        if value in {"|", ">"}:
-            block_lines: list[str] = []
-            index += 1
-            while index < len(lines):
-                continuation = lines[index]
-                if continuation.strip() and not continuation.startswith((" ", "\t")):
-                    break
-                block_lines.append(continuation.strip())
-                index += 1
-            metadata[key] = "\n".join(block_lines).strip()
-            continue
-
-        if not value:
-            values: list[Any] = []
-            index += 1
-            while index < len(lines):
-                candidate = lines[index].strip()
-                if candidate.startswith("- "):
-                    values.append(_parse_frontmatter_value(candidate[2:].strip()))
-                    index += 1
-                    continue
-                if not candidate or candidate.startswith("#"):
-                    index += 1
-                    continue
-                break
-            metadata[key] = values
-            continue
-
-        metadata[key] = _parse_frontmatter_value(value)
-        index += 1
-
-    return metadata
-
-
-def _parse_frontmatter_value(value: str) -> Any:
-    raw = str(value or "").strip()
-    if raw.startswith(("'", '"')) and raw.endswith(("'", '"')) and len(raw) >= 2:
-        raw = raw[1:-1]
-    if raw.startswith("[") and raw.endswith("]"):
-        return [item.strip().strip("'\"") for item in raw[1:-1].split(",") if item.strip()]
-    lowered = raw.lower()
-    if lowered in {"true", "false"}:
-        return lowered == "true"
-    return raw
-
-
-def _format_frontmatter_scalar(value: Any) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    raw = str(value).replace("\r", " ").replace("\n", " ").strip()
-    if raw == "":
-        return '""'
-    needs_quote = raw.startswith(("[", "{", "-", "#", "!", "&", "*", "'", '"')) or ":" in raw or "#" in raw
-    if raw.lower() in {"true", "false", "null", "none"}:
-        needs_quote = True
-    if not needs_quote:
-        return raw
-    return '"' + raw.replace('\\', '\\\\').replace('"', '\\"') + '"'

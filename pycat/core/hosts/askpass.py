@@ -1,13 +1,11 @@
 """Ephemeral authenticated loopback bridge for OpenSSH prompts. Stdlib only."""
 from __future__ import annotations
 
-import hmac
 import ctypes
-from ctypes import wintypes
+import hmac
 import json
 import os
 import re
-from pathlib import Path
 import secrets
 import shlex
 import socket
@@ -15,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+from ctypes import wintypes
+from pathlib import Path
 
 ASKPASS_ARG = "--pycat-ssh-askpass"
 

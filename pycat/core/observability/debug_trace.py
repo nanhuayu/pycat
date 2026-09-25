@@ -6,16 +6,16 @@ request/response/stream payload files are optional debugging attachments.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from datetime import datetime
 import base64
 import hashlib
 import json
 import logging
-from pathlib import Path
 import re
 import threading
 import time
+from dataclasses import dataclass, replace
+from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
 from pycat.models.session_paths import resolve_session_root

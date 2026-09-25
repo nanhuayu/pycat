@@ -16,7 +16,6 @@ from pycat.core.channel.scheduler import ChannelTurnScheduler
 from pycat.core.channel.worker import ChannelWorker
 from pycat.models.contracts.channel import ChannelConfig
 
-
 logger = logging.getLogger(__name__)
 
 

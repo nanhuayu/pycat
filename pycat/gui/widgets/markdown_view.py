@@ -7,13 +7,13 @@ import math
 import re
 from functools import partial
 
-from PyQt6.QtCore import QCoreApplication, QPoint, QSize, Qt, QTimer, QThreadPool, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QCoreApplication, QPoint, QSize, Qt, QThreadPool, QTimer, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage, QTextCursor, QTextDocument, QTextOption, QWheelEvent
 from PyQt6.QtWidgets import QAbstractScrollArea, QFrame, QSizePolicy, QTextBrowser, QTextEdit
 
-from pycat.gui.utils.theme import resolve_accent, resolve_theme, theme_tokens
-from pycat.gui.utils.message_images import image_source
 from pycat.gui.runtime.background_job import BackgroundJob
+from pycat.gui.utils.message_images import image_source
+from pycat.gui.utils.theme import resolve_accent, resolve_theme, theme_tokens
 from pycat.gui.widgets.themed_line_edit import ThemedContextMenuMixin
 from pycat.models.contracts.config import DEFAULT_ACCENT
 
@@ -267,7 +267,8 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
         self._theme_timer.timeout.connect(self._refresh_theme)
         self._refit_timer = QTimer(self)
         self._refit_timer.setSingleShot(True)
-        self._refit_timer.timeout.connect(self.refit_height)
+        self._refit_timer.timeout.connect(self._finish_refit)
+        self._pending_scroll_restore: tuple[int, bool] | None = None
         self.setReadOnly(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setOpenExternalLinks(True)
@@ -290,6 +291,8 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
         self._maximum_content_height: int | None = None
         self._height_padding = 2
         self.verticalScrollBar().rangeChanged.connect(self._on_scroll_range_changed)
+        self.verticalScrollBar().actionTriggered.connect(self._cancel_scroll_restore)
+        self.verticalScrollBar().sliderPressed.connect(self._cancel_scroll_restore)
 
         doc = self.document()
         opt = doc.defaultTextOption()
@@ -309,6 +312,10 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
         self.set_markdown(text)
 
     def set_markdown(self, text: str) -> None:
+        scrollbar = self.verticalScrollBar()
+        reading_position = None
+        if self._maximum_content_height is not None and self._raw_markdown_text:
+            reading_position = (scrollbar.value(), scrollbar.value() >= scrollbar.maximum())
         if text is None:
             text = ""
         text = str(text)
@@ -334,7 +341,22 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
                 self.setPlainText(text)
 
         self.refit_height()
+        if reading_position is not None:
+            position, follow_end = reading_position
+            scrollbar.setValue(scrollbar.maximum() if follow_end else position)
+        self._pending_scroll_restore = reading_position
         self._refit_timer.start(0)
+
+    def _finish_refit(self) -> None:
+        self.refit_height()
+        if self._pending_scroll_restore is not None:
+            position, follow_end = self._pending_scroll_restore
+            self._pending_scroll_restore = None
+            bar = self.verticalScrollBar()
+            bar.setValue(bar.maximum() if follow_end else position)
+
+    def _cancel_scroll_restore(self, *_args) -> None:
+        self._pending_scroll_restore = None
 
     def _refresh_theme(self) -> None:
         self.set_markdown(self._raw_markdown_text)
@@ -447,6 +469,7 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
         self.refit_height()
 
     def wheelEvent(self, event):
+        self._cancel_scroll_restore()
         if self._maximum_content_height is None:
             # An auto-height reply belongs to the transcript's scroll area.
             parent = self.parentWidget()
@@ -468,6 +491,8 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
     def _on_scroll_range_changed(self, _minimum: int, maximum: int) -> None:
         if self._maximum_content_height is None and maximum > 0:
             self.verticalScrollBar().setRange(0, 0)
+        elif self._maximum_content_height is not None and not self._fitting_height:
+            self._refit_timer.start(0)
 
     def _on_document_size_changed(self, *_args):
         self.refit_height()
@@ -502,6 +527,14 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
                 # can retain an oversized hidden range. The full document already
                 # fits here; remove the estimate, including keyboard/selection scroll.
                 self.verticalScrollBar().setRange(0, 0)
+            else:
+                # Qt can retain an estimated range after laying out wrapped
+                # headings/code. Use the laid-out document, not that estimate,
+                # so the last line is reachable without overscrolling it.
+                self.document().setTextWidth(max(120, self.viewport().width()))
+                content_height = math.ceil(self.document().documentLayout().documentSize().height())
+                self.verticalScrollBar().setRange(0, max(0, content_height - self.viewport().height()))
+                self.verticalScrollBar().setPageStep(self.viewport().height())
             self.updateGeometry()
         except Exception as exc:
             logger.debug("Failed to refit markdown view height: %s", exc)

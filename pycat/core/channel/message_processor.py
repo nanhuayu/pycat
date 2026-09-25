@@ -11,7 +11,6 @@ from pycat.core.channel.turn_runner import ChannelTurnRunner
 from pycat.models.contracts.channel import ChannelConfig
 from pycat.models.conversation import Conversation, Message
 
-
 logger = logging.getLogger(__name__)
 
 

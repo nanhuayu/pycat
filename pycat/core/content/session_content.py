@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from pycat.core.content.mime import DEFAULT_MIME, guess_mime, is_text_mime
+from pycat.core.content.office import extract_office_text, is_office_attachment
 from pycat.models.contracts.content import (
     ContentRef,
     InputPreparationFailure,
@@ -25,8 +27,6 @@ from pycat.models.contracts.content import (
 )
 from pycat.models.conversation import Conversation, Message
 from pycat.models.session_paths import resolve_session_root
-from pycat.core.content.office import extract_office_text, is_office_attachment
-
 
 MAX_INPUT_FILE_BYTES = 25 * 1024 * 1024
 MAX_INPUT_BATCH_BYTES = 64 * 1024 * 1024
@@ -128,7 +128,7 @@ class SessionContentService:
                 else:
                     raw, detected_name, detected_mime = self._read_source(source)
                 name = self._safe_name(attachment.get("name")) or detected_name
-                mime = self._safe_mime(attachment.get("mime")) or detected_mime or mimetypes.guess_type(name)[0] or "application/octet-stream"
+                mime = self._safe_mime(attachment.get("mime")) or detected_mime or guess_mime(name)
                 if total_size + len(raw) > MAX_INPUT_BATCH_BYTES:
                     raise ValueError(f"attachment batch exceeds {MAX_INPUT_BATCH_BYTES} bytes")
                 ref, created = self._store(
@@ -277,7 +277,7 @@ class SessionContentService:
             try:
                 requested = raw_ref if isinstance(raw_ref, ContentRef) else ContentRef.from_dict(raw_ref)
                 ref, raw, cache_key = self._load_snapshot(conversation, requested, cache=cache)
-                mime = str(ref.mime or "application/octet-stream").lower()
+                mime = str(ref.mime or DEFAULT_MIME).lower()
                 name = str(requested.name or ref.name or "attachment")
                 label = f"{name} ({mime}, {ref.ref})"
                 if str(conversation.work_dir).startswith("ssh://"):
@@ -314,7 +314,7 @@ class SessionContentService:
                         "--- End Office attachment ---"
                     )
                     continue
-                if self._is_text(ref):
+                if is_text_mime(ref.mime):
                     available = max(0, int(remaining_text_bytes[0] or 0))
                     included = min(len(raw), available)
                     truncated = included < len(raw)
@@ -374,7 +374,7 @@ class SessionContentService:
         ref = ContentRef(
             id=digest,
             name=name or "attachment",
-            mime=mime or "application/octet-stream",
+            mime=mime or DEFAULT_MIME,
             size=len(raw),
             digest=digest,
             ref=f"input:{digest}",
@@ -541,7 +541,7 @@ class SessionContentService:
             header, separator, payload = source.partition(",")
             if not separator or ";base64" not in header.lower():
                 raise ValueError("only base64 data URLs are supported")
-            mime = header[5:].split(";", 1)[0].strip().lower() or "application/octet-stream"
+            mime = header[5:].split(";", 1)[0].strip().lower() or DEFAULT_MIME
             if not mime.startswith("image/"):
                 raise ValueError("only image data URLs are supported")
             max_encoded_size = ((MAX_INPUT_FILE_BYTES + 2) // 3) * 4
@@ -561,7 +561,7 @@ class SessionContentService:
             raw = stream.read(MAX_INPUT_FILE_BYTES + 1)
         if len(raw) > MAX_INPUT_FILE_BYTES:
             raise ValueError(f"attachment exceeds {MAX_INPUT_FILE_BYTES} bytes: {path.name}")
-        mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        mime = guess_mime(path.name)
         return raw, path.name, mime
 
     @staticmethod
@@ -609,18 +609,6 @@ class SessionContentService:
     def _read_bounded_file(path: Path) -> bytes:
         with path.open("rb") as stream:
             return stream.read(MAX_INPUT_FILE_BYTES + 1)
-
-    @staticmethod
-    def _is_text(ref: ContentRef) -> bool:
-        mime = str(ref.mime or "").lower()
-        if mime.startswith("text/"):
-            return True
-        return mime in {
-            "application/json",
-            "application/xml",
-            "application/javascript",
-            "application/x-yaml",
-        }
 
     @classmethod
     def _record_dir(cls, conversation: Conversation, ref: ContentRef | str) -> Path:

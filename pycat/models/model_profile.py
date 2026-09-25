@@ -10,6 +10,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List
 
+from pycat.models.coercion import as_bool, optional_bool
+
 MODEL_INPUT_MODALITIES = frozenset({"text", "image", "audio"})
 BUNDLED_MODEL_TAG = "bundled"
 REASONING_CODECS = frozenset(
@@ -106,27 +108,6 @@ def _coerce_optional_float(value: Any) -> float | None:
         return None
 
 
-def _coerce_bool(value: Any, default: bool = False) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        text = value.strip().lower()
-        if text in {"1", "true", "yes", "on"}:
-            return True
-        if text in {"0", "false", "no", "off"}:
-            return False
-    try:
-        return bool(value)
-    except Exception:
-        return default
-
-
-def _coerce_optional_bool(value: Any) -> bool | None:
-    if value in (None, ""):
-        return None
-    return _coerce_bool(value)
-
-
 def _coerce_headers(value: Any) -> Dict[str, str]:
     if not isinstance(value, dict):
         return {}
@@ -168,7 +149,7 @@ def _coerce_json_object(value: Any) -> Dict[str, Any]:
 
 
 def _legacy_reasoning_mode(enabled: Any, effort: Any) -> str:
-    normalized_enabled = _coerce_optional_bool(enabled)
+    normalized_enabled = optional_bool(enabled)
     normalized_effort = str(effort or "").strip().lower()
     if normalized_effort == "none":
         normalized_effort = "off"
@@ -217,8 +198,8 @@ class ModelProfile:
         self.display_name = str(self.display_name or self.model_id).strip()
         self.context_window = _coerce_optional_int(self.context_window)
         self.max_output_tokens = _coerce_optional_int(self.max_output_tokens)
-        self.supports_tools = _coerce_bool(self.supports_tools, True)
-        self.supports_reasoning = _coerce_bool(self.supports_reasoning, True)
+        self.supports_tools = as_bool(self.supports_tools, True)
+        self.supports_reasoning = as_bool(self.supports_reasoning, True)
 
         self.input_modalities = _coerce_string_list(
             self.input_modalities,
@@ -284,7 +265,7 @@ class ModelProfile:
         payload = dict(data or {})
         has_modalities = "input_modalities" in payload
         modalities = list(payload.get("input_modalities") or ["text"]) if has_modalities else ["text"]
-        if not has_modalities and _coerce_optional_bool(payload.get("supports_vision")) is True:
+        if not has_modalities and optional_bool(payload.get("supports_vision")) is True:
             modalities.append("image")
         reasoning_default = str(payload.get("reasoning_default") or "").strip().lower()
         if reasoning_default == "none":

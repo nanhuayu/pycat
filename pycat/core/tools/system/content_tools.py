@@ -8,7 +8,6 @@ from pycat.core.content.archive_view_service import ArchiveViewService
 from pycat.core.context.compression import MIN_LLM_COMPRESSION_CHARS
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
 
-
 ARCHIVE_CONTENT_CHARS = 8000
 
 

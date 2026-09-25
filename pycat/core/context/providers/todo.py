@@ -3,6 +3,7 @@ from __future__ import annotations
 from pycat.core.context.providers.base import MessageProviderMixin, ProviderContext, context_item
 from pycat.core.state.operations import get_active_todos
 
+
 class TodoProvider(MessageProviderMixin):
     name = "todo"
     priority = 25

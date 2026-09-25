@@ -7,8 +7,7 @@ import json
 import os
 import sys
 
-from pycat.cli import APP_VERSION
-
+from pycat.core.version import __version__
 
 CLI_COMMANDS = {"exec", "resume", "model", "config", "new", "rename", "pin", "archive", "delete",
                 "import", "export", "serve", "version", "doctor", "tools", "skills", "mcp", "mode",
@@ -143,7 +142,7 @@ def _value(text):
 async def execute_args(args):
     from pycat.cli.executor import CliExecutor
     from pycat.cli.output import CliOutput
-    from pycat.models.contracts.agent import RunRequest, TurnRevision, ApplicationError
+    from pycat.models.contracts.agent import ApplicationError, RunRequest, TurnRevision
     out = CliOutput(mode=getattr(args, "output_format", "text"))
     endpoint = getattr(args, "endpoint", "")
     services = None
@@ -289,7 +288,7 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.version or args.command == "version":
-        print(f"PyCat {APP_VERSION}")
+        print(f"PyCat {__version__}")
         return 0
     if args.command == "serve":
         try:

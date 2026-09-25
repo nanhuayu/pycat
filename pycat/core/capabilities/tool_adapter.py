@@ -179,7 +179,10 @@ class CapabilityTool(BaseTool):
                 mask=mask,
             )
         except Exception as exc:
-            return ToolResult(f"Capability '{self.capability.id}' failed: {exc}", is_error=True)
+            metadata = dict(getattr(exc, "metadata", {}) or {})
+            metadata.setdefault("error_code", "capability_input_invalid" if isinstance(exc, ValueError) else "capability_failed")
+            metadata.setdefault("retryable", False)
+            return ToolResult(f"Capability '{self.capability.id}' failed: {exc}", is_error=True, metadata=metadata)
         validation_error = str(getattr(result, "validation_error", "") or "")
         if validation_error:
             return ToolResult(f"Capability '{self.capability.id}' failed: {validation_error}", is_error=True)

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from threading import RLock
 from typing import Callable, Generic, TypeVar
-
 
 T = TypeVar("T")
 Listener = Callable[[], None]
@@ -43,11 +41,3 @@ class Store(Generic[T]):
                 self._listeners.discard(listener)
 
         return _unsubscribe
-
-
-def patch_dataclass_state(state: T, **updates) -> T:
-    return replace(state, **updates)
-
-
-def create_store(initial_state: T, on_change: OnChange[T] | None = None) -> Store[T]:
-    return Store(initial_state=initial_state, on_change=on_change)

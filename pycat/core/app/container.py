@@ -10,54 +10,56 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
-from pycat.core.app import AppBootstrap, AppCoordinator
+from pycat.core.agent.run.runtime import AgentRuntime
+from pycat.core.agent.tooling.executor import ToolExecutor
+from pycat.core.app.bootstrap import AppBootstrap
+from pycat.core.app.channel_platforms import build_channel_platforms
+from pycat.core.app.coordinator import AppCoordinator
+from pycat.core.app.loop_host import ApplicationLoop
+from pycat.core.app.repositories import AppRepositories
+from pycat.core.app.repositories.provider_credentials import ProviderCredentialsRepository
 from pycat.core.app.services.app_settings import AppSettingsService
 from pycat.core.app.services.channel import ChannelService
-from pycat.core.app.services.provider_catalog import ProviderCatalogService
-from pycat.core.app.services.provider import ProviderService
 from pycat.core.app.services.codex_auth import CodexAuthService
-from pycat.core.app.services.workbuddy_auth import WorkBuddyAuthService
-from pycat.core.app.repositories.provider_credentials import ProviderCredentialsRepository
-from pycat.core.app.services.mode_catalog import ModeCatalogService
-from pycat.core.app.services.conversation import ConversationService
+from pycat.core.app.services.commands import CommandService
 from pycat.core.app.services.context import ContextService
-from pycat.core.app.services.skill import SkillService
+from pycat.core.app.services.conversation import ConversationService
+from pycat.core.app.services.delegation import DelegationService
 from pycat.core.app.services.extensions import ExtensionService
+from pycat.core.app.services.interactive import InteractiveService
 from pycat.core.app.services.knowledge import KnowledgeService
-from pycat.core.content.resolver import SessionContentResolver
-from pycat.core.content.wiki import WikiService
-from pycat.core.memory.review import MemoryReviewService
-from pycat.core.memory.worker import CurationWorker
-from pycat.core.app.services.search import SearchService
-from pycat.core.app.services.settings_update import SettingsUpdateService
+from pycat.core.app.services.mode_catalog import ModeCatalogService
+from pycat.core.app.services.provider import ProviderService
+from pycat.core.app.services.provider_catalog import ProviderCatalogService
 from pycat.core.app.services.release import ReleaseChecker
 from pycat.core.app.services.run import RunService
-from pycat.core.app.services.commands import CommandService
+from pycat.core.app.services.search import SearchService
+from pycat.core.app.services.settings_update import SettingsUpdateService
+from pycat.core.app.services.skill import SkillService
+from pycat.core.app.services.tools import McpService, ToolService
 from pycat.core.app.services.workbench import WorkbenchService
-from pycat.core.app.services.interactive import InteractiveService
-from pycat.core.app.loop_host import ApplicationLoop
-from pycat.core.app.services.tools import ToolService, McpService
-from pycat.core.agent.tooling.executor import ToolExecutor
-from pycat.core.app.repositories import AppRepositories
-from pycat.core.app.channel_platforms import build_channel_platforms
-from pycat.core.config.io import load_settings_dict
-from pycat.core.persistence import DataDirectoryLease
-from pycat.core.llm.client import LLMClient
-from pycat.core.content.ocr import OcrService
-from pycat.core.content.session_content import SessionContentService
+from pycat.core.app.services.workbuddy_auth import WorkBuddyAuthService
 from pycat.core.app.services.workspace import WorkspaceService
-from pycat.core.prompts.renderer import PromptRenderer
-from pycat.core.agent.run.runtime import AgentRuntime
 from pycat.core.capabilities import (
     CapabilitiesConfig,
     CapabilitiesManager,
     CapabilityExecutor,
     default_capabilities_config,
 )
-from pycat.core.channel.gateway import ChannelGateway
 from pycat.core.channel.catalog import ChannelCatalog
-from pycat.core.tools.manager import ToolManager
+from pycat.core.channel.gateway import ChannelGateway
 from pycat.core.commands import CommandRegistry
+from pycat.core.config.io import load_settings_dict
+from pycat.core.content.ocr import OcrService
+from pycat.core.content.resolver import SessionContentResolver
+from pycat.core.content.session_content import SessionContentService
+from pycat.core.content.wiki import WikiService
+from pycat.core.llm.client import LLMClient
+from pycat.core.memory.review import MemoryReviewService
+from pycat.core.memory.worker import CurationWorker
+from pycat.core.persistence import DataDirectoryLease
+from pycat.core.prompts.renderer import PromptRenderer
+from pycat.core.tools.manager import ToolManager
 from pycat.models.contracts.config import AppConfig
 from pycat.models.model_ref import split_model_ref
 
@@ -89,6 +91,7 @@ class AppServices:
     capability_executor: CapabilityExecutor
     agent_runtime: AgentRuntime
     run_service: RunService
+    delegation_service: DelegationService
     tools: ToolService
     mcp: McpService
     channel_gateway: ChannelGateway
@@ -263,6 +266,9 @@ class AppContainer:
             data_dir=data_dir,
             context=context_service,
         )
+        delegation_service = DelegationService(runs=run_service, tools=tool_manager, on_change=app_coordinator.invalidate_content)
+        run_service.delegation = delegation_service
+        tool_manager.registry.get_tool('agent__task').operation = delegation_service.operate
         channel_platforms = build_channel_platforms(content_resolver=resolver)
         channel_gateway = ChannelGateway(
             data_dir=repositories.data_dir,
@@ -344,6 +350,7 @@ class AppContainer:
             channel_gateway=channel_gateway,
             run_service=run_service,
             tools=tools_service,
+            delegation_service=delegation_service,
             mcp=mcp_service,
             channel_service=channel_service,
             channel_catalog=channel_platforms.catalog,
@@ -374,6 +381,7 @@ class AppContainer:
         self.services.provider_service.close()
         try:
             await self.services.interactive.aclose()
+            await self.services.delegation_service.aclose()
             await self.services.run_service.aclose()
             results = await asyncio.gather(
                 asyncio.to_thread(self.services.curation_worker.close),

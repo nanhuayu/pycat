@@ -2,16 +2,23 @@
 from __future__ import annotations
 
 import logging
-from PyQt6.QtCore import pyqtSignal, Qt, QSize
+
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, QSize, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup
 from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QMenu, QSizePolicy, QToolButton, QWidget
 
+from pycat.gui.shortcuts import shortcut_sequence
 from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.shortcuts import shortcut_sequence
-from pycat.gui.utils.theme import prepare_context_menu, resolve_accent, resolve_theme, theme_tokens
-from pycat.gui.widgets.model_ref_selector import ModelRefCombo
+from pycat.gui.utils.theme import (
+    COMPACT_CONTROL_HEIGHT,
+    prepare_context_menu,
+    resolve_accent,
+    resolve_theme,
+    theme_tokens,
+)
 from pycat.gui.widgets.input.context_usage_button import ContextUsageButton
+from pycat.gui.widgets.model_ref_selector import ModelRefCombo
 from pycat.models.contracts.tooling import (
     DEFAULT_FILESYSTEM_MODE,
     DEFAULT_TOOL_APPROVAL,
@@ -19,15 +26,13 @@ from pycat.models.contracts.tooling import (
     normalize_tool_approval,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
 class ComposerToolbar(QWidget):
     """Compact toolbar with one visible control per conversation setting."""
 
-    _BUTTON_SIZE = QSize(30, 30)
-    _PRIMARY_ACTION_BUTTON_SIZE = QSize(30, 30)
+    _BUTTON_SIZE = QSize(COMPACT_CONTROL_HEIGHT, COMPACT_CONTROL_HEIGHT)
     _ICON_SIZE = QSize(18, 18)
     _PRIMARY_ACTION_ICON_SIZE = QSize(20, 20)
     _MODEL_SELECTOR_MIN_WIDTH = 104
@@ -45,11 +50,11 @@ class ComposerToolbar(QWidget):
     model_edit_requested = pyqtSignal()
 
     _TOOL_APPROVAL_ITEMS = (
-        ("默认权限", "default"),
-        ("每次确认", "ask"),
-        ("自动执行", "allow"),
-        ("禁用工具", "deny"),
-        ("自定义规则", "custom"),
+        (QT_TRANSLATE_NOOP('ComposerToolbar', "默认权限"), "default"),
+        (QT_TRANSLATE_NOOP('ComposerToolbar', "每次确认"), "ask"),
+        (QT_TRANSLATE_NOOP('ComposerToolbar', "自动执行"), "allow"),
+        (QT_TRANSLATE_NOOP('ComposerToolbar', "禁用工具"), "deny"),
+        (QT_TRANSLATE_NOOP('ComposerToolbar', "自定义规则"), "custom"),
     )
     _TOOL_APPROVAL_LABELS = {value: label for label, value in _TOOL_APPROVAL_ITEMS}
     _TOOL_APPROVAL_VISUALS = {
@@ -60,20 +65,20 @@ class ComposerToolbar(QWidget):
         "custom": (Icons.SLIDERS, "primary"),
     }
     _TOOL_APPROVAL_DESCRIPTIONS = {
-        "default": "按内置安全表执行，部分工具类别需要确认",
-        "ask": "每次工具执行前都逐个确认",
-        "allow": "当前可见工具不再逐次确认",
-        "deny": "不展示或执行普通模型工具",
-        "custom": "使用设置页维护的类别与工具规则",
+        "default": QT_TRANSLATE_NOOP('ComposerToolbar', "按内置安全表执行，部分工具类别需要确认"),
+        "ask": QT_TRANSLATE_NOOP('ComposerToolbar', "每次工具执行前都逐个确认"),
+        "allow": QT_TRANSLATE_NOOP('ComposerToolbar', "当前可见工具不再逐次确认"),
+        "deny": QT_TRANSLATE_NOOP('ComposerToolbar', "不展示或执行普通模型工具"),
+        "custom": QT_TRANSLATE_NOOP('ComposerToolbar', "使用设置页维护的类别与工具规则"),
     }
     _FILESYSTEM_MODE_ITEMS = (
-        ("限制到工作区", "confined"),
-        ("允许所有本地路径", "full_access"),
+        (QT_TRANSLATE_NOOP('ComposerToolbar', "限制到工作区"), "confined"),
+        (QT_TRANSLATE_NOOP('ComposerToolbar', "允许所有本地路径"), "full_access"),
     )
     _FILESYSTEM_MODE_LABELS = {value: label for label, value in _FILESYSTEM_MODE_ITEMS}
     _FILESYSTEM_MODE_DESCRIPTIONS = {
-        "confined": "内置文件工具受工作区和本次任务读取授权约束",
-        "full_access": "内置文件工具可访问工作区外路径；Shell/Python 不受操作系统沙箱隔离",
+        "confined": QT_TRANSLATE_NOOP('ComposerToolbar', "内置文件工具受工作区和本次任务读取授权约束"),
+        "full_access": QT_TRANSLATE_NOOP('ComposerToolbar', "内置文件工具可访问工作区外路径；Shell/Python 不受操作系统沙箱隔离"),
     }
 
     def __init__(self, parent=None):
@@ -99,45 +104,45 @@ class ComposerToolbar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        self.attach_btn = self._make_icon_button(Icons.PLUS, "添加文件/图片")
+        self.attach_btn = self._make_icon_button(Icons.PLUS, QCoreApplication.translate('ComposerToolbar', "添加文件/图片"))
         self.attach_btn.clicked.connect(self.attach_requested.emit)
         layout.addWidget(self.attach_btn)
 
         self.mode_combo = QComboBox()
         self.mode_combo.setObjectName("mode_combo")
-        self._configure_combo(self.mode_combo, minimum=64, maximum=88, popup_minimum=180, tooltip="选择对话模式")
+        self._configure_combo(self.mode_combo, minimum=64, maximum=88, popup_minimum=180, tooltip=QCoreApplication.translate('ComposerToolbar', "选择对话模式"))
         layout.addWidget(self.mode_combo)
 
-        self.permission_btn = self._make_icon_button(Icons.SHIELD, "会话访问设置")
+        self.permission_btn = self._make_icon_button(Icons.SHIELD, QCoreApplication.translate('ComposerToolbar', "会话访问设置"))
         self.permission_btn.setObjectName("access_policy_btn")
         self.permission_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self._permission_menu = prepare_context_menu(QMenu(self.permission_btn), self)
         self._permission_menu.aboutToShow.connect(
             lambda: prepare_context_menu(self._permission_menu, self)
         )
-        self._tool_approval_header = self._permission_menu.addAction("工具操作")
+        self._tool_approval_header = self._permission_menu.addAction(QCoreApplication.translate('ComposerToolbar', "工具操作"))
         self._tool_approval_header.setEnabled(False)
         self._tool_approval_actions = QActionGroup(self._permission_menu)
         self._tool_approval_actions.setExclusive(True)
         for label, value in self._TOOL_APPROVAL_ITEMS:
-            action = QAction(label, self._permission_menu)
+            action = QAction(QCoreApplication.translate("ComposerToolbar", label), self._permission_menu)
             action.setCheckable(True)
             action.setData(value)
             icon_name, tone = self._TOOL_APPROVAL_VISUALS[value]
             action.setIcon(self._permission_icon(icon_name, tone))
-            action.setToolTip(self._TOOL_APPROVAL_DESCRIPTIONS[value])
+            action.setToolTip(QCoreApplication.translate("ComposerToolbar", self._TOOL_APPROVAL_DESCRIPTIONS[value]))
             action.triggered.connect(
                 lambda _checked=False, approval=value: self.tool_approval_changed.emit(approval)
             )
             self._tool_approval_actions.addAction(action)
             self._permission_menu.addAction(action)
         self._permission_menu.addSeparator()
-        self._filesystem_mode_header = self._permission_menu.addAction("内置文件工具范围")
+        self._filesystem_mode_header = self._permission_menu.addAction(QCoreApplication.translate('ComposerToolbar', "内置文件工具范围"))
         self._filesystem_mode_header.setEnabled(False)
         self._filesystem_mode_actions = QActionGroup(self._permission_menu)
         self._filesystem_mode_actions.setExclusive(True)
         for label, value in self._FILESYSTEM_MODE_ITEMS:
-            action = QAction(label, self._permission_menu)
+            action = QAction(QCoreApplication.translate("ComposerToolbar", label), self._permission_menu)
             action.setCheckable(True)
             action.setData(value)
             action.setIcon(
@@ -146,7 +151,7 @@ class ComposerToolbar(QWidget):
                     "danger" if value == "full_access" else "primary",
                 )
             )
-            action.setToolTip(self._FILESYSTEM_MODE_DESCRIPTIONS[value])
+            action.setToolTip(QCoreApplication.translate("ComposerToolbar", self._FILESYSTEM_MODE_DESCRIPTIONS[value]))
             action.triggered.connect(
                 lambda _checked=False, mode=value: self.filesystem_mode_changed.emit(mode)
             )
@@ -162,7 +167,7 @@ class ComposerToolbar(QWidget):
         self.context_usage_btn.compact_requested.connect(self.compact_requested.emit)
         layout.addWidget(self.context_usage_btn)
 
-        self.session_options_btn = self._make_icon_button(Icons.SLIDERS, "对话设置")
+        self.session_options_btn = self._make_icon_button(Icons.SLIDERS, QCoreApplication.translate('ComposerToolbar', "对话设置"))
         self.session_options_btn.setObjectName("session_options_btn")
         self.session_options_btn.clicked.connect(self.session_settings_requested.emit)
         layout.addWidget(self.session_options_btn)
@@ -173,7 +178,7 @@ class ComposerToolbar(QWidget):
         self.model_ref_combo = ModelRefCombo(
             [],
             allow_empty=False,
-            empty_label="选择模型",
+            empty_label=QCoreApplication.translate('ComposerToolbar', "选择模型"),
             allow_unlisted_current=True,
         )
         self.model_ref_combo.setObjectName("bottom_model_selector")
@@ -183,7 +188,7 @@ class ComposerToolbar(QWidget):
         self.model_ref_combo.setMaximumWidth(self._MODEL_SELECTOR_MAX_WIDTH)
         self.model_ref_combo.setFixedHeight(self._BUTTON_SIZE.height())
         self.model_ref_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        self.model_ref_combo.setToolTip("选择当前对话模型")
+        self.model_ref_combo.setToolTip(QCoreApplication.translate('ComposerToolbar', "选择当前对话模型"))
         try:
             line_edit = self.model_ref_combo.lineEdit()
             line_edit.setTextMargins(0, 0, 0, 0)
@@ -201,19 +206,19 @@ class ComposerToolbar(QWidget):
         self._compact_model_ref_combo_width()
         layout.addWidget(self.model_ref_combo)
 
-        self.model_edit_btn = self._make_icon_button(Icons.EDIT, "编辑模型")
+        self.model_edit_btn = self._make_icon_button(Icons.EDIT, QCoreApplication.translate('ComposerToolbar', "编辑模型"))
         self.model_edit_btn.setObjectName("model_edit_btn")
         self.model_edit_btn.clicked.connect(self.model_edit_requested.emit)
         layout.addWidget(self.model_edit_btn)
         self._sync_access_btn_enabled()
 
-        self.prompt_optimize_btn = self._make_icon_button(Icons.WAND, "优化提示词")
+        self.prompt_optimize_btn = self._make_icon_button(Icons.WAND, QCoreApplication.translate('ComposerToolbar', "优化提示词"))
         self.prompt_optimize_btn.clicked.connect(self._handle_prompt_optimize_clicked)
         layout.addWidget(self.prompt_optimize_btn)
 
-        self.primary_action_btn = self._make_button("", "发送消息")
+        self.primary_action_btn = self._make_button("", QCoreApplication.translate('ComposerToolbar', "发送消息"))
         self.primary_action_btn.setObjectName("primary_action_btn")
-        self.primary_action_btn.setFixedSize(self._PRIMARY_ACTION_BUTTON_SIZE)
+        self.primary_action_btn.setFixedSize(self._BUTTON_SIZE)
         self.primary_action_btn.clicked.connect(self.primary_action_requested.emit)
         layout.addWidget(self.primary_action_btn)
         self._sync_primary_action()
@@ -270,8 +275,8 @@ class ComposerToolbar(QWidget):
         self._sync_access_btn_enabled()
 
     def _apply_access_display(self) -> None:
-        approval_label = self._TOOL_APPROVAL_LABELS[self._tool_approval]
-        filesystem_label = self._FILESYSTEM_MODE_LABELS[self._filesystem_mode]
+        approval_label = QCoreApplication.translate("ComposerToolbar", self._TOOL_APPROVAL_LABELS[self._tool_approval])
+        filesystem_label = QCoreApplication.translate("ComposerToolbar", self._FILESYSTEM_MODE_LABELS[self._filesystem_mode])
         if self._tool_approval == "deny":
             icon_name, tone = Icons.LOCK, "muted"
         elif self._filesystem_mode == "full_access":
@@ -283,10 +288,11 @@ class ComposerToolbar(QWidget):
         self.permission_btn.setIcon(self._permission_icon(icon_name, tone))
         self.permission_btn.setProperty("tone", tone)
         tooltip = (
-            f"工具操作：{approval_label}\n"
-            f"{self._TOOL_APPROVAL_DESCRIPTIONS[self._tool_approval]}\n"
-            f"内置文件工具范围：{filesystem_label}\n"
-            f"{self._FILESYSTEM_MODE_DESCRIPTIONS[self._filesystem_mode]}"
+            QCoreApplication.translate('ComposerToolbar', '工具操作：{approval}\n{approval_detail}\n内置文件工具范围：{scope}\n{scope_detail}').format(
+                approval=approval_label,
+                approval_detail=QCoreApplication.translate("ComposerToolbar", self._TOOL_APPROVAL_DESCRIPTIONS[self._tool_approval]),
+                scope=filesystem_label,
+                scope_detail=QCoreApplication.translate("ComposerToolbar", self._FILESYSTEM_MODE_DESCRIPTIONS[self._filesystem_mode]))
         )
         self.permission_btn.setToolTip(tooltip)
         self.permission_btn.setAccessibleName(tooltip.replace("\n", "，"))
@@ -346,7 +352,7 @@ class ComposerToolbar(QWidget):
     def _compact_model_ref_combo_width(self, *_args) -> None:
         try:
             model_ref = self.model_ref_combo.model_ref()
-            text = self.model_ref_combo.currentText() or model_ref or "选择模型"
+            text = self.model_ref_combo.currentText() or model_ref or QCoreApplication.translate('ComposerToolbar', "选择模型")
             line_edit = self.model_ref_combo.lineEdit()
             current_index = self.model_ref_combo.currentIndex()
             selected_text = (
@@ -357,7 +363,7 @@ class ComposerToolbar(QWidget):
             if model_ref and line_edit.text().strip() == selected_text:
                 line_edit.setCursorPosition(0)
             self.model_ref_combo.setToolTip(
-                f"选择当前对话模型\n当前：{model_ref}" if model_ref else "选择当前对话模型"
+                QCoreApplication.translate('ComposerToolbar', '选择当前对话模型\n当前：{model_ref}').format(model_ref=model_ref) if model_ref else QCoreApplication.translate('ComposerToolbar', "选择当前对话模型")
             )
             text_width = self.model_ref_combo.fontMetrics().horizontalAdvance(str(text))
             width = text_width + 22
@@ -475,16 +481,18 @@ class ComposerToolbar(QWidget):
         self.primary_action_btn.setText("")
         send_hint = f" ({self._send_shortcut})" if self._send_shortcut else ""
         if stopping:
-            tooltip = "停止当前任务 (Esc)"
+            tooltip = QCoreApplication.translate('ComposerToolbar', "停止当前任务 (Esc)")
             tone = "danger"
         elif self._is_streaming:
-            tooltip = "引导当前任务 (" + (self._send_shortcut + "；" if self._send_shortcut else "") + "Esc 停止)"
+            tooltip = (QCoreApplication.translate('ComposerToolbar', "引导当前任务 ({shortcut}；Esc 停止)").format(
+                shortcut=self._send_shortcut) if self._send_shortcut else
+                QCoreApplication.translate('ComposerToolbar', "引导当前任务 (Esc 停止)"))
             tone = "primary"
         elif self._revision_active:
-            tooltip = "替换并重试" + send_hint
+            tooltip = QCoreApplication.translate('ComposerToolbar', "替换并重试") + send_hint
             tone = "primary"
         else:
-            tooltip = "发送消息" + send_hint
+            tooltip = QCoreApplication.translate('ComposerToolbar', "发送消息") + send_hint
             tone = "primary"
         self.primary_action_btn.setToolTip(tooltip)
         self.primary_action_btn.setAccessibleName(tooltip)
@@ -511,10 +519,10 @@ class ComposerToolbar(QWidget):
         self.prompt_optimize_btn.setEnabled(not is_streaming)
         if busy:
             self.prompt_optimize_btn.setIcon(Icons.get(Icons.STOP, color=Icons.COLOR_ERROR, scale_factor=1.0))
-            self.prompt_optimize_btn.setToolTip("取消提示词优化")
+            self.prompt_optimize_btn.setToolTip(QCoreApplication.translate('ComposerToolbar', "取消提示词优化"))
         else:
             self.prompt_optimize_btn.setIcon(Icons.get(Icons.WAND, scale_factor=1.0))
-            self.prompt_optimize_btn.setToolTip("优化提示词")
+            self.prompt_optimize_btn.setToolTip(QCoreApplication.translate('ComposerToolbar', "优化提示词"))
 
     def _handle_prompt_optimize_clicked(self) -> None:
         if self._prompt_optimize_busy:

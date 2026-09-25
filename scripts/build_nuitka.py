@@ -44,7 +44,7 @@ def entry_plan(frontend="all", ocr=True, compiler="auto", jobs=4, analyze=False,
         "--product-name=PyCat", "--company-name=PyCat Contributors",
         f"--file-version={version()}", f"--product-version={version()}",
         "--windows-icon-from-ico=pycat/assets/pycat.ico",
-        "--include-module=pycat.core.tools.system.python_worker",
+        "--include-module=pycat.core.hosts.python_worker",
         "--include-module=pycat.core.tools.pty_child",
         # ddgs lazily imports its implementation and discovers engines via pkgutil.
         "--include-module=ddgs.ddgs", "--include-package=ddgs.engines",
@@ -95,6 +95,7 @@ def entry_plan(frontend="all", ocr=True, compiler="auto", jobs=4, analyze=False,
         command += ["--nofollow-import-to=pycat.gui,PyQt6"]
     else:
         command += ["--enable-plugin=pyqt6",
+                    "--include-package-data=pycat:assets/translations/*.qm",
                     "--include-package-data=PyQt6:Qt6/translations/qtbase_zh_CN.qm",
                     "--include-package-data=pycat:assets/*.svg",
                     "--include-package-data=pycat:assets/*.ico",
@@ -193,7 +194,7 @@ def main(argv=None) -> int:
     archive = output_root / (label + ".zip")
     if archive.exists() and not args.analyze:
         parser.error(f"Release already exists: {archive}. Use --output-root to build another copy.")
-    required = ["Nuitka", "httpx", "Pillow", "PyMuPDF", "python-docx", "mcp", "ddgs", "psutil",
+    required = ["Nuitka", "httpx", "Pillow", "PyMuPDF", "PyYAML", "python-docx", "mcp", "ddgs", "psutil",
                 "pywinpty", "textual", "fastapi", "uvicorn"]
     if args.frontend != "cli":
         required += ["PyQt6", "pyte"]
@@ -212,6 +213,9 @@ def main(argv=None) -> int:
     env["NUITKA_CACHE_DIR"] = str(CACHE)
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
+    if args.frontend != "cli":
+        subprocess.run([sys.executable, str(ROOT / 'scripts/check_translations.py')],
+                       cwd=ROOT, env=env, check=True)
     if not args.analyze:
         subprocess.run([sys.executable, str(ROOT / 'scripts/build_public_intro.py'), '--check'],
                        cwd=ROOT, env=env, check=True)

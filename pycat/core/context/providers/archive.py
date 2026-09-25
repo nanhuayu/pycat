@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pycat.core.content.markdown import trim_text
 from pycat.core.context.items import ContextItem
-from pycat.core.llm.token_budget import estimate_tokens
 from pycat.core.context.providers.base import MessageProviderMixin, ProviderContext, context_item
+from pycat.core.llm.token_budget import estimate_tokens
 
 
 class ArchiveIndexProvider(MessageProviderMixin):

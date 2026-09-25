@@ -6,7 +6,6 @@ from pycat.core.channel.platforms.qqbot import QQBotChannelPlatformBackend
 from pycat.core.channel.platforms.telegram import TelegramChannelPlatformBackend
 from pycat.core.channel.platforms.wechat import WeChatChannelPlatformBackend
 
-
 __all__ = [
     "ChannelPlatformBackend",
     "FeishuChannelPlatformBackend",

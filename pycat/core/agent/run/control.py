@@ -10,7 +10,6 @@ from pathlib import Path
 from pycat.models.contracts.agent import RunPolicy
 from pycat.models.contracts.tooling import FilesystemScope, ToolPermissionConfig
 
-
 _COMPLETION_TOOL = "agent__complete"
 
 
@@ -24,6 +23,9 @@ def effective_run_policy(
     revision = 0
     if control is not None:
         permissions, filesystem_scope, revision = control.access_snapshot()
+    if policy.task_access is not None:
+        permissions = policy.task_access.permissions_for(permissions)
+        filesystem_scope = policy.task_access.scope_for(filesystem_scope)
     if policy.completion_policy == "explicit":
         permissions = ToolPermissionConfig(
             category_defaults=dict(permissions.category_defaults or {}),

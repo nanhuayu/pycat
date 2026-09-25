@@ -17,6 +17,7 @@ pycat/assets/tools/ripgrep/windows-x64/
 _*.md
 temp/
 temp_*
+tmp/
 debug/
 
 .pycat/
@@ -46,9 +47,11 @@ pip-wheel-metadata/
 
 # PyInstaller
 *.spec
-build/
-dist/
 release/
+/showcase/output/
+/showcase/voice/*
+/showcase/recordings/*
+/showcase/music/*
 
 # Virtual environments
 venv/
@@ -60,7 +63,6 @@ env.bak/
 venv.bak/
 
 # Editor/IDE
-.vscode/
 .idea/
 *.sublime-workspace
 *.sublime-project

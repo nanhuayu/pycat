@@ -8,13 +8,12 @@ Consolidates:
 
 from __future__ import annotations
 
-import json
 import codecs
+import json
 import logging
 from typing import Any, AsyncIterator, Optional, TextIO
 
 import httpx
-
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +96,7 @@ async def iter_sse_data_lines(
         event_type = "\n".join(event_lines).strip()
         event_lines = []
         data_lines = []
-        if not data or data == "[DONE]":
+        if not data:
             return None
         if event_type and data.startswith("{"):
             payload = parse_json_safely(data)
@@ -157,14 +156,16 @@ async def iter_sse_data_lines(
                     _write_log(payload)
                     yield payload
 
+    tail = buffer.strip()
+    if tail.startswith("data:"):
+        data_lines.append(tail.split(":", 1)[1].lstrip())
+    elif tail.startswith("{") and tail.endswith("}"):
+        _write_log(tail)
+        yield tail
     payload = _emit_event_payload()
     if payload:
         _write_log(payload)
         yield payload
-    tail = buffer.strip()
-    if tail.startswith("{") and tail.endswith("}"):
-        _write_log(tail)
-        yield tail
 
 
 def parse_sse_json(data: str) -> Any:

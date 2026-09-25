@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping
 
+from pycat.models.coercion import as_bool
 from pycat.models.contracts.capability import CapabilitiesConfig
 from pycat.models.contracts.channel import ChannelConfig
 from pycat.models.contracts.tooling import ToolPermissionConfig
-
 
 DEFAULT_ACCENT = "forest"
 SUPPORTED_ACCENTS = ("blue", "lavender", "forest")
@@ -28,15 +28,6 @@ def _as_str(v: Any, default: str = "") -> str:
     except Exception:
         return default
     return s
-
-
-def _as_bool(v: Any, default: bool = False) -> bool:
-    if v is None:
-        return default
-    try:
-        return bool(v)
-    except Exception:
-        return default
 
 
 def _as_int(v: Any, default: int = 0) -> int:
@@ -78,7 +69,7 @@ class CompressionPolicyConfig:
         tight_ratio = max(0.10, min(0.94, _as_float(d.get("tight_replay_threshold_ratio"), 0.35)))
         tight_ratio = min(tight_ratio, compact_ratio - 0.01)
         return CompressionPolicyConfig(
-            tight_replay_enabled=_as_bool(d.get("tight_replay_enabled"), True),
+            tight_replay_enabled=as_bool(d.get("tight_replay_enabled"), True),
             tight_replay_threshold_ratio=tight_ratio,
             token_threshold_ratio=compact_ratio,
         )
@@ -100,7 +91,7 @@ class ContextConfig:
     def from_dict(data: Mapping[str, Any] | None) -> "ContextConfig":
         d = _as_dict(dict(data) if data is not None else {})
         return ContextConfig(
-            agent_auto_compress_enabled=_as_bool(d.get("agent_auto_compress_enabled"), True),
+            agent_auto_compress_enabled=as_bool(d.get("agent_auto_compress_enabled"), True),
             compression_policy=CompressionPolicyConfig.from_dict(_as_dict(d.get("compression_policy"))),
         )
 
@@ -128,7 +119,7 @@ class PromptsConfig:
                 or d.get("base_role_definition"),
                 "",
             ).strip(),
-            include_environment=_as_bool(d.get("include_environment"), True),
+            include_environment=as_bool(d.get("include_environment"), True),
             file_tree_max_depth=int(d.get("file_tree_max_depth", 2) or 2),
         )
 
@@ -220,7 +211,7 @@ class ShellConfig:
                 if isinstance(d.get("arguments", []), (list, tuple)) else (),
             wsl_distro=_as_str(d.get("wsl_distro"), "").strip(),
             output_encoding=encoding,
-            inherit_env=_as_bool(d.get("inherit_env"), True),
+            inherit_env=as_bool(d.get("inherit_env"), True),
             bang_command_behavior=bang_behavior,
             wait_seconds=_clamp_int(
                 _as_int(
@@ -255,7 +246,7 @@ class OcrConfig:
     def from_dict(data: Mapping[str, Any] | None) -> "OcrConfig":
         d = _as_dict(dict(data) if data is not None else {})
         return OcrConfig(
-            enabled=_as_bool(d.get("enabled"), True),
+            enabled=as_bool(d.get("enabled"), True),
             pdf_batch_pages=_clamp_int(_as_int(d.get("pdf_batch_pages"), 8), 1, 32),
             backend="vision" if d.get("backend") == "vision" else "local",
         )
@@ -271,14 +262,13 @@ class OcrConfig:
 @dataclass(frozen=True)
 class AppConfig:
     # UI
+    language: str = "zh_CN"
     theme: str = "light"
     accent: str = DEFAULT_ACCENT
     show_sidebar: bool = True
     show_stats: bool = False
     show_thinking: bool = True
     log_stream: bool = False
-    memory_char_limit: int = 4000
-    user_memory_char_limit: int = 4000
     proxy_url: str = ""
     llm_timeout_seconds: float = 600.0
     splitter_sizes: List[int] = field(default_factory=list)
@@ -325,20 +315,19 @@ class AppConfig:
             accent = DEFAULT_ACCENT
 
         return AppConfig(
+            language="en" if d.get("language") == "en" else "zh_CN",
             theme=theme,
             accent=accent,
-            show_sidebar=_as_bool(d.get("show_sidebar"), True),
-            show_stats=_as_bool(d.get("show_stats"), False),
-            show_thinking=_as_bool(d.get("show_thinking"), True),
-            log_stream=_as_bool(d.get("log_stream"), False),
-            memory_char_limit=8000 if _as_int(d.get("memory_char_limit"), 4000) == 8000 else 4000,
-            user_memory_char_limit=8000 if _as_int(d.get("user_memory_char_limit"), 4000) == 8000 else 4000,
+            show_sidebar=as_bool(d.get("show_sidebar"), True),
+            show_stats=as_bool(d.get("show_stats"), False),
+            show_thinking=as_bool(d.get("show_thinking"), True),
+            log_stream=as_bool(d.get("log_stream"), False),
             proxy_url=_as_str(d.get("proxy_url"), "").strip(),
             llm_timeout_seconds=max(30.0, min(3600.0, _as_float(d.get("llm_timeout_seconds"), 600.0))),
             splitter_sizes=_sizes(d.get("splitter_sizes")),
             chat_splitter_sizes=_sizes(d.get("chat_splitter_sizes")),
             main_window_size=_sizes(d.get("main_window_size"))[:2],
-            close_to_tray=_as_bool(d.get("close_to_tray"), True),
+            close_to_tray=as_bool(d.get("close_to_tray"), True),
             shortcuts={str(key): value for key, value in _as_dict(d.get("shortcuts")).items() if isinstance(value, str)},
             agent=AgentRuntimeConfig.from_dict(_as_dict(d.get("agent"))),
             permissions=ToolPermissionConfig.from_settings_dict(d),
@@ -364,14 +353,13 @@ class AppConfig:
 
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
+            "language": "en" if self.language == "en" else "zh_CN",
             "theme": self.theme,
             "accent": self.accent,
             "show_sidebar": bool(self.show_sidebar),
             "show_stats": bool(self.show_stats),
             "show_thinking": bool(self.show_thinking),
             "log_stream": bool(self.log_stream),
-            "memory_char_limit": 8000 if self.memory_char_limit == 8000 else 4000,
-            "user_memory_char_limit": 8000 if self.user_memory_char_limit == 8000 else 4000,
             "proxy_url": self.proxy_url or "",
             "llm_timeout_seconds": float(self.llm_timeout_seconds),
             "splitter_sizes": [int(x) for x in (self.splitter_sizes or [])],

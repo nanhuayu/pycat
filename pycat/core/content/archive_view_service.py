@@ -7,9 +7,10 @@ from typing import Any
 
 from pycat.core.content.archive_store import ArchivedContentRecord, SessionArchiveStore
 from pycat.core.content.view_protocol import TOOL_SUMMARY_PROJECTION_CHARS
+from pycat.core.llm.token_budget import estimate_tokens
 from pycat.core.state.operations import remember_archive
-from pycat.models.conversation import Conversation, normalize_tool_result
 from pycat.models.contracts.session_state import SessionState
+from pycat.models.conversation import Conversation, normalize_tool_result
 
 
 @dataclass
@@ -47,6 +48,10 @@ class ArchiveViewService:
             self.sync_state_and_messages(record)
             return ArchiveViewResult(record=record, text=record.summary, status="complete")
 
+        if record.metadata.get("summary_skipped"):
+            self.sync_state_and_messages(record)
+            return ArchiveViewResult(record=record, status="skipped")
+
         if not self._can_generate_summary():
             self.sync_state_and_messages(record)
             return ArchiveViewResult(record=record, status=record.summary_status)
@@ -69,7 +74,7 @@ class ArchiveViewService:
         return ArchiveViewResult(
             record=updated,
             text=updated.summary,
-            status="complete" if updated.summary else updated.summary_status,
+            status="complete" if updated.summary else "skipped" if updated.metadata.get("summary_skipped") else updated.summary_status,
         )
 
     def _can_generate_summary(self) -> bool:
@@ -115,6 +120,11 @@ class ArchiveViewService:
             }
         )
         summary = str(getattr(result, "summary", "") or "").strip()
+        tokens = estimate_tokens(summary)
+        if summary and not record.metadata.get("image_attachments") and tokens >= max(1, record.token_estimate * 0.9):
+            record.metadata.update(summary_skipped="not_beneficial", compressed_token_estimate=tokens)
+            self.store.write_record(record)
+            return record
         if summary:
             self.store.write_summary_view(
                 record,

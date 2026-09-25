@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from pycat.core.channel.connection import ChannelConnectionSnapshot, ChannelConnectionState
-from pycat.core.channel.platforms.base import ChannelPlatformBackend
 from pycat.core.channel.host import ChannelHost
+from pycat.core.channel.platforms.base import ChannelPlatformBackend
 from pycat.core.channel.platforms.qqbot.client import QQBOT_OPEN_BASE
 from pycat.core.channel.platforms.qqbot.delivery import QQBotDelivery
 from pycat.core.channel.platforms.qqbot.webhook_server import start_qqbot_webhook_server

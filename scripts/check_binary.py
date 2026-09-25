@@ -166,7 +166,7 @@ def check_gui_settings(worker):
         window.show()
         chat = window.chat_view
         window.input_area.text_input.setPlainText('settings return draft')
-        pages = ('appearance', 'models', 'modes', 'skills', 'mcp',
+        pages = ('general', 'models', 'modes', 'skills', 'mcp',
                  'capabilities', 'automation', 'channels', 'about')
         def drain():
             app.processEvents()
@@ -183,7 +183,7 @@ def check_gui_settings(worker):
             assert back is not None
             case = index % 4
             if case:
-                dialog.strategy_page.max_turns_spin.setValue(100 + index)
+                dialog.page('strategy').max_turns_spin.setValue(100 + index)
                 assert dialog.is_dirty()
                 if case == 2:
                     dialog._confirm_close = lambda: 'cancel'
@@ -362,7 +362,7 @@ def check_mcp(worker, workspace: Path):
         import asyncio, tempfile
         from pycat import PyCat
         from pycat.models.contracts.mcp import McpServerConfig
-        from pycat.core.tools.system.python_exec import resolve_python_runner
+        from pycat.core.hosts.python import resolve_python_runner
         async def check():
             with tempfile.TemporaryDirectory() as data:
                 async with PyCat(data_dir=data) as app:
@@ -464,7 +464,7 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
         worker("""
             from pathlib import Path
             import subprocess, tempfile
-            from pycat.core.tools.system.python_exec import resolve_python_runner
+            from pycat.core.hosts.python import resolve_python_runner
             runner = resolve_python_runner()
             assert Path(runner[0]).is_file(), runner
             with tempfile.TemporaryDirectory() as folder:
@@ -484,7 +484,7 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
             assert isinstance(json.loads(config.read_text(encoding="utf-8")), dict)
             with tempfile.TemporaryDirectory() as data:
                 skills = SkillsManager(work_dir=data, data_dir=data)
-                for name in ("find-skills", "skill-creator"):
+                for name in ("find-skills", "skill-creator", "pdf"):
                     skill = skills.get(name)
                     assert skill and skill.source_scope == "bundled" and skill.read_only, name
                     assert skill.description and skill.content, name
@@ -518,6 +518,14 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
             asyncio.run(run())
             document = pymupdf.open()
             document.new_page().insert_text((72, 72), "PDF probe")
+            with tempfile.TemporaryDirectory() as pdf_dir:
+                from pycat.core.tools.base import ToolContext
+                from pycat.core.tools.system.filesystem import ReadFileTool
+                path = Path(pdf_dir) / "probe.pdf"
+                document.save(path)
+                read = asyncio.run(ReadFileTool().execute({"path": "probe.pdf"}, ToolContext(work_dir=pdf_dir)))
+                assert not read.is_error, read.content
+                assert "PDF probe" in json.loads(read.content)["pages"][0]["text"]
             with pymupdf.open(stream=document.tobytes(), filetype="pdf") as reopened:
                 assert "PDF probe" in reopened[0].get_text()
                 png = reopened[0].get_pixmap().tobytes("png")
@@ -526,7 +534,7 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
             document.close()
             print("SDK and PDF passed")
         """)
-        checks.append("SDK two-turn persistence, model transport, PDF and image runtime")
+        checks.append("SDK two-turn persistence, model transport, isolated PDF text extraction and image runtime")
         check_ssh_helper(worker)
         checks.append("SSH helper source, protocol and stdlib bootstrap resource")
         check_export(worker)
@@ -567,7 +575,8 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
                 from PyQt6.QtWidgets import QApplication
                 from PyQt6.QtGui import QImageReader
                 from PyQt6.QtCore import QThreadPool, QTimer
-                from pycat.gui.application import _install_qtbase_translation
+                from pycat.gui.i18n import install_language
+                from PyQt6.QtCore import QCoreApplication
                 from pycat.gui.main_window import MainWindow
                 from pycat.gui.runtime.background_job import BackgroundJob
                 from pycat.gui.widgets.terminal_view import TerminalView
@@ -579,7 +588,10 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
                 svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#16794c"/></svg>'
                 image = ContentOpenUseCase.read_image('data:image/svg+xml;base64,' + base64.b64encode(svg).decode())
                 assert image.width() == 40 and image.pixelColor(10, 10).name() == '#16794c'
-                assert _install_qtbase_translation(app)
+                assert install_language(app, 'en') == 'en'
+                assert QCoreApplication.translate('DialogButtons', '保存') == 'Save'
+                assert install_language(app, 'zh_CN') == 'zh_CN'
+                assert app._pycat_translators, 'Qt Chinese catalog missing'
                 window = MainWindow()
                 window.show()
                 terminal = TerminalView(window)

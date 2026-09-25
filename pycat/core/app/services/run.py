@@ -7,17 +7,18 @@ import threading
 import uuid
 from collections import deque
 from collections.abc import AsyncIterator
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
 from pycat.core.agent.policy import RunPolicyBuilder
 from pycat.core.agent.run.control import RunControl
 from pycat.core.app.runtime_paths import get_debug_log_path
-from pycat.core.observability.debug_trace import create_run_debug_trace, finish_run_debug_trace
-from pycat.core.llm.model_selection import provider_has_model, resolve_provider_model_ref, select_default_provider_model
-from pycat.core.modes.manager import ModeManager
 from pycat.core.commands.types import PromptInvocation
 from pycat.core.content.resolver import SessionContentResolver
+from pycat.core.llm.model_selection import provider_has_model, resolve_provider_model_ref, select_default_provider_model
+from pycat.core.modes.manager import ModeManager
+from pycat.core.observability.debug_trace import create_run_debug_trace, finish_run_debug_trace
 from pycat.models.contracts.agent import (
     ApplicationError,
     ConversationBusyError,
@@ -32,10 +33,14 @@ from pycat.models.contracts.agent import (
     RunStopReason,
     SlowConsumerError,
 )
-from pycat.models.conversation import Message
-from pycat.models.model_ref import build_model_ref, split_model_ref, provider_matches_name
 from pycat.models.contracts.config import AppConfig
-from pycat.models.contracts.tooling import ToolPermissionConfig, permission_config_for_approval, filesystem_scope_for_mode
+from pycat.models.contracts.tooling import (
+    ToolPermissionConfig,
+    filesystem_scope_for_mode,
+    permission_config_for_approval,
+)
+from pycat.models.conversation import Message
+from pycat.models.model_ref import build_model_ref, provider_matches_name, split_model_ref
 
 
 class RunHandle:
@@ -195,6 +200,7 @@ class RunService:
         self._loop = None
         self._controls = {}
         self._controls_lock = threading.RLock()
+        self.delegation = None
 
     def bind_loop(self):
         loop = asyncio.get_running_loop()
@@ -203,6 +209,8 @@ class RunService:
         self._loop = loop
         if self._closed:
             raise ApplicationError("Application is closed.")
+        if self.delegation is not None:
+            self.delegation.start_recovery()
 
     def schedule(self, coroutine):
         if self._closed or self._loop is None or not self._loop.is_running():
@@ -298,7 +306,7 @@ class RunService:
         async with self.start(request, observe=False, **callbacks) as handle:
             return await handle.result()
 
-    def prepare(self, request: RunRequest, *, source="sdk", invocation: PromptInvocation | None = None):
+    def prepare(self, request: RunRequest, *, source="sdk", invocation: PromptInvocation | None = None, delegation_run_id=''):
         if invocation is not None and not isinstance(invocation, PromptInvocation):
             raise InvalidRequestError("Invalid prompt invocation.")
         if not isinstance(request, RunRequest) or (not request.text.strip() and not request.attachments and not request.references and not request.revision):
@@ -325,6 +333,12 @@ class RunService:
                     raise InvalidRequestError("Conversation no longer exists.")
             if request.expected_revision and request.expected_revision != convs.view_revision(conversation):
                 raise InvalidRequestError("Conversation changed; reload before submitting.")
+            d = conversation.delegation
+            if d:
+                if delegation_run_id and (d.submission != 'queued' or d.run_id != delegation_run_id or d.cancel_requested):
+                    raise ConversationBusyError('独立任务已启动或已停止，不能重复执行。')
+                if not delegation_run_id and d.submission != 'settled':
+                    raise ConversationBusyError('独立任务尚未交付；请先停止或从任务卡片继续。')
             settings = self.settings.load()
             providers = [p for p in self.models.current() if p.enabled]
             if request.model is not None:
@@ -451,9 +465,10 @@ class RunService:
             convs.end_lifecycle(conversation.id, token)
             raise
 
-    async def submit(self, request: RunRequest, *, source="sdk", invocation=None, **callbacks):
+    async def submit(self, request: RunRequest, *, source="sdk", invocation=None, delegation_run_id='', **callbacks):
         self.bind_loop()
-        preparation = asyncio.create_task(asyncio.to_thread(self.prepare, request, source=source, invocation=invocation))
+        preparation = asyncio.create_task(asyncio.to_thread(self.prepare, request, source=source, invocation=invocation,
+                                                         delegation_run_id=delegation_run_id))
         try:
             provider, conversation, policy, token = await asyncio.shield(preparation)
         except asyncio.CancelledError:
@@ -471,6 +486,7 @@ class RunService:
             claim_token=token,
             input_saved=True,
             delegate_profile=invocation.delegate_profile if invocation else '',
+            delegation_run_id=delegation_run_id,
             **callbacks,
         )
 
@@ -493,6 +509,7 @@ class RunService:
         initial_runtime_messages=None,
         input_saved=False,
         delegate_profile='',
+        delegation_run_id='',
     ):
         self.bind_loop()
         token = claim_token or self.conversations.begin_turn(conversation.id)
@@ -515,6 +532,21 @@ class RunService:
         saved = False
         failure = ""
         try:
+            # The conversation claim owns this turn. Available tools do not
+            # reserve a workspace (or all workspaces) for the whole model run.
+            latest = self.conversations.load(conversation.id) if conversation.delegation else None
+            d = latest.delegation if latest else conversation.delegation
+            if delegation_run_id:
+                latest = self.delegation.revalidate(conversation.id, activity_token=token)
+                d = latest.delegation
+                if d.run_id != delegation_run_id:
+                    raise ConversationBusyError('独立任务已取消或正在处理。')
+                conversation.delegation = deepcopy(d)
+                policy = RunPolicyBuilder.build(conversation=conversation, app_settings=self.settings.load(), source=policy.source)
+                conversation.delegation.submission = 'started'
+                input_saved = False
+            elif d and d.submission != 'settled':
+                raise ConversationBusyError('独立任务尚未交付。')
             settings = self.settings.load()
             capture = bool(debug_log_path or settings.get("log_stream", False))
             debug_trace = create_run_debug_trace(
@@ -524,6 +556,8 @@ class RunService:
             )
             if not input_saved and not self.conversations.save(conversation, activity_token=token):
                 raise PersistenceError("Could not save input; execution was not started.")
+            if delegation_run_id and self.delegation is not None:
+                self.delegation._changed(conversation)
             if run_control is not None and run_control.access_snapshot()[:2] != (
                 policy.tool_permissions,
                 policy.filesystem_scope,
@@ -577,6 +611,20 @@ class RunService:
                     for key in ('tool_approval', 'filesystem_mode'):
                         if key in latest.settings:
                             result.conversation.settings[key] = latest.settings[key]
+                    if latest.delegation is not None:
+                        d = deepcopy(latest.delegation)
+                        if delegation_run_id:
+                            if d.run_id != delegation_run_id:
+                                raise PersistenceError('旧执行不能覆盖新的独立任务结果。', result=result)
+                            if d.cancel_requested:
+                                result.status, result.stop_reason = RunStatus.CANCELLED, RunStopReason.CANCELLED
+                            elif result.status == RunStatus.CANCELLED:
+                                result.status = RunStatus.INTERRUPTED
+                            if result.final_message is not None:
+                                result.final_message.metadata['run_status'] = result.status.value
+                                d.result_message_id = result.final_message.id
+                            d.submission = 'settled'
+                        result.conversation.delegation = d
                 if not self.conversations.save(result.conversation, activity_token=token):
                     raise PersistenceError("Execution finished but the result could not be saved.", result=result)
             saved = True

@@ -29,6 +29,8 @@ PyCat 面向开发者、自动化实践者和处理真实项目的进阶用户�
 
 ## 快速开始
 
+**0.2.2** 完善多会话并行、上下文压缩与记忆保存，统一工具和运行状态展示，并加入桌面英文预览。查看[版本说明与下载](https://github.com/nanhuayu/pycat/releases/tag/v0.2.2)。
+
 **直接使用桌面版**
 
 1. 从 [Releases](https://github.com/nanhuayu/pycat/releases) 下载 Windows 便携包，完整解压，在 `pycat-windows-x64` 中运行 **`pycat.exe`**。

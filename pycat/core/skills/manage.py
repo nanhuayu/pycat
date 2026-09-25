@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import re
 import stat
-from pycat.models.session_paths import resolve_project_data_root
 from pathlib import Path
 
 from pycat.core.config import get_global_subdir
 from pycat.core.persistence import atomic_write_bytes, atomic_write_text, exclusive_file_lock
 from pycat.core.security.threats import first_threat_message
 from pycat.core.skills.usage import SkillUsageStore
-
+from pycat.models.session_paths import resolve_project_data_root
 
 SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{2,63}$")
 MAX_CONTENT_CHARS = 20_000

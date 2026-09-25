@@ -5,8 +5,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional, Sequence
 
 from pycat.models.contracts.model_target import ModelTarget
-from pycat.models.contracts.tooling import TOOL_CATEGORIES, normalize_tool_category
-
+from pycat.models.contracts.tooling import TOOL_CATEGORIES, canonical_tool_categories, normalize_tool_category
 
 ModeSource = Literal["global", "project", "builtin"]
 ProfileKind = Literal["primary", "subagent", "both"]
@@ -31,12 +30,7 @@ class ModeConfig:
     source: Optional[ModeSource] = None
 
     def __post_init__(self) -> None:
-        categories: list[str] = []
-        for item in self.allowed_tool_categories or ():
-            category = normalize_tool_category(str(item))
-            if category not in categories:
-                categories.append(category)
-        object.__setattr__(self, "allowed_tool_categories", tuple(categories))
+        object.__setattr__(self, "allowed_tool_categories", canonical_tool_categories(self.allowed_tool_categories))
 
         profile_kind = str(self.profile_kind or "primary").strip().lower()
         if profile_kind not in {"primary", "subagent", "both"}:
@@ -60,9 +54,6 @@ class ModeConfig:
             if normalize_tool_category(item) in MODE_TOOL_CATEGORIES
         }
 
-    def allows_tool_category(self, name: str) -> bool:
-        return normalize_tool_category(name) in self.tool_category_names()
-
     def is_primary_mode(self) -> bool:
         return self.profile_kind in {"primary", "both"}
 
@@ -73,7 +64,3 @@ class ModeConfig:
 def normalize_mode_slug(raw: str) -> str:
     value = (raw or "").strip().lower()
     return value or "chat"
-
-
-def safe_mode_display_name(mode: ModeConfig) -> str:
-    return (mode.name or mode.slug or "mode").strip() or (mode.slug or "mode")

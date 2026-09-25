@@ -4,12 +4,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import queue
 import shutil
 import subprocess
 import threading
 from contextlib import nullcontext
+from pathlib import Path
 
 from pycat.core.hosts import remote_helper
 from pycat.core.hosts.askpass import AskpassBridge

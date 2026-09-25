@@ -5,13 +5,12 @@ Agent, interprets message text as a path, or stores platform download credential
 """
 from __future__ import annotations
 
+import hashlib
+import mimetypes
 from contextlib import nullcontext
 from dataclasses import dataclass
-import hashlib
 from io import BytesIO
-import mimetypes
 from pathlib import Path
-import re
 from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -20,10 +19,11 @@ import httpx
 from PIL import Image, UnidentifiedImageError
 
 from pycat.core.channel.replies import channel_reply_policy
+from pycat.core.content.mime import guess_mime
 from pycat.core.content.references import delivery_refs_for_messages
 from pycat.core.content.session_content import MAX_INPUT_BATCH_BYTES, MAX_INPUT_FILE_BYTES
+from pycat.models.filenames import safe_filename
 from pycat.models.workspace import workspace_identity
-
 
 MAX_MEDIA_ITEMS = 8
 
@@ -33,12 +33,6 @@ class OutboundFile:
     name: str
     mime: str
     data: bytes
-
-
-def safe_filename(value: str, default='attachment.bin') -> str:
-    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(value or '').replace('\\', '/').rsplit('/', 1)[-1])
-    name = name.strip(' .')[:180]
-    return name or default
 
 
 def read_media_response(response, *, limit=MAX_INPUT_FILE_BYTES) -> bytes:
@@ -81,7 +75,7 @@ def download_public_media(client, url, *, domains, limit=MAX_INPUT_FILE_BYTES):
 def save_attachment(raw, directory, *, name='', mime='', image=False):
     if not raw or len(raw) > MAX_INPUT_FILE_BYTES:
         raise ValueError('附件大小超过限制或为空。')
-    name = safe_filename(name)
+    name = safe_filename(name, 'attachment.bin')
     if image:
         try:
             with Image.open(BytesIO(raw)) as picture:
@@ -95,7 +89,7 @@ def save_attachment(raw, directory, *, name='', mime='', image=False):
         suffix = '.jpg' if mime == 'image/jpeg' else mimetypes.guess_extension(mime) or '.img'
         if name == 'attachment.bin' or not Path(name).suffix:
             name = 'image' + suffix if name == 'attachment.bin' else name + suffix
-    mime = mime or mimetypes.guess_type(name)[0] or 'application/octet-stream'
+    mime = mime or guess_mime(name)
     path = Path(directory) / (uuid4().hex + Path(name).suffix)
     path.write_bytes(raw)
     return {'path': str(path), 'name': name, 'mime': mime}
@@ -158,7 +152,7 @@ class ChannelMediaTransfer:
                     raise ValueError('文件大小超过限制。')
                 if len(ref.digest) != 64 or hashlib.sha256(raw).hexdigest() != ref.digest:
                     raise ValueError('文件已改变。')
-                send_file(OutboundFile(safe_filename(ref.name), ref.mime, raw))
+                send_file(OutboundFile(safe_filename(ref.name, 'attachment.bin'), ref.mime, raw))
             except (ValueError, OSError, RuntimeError, httpx.HTTPError):
                 reply_sender('部分交付文件未能发送，请在 PyCat 的本次产出中查看。请检查机器人权限、平台文件限制，以及文件是否仍存在且未更改。')
                 break

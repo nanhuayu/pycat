@@ -4,6 +4,13 @@ import logging
 from dataclasses import replace
 from typing import Iterable, Mapping
 
+from pycat.core.agent.run.control import effective_run_policy
+from pycat.core.modes.manager import ModeManager, resolve_mode_config
+from pycat.models.contracts.agent import (
+    RetryPolicy,
+    RunPolicy,
+    effective_pycat_assistant_enabled,
+)
 from pycat.models.contracts.config import AgentRuntimeConfig, RetryConfig
 from pycat.models.contracts.tooling import (
     FilesystemScope,
@@ -13,14 +20,8 @@ from pycat.models.contracts.tooling import (
     normalize_tool_category,
     permission_config_for_approval,
 )
-from pycat.core.modes.manager import ModeManager, resolve_mode_config
-from pycat.models.contracts.agent import (
-    RetryPolicy,
-    RunPolicy,
-    effective_pycat_assistant_enabled,
-)
-from pycat.core.agent.run.control import effective_run_policy
 from pycat.models.conversation import Conversation
+from pycat.models.workspace import workspace_identity
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,7 @@ class RunPolicyBuilder:
         denied_tools: Iterable[str] = (),
         source: str = "desktop",
         max_turns: int | None = None,
+        parent_policy: RunPolicy | None = None,
     ) -> RunPolicy:
         app_settings_dict = _settings_dict(app_settings)
         settings = getattr(conversation, "settings", {}) or {}
@@ -229,10 +231,22 @@ class RunPolicyBuilder:
             mode_has_turn_budget = bool(getattr(mode_cfg, "max_turns", None))
         if not mode_has_turn_budget:
             updates["max_turns"] = int(agent_config.max_turns or policy.max_turns)
+        if effective_source == "sub_task":
+            updates["max_turns"] = int(parent_policy.max_turns if parent_policy else agent_config.max_turns)
         if max_turns is not None:
             updates["max_turns"] = min(int(updates.get("max_turns", policy.max_turns)), max(1, int(max_turns)))
 
-        return replace(
+        delegation = conversation.delegation
+        if delegation is not None:
+            access = delegation.access
+            if workspace_identity(conversation.work_dir) != workspace_identity(access.work_dir):
+                raise ValueError('独立任务的工作区已改变，请从来源会话重新派发。')
+            updates['task_access'] = access
+            updates['max_turns'] = min(int(updates.get('max_turns', policy.max_turns)), access.max_turns)
+            updates['tool_selection'] = policy.tool_selection.intersect(ToolSelectionPolicy(
+                allowed_tools=set(access.tools), denied_tools={'agent__run', 'agent__task'}))
+        result = replace(
             policy,
             **updates,
         )
+        return effective_run_policy(result)[0]

@@ -1,15 +1,14 @@
 """Reusable single-turn and Agent-loop capability contracts."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from pycat.models.contracts.model_target import ModelTarget
-from pycat.models.contracts.tooling import normalize_tool_category
+from pycat.models.contracts.tooling import canonical_tool_categories
 
-
-CAPABILITIES_SCHEMA_VERSION = 6
+CAPABILITIES_SCHEMA_VERSION = 8
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -78,12 +77,7 @@ class CapabilityConfig:
             raise ValueError("Capability operation must be text or image")
         if self.operation == "image" and runtime != "single_turn":
             raise ValueError("图像能力只支持单次执行。")
-        categories: list[str] = []
-        for raw in self.allowed_tool_categories or ():
-            category = normalize_tool_category(raw)
-            if category not in categories:
-                categories.append(category)
-        object.__setattr__(self, "allowed_tool_categories", tuple(categories))
+        object.__setattr__(self, "allowed_tool_categories", canonical_tool_categories(self.allowed_tool_categories))
         try:
             max_turns = int(self.max_turns) if self.max_turns is not None else None
         except Exception:

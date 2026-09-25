@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from PyQt6.QtCore import Qt, QThreadPool, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, QThreadPool, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -38,7 +38,7 @@ from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.settings_controls import SettingsFormLayout
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
-from pycat.models.image_api import IMAGE_PROTOCOLS, ImageAPI
+from pycat.models.image_api import ImageAPI
 from pycat.models.model_profile import ModelProfile
 from pycat.models.provider import (
     ACCOUNT_AUTH_LABELS,
@@ -58,15 +58,15 @@ class _ModelListItem(SettingsStatusListItem):
         self.update_display(profile)
 
     def update_display(self, profile: ModelProfile) -> None:
-        title = str(profile.display_name or profile.model_id or "未命名模型")
+        title = str(profile.display_name or profile.model_id or QCoreApplication.translate('ProviderEditor', '未命名模型'))
         subtitle = profile.model_id if profile.display_name and profile.display_name != profile.model_id else ""
         abilities = [
             label
             for enabled, label in (
-                (profile.supports_tools, "工具"),
-                (profile.supports_reasoning, "推理"),
-                (profile.supports_input("image"), "图片输入"),
-                (profile.supports_input("audio"), "音频输入"),
+                (profile.supports_tools, QCoreApplication.translate('ProviderEditor', '工具')),
+                (profile.supports_reasoning, QCoreApplication.translate('ProviderEditor', '推理')),
+                (profile.supports_input("image"), QCoreApplication.translate('ProviderEditor', '图片输入')),
+                (profile.supports_input("audio"), QCoreApplication.translate('ProviderEditor', '音频输入')),
             )
             if enabled
         ]
@@ -75,10 +75,7 @@ class _ModelListItem(SettingsStatusListItem):
             enabled=True,
             detail=subtitle,
             tooltip=(
-                f"{title}\n模型 ID：{profile.model_id}\n"
-                f"能力：{' / '.join(abilities) or '文本'}\n"
-                f"上下文窗口：{profile.context_window or '未设置'}\n"
-                f"最大输出：{profile.max_output_tokens or '未设置'}"
+                QCoreApplication.translate('ProviderEditor', '{title}\n模型 ID：{model_id}\n能力：{value}\n上下文窗口：{value_}\n最大输出：{value__}').format(title=title, model_id=profile.model_id, value=' / '.join(abilities) or QCoreApplication.translate('ProviderEditor', '文本'), value_=profile.context_window or QCoreApplication.translate('ProviderEditor', '未设置'), value__=profile.max_output_tokens or QCoreApplication.translate('ProviderEditor', '未设置'))
             ),
         )
         ability_icons = []
@@ -132,12 +129,12 @@ class ProviderEditor(QWidget):
         self.setEnabled(False)
 
     @staticmethod
-    def _api_type_options() -> list[tuple[str, str]]:
+    def api_type_options() -> list[tuple[str, str]]:
         return [
-            ("OpenAI 兼容 / Chat Completions", OPENAI_COMPATIBLE),
+            (QCoreApplication.translate('ProviderEditor', 'OpenAI 兼容 / Chat Completions'), OPENAI_COMPATIBLE),
             ("OpenAI Responses API", OPENAI_RESPONSES),
-            ("Anthropic 原生 / Messages API", ANTHROPIC_NATIVE),
-            ("Ollama 本地 / Chat API", OLLAMA_CHAT),
+            (QCoreApplication.translate('ProviderEditor', 'Anthropic 原生 / Messages API'), ANTHROPIC_NATIVE),
+            (QCoreApplication.translate('ProviderEditor', 'Ollama 本地 / Chat API'), OLLAMA_CHAT),
         ]
 
     def _setup_ui(self) -> None:
@@ -147,8 +144,8 @@ class ProviderEditor(QWidget):
 
         self.tabs = QTabWidget()
         self.connection_tab = self._build_connection_tab()
-        self.tabs.addTab(self.connection_tab, "连接")
-        self.tabs.addTab(self._build_model_tab(), "模型")
+        self.tabs.addTab(self.connection_tab, QCoreApplication.translate('ProviderEditor', '连接'))
+        self.tabs.addTab(self._build_model_tab(), QCoreApplication.translate('ProviderEditor', '模型'))
         root.addWidget(self.tabs, 1)
 
     def _build_connection_tab(self) -> QWidget:
@@ -170,15 +167,15 @@ class ProviderEditor(QWidget):
         self.name_input = ThemedLineEdit()
         self.api_type_combo = QComboBox()
         configure_combo_popup(self.api_type_combo, popup_minimum_width=300)
-        for label, value in self._api_type_options():
+        for label, value in self.api_type_options():
             self.api_type_combo.addItem(label, value)
         self.api_base_input = ThemedLineEdit()
         self.api_key_input = ThemedLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.auth_type_combo = QComboBox()
         self.auth_type_combo.addItem('API Key', 'api_key')
-        self.auth_type_combo.addItem('ChatGPT / Codex 登录', 'chatgpt')
-        self.auth_type_combo.addItem('WorkBuddy / CodeBuddy（国内 · 实验性）', 'workbuddy')
+        self.auth_type_combo.addItem(QCoreApplication.translate('ProviderEditor', 'ChatGPT / Codex 登录'), 'chatgpt')
+        self.auth_type_combo.addItem(QCoreApplication.translate('ProviderEditor', 'WorkBuddy / CodeBuddy（国内 · 实验性）'), 'workbuddy')
         configure_combo_popup(self.auth_type_combo)
 
         key_widget = QWidget()
@@ -190,7 +187,7 @@ class ProviderEditor(QWidget):
         self.show_key_btn.setObjectName("settings_action_btn")
         self.show_key_btn.setCheckable(True)
         self.show_key_btn.setIcon(Icons.get(Icons.EYE))
-        self.show_key_btn.setToolTip("显示 API Key")
+        self.show_key_btn.setToolTip(QCoreApplication.translate('ProviderEditor', '显示 API Key'))
         self.show_key_btn.setFixedWidth(32)
         self.show_key_btn.toggled.connect(self._toggle_key_visibility)
         key_layout.addWidget(self.show_key_btn)
@@ -202,12 +199,12 @@ class ProviderEditor(QWidget):
         self.headers_edit.setMinimumHeight(96)
         self.headers_edit.setMaximumHeight(120)
 
-        self._name_label = QLabel("名称")
-        self._auth_type_label = QLabel("登录方式")
+        self._name_label = QLabel(QCoreApplication.translate('ProviderEditor', '名称'))
+        self._auth_type_label = QLabel(QCoreApplication.translate('ProviderEditor', '登录方式'))
         form.addRow(self._name_label, self.name_input)
         form.addRow(self._auth_type_label, self.auth_type_combo)
-        self._api_type_label = QLabel('聊天接口类型')
-        self._api_base_label = QLabel('API 地址')
+        self._api_type_label = QLabel(QCoreApplication.translate('ProviderEditor', '聊天接口类型'))
+        self._api_base_label = QLabel(QCoreApplication.translate('ProviderEditor', 'API 地址'))
         self._key_label = QLabel('API Key')
         form.addRow(self._key_label, key_widget)
         layout.addLayout(form)
@@ -215,12 +212,12 @@ class ProviderEditor(QWidget):
         self.auth_row = QWidget()
         auth_layout = QHBoxLayout(self.auth_row)
         auth_layout.setContentsMargins(0, 0, 0, 0)
-        self.login_btn = QPushButton('登录 ChatGPT')
-        self.logout_btn = QPushButton('退出登录')
-        self.cancel_login_btn = QPushButton('取消')
-        self.sync_models_btn = QPushButton('同步模型')
+        self.login_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '登录 ChatGPT'))
+        self.logout_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '退出登录'))
+        self.cancel_login_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '取消'))
+        self.sync_models_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '同步模型'))
         self.sync_models_btn.setIcon(Icons.get(Icons.REFRESH))
-        self.auth_status = QLabel('未登录')
+        self.auth_status = QLabel(QCoreApplication.translate('ProviderEditor', '未登录'))
         self.auth_status.setObjectName('provider_status_label')
         self.auth_status.setTextFormat(Qt.TextFormat.PlainText)
         self.auth_status.setWordWrap(True)
@@ -251,7 +248,7 @@ class ProviderEditor(QWidget):
         layout.addWidget(self.chat_connection)
         self.image_connection_toggle = QToolButton()
         self.image_connection_toggle.setObjectName("collapse_toggle")
-        self.image_connection_toggle.setText("图像接口")
+        self.image_connection_toggle.setText(QCoreApplication.translate('ProviderEditor', '图像接口'))
         self.image_connection_toggle.setCheckable(True)
         self.image_connection_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.image_connection_toggle.setArrowType(Qt.ArrowType.RightArrow)
@@ -263,7 +260,7 @@ class ProviderEditor(QWidget):
 
         self.headers_toggle = QToolButton()
         self.headers_toggle.setObjectName("collapse_toggle")
-        self.headers_toggle.setText("自定义请求头")
+        self.headers_toggle.setText(QCoreApplication.translate('ProviderEditor', '自定义请求头'))
         self.headers_toggle.setCheckable(True)
         self.headers_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.headers_toggle.setArrowType(Qt.ArrowType.RightArrow)
@@ -273,8 +270,8 @@ class ProviderEditor(QWidget):
         layout.addWidget(self.headers_edit)
 
         actions = QHBoxLayout()
-        self.test_btn = QPushButton("测试连接")
-        self.test_btn.setToolTip("检查服务连接与模型目录，不发起图像生成。")
+        self.test_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '测试连接'))
+        self.test_btn.setToolTip(QCoreApplication.translate('ProviderEditor', '检查服务连接与模型目录，不发起图像生成。'))
         self.test_btn.setObjectName("settings_action_btn")
         self.test_btn.setIcon(Icons.get(Icons.CHECK))
         self.test_btn.clicked.connect(self.test_connection)
@@ -296,20 +293,24 @@ class ProviderEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         form = SettingsFormLayout(stacked_labels=True)
         self.image_protocol_combo = QComboBox()
-        for value, label in IMAGE_PROTOCOLS.items():
+        for value, label in (
+            ("openai_images", QCoreApplication.translate("ProviderEditor", "OpenAI Images（GPT Image）")),
+            ("dashscope_images", QCoreApplication.translate("ProviderEditor", "Qwen Image（DashScope 同步）")),
+            ("seedream_images", QCoreApplication.translate("ProviderEditor", "Seedream（火山 / BytePlus Ark）")),
+        ):
             self.image_protocol_combo.addItem(label, value)
         configure_combo_popup(self.image_protocol_combo)
-        form.addRow("图像接口类型", self.image_protocol_combo)
+        form.addRow(QCoreApplication.translate('ProviderEditor', '图像接口类型'), self.image_protocol_combo)
         self.image_generation_input = ThemedLineEdit()
         self.image_edit_input = ThemedLineEdit()
         self.image_generation_preview = QLabel()
         self.image_edit_preview = QLabel()
         for label, control, preview in (
-            ("图像生成地址", self.image_generation_input, self.image_generation_preview),
-            ("图像编辑地址", self.image_edit_input, self.image_edit_preview),
+            (QCoreApplication.translate('ProviderEditor', '图像生成地址'), self.image_generation_input, self.image_generation_preview),
+            (QCoreApplication.translate('ProviderEditor', '图像编辑地址'), self.image_edit_input, self.image_edit_preview),
         ):
-            control.setPlaceholderText("留空跟随聊天 API 地址；可填基础地址或完整请求地址")
-            control.setToolTip("生成和编辑分别配置。填写完整 HTTP(S) 地址，不要只填写 /v1/images/...。")
+            control.setPlaceholderText(QCoreApplication.translate('ProviderEditor', '留空跟随聊天 API 地址；可填基础地址或完整请求地址'))
+            control.setToolTip(QCoreApplication.translate('ProviderEditor', '生成和编辑分别配置。填写完整 HTTP(S) 地址，不要只填写 /v1/images/...。'))
             preview.setWordWrap(True)
             preview.setTextFormat(Qt.TextFormat.PlainText)
             preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -343,7 +344,7 @@ class ProviderEditor(QWidget):
                 label.setText(api.endpoint(self.api_base_input.text(), edit=edit))
             except ValueError as exc:
                 label.setText(str(exc))
-        self.image_connection_note.setText("生成与编辑分别沿用上方 API 地址，也可设置独立地址。共用本服务 API Key。")
+        self.image_connection_note.setText(QCoreApplication.translate('ProviderEditor', '生成与编辑分别沿用上方 API 地址，也可设置独立地址。共用本服务 API Key。'))
 
     def _build_model_tab(self) -> QWidget:
         tab = QWidget()
@@ -352,11 +353,11 @@ class ProviderEditor(QWidget):
         layout.setSpacing(8)
 
         actions = SettingsActionBar()
-        self.catalog_btn = actions.add_action("模型目录", Icons.get(Icons.REFRESH), self.open_model_catalog)
-        self.add_model_btn = actions.add_action("自定义模型", Icons.get(Icons.PLUS), self._add_custom_model)
-        self.edit_model_btn = actions.add_action("编辑", Icons.get(Icons.EDIT), self._edit_model)
-        self.remove_model_btn = actions.add_action(
-            "删除", Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR), self._remove_model, danger=True,
+        self.catalog_btn = actions.add_action(QCoreApplication.translate('ProviderEditor', '模型目录'), Icons.get(Icons.REFRESH), self.open_model_catalog)
+        self.add_model_btn = actions.add_action(QCoreApplication.translate('ProviderEditor', '自定义模型'), Icons.get(Icons.PLUS), self._add_custom_model)
+        self.edit_model_btn = actions.add_icon_action(QCoreApplication.translate('ProviderEditor', '编辑模型'), Icons.get(Icons.EDIT), self._edit_model)
+        self.remove_model_btn = actions.add_icon_action(
+            QCoreApplication.translate('ProviderEditor', '删除模型'), Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR), self._remove_model, danger=True,
         )
         actions.add_stretch()
         layout.addWidget(actions)
@@ -410,7 +411,7 @@ class ProviderEditor(QWidget):
         validate_connection: bool = True,
     ) -> Provider:
         if self._provider is None:
-            raise ValueError("未选择服务商")
+            raise ValueError(QCoreApplication.translate('ProviderEditor', '未选择服务商'))
         provider = Provider.from_dict(self._provider.to_dict())
         if enabled is not None:
             provider.enabled = bool(enabled)
@@ -420,7 +421,7 @@ class ProviderEditor(QWidget):
         provider.api_key = self.api_key_input.text().strip()
         provider.auth_type = str(self.auth_type_combo.currentData() or 'api_key')
         provider.image_api = self._image_api_draft()
-        provider.custom_headers = self._json_object(self.headers_edit, "自定义请求头")
+        provider.custom_headers = self._json_object(self.headers_edit, QCoreApplication.translate('ProviderEditor', '自定义请求头'))
         provider.normalize_inplace()
         if validate_connection:
             valid, message = self._provider_service.validate_provider(provider)
@@ -450,19 +451,19 @@ class ProviderEditor(QWidget):
         self._toggle_image_connection(self.image_connection_toggle.isChecked())
         self.headers_edit.setVisible(not account_login and self.headers_toggle.isChecked())
         self.account_note.setVisible(account_login)
-        self.account_note.setText("聊天与图像能力共用此账号，无需配置接口。图像权限和额度由账号决定。"
-                                if kind == 'chatgpt' else "国内账号 · 实验性。模型与可用额度由账号决定。")
-        self.test_btn.setText("检查账号" if account_login else "测试连接")
-        self.login_btn.setText('登录 WorkBuddy' if kind == 'workbuddy' else '登录 ChatGPT')
-        self.auth_row.setToolTip('国内账号 · 实验性。使用浏览器授权所选身份；切换账号请退出后重新登录。' if kind == 'workbuddy' else '')
+        self.account_note.setText(QCoreApplication.translate('ProviderEditor', '聊天与图像能力共用此账号，无需配置接口。图像权限和额度由账号决定。')
+                                if kind == 'chatgpt' else QCoreApplication.translate('ProviderEditor', '国内账号 · 实验性。模型与可用额度由账号决定。'))
+        self.test_btn.setText(QCoreApplication.translate('ProviderEditor', '检查账号') if account_login else QCoreApplication.translate('ProviderEditor', '测试连接'))
+        self.login_btn.setText(QCoreApplication.translate('ProviderEditor', '登录 WorkBuddy') if kind == 'workbuddy' else QCoreApplication.translate('ProviderEditor', '登录 ChatGPT'))
+        self.auth_row.setToolTip(QCoreApplication.translate('ProviderEditor', '国内账号 · 实验性。使用浏览器授权所选身份；切换账号请退出后重新登录。') if kind == 'workbuddy' else '')
         connected = False
-        label = '未登录'
+        label = QCoreApplication.translate('ProviderEditor', '未登录')
         auth = self._provider_service.account_auth(str(self.auth_type_combo.currentData()))
         if auth is not None and self._provider is not None:
             try:
                 state = auth.status(self._provider.id)
                 connected = state['connected']
-                label = ('已登录 · ' + str(state.get('label') or state.get('email') or '')).rstrip(' ·') if connected else '未登录'
+                label = (QCoreApplication.translate('ProviderEditor', '已登录 · ') + str(state.get('label') or state.get('email') or '')).rstrip(' ·') if connected else QCoreApplication.translate('ProviderEditor', '未登录')
             except RuntimeError as exc:
                 label = str(exc)
         pending = bool(self._login_flows)
@@ -472,7 +473,7 @@ class ProviderEditor(QWidget):
         self.logout_btn.setEnabled(not pending)
         self.sync_models_btn.setEnabled(connected and not pending)
         self.cancel_login_btn.setVisible(pending)
-        self.auth_status.setText(('在浏览器中完成登录…' if self._login_flows[0].authorization_url else '正在准备登录…') if pending else label)
+        self.auth_status.setText((QCoreApplication.translate('ProviderEditor', '在浏览器中完成登录…') if self._login_flows[0].authorization_url else QCoreApplication.translate('ProviderEditor', '正在准备登录…')) if pending else label)
         self.auth_status.setProperty('state', 'success' if connected else 'muted')
         self.auth_status.style().unpolish(self.auth_status)
         self.auth_status.style().polish(self.auth_status)
@@ -508,12 +509,12 @@ class ProviderEditor(QWidget):
                     self._sync_auth_fields()
                     self._start_login_step(auth, flow, prepare=False)
                     return
-                error = RuntimeError('无法打开默认浏览器，请检查系统设置后重试。')
+                error = RuntimeError(QCoreApplication.translate('ProviderEditor', '无法打开默认浏览器，请检查系统设置后重试。'))
             if error:
                 flow.cancel()
             self._login_flows.remove(flow)
             self._sync_auth_fields()
-            self.show_status(str(error) if error else '已登录。同步可用模型后保存设置，即可在对话中选择。', state='error' if error else 'success')
+            self.show_status(str(error) if error else QCoreApplication.translate('ProviderEditor', '已登录。同步可用模型后保存设置，即可在对话中选择。'), state='error' if error else 'success')
 
         job.signals.finished.connect(finished)
         QThreadPool.globalInstance().start(job)
@@ -570,9 +571,9 @@ class ProviderEditor(QWidget):
         try:
             value = json.loads(text)
         except Exception as exc:
-            raise ValueError(f"{label} JSON 无效：{exc}") from exc
+            raise ValueError(QCoreApplication.translate('ProviderEditor', '{label} JSON 无效：{exc}').format(label=label, exc=exc)) from exc
         if not isinstance(value, dict):
-            raise ValueError(f"{label}必须是 JSON 对象")
+            raise ValueError(QCoreApplication.translate('ProviderEditor', '{label}必须是 JSON 对象').format(label=label))
         return value
 
     def _toggle_key_visibility(self, checked: bool) -> None:
@@ -625,7 +626,7 @@ class ProviderEditor(QWidget):
             return
         profile = dialog.accepted_profile()
         if self._provider.find_model_profile(profile.model_id) is not None:
-            QMessageBox.warning(self, "模型已存在", f'“{profile.model_id}”已在常用模型目录中。')
+            QMessageBox.warning(self, QCoreApplication.translate('ProviderEditor', '模型已存在'), QCoreApplication.translate('ProviderEditor', '“{model_id}”已在常用模型目录中。').format(model_id=profile.model_id))
             return
         self._provider.upsert_model(profile)
         self._refresh_model_list(preferred_id=profile.model_id)
@@ -658,7 +659,7 @@ class ProviderEditor(QWidget):
         if self._provider is None or not self._active_model_id:
             return
         model_id = self._active_model_id
-        if QMessageBox.question(self, "删除模型", f'确定从常用目录删除“{model_id}”吗？') != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, QCoreApplication.translate('ProviderEditor', '删除模型'), QCoreApplication.translate('ProviderEditor', '确定从常用目录删除“{model_id}”吗？').format(model_id=model_id)) != QMessageBox.StandardButton.Yes:
             return
         self._provider.remove_model(model_id)
         self._active_model_id = ""
@@ -692,7 +693,7 @@ class ProviderEditor(QWidget):
             self.show_status(str(exc), state="error")
             return
         self.test_btn.setEnabled(False)
-        self.show_status("正在测试连接...", state="muted")
+        self.show_status(QCoreApplication.translate('ProviderEditor', '正在测试连接...'), state="muted")
 
         async def operation():
             return await self._provider_service.test_connection(provider)
@@ -700,11 +701,11 @@ class ProviderEditor(QWidget):
         def done(result, error) -> None:
             self.test_btn.setEnabled(True)
             if error is not None:
-                self.show_status(f"连接失败：{error}", state="error")
+                self.show_status(QCoreApplication.translate('ProviderEditor', '连接失败：{error}').format(error=error), state="error")
             else:
                 success, message = result
                 self.show_status(
-                    "连接成功" if success else f"连接失败：{message}",
+                    QCoreApplication.translate('ProviderEditor', '连接成功') if success else QCoreApplication.translate('ProviderEditor', '连接失败：{message}').format(message=message),
                     state="success" if success else "error",
                 )
 

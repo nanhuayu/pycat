@@ -9,6 +9,7 @@ from pycat.models.contracts.config import AppConfig
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
 
+
 class ContextService:
     """High-level context operations used by presenters and MainWindow."""
 
@@ -51,7 +52,11 @@ class ContextService:
         return factory
 
     async def compact_async(self, conversation: Conversation, provider: Provider):
-        """Condense the conversation context through the async maintenance path."""
+        """Compact idle history while retaining the latest real user turn.
+
+        The explicit action need not retain the automatic path's three-turn
+        starting target. Closed tails may still use their recoverable capsules.
+        """
         return await self._maintenance.maintain_async(
             conversation,
             provider=provider,
@@ -59,6 +64,6 @@ class ContextService:
             current_seq=conversation.current_seq_id(),
             force=True,
             honor_auto_enabled=False,
-            recent_turn_target=3,
+            recent_turn_target=1,
             protect_current_turn=False,
         )

@@ -77,6 +77,12 @@ class MessagePresenter:
         revision_request = extra_metadata.pop("conversation_revision", None)
 
         if host.current_conversation is not None:
+            if host.current_conversation.delegation is not None:
+                card = host.services.delegation_service.get(host.current_conversation.id)
+                if card['status'] in {'queued', 'running'}:
+                    host.chat_view.show_notice('独立任务正在处理；如需补充需求，请先停止任务，再修改并继续。',
+                                              tone='info', conversation_id=host.current_conversation.id)
+                    return
             is_maintaining = getattr(
                 getattr(host, "conversation_presenter", None),
                 "is_maintaining",

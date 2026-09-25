@@ -7,7 +7,6 @@ from typing import Any
 
 from pycat.models.conversation import Message
 
-
 SAFE_META_KEY = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 CHANNEL_RE = re.compile(
     r"<channel\s+source=\"([^\"]+)\"([^>]*)>\s*(.*?)\s*</channel>",

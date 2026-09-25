@@ -1,8 +1,9 @@
 import threading
-from typing import Dict, List, Any, Iterable, Optional
-from pycat.models.contracts.tooling import ToolPermissionConfig
+from typing import Any, Dict, Iterable, List, Optional
+
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.models.contracts.tooling import ToolDescriptor, ToolSelectionPolicy
+from pycat.models.contracts.tooling import ToolDescriptor, ToolPermissionConfig, ToolSelectionPolicy
+
 
 class ToolRegistry:
     def __init__(self):
@@ -21,11 +22,6 @@ class ToolRegistry:
             tools = dict(self._tools)
             tools.pop(name, None)
             self._tools = tools
-
-    def unregister_prefix(self, prefix: str) -> None:
-        if not prefix:
-            return
-        self.replace_prefix(prefix, ())
 
     def replace_prefix(self, prefix: str, tools: Iterable[BaseTool]) -> None:
         """Atomically replace every tool under one public-name prefix."""

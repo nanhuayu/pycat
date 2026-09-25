@@ -11,17 +11,16 @@ from __future__ import annotations
 
 import base64
 import gzip
+import re
+import xml.etree.ElementTree as ET
 from io import BytesIO
 from pathlib import Path
-import re
-from urllib.parse import unquote_to_bytes
-import xml.etree.ElementTree as ET
 from typing import Optional
+from urllib.parse import unquote_to_bytes
 
 from PyQt6.QtCore import QBuffer, QIODevice, QRectF, QSize, Qt
 from PyQt6.QtGui import QImage, QImageReader, QPainter, QPixmap
 from PyQt6.QtSvg import QSvgRenderer
-
 
 MAX_SVG_BYTES = 16 * 1024 * 1024
 

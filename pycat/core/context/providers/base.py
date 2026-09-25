@@ -33,14 +33,6 @@ class ContextProvider(Protocol):
         ...
 
 
-def synthetic_context_message(content: str, *, kind: str) -> Message:
-    return Message(
-        role="user",
-        content=str(content or ""),
-        metadata={"context_kind": kind, "synthetic": True},
-    )
-
-
 def context_item(
     content: str,
     *,

@@ -6,14 +6,13 @@ Keeping them in pycat/models/ makes them easy to import from UI and services.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
-import time
-from typing import Any
 import threading
+import time
+from dataclasses import dataclass, field
+from typing import Any
 
-from pycat.models.conversation import Message
-
+from pycat.models.conversation import Conversation, Message
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +83,9 @@ class ConversationStreamState:
     pending_tool_invocations: dict[str, dict[str, Any]] = field(default_factory=dict)
     recent_events: list[dict[str, Any]] = field(default_factory=list)
     request_usage: dict[str, Any] = field(default_factory=dict)
+    # GUI-thread projection retained for the lifetime of this run. The worker
+    # owns a separate clone; switching the selected view must not reload disk.
+    conversation: Conversation | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
 
     def cancel(self) -> None:
@@ -106,7 +108,6 @@ class ConversationStreamState:
         if len(self.recent_events) > 20:
             self.recent_events = self.recent_events[-20:]
 
-        phase = str(item.get("phase") or "").strip()
         tool_name = str(item.get("tool_name") or item.get("name") or "").strip()
         tool_call_id = str(item.get("tool_call_id") or "").strip()
         if tool_call_id:

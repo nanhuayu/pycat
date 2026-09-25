@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import copy
-import hashlib
-import json
-from typing import Any
-
 from pycat.models.contracts.content import ArchivedContentRecord
 from pycat.models.contracts.session_state import (
     RECENT_COMPLETED_TODO_LIMIT,
@@ -15,38 +10,6 @@ from pycat.models.contracts.session_state import (
     TodoStatus,
     WorkTraceStep,
 )
-
-
-def create_state_snapshot(state: SessionState) -> SessionState:
-    return copy.deepcopy(state)
-
-
-def state_checkpoint(state: SessionState) -> dict[str, Any]:
-    archive_digest = hashlib.sha1(
-        json.dumps(
-            [
-                {
-                    "id": getattr(record, "id", ""),
-                    "digest": getattr(record, "digest", ""),
-                    "updated_seq": getattr(record, "updated_seq", 0),
-                }
-                for record in (state.archive_index or {}).values()
-            ],
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        ).encode("utf-8", errors="replace")
-    ).hexdigest()[:16]
-    return {
-        "_snapshot_kind": "checkpoint",
-        "state_version": int(state.state_version or 0),
-        "last_updated_seq": int(state.last_updated_seq or 0),
-        "last_maintenance_seq": int(state.last_maintenance_seq or 0),
-        "summary_digest": hashlib.sha1(str(state.summary or "").encode("utf-8", errors="replace")).hexdigest()[:16],
-        "archive_count": len(state.archive_index or {}),
-        "archive_digest": archive_digest,
-        "work_trace_updated_seq": int(getattr(state.work_trace, "updated_seq", 0) or 0),
-    }
 
 
 def ensure_artifact(state: SessionState, name: str, *, default_content: str = "") -> SessionArtifact:

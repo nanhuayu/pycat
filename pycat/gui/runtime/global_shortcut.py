@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import ctypes
-from ctypes import wintypes
 import itertools
 import sys
+from ctypes import wintypes
 
-from PyQt6.QtCore import QAbstractNativeEventFilter, QTimer, Qt
+from PyQt6.QtCore import QAbstractNativeEventFilter, QCoreApplication, Qt, QTimer
 from PyQt6.QtGui import QGuiApplication, QKeySequence
 
 
@@ -47,10 +47,10 @@ class GlobalShortcut(QAbstractNativeEventFilter):
         if not text:
             return ''
         if self._api is None:
-            return '当前平台使用应用内快捷键；全局截图快捷键支持 Windows。'
+            return QCoreApplication.translate('GlobalShortcut', '当前平台使用应用内快捷键；全局截图快捷键支持 Windows。')
         sequence = QKeySequence(text)
         if sequence.isEmpty() or sequence.count() != 1:
-            return '全局截图快捷键需要一个组合键。'
+            return QCoreApplication.translate('GlobalShortcut', '全局截图快捷键需要一个组合键。')
         combination = sequence[0]
         key = int(combination.key())
         modifiers = 0x4000  # MOD_NOREPEAT
@@ -70,14 +70,14 @@ class GlobalShortcut(QAbstractNativeEventFilter):
         elif 0x20 <= key <= 0x7E:
             mapped = self._api.VkKeyScanW(chr(key).lower())
             if mapped == -1:
-                return '此按键无法注册为全局快捷键，请使用字母、数字或功能键。'
+                return QCoreApplication.translate('GlobalShortcut', '此按键无法注册为全局快捷键，请使用字母、数字或功能键。')
             key = mapped & 0xFF
             # VkKeyScan encodes Shift / Ctrl / Alt as 1 / 2 / 4.
             modifiers |= sum(native for mask, native in ((1, 4), (2, 2), (4, 1)) if (mapped >> 8) & mask)
         else:
-            return '此按键无法注册为全局快捷键，请使用字母、数字或功能键。'
+            return QCoreApplication.translate('GlobalShortcut', '此按键无法注册为全局快捷键，请使用字母、数字或功能键。')
         if not self._api.RegisterHotKey(None, self._id, modifiers, key):
-            return f'截图快捷键 {text} 被占用或由系统保留；可在“设置 → 快捷键”更换，仍可从托盘截图。'
+            return QCoreApplication.translate('GlobalShortcut', '截图快捷键 {text} 被占用或由系统保留；可在“设置 → 快捷键”更换，仍可从托盘截图。').format(text=text)
         self.active = True
         return ''
 

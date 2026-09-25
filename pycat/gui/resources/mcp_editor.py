@@ -6,35 +6,39 @@ import shlex
 from collections.abc import Callable, Iterable
 
 from PyQt6 import sip
-from PyQt6.QtCore import QThreadPool
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, QThreadPool
 from PyQt6.QtWidgets import (
     QComboBox,
-    QHBoxLayout,
-    QMenu,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QGridLayout,
-    QSizePolicy,
+    QHBoxLayout,
     QLabel,
     QListWidget,
+    QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from pycat.gui.resources.tool_catalog import ToolCatalog
 from pycat.gui.runtime.background_job import BackgroundJob
-from pycat.gui.settings.components import SettingsListDetailLayout, RESOURCE_DESCRIPTION_ROLE, RESOURCE_TOGGLE_ROLE
 from pycat.gui.settings.components import (
+    RESOURCE_DESCRIPTION_ROLE,
+    RESOURCE_TOGGLE_ROLE,
     SettingsActionBar,
+    SettingsListDetailLayout,
     SettingsStatusListItem,
+    build_dialog_button_box,
     configure_settings_resource_list,
 )
-from pycat.gui.utils.settings_controls import SettingsFormLayout
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.settings_controls import SettingsFormLayout
+from pycat.gui.utils.theme import configure_menu_button
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from pycat.models.contracts.mcp import (
     TRANSPORT_SSE,
@@ -44,9 +48,9 @@ from pycat.models.contracts.mcp import (
 )
 
 _TRANSPORT_LABELS = {
-    TRANSPORT_STDIO: "本地进程 (stdio)",
-    TRANSPORT_STREAMABLE_HTTP: "流式 HTTP (streamable_http)",
-    TRANSPORT_SSE: "SSE (遗留)",
+    TRANSPORT_STDIO: QT_TRANSLATE_NOOP('McpEditor', "本地进程 (stdio)"),
+    TRANSPORT_STREAMABLE_HTTP: QT_TRANSLATE_NOOP('McpEditor', "流式 HTTP (streamable_http)"),
+    TRANSPORT_SSE: QT_TRANSLATE_NOOP('McpEditor', "SSE (遗留)"),
 }
 
 def _parse_arguments(text: str) -> list[str]:
@@ -57,14 +61,14 @@ def _parse_arguments(text: str) -> list[str]:
         try:
             result = json.loads(value)
         except ValueError as exc:
-            raise ValueError(f'参数 JSON 无效：{exc}') from exc
+            raise ValueError(QCoreApplication.translate('McpEditor', '参数 JSON 无效：{exc}').format(exc=exc)) from exc
         if not isinstance(result, list) or any(not isinstance(item, str) for item in result):
-            raise ValueError('参数 JSON 必须是字符串数组')
+            raise ValueError(QCoreApplication.translate('McpEditor', '参数 JSON 必须是字符串数组'))
         return result
     try:
         return shlex.split(value)
     except ValueError as exc:
-        raise ValueError(f'参数格式无效：{exc}') from exc
+        raise ValueError(QCoreApplication.translate('McpEditor', '参数格式无效：{exc}').format(exc=exc)) from exc
 
 
 def _parse_json_object(text: str, field_label: str) -> dict[str, str]:
@@ -80,12 +84,12 @@ def _parse_json_object(text: str, field_label: str) -> dict[str, str]:
     try:
         parsed = json.loads(stripped)
     except Exception as exc:
-        raise ValueError(f"{field_label}必须是合法的 JSON 对象，例如 {{\"KEY\": \"VALUE\"}}：{exc}") from exc
+        raise ValueError(QCoreApplication.translate('McpEditor', '{field_label}必须是合法的 JSON 对象，例如 {{"KEY": "VALUE"}}：{exc}').format(field_label=field_label, exc=exc)) from exc
     if not isinstance(parsed, dict):
-        raise ValueError(f"{field_label}必须是 JSON 对象，例如 {{\"KEY\": \"VALUE\"}}")
+        raise ValueError(QCoreApplication.translate('McpEditor', '{field_label}必须是 JSON 对象，例如 {{"KEY": "VALUE"}}').format(field_label=field_label))
     for key, value in parsed.items():
         if not isinstance(key, str) or not isinstance(value, str):
-            raise ValueError(f"{field_label}的键和值都必须是字符串")
+            raise ValueError(QCoreApplication.translate('McpEditor', '{field_label}的键和值都必须是字符串').format(field_label=field_label))
     return dict(parsed)
 
 
@@ -100,7 +104,7 @@ class McpCreateDialog(QDialog):
 
     def __init__(self, existing_names: Iterable[str], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("新增 MCP 服务")
+        self.setWindowTitle(QCoreApplication.translate('McpEditor', '添加 MCP 服务'))
         self.setModal(True)
         self.setMinimumWidth(460)
         self._existing = {str(name or "").strip() for name in existing_names}
@@ -120,27 +124,27 @@ class McpCreateDialog(QDialog):
 
         self.name_edit = ThemedLineEdit()
         self.name_edit.setText(name)
-        self.name_edit.setPlaceholderText("服务名称，例如 filesystem")
+        self.name_edit.setPlaceholderText(QCoreApplication.translate('McpEditor', '服务名称，例如 filesystem'))
 
         self.transport_combo = QComboBox()
         for key, label in _TRANSPORT_LABELS.items():
-            self.transport_combo.addItem(label, key)
+            self.transport_combo.addItem(QCoreApplication.translate("McpEditor", label), key)
         self.transport_combo.currentIndexChanged.connect(self._sync_fields)
 
         self.command_edit = ThemedLineEdit()
-        self.command_edit.setPlaceholderText("启动命令，例如 npx 或 python")
+        self.command_edit.setPlaceholderText(QCoreApplication.translate('McpEditor', '启动命令，例如 npx 或 python'))
         self.args_edit = ThemedLineEdit()
-        self.args_edit.setPlaceholderText('参数，例如 ["-y", "pkg"]')
+        self.args_edit.setPlaceholderText(QCoreApplication.translate('McpEditor', '参数，例如 ["-y", "pkg"]'))
         self.url_edit = ThemedLineEdit()
         self.url_edit.setPlaceholderText("https://example.com/mcp")
 
-        form.addRow("名称", self.name_edit)
-        form.addRow("传输方式", self.transport_combo)
-        self._command_row = QLabel("命令")
+        form.addRow(QCoreApplication.translate('McpEditor', '名称'), self.name_edit)
+        form.addRow(QCoreApplication.translate('McpEditor', '传输方式'), self.transport_combo)
+        self._command_row = QLabel(QCoreApplication.translate('McpEditor', '命令'))
         form.addRow(self._command_row, self.command_edit)
-        self._args_row = QLabel('参数')
+        self._args_row = QLabel(QCoreApplication.translate('McpEditor', '参数'))
         form.addRow(self._args_row, self.args_edit)
-        self._url_row = QLabel("服务 URL")
+        self._url_row = QLabel(QCoreApplication.translate('McpEditor', '服务 URL'))
         form.addRow(self._url_row, self.url_edit)
         layout.addLayout(form)
         self.validation_label = QLabel("")
@@ -149,12 +153,7 @@ class McpCreateDialog(QDialog):
         self.validation_label.setVisible(False)
         layout.addWidget(self.validation_label)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("创建")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons = build_dialog_button_box(self, accept_text=QCoreApplication.translate('McpEditor', '添加'))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -206,7 +205,7 @@ class McpCreateDialog(QDialog):
         )
         config.validate()
         if name in self._existing:
-            raise ValueError(f"MCP 服务名称重复：{name}")
+            raise ValueError(QCoreApplication.translate('McpEditor', 'MCP 服务名称重复：{name}').format(name=name))
         return config
 
 
@@ -239,36 +238,39 @@ class McpSettingsWidget(QWidget):
         self.browser = split
         overview = QHBoxLayout()
         self.search = ThemedLineEdit()
-        self.search.setPlaceholderText("搜索已安装 MCP")
-        self.search.setAccessibleName("搜索已安装 MCP")
+        self.search.setPlaceholderText(QCoreApplication.translate('McpEditor', '搜索已安装 MCP'))
+        self.search.setAccessibleName(QCoreApplication.translate('McpEditor', '搜索已安装 MCP'))
         self.search.textChanged.connect(self._filter_list)
         overview.addWidget(self.search, 1)
-        add = QPushButton("＋ 添加")
+        add = QPushButton()
         menu = QMenu(add)
-        menu.addAction("手动配置", self.add_server)
-        menu.addAction("导入 mcp.json", self.import_servers)
-        add.setMenu(menu)
+        menu.addAction(QCoreApplication.translate('McpEditor', '手动配置'), self.add_server)
+        menu.addAction(QCoreApplication.translate('McpEditor', '导入 mcp.json'), self.import_servers)
+        configure_menu_button(add, menu, Icons.get(Icons.PLUS), QCoreApplication.translate('McpEditor', '添加'))
         overview.addWidget(add)
-        more = QPushButton("更多")
+        more = QToolButton()
+        more.setObjectName("resource_more_button")
         menu = QMenu(more)
-        menu.addAction("导出 mcp.json", self.export_servers)
-        menu.addAction("重新读取", self.reload_servers)
-        more.setMenu(menu)
+        menu.addAction(QCoreApplication.translate('McpEditor', '导出 mcp.json'), self.export_servers)
+        menu.addAction(QCoreApplication.translate('McpEditor', '重新读取'), self.reload_servers)
+        configure_menu_button(more, menu, Icons.get_muted(Icons.MORE), QCoreApplication.translate('McpEditor', '更多 MCP 操作'))
         overview.addWidget(more)
         split.toolbar_layout.addLayout(overview)
         actions = SettingsActionBar(spacing=4)
         self.toggle_btn = actions.add_action(
-            "停用", Icons.get(Icons.PAUSE), self.toggle_server_enabled,
+            QCoreApplication.translate('McpEditor', '停用'), Icons.get(Icons.PAUSE), self.toggle_server_enabled,
         )
         self.remove_btn = actions.add_icon_action(
-            "删除 MCP 服务",
-            Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR),
+            QCoreApplication.translate('McpEditor', '删除 MCP 服务'),
+            Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR),
             self.remove_server,
             danger=True,
         )
         actions.add_stretch()
-        self.test_btn = QPushButton("测试连接")
-        self.test_btn.setToolTip("用当前草稿测试连接和读取工具目录")
+        self.test_btn = QPushButton(QCoreApplication.translate('McpEditor', '测试'))
+        self.test_btn.setAccessibleName(QCoreApplication.translate('McpEditor', '测试 MCP 连接'))
+        self.test_btn.setMinimumWidth(self.test_btn.fontMetrics().horizontalAdvance(QCoreApplication.translate('McpEditor', '测试中…')) + 24)
+        self.test_btn.setToolTip(QCoreApplication.translate('McpEditor', '用当前草稿测试连接和读取工具目录'))
         self.test_btn.clicked.connect(self._test_connection)
         actions.add_widget(self.test_btn)
         split.detail_layout.addWidget(actions)
@@ -298,31 +300,31 @@ class McpSettingsWidget(QWidget):
         self.name_edit = ThemedLineEdit()
         self.transport_combo = QComboBox()
         for key, label in _TRANSPORT_LABELS.items():
-            self.transport_combo.addItem(label, key)
+            self.transport_combo.addItem(QCoreApplication.translate("McpEditor", label), key)
         self.transport_combo.currentIndexChanged.connect(self._on_transport_changed)
         self.command_edit = ThemedLineEdit()
         self.args_edit = ThemedLineEdit()
-        self.args_edit.setPlaceholderText('JSON 数组或空格分隔参数，例如 ["-y", "pkg"]')
+        self.args_edit.setPlaceholderText(QCoreApplication.translate('McpEditor', 'JSON 数组或空格分隔参数，例如 ["-y", "pkg"]'))
         self.cwd_edit = ThemedLineEdit()
-        self.cwd_edit.setPlaceholderText("工作目录（可选，留空继承当前目录）")
+        self.cwd_edit.setPlaceholderText(QCoreApplication.translate('McpEditor', '工作目录（可选，留空继承当前目录）'))
         self.env_edit = ThemedTextEdit()
         self.env_edit.setMaximumHeight(110)
-        self.env_edit.setPlaceholderText('JSON 对象，默认 {}，例如 {"API_KEY": "value"}')
+        self.env_edit.setPlaceholderText(QCoreApplication.translate('McpEditor', 'JSON 对象，默认 {}，例如 {"API_KEY": "value"}'))
         self.url_edit = ThemedLineEdit()
         self.url_edit.setPlaceholderText("https://example.com/mcp")
         self.headers_edit = ThemedTextEdit()
         self.headers_edit.setMaximumHeight(110)
         self.headers_edit.setPlaceholderText(
-            'JSON 对象，默认 {}，例如 {"Authorization": "Bearer xxx"}'
+            QCoreApplication.translate('McpEditor', 'JSON 对象，默认 {}，例如 {"Authorization": "Bearer xxx"}')
         )
-        self._command_label = QLabel("命令")
-        self._args_label = QLabel("参数")
-        self._cwd_label = QLabel("工作目录")
-        self._env_label = QLabel("环境变量")
-        self._url_label = QLabel("服务 URL")
-        self._headers_label = QLabel("请求头")
-        field("名称", self.name_edit, 0)
-        field("传输方式", self.transport_combo, 0, 1)
+        self._command_label = QLabel(QCoreApplication.translate('McpEditor', '命令'))
+        self._args_label = QLabel(QCoreApplication.translate('McpEditor', '参数'))
+        self._cwd_label = QLabel(QCoreApplication.translate('McpEditor', '工作目录'))
+        self._env_label = QLabel(QCoreApplication.translate('McpEditor', '环境变量'))
+        self._url_label = QLabel(QCoreApplication.translate('McpEditor', '服务 URL'))
+        self._headers_label = QLabel(QCoreApplication.translate('McpEditor', '请求头'))
+        field(QCoreApplication.translate('McpEditor', '名称'), self.name_edit, 0)
+        field(QCoreApplication.translate('McpEditor', '传输方式'), self.transport_combo, 0, 1)
         self._stdio_fields = [field(self._command_label, self.command_edit, 1),
             field(self._args_label, self.args_edit, 1, 1),
             field(self._cwd_label, self.cwd_edit, 2, span=2),
@@ -349,9 +351,9 @@ class McpSettingsWidget(QWidget):
                 item = SettingsStatusListItem(server)
                 transport = server.normalized_transport()
                 item.set_status(
-                    server.name or "未命名服务",
+                    server.name or QCoreApplication.translate('McpEditor', '未命名服务'),
                     enabled=server.enabled,
-                    detail=f"{transport} · {'已启用' if server.enabled else '已停用'}",
+                    detail=QCoreApplication.translate('McpEditor', '{transport} · {value}').format(transport=transport, value=QCoreApplication.translate('McpEditor', '已启用') if server.enabled else QCoreApplication.translate('McpEditor', '已停用')),
                     tooltip=self._server_tooltip(server),
                 )
                 item.setData(RESOURCE_DESCRIPTION_ROLE, server.endpoint_summary())
@@ -385,7 +387,7 @@ class McpSettingsWidget(QWidget):
         try:
             self._commit_active()
         except ValueError as exc:
-            QMessageBox.warning(self, "MCP 配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             self._loading = True
             try:
                 self.list_widget.setCurrentRow(previous_index)
@@ -445,8 +447,8 @@ class McpSettingsWidget(QWidget):
         command = self.command_edit.text().strip()
         url = self.url_edit.text().strip()
         args = _parse_arguments(self.args_edit.text())
-        env = _parse_json_object(self.env_edit.toPlainText(), "环境变量")
-        headers = _parse_json_object(self.headers_edit.toPlainText(), "请求头")
+        env = _parse_json_object(self.env_edit.toPlainText(), QCoreApplication.translate('McpEditor', '环境变量'))
+        headers = _parse_json_object(self.headers_edit.toPlainText(), QCoreApplication.translate('McpEditor', '请求头'))
         candidate = McpServerConfig(
             name=name,
             transport=transport,
@@ -468,7 +470,7 @@ class McpSettingsWidget(QWidget):
 
         if self._connection_tester is None:
             QMessageBox.information(
-                self, "测试连接", "当前环境未提供 MCP 运行时，无法测试连接。"
+                self, QCoreApplication.translate('McpEditor', '测试连接'), QCoreApplication.translate('McpEditor', '当前环境未提供 MCP 运行时，无法测试连接。')
             )
             return
         if not (0 <= self._active_index < len(self.servers)):
@@ -476,14 +478,14 @@ class McpSettingsWidget(QWidget):
         try:
             self._commit_active()
         except ValueError as exc:
-            QMessageBox.warning(self, "MCP 配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             return
         if self._probe_job is not None:
             return
         config = self._clone(self.servers[self._active_index])
         self._probe_config = config
         self.test_btn.setEnabled(False)
-        self.test_btn.setText("测试中…")
+        self.test_btn.setText(QCoreApplication.translate('McpEditor', '测试中…'))
         tester = self._connection_tester
         job = BackgroundJob(lambda: tester(config))
         self._probe_job = job
@@ -497,7 +499,7 @@ class McpSettingsWidget(QWidget):
         self._probe_job = None
         self.destroyed.disconnect(job.abandon)
         self.test_btn.setEnabled(True)
-        self.test_btn.setText("测试连接")
+        self.test_btn.setText(QCoreApplication.translate('McpEditor', '测试'))
         try:
             self._commit_active()
         except ValueError:
@@ -507,24 +509,24 @@ class McpSettingsWidget(QWidget):
         config = self.servers[self._active_index]
         if config.to_dict() != self._probe_config.to_dict():
             return
-        result = result or {"ok": False, "error": str(error or "连接测试未返回结果")}
+        result = result or {"ok": False, "error": str(error or QCoreApplication.translate('McpEditor', '连接测试未返回结果'))}
         if result.get("ok"):
             tools = [str(name) for name in result.get("tools") or []]
             config.cached_tools = tools
             self.tool_catalog.set_tools(tools, result.get("schemas") or ())
             QMessageBox.information(
                 self,
-                "测试连接",
-                f"连接成功，发现 {len(tools)} 个工具。",
+                QCoreApplication.translate('McpEditor', '测试连接'),
+                QCoreApplication.translate('McpEditor', '连接成功，发现 {value} 个工具。').format(value=len(tools)),
             )
         else:
-            error = str(result.get("error") or "未知错误")
+            error = str(result.get("error") or QCoreApplication.translate('McpEditor', '未知错误'))
             while error.startswith(('连接失败：', '连接失败:')):
                 error = error[5:].lstrip()
             QMessageBox.warning(
                 self,
-                "MCP 连接失败",
-                error or '未知错误',
+                QCoreApplication.translate('McpEditor', 'MCP 连接失败'),
+                error or QCoreApplication.translate('McpEditor', '未知错误'),
             )
 
     def cancel_probe(self):
@@ -533,7 +535,7 @@ class McpSettingsWidget(QWidget):
             job.abandon()
             self.destroyed.disconnect(job.abandon)
             self.test_btn.setEnabled(True)
-            self.test_btn.setText("测试连接")
+            self.test_btn.setText(QCoreApplication.translate('McpEditor', '测试'))
 
     def hideEvent(self, event):
         self.cancel_probe()
@@ -543,7 +545,7 @@ class McpSettingsWidget(QWidget):
         try:
             self._commit_active()
         except ValueError as exc:
-            QMessageBox.warning(self, "MCP 配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             return
         dialog = McpCreateDialog((server.name for server in self.servers), parent=self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -551,7 +553,7 @@ class McpSettingsWidget(QWidget):
         try:
             config = dialog.values()
         except ValueError as exc:
-            QMessageBox.warning(self, "MCP 配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             return
         self.servers.append(config)
         self._active_index = len(self.servers) - 1
@@ -562,7 +564,7 @@ class McpSettingsWidget(QWidget):
 
     def import_servers(self) -> None:
         path, _selected = QFileDialog.getOpenFileName(
-            self, "导入 mcp.json", "", "MCP 配置 (*.json);;所有文件 (*)"
+            self, QCoreApplication.translate('McpEditor', '导入 mcp.json'), "", QCoreApplication.translate('McpEditor', 'MCP 配置 (*.json);;所有文件 (*)')
         )
         if not path:
             return
@@ -570,26 +572,26 @@ class McpSettingsWidget(QWidget):
             with open(path, "r", encoding="utf-8") as handle:
                 payload = json.load(handle)
         except Exception as exc:
-            QMessageBox.warning(self, "导入失败", f"无法读取文件：{exc}")
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', '导入失败'), QCoreApplication.translate('McpEditor', '无法读取文件：{exc}').format(exc=exc))
             return
         entries = payload.get("mcpServers") if isinstance(payload, dict) else None
         if not isinstance(entries, dict):
-            QMessageBox.warning(self, "导入失败", "文件必须是 {\"mcpServers\": {...}} 格式。")
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', '导入失败'), QCoreApplication.translate('McpEditor', '文件必须是 {"mcpServers": {...}} 格式。'))
             return
         try:
             self._commit_active()
         except ValueError as exc:
-            QMessageBox.warning(self, "MCP 配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             return
         imported: list[McpServerConfig] = []
         errors: list[str] = []
         existing = {server.name for server in self.servers}
         for name, raw in entries.items():
             if not isinstance(name, str):
-                errors.append("服务名称必须是字符串")
+                errors.append(QCoreApplication.translate('McpEditor', '服务名称必须是字符串'))
                 continue
             if not isinstance(raw, dict):
-                errors.append(f"{name}：条目不是对象")
+                errors.append(QCoreApplication.translate('McpEditor', '{name}：条目不是对象').format(name=name))
                 continue
             try:
                 candidate = McpServerConfig.from_mcp_json(name, raw)
@@ -597,7 +599,7 @@ class McpSettingsWidget(QWidget):
                 errors.append(f"{name}：{exc}")
                 continue
             if candidate.name in existing:
-                errors.append(f"MCP 服务名称重复：{candidate.name}")
+                errors.append(QCoreApplication.translate('McpEditor', 'MCP 服务名称重复：{name}').format(name=candidate.name))
                 continue
             existing.add(candidate.name)
             imported.append(candidate)
@@ -605,24 +607,24 @@ class McpSettingsWidget(QWidget):
             self.servers.extend(imported)
             self._active_index = len(self.servers) - 1
             self.refresh_list(self._active_index)
-        summary = f"导入 {len(imported)} 个服务。"
+        summary = QCoreApplication.translate('McpEditor', '导入 {value} 个服务。').format(value=len(imported))
         if errors:
-            summary += "\n以下条目被跳过：\n" + "\n".join(errors)
-        QMessageBox.information(self, "导入 mcp.json", summary)
+            summary += QCoreApplication.translate('McpEditor', '\n以下条目被跳过：\n') + "\n".join(errors)
+        QMessageBox.information(self, QCoreApplication.translate('McpEditor', '导入 mcp.json'), summary)
 
     def export_servers(self) -> None:
         try:
             servers = self.collect_servers()
         except ValueError as exc:
-            QMessageBox.warning(self, "MCP 配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             return
         enabled_servers = [server for server in servers if server.enabled]
         if not enabled_servers:
-            QMessageBox.information(self, "导出 mcp.json", "没有已启用的 MCP 服务可导出。")
+            QMessageBox.information(self, QCoreApplication.translate('McpEditor', '导出 mcp.json'), QCoreApplication.translate('McpEditor', '没有已启用的 MCP 服务可导出。'))
             return
         payload = {"mcpServers": {server.name: self._to_mcp_json(server) for server in enabled_servers}}
         path, _selected = QFileDialog.getSaveFileName(
-            self, "导出 mcp.json", "mcp.json", "MCP 配置 (*.json);;所有文件 (*)"
+            self, QCoreApplication.translate('McpEditor', '导出 mcp.json'), "mcp.json", QCoreApplication.translate('McpEditor', 'MCP 配置 (*.json);;所有文件 (*)')
         )
         if not path:
             return
@@ -630,12 +632,12 @@ class McpSettingsWidget(QWidget):
             with open(path, "w", encoding="utf-8") as handle:
                 json.dump(payload, handle, ensure_ascii=False, indent=2)
         except Exception as exc:
-            QMessageBox.warning(self, "导出失败", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', '导出失败'), str(exc))
             return
         QMessageBox.information(
             self,
-            "导出 mcp.json",
-            f"已导出 {len(enabled_servers)} 个服务到：\n{path}\n\n注意：导出内容包含请求头中的凭据，请自行妥善保管。",
+            QCoreApplication.translate('McpEditor', '导出 mcp.json'),
+            QCoreApplication.translate('McpEditor', '已导出 {value} 个服务到：\n{path}\n\n注意：导出内容包含请求头中的凭据，请自行妥善保管。').format(value=len(enabled_servers), path=path),
         )
 
     @staticmethod
@@ -648,7 +650,7 @@ class McpSettingsWidget(QWidget):
         try:
             self._commit_active()
         except ValueError as exc:
-            QMessageBox.warning(self, "MCP 配置无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             return
         server = self.servers[self._active_index]
         server.enabled = not server.enabled
@@ -658,7 +660,7 @@ class McpSettingsWidget(QWidget):
         if not (0 <= self._active_index < len(self.servers)):
             return
         server = self.servers[self._active_index]
-        if QMessageBox.question(self, "删除 MCP 服务", f'确定删除“{server.name}”吗？') != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, QCoreApplication.translate('McpEditor', '删除 MCP 服务'), QCoreApplication.translate('McpEditor', '确定删除“{name}”吗？').format(name=server.name)) != QMessageBox.StandardButton.Yes:
             return
         del self.servers[self._active_index]
         self._active_index = min(self._active_index, len(self.servers) - 1)
@@ -670,8 +672,8 @@ class McpSettingsWidget(QWidget):
         if self.has_unsaved_changes():
             answer = QMessageBox.question(
                 self,
-                "放弃 MCP 更改",
-                "重新读取会放弃尚未保存的 MCP 更改，是否继续？",
+                QCoreApplication.translate('McpEditor', '放弃 MCP 更改'),
+                QCoreApplication.translate('McpEditor', '重新读取会放弃尚未保存的 MCP 更改，是否继续？'),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -688,7 +690,7 @@ class McpSettingsWidget(QWidget):
         for server in self.servers:
             server.validate()
             if server.name in names:
-                raise ValueError(f"MCP 服务名称重复：{server.name}")
+                raise ValueError(QCoreApplication.translate('McpEditor', 'MCP 服务名称重复：{name}').format(name=server.name))
             names.add(server.name)
         return [self._clone(server) for server in self.servers]
 
@@ -715,8 +717,8 @@ class McpSettingsWidget(QWidget):
         enabled = server is not None
         self.toggle_btn.setEnabled(enabled)
         self.remove_btn.setEnabled(enabled)
-        action_label = "停用 MCP 服务" if server and server.enabled else "启用 MCP 服务"
-        self.toggle_btn.setText("停用" if server and server.enabled else "启用")
+        action_label = QCoreApplication.translate('McpEditor', '停用 MCP 服务') if server and server.enabled else QCoreApplication.translate('McpEditor', '启用 MCP 服务')
+        self.toggle_btn.setText(QCoreApplication.translate('McpEditor', '停用') if server and server.enabled else QCoreApplication.translate('McpEditor', '启用'))
         self.toggle_btn.setToolTip(action_label)
         self.toggle_btn.setAccessibleName(action_label)
         self.toggle_btn.setIcon(Icons.get(Icons.PAUSE if server and server.enabled else Icons.PLAY))
@@ -726,14 +728,14 @@ class McpSettingsWidget(QWidget):
         transport = server.normalized_transport()
         lines = [
             f"{server.name}",
-            f"状态：{'启用' if server.enabled else '停用'}",
-            f"传输：{transport}",
+            QCoreApplication.translate('McpEditor', '状态：{value}').format(value=QCoreApplication.translate('McpEditor', '启用') if server.enabled else QCoreApplication.translate('McpEditor', '停用')),
+            QCoreApplication.translate('McpEditor', '传输：{transport}').format(transport=transport),
         ]
         if server.is_http_transport():
             lines.append(f"URL：{server.url or '-'}")
             if server.headers:
-                lines.append(f"请求头：{', '.join(sorted(server.headers))}")
+                lines.append(QCoreApplication.translate('McpEditor', '请求头：{value}').format(value=', '.join(sorted(server.headers))))
         else:
-            lines.append(f"命令：{server.command or '-'}")
-            lines.append(f"参数：{' '.join(server.args or []) or '-'}")
+            lines.append(QCoreApplication.translate('McpEditor', '命令：{value}').format(value=server.command or '-'))
+            lines.append(QCoreApplication.translate('McpEditor', '参数：{value}').format(value=' '.join(server.args or []) or '-'))
         return "\n".join(lines)

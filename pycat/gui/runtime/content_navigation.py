@@ -1,32 +1,39 @@
 """Qt-side actions for content already verified by the core resolver."""
 from __future__ import annotations
 
-import hashlib
 import base64
+import hashlib
 import logging
-import mimetypes
 import os
 import shutil
 import tempfile
-from dataclasses import dataclass
+from copy import copy
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from PyQt6.QtCore import QBuffer, QIODevice, QMimeData, QUrl
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QImage, QImageReader, QPixmap
 
-from pycat.core.content.references import build_artifact_content_ref, delivery_refs_for_messages, content_identity, material_rows
-from pycat.core.content.resolver import ResolvedContent, SessionContentResolver
-from pycat.core.content.office import OfficeExtractionError, extract_office_text, is_office_attachment
 from pycat.core.content.export import render_document
+from pycat.core.content.mime import DEFAULT_MIME, guess_mime, is_text_mime
+from pycat.core.content.office import OfficeExtractionError, extract_office_text, is_office_attachment
+from pycat.core.content.references import (
+    build_artifact_content_ref,
+    content_identity,
+    delivery_refs_for_messages,
+    material_rows,
+)
+from pycat.core.content.resolver import ResolvedContent, SessionContentResolver
 from pycat.core.state.artifact import ArtifactService
-from pycat.models.contracts.content import ContentRef
-from pycat.models.workspace import workspace_identity
-from pycat.models.session_paths import has_active_workspace
 from pycat.gui.utils.image_loader import read_image
-
+from pycat.models.contracts.content import ContentRef
+from pycat.models.session_paths import has_active_workspace
+from pycat.models.workspace import WorkspaceLocation, workspace_identity
 
 logger = logging.getLogger(__name__)
+_MODERN_OFFICE_SUFFIXES = {".docx", ".docm", ".dotx", ".dotm", ".xlsx", ".xlsm", ".xltx", ".xltm"}
 
 
 class ContentNavigationError(ValueError):
@@ -35,17 +42,21 @@ class ContentNavigationError(ValueError):
 
 @dataclass(frozen=True)
 class ContentOpenTarget:
-    path: Path
+    """A local target, or remote metadata with a worker-only materializer."""
+
+    path: Path | None
     ref: ContentRef
     mime: str
     is_image: bool
     preview_kind: str
     actions: tuple[str, ...]
     conversation_id: str = ""
+    conversation_workspace: str = ""
+    materialize: Callable[[], ContentOpenTarget] | None = field(default=None, repr=False, compare=False)
 
     @property
     def name(self) -> str:
-        return str(self.ref.name or self.path.name or "content")
+        return str(self.ref.name or (self.path.name if self.path else "content"))
 
 
 @dataclass(frozen=True)
@@ -65,7 +76,7 @@ class PreparedSave:
 
 
 class ContentTargetResolver(Protocol):
-    """Resolve one ref on the GUI thread for projection and scope checks."""
+    """Capture scope on the GUI thread; False must not download remote content."""
 
     def __call__(
         self,
@@ -166,6 +177,31 @@ class ContentOpenUseCase:
         return self._resolve_target(conversation, requested, verify_integrity=verify_integrity)
 
     def _resolve_target(self, conversation, requested, *, verify_integrity):
+        workspace = requested.workspace or conversation.work_dir
+        if not verify_integrity and requested.kind == "workspace" and WorkspaceLocation.parse(workspace).is_remote:
+            # Membership was checked against the live GUI projection. Capture
+            # its scope now; the worker must never consult mutable Qt state.
+            snapshot = copy(conversation)
+            requested = replace(requested, workspace=workspace)
+            mime = self._display_mime(requested.name, requested.mime)
+            is_image = mime.startswith("image/")
+            kind = ""
+            if is_image:
+                kind = "image"
+            elif mime == "application/pdf":
+                kind = "pdf"
+            elif is_text_mime(mime):
+                kind = "text"
+            elif Path(requested.name).suffix.lower() in _MODERN_OFFICE_SUFFIXES:
+                kind = "office"
+            actions = ("open", "save_as", "reveal", "copy")
+            if kind:
+                actions = ("preview", *actions)
+            return ContentOpenTarget(None, requested, mime, is_image, kind,
+                actions,
+                conversation_id=str(conversation.id),
+                conversation_workspace=str(conversation.work_dir),
+                materialize=partial(self._resolve_target, snapshot, requested, verify_integrity=True))
         try:
             resolved = self._resolver.resolve_content(conversation, requested, verify_digest=verify_integrity)
             self._verify_integrity(resolved, verify_digest=verify_integrity and requested.kind == "input")
@@ -185,13 +221,24 @@ class ContentOpenUseCase:
             preview_kind=preview_kind,
             actions=actions,
             conversation_id=str(getattr(conversation, "id", "") or ""),
+            conversation_workspace=str(getattr(conversation, "work_dir", "") or ""),
         )
+
+    @staticmethod
+    def prepare_target(target: ContentOpenTarget) -> ContentOpenTarget:
+        """Materialize and verify in a worker, returning an actual local target."""
+        if target.materialize is not None:
+            return target.materialize()
+        ContentOpenUseCase.verify_target(target)
+        return target
 
     @staticmethod
     def verify_target(target: ContentOpenTarget) -> None:
         """Verify an immutable target without consulting GUI or conversation state."""
 
-        resolved = ResolvedContent(path=Path(target.path), ref=target.ref)
+        if target.path is None:
+            raise ContentNavigationError("远程内容尚未加载")
+        resolved = ResolvedContent(path=target.path, ref=target.ref)
         try:
             if not resolved.path.is_file():
                 raise ContentNavigationError("内容文件不存在或不可访问")
@@ -376,8 +423,6 @@ class ContentOpenUseCase:
         ref = ContentRef(
             id=file_path.name,
             name=file_path.name,
-            # An empty mime lets _verified_type fall back to suffix guessing +
-            # signature sniffing; "application/octet-stream" would override it.
             mime="",
             size=0,
             digest="",
@@ -460,7 +505,7 @@ class ContentOpenUseCase:
         return ContentRef(
             id=identifier if separator else value,
             name=identifier if separator else value,
-            mime="application/octet-stream",
+            mime=DEFAULT_MIME,
             size=0,
             digest="",
             ref=value,
@@ -581,15 +626,20 @@ class ContentOpenUseCase:
             pass
 
     @staticmethod
+    def _display_mime(name: str, declared: str) -> str:
+        declared = str(declared or "").lower()
+        guessed = guess_mime(name)
+        # Senders may label passive text by the OS handler (CSV as Excel).
+        if not declared or declared == DEFAULT_MIME or is_text_mime(guessed) and not is_text_mime(declared):
+            return guessed
+        return declared
+
+    @staticmethod
     def _verified_type(resolved: ResolvedContent) -> tuple[str, bool, str]:
-        declared = str(resolved.mime or "application/octet-stream").lower()
-        suffix_mime = str(mimetypes.guess_type(resolved.name)[0] or "").lower()
-        mime = declared or suffix_mime or "application/octet-stream"
+        declared = str(resolved.mime or DEFAULT_MIME).lower()
+        suffix_mime = guess_mime(resolved.name)
+        mime = ContentOpenUseCase._display_mime(resolved.name, declared)
         suffix = Path(resolved.name).suffix.lower()
-        # Windows registry associations can label .md as octet-stream. Preview
-        # our explicit passive text formats consistently on every platform.
-        if suffix in {".md", ".markdown", ".txt", ".py", ".js", ".ts", ".css", ".log", ".csv", ".toml", ".ini", ".yaml", ".yml"} and mime == "application/octet-stream":
-            mime = "text/plain"
         with resolved.path.open("rb") as stream:
             signature = stream.read(8)
         claims_pdf = mime in {"application/pdf", "application/x-pdf"} or resolved.name.lower().endswith(".pdf")
@@ -598,7 +648,7 @@ class ContentOpenUseCase:
                 raise ContentNavigationError("PDF 格式无效或文件已经损坏")
             return "application/pdf", False, "pdf"
         if is_office_attachment(resolved.name, mime):
-            if suffix in {".docx", ".docm", ".dotx", ".dotm", ".xlsx", ".xlsm", ".xltx", ".xltm"}:
+            if suffix in _MODERN_OFFICE_SUFFIXES:
                 if not signature.startswith(b"PK\x03\x04"):
                     raise ContentNavigationError("Office 格式无效或文件已经损坏")
                 return mime, False, "office"
@@ -620,12 +670,7 @@ class ContentOpenUseCase:
         if claims_image and (not image_format or not reader.canRead()):
             raise ContentNavigationError("图片格式无效或文件已经损坏")
         if not image_format:
-            if mime.startswith("text/") or mime in {
-                "application/json",
-                "application/xml",
-                "application/yaml",
-                "application/x-yaml",
-            }:
+            if is_text_mime(mime):
                 return mime, False, "text"
             return mime, False, ""
         detected = {

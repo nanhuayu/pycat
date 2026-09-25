@@ -1,22 +1,33 @@
 """One non-modal detail window, with domain-specific writes and shared reading."""
+import weakref
 from copy import copy
 from dataclasses import replace
 from pathlib import Path
-import weakref
 
 from PyQt6 import sip
-from PyQt6.QtCore import QThreadPool, Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QGuiApplication, QKeySequence, QShortcut
-from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QMenu, QMessageBox, QFileDialog, QWidget
+from PyQt6.QtCore import Qt, QThreadPool, pyqtSignal
+from PyQt6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence, QShortcut
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from pycat.core.content.markdown import strip_frontmatter
 from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.runtime.content_navigation import ContentOpenUseCase, PreparedPreview
-from pycat.gui.widgets.content_viewer import ContentViewer
-from pycat.gui.widgets.themed_line_edit import ThemedPlainTextEdit
-from pycat.gui.utils.window_geometry import apply_window_size
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT, configure_icon_button, prepare_context_menu
+from pycat.gui.utils.window_geometry import apply_window_size
+from pycat.gui.widgets.content_viewer import ContentViewer
+from pycat.gui.widgets.themed_line_edit import ThemedPlainTextEdit
 from pycat.models.contracts.content import ContentRef
 from pycat.models.session_paths import has_active_workspace
 
@@ -62,6 +73,9 @@ class ContentPreviewDialog(QDialog):
         self.setObjectName("content_preview_dialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("内容")
+        self.setWindowFlag(Qt.WindowType.WindowMinMaxButtonsHint, True)
+        self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+        self.setSizeGripEnabled(True)
         apply_window_size(self, preferred=(800, 620), minimum=(360, 320))
         root = QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
@@ -84,9 +98,19 @@ class ContentPreviewDialog(QDialog):
         self.editor.setAccessibleName("编辑内容")
         root.addWidget(self.editor, 1)
         self.back = self._command("返回", Icons.ARROW_LEFT, self.go_back)
-        self.source_mode = self._command("显示 Markdown 源码", Icons.CODE)
-        self.source_mode.defaultAction().setCheckable(True)
+        self.read_mode = self._command("阅读", Icons.BOOK_OPEN, text=True)
+        self.source_mode = self._command("源码", Icons.CODE, text=True)
+        self.preview_modes = QActionGroup(self)
+        self.preview_modes.setExclusive(True)
+        for button in (self.read_mode, self.source_mode):
+            button.defaultAction().setCheckable(True)
+            self.preview_modes.addAction(button.defaultAction())
+        self.read_mode.setChecked(True)
         self.source_mode.defaultAction().toggled.connect(self.viewer.set_source_visible)
+        self.read_mode.setToolTip("阅读 Markdown")
+        self.read_mode.setAccessibleName("阅读 Markdown")
+        self.source_mode.setToolTip("查看 Markdown 源码")
+        self.source_mode.setAccessibleName("查看 Markdown 源码")
         self.previous = self._command("上一页", Icons.CHEVRON_LEFT, lambda: self.set_pdf_page(self.viewer.page - 1))
         self.counter = QLabel()
         self.counter.setAccessibleName("PDF 页码")
@@ -103,6 +127,7 @@ class ContentPreviewDialog(QDialog):
         self.edit = self._command("编辑", Icons.EDIT, self.start_edit)
         self.promote = self._command("整理为项目知识", Icons.BOOK, self.promote_to_knowledge)
         self.save = self._command("保存", Icons.SAVE, self.save_changes, text=True)
+        self.save.setProperty("primary", True)
         self.save.defaultAction().setShortcut(QKeySequence.StandardKey.Save)
         self.cancel = self._command("取消", Icons.XMARK, self.cancel_edit, text=True)
         self.source_button = self._command("查看来源", Icons.LINK)
@@ -161,8 +186,11 @@ class ContentPreviewDialog(QDialog):
         reading = not self._editing
         pdf = reading and self.viewer.kind == "pdf"
         raster = reading and self.viewer.kind in {"image", "pdf"}
+        (self.source_mode if self.viewer.source_visible else self.read_mode).setChecked(True)
         eligible = {
-            self.back: bool(self._history), self.source_mode: reading and self.viewer.kind == "markdown",
+            self.back: bool(self._history),
+            self.read_mode: reading and self.viewer.kind == "markdown",
+            self.source_mode: reading and self.viewer.kind == "markdown",
             self.previous: pdf, self.counter: pdf, self.next: pdf,
             self.zoom_out: raster, self.zoom_reset: raster, self.zoom_in: raster, self.zoom_fit: raster,
             self.edit: reading and self._page.get("kind") in {"wiki", "memory"} and not self._request.get("evidence"),
@@ -251,8 +279,14 @@ class ContentPreviewDialog(QDialog):
         self.conversation = copy(conversation) if conversation is not None else None
         self._set_editing(False)
         self._load()
+        self.show_window()
+
+    def show_window(self):
+        if self.isMinimized():
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
         self.show()
         self.raise_()
+        self.activateWindow()
 
     def open_memory(self, conversation, scope, entry_id=""):
         self.open_request({"memory": scope, "entry_id": entry_id}, conversation)

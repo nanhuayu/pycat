@@ -49,8 +49,4 @@ class FeishuDelivery:
     def send_reply(self, channel: ChannelConfig, *, receive_id: str, content: str) -> None:
         self._client.send_text_message(channel, receive_id=receive_id, text=content, receive_id_type="chat_id")
 
-    def normalize_reply_text(self, content: Any, *, limit: int = 4000) -> str:
-        return self._client.normalize_reply_text(content, limit=limit)
-
-
 __all__ = ["FeishuDelivery"]

@@ -1,15 +1,15 @@
 """One configured search engine, with explicit failures and bounded results."""
-from typing import List, Dict, Any, Optional
 import re
+from typing import Any, Dict, List, Optional
 
+from pycat.core.app.services.search_providers.base import BaseSearchProvider
+from pycat.core.app.services.search_providers.factory import SearchProviderFactory
 from pycat.models.search_config import (
     DEFAULT_MAX_RESULTS,
     MAX_MAX_RESULTS,
     MIN_MAX_RESULTS,
     SearchConfig,
 )
-from pycat.core.app.services.search_providers.factory import SearchProviderFactory
-from pycat.core.app.services.search_providers.base import BaseSearchProvider
 
 
 class SearchService:

@@ -1,7 +1,8 @@
 """One display body for Markdown, plain text, images and PDF pages."""
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap, QPainter
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QStackedWidget, QGraphicsView, QGraphicsScene
+from PyQt6.QtGui import QPainter, QPixmap
+from PyQt6.QtWidgets import QGraphicsScene, QGraphicsView, QScrollArea, QStackedWidget, QVBoxLayout, QWidget
+
 from pycat.gui.widgets.markdown_view import MarkdownView
 from pycat.gui.widgets.themed_line_edit import ThemedPlainTextEdit
 

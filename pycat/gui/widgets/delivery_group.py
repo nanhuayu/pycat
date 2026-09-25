@@ -1,4 +1,5 @@
 """Compact output projection with lazy rows and bounded image strips."""
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 
@@ -17,7 +18,7 @@ class DeliveryGroup(QFrame):
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 8, 10, 8)
         root.setSpacing(6)
-        title = QLabel(f'本次产出 · {len(self.refs)}')
+        title = QLabel(QCoreApplication.translate('DeliveryGroup', '本次产出 · {value}').format(value=len(self.refs)))
         title.setObjectName('delivery_section_title')
         title.setProperty('muted', True)
         root.addWidget(title)
@@ -32,7 +33,7 @@ class DeliveryGroup(QFrame):
         self.more_button.clicked.connect(lambda: self._append(self.BATCH_SIZE))
         actions.addWidget(self.more_button)
         actions.addStretch()
-        self.collapse_button = QPushButton('收起')
+        self.collapse_button = QPushButton(QCoreApplication.translate('DeliveryGroup', '收起'))
         self.collapse_button.setFlat(True)
         self.collapse_button.clicked.connect(self.collapse)
         actions.addWidget(self.collapse_button)
@@ -57,7 +58,7 @@ class DeliveryGroup(QFrame):
                 self.rows.addWidget(widget)
             self.visible_count += 1
         remaining = len(self.refs) - self.visible_count
-        self.more_button.setText(f'再显示 {min(remaining, self.BATCH_SIZE)} 项' + (f'（剩余 {remaining}）' if remaining > self.BATCH_SIZE else ''))
+        self.more_button.setText(QCoreApplication.translate('DeliveryGroup', '再显示 {value} 项').format(value=min(remaining, self.BATCH_SIZE)) + (QCoreApplication.translate('DeliveryGroup', '（剩余 {remaining}）').format(remaining=remaining) if remaining > self.BATCH_SIZE else ''))
         self.more_button.setVisible(remaining > 0)
         self.collapse_button.setVisible(self.visible_count > self.INITIAL_COUNT)
 

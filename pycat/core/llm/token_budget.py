@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
+from pycat.core.context.history import history_projection_signature, is_real_user_message, project_history
+from pycat.core.context.sections import build_conversation_summary
 from pycat.models.conversation import Conversation, Message, normalize_tool_result
 from pycat.models.llm_config import LLMConfig
 from pycat.models.model_ref import provider_matches_name
@@ -298,11 +300,6 @@ class TokenUsageSnapshot:
     def danger_threshold_tokens(self) -> int:
         return int(self.budget.danger_threshold_tokens or 0)
 
-    def short_label(self) -> str:
-        used = format_token_count(self.context_tokens)
-        limit = format_token_count(self.effective_prompt_limit or self.context_window)
-        return f"上下文 {used}/{limit}"
-
     def detail_text(self) -> str:
         parts = [
             f"窗口 {format_token_count(self.context_window)}",
@@ -440,8 +437,8 @@ def build_token_usage_snapshot(
     if request_snapshot is not None:
         return request_snapshot
 
-    messages = [msg for msg in getattr(conversation, "messages", []) or [] if not getattr(msg, "archived_content_id", None)]
-    context_tokens = estimate_conversation_tokens(messages)
+    messages = project_history(conversation)
+    context_tokens = estimate_conversation_tokens(messages) + estimate_tokens(build_conversation_summary(conversation))
     assistant_tokens = 0
     for msg in messages:
         if getattr(msg, "role", "") == "assistant" and getattr(msg, "tokens", None):
@@ -484,6 +481,7 @@ def build_token_usage_snapshot(
 
 def request_usage_payload(
     *,
+    conversation: Conversation,
     token_estimate: int,
     budget: TokenBudget,
     replay_pressure: str,
@@ -493,6 +491,7 @@ def request_usage_payload(
     """Serialize the small budget projection for one immutable provider body."""
     return {
         "source": "provider_request",
+        "context_signature": history_projection_signature(conversation),
         "token_estimate": max(0, int(token_estimate or 0)),
         "active_messages": max(0, int(active_messages or 0)),
         "context_window": int(budget.context_window or 0),
@@ -520,6 +519,8 @@ def _request_usage_snapshot(
     usage = dict(request_usage) if isinstance(request_usage, dict) else _latest_request_usage(conversation)
     if not usage:
         return None
+    if usage.get("context_signature") != history_projection_signature(conversation):
+        return None
     try:
         effective_prompt_limit = int(usage.get("effective_prompt_limit") or 0)
         context_window = int(usage.get("context_window") or 0)
@@ -527,6 +528,8 @@ def _request_usage_snapshot(
     except Exception:
         return None
     if effective_prompt_limit <= 0 or context_window <= 0:
+        return None
+    if context_window != current_budget.context_window:
         return None
 
     current_model = str(model_id or current_budget.model_id or getattr(conversation, "model", "") or "").strip()
@@ -577,7 +580,7 @@ def _latest_request_usage(conversation: Conversation) -> dict[str, Any] | None:
     """Return only a request snapshot that still follows the latest real User."""
     for message in reversed(list(getattr(conversation, "messages", []) or [])):
         role = str(getattr(message, "role", "") or "")
-        if role == "user":
+        if is_real_user_message(message):
             return None
         if role != "assistant":
             continue

@@ -1,12 +1,13 @@
 """Application use cases for memory and project material projections."""
 from __future__ import annotations
 
+import json
 
 from pycat.core.content.archive_store import SessionArchiveStore
+from pycat.core.content.references import content_identity, material_rows
 from pycat.core.llm.token_budget import estimate_tokens
-from pycat.core.content.references import material_rows, content_identity
-from pycat.core.memory.service import MemoryService, memory_enabled
 from pycat.core.memory.review import MemoryReviewService
+from pycat.core.memory.service import MemoryService, memory_enabled
 from pycat.models.contracts.content import ContentRef, MaterialPage
 from pycat.models.session_paths import has_active_workspace
 
@@ -104,12 +105,18 @@ class KnowledgeService:
     async def promote_artifact(self, conversation, ref: ContentRef, *, provider) -> dict:
         resolved = self.resolver.resolve_content(conversation, ref)
         text = resolved.path.read_text(encoding="utf-8")
-        if estimate_tokens(text) > 8000:
-            raise ValueError("成果超过一次整理的输入上限，请先整理为一份精简的成果。")
-        result = await self.executor.run_capability(provider=provider, capability_id="wiki_synthesize", message=text,
+        candidates = self.wiki.review_context(conversation.work_dir, text)
+        message = json.dumps({"artifact": text, "existing_wiki": candidates}, ensure_ascii=False)
+        if estimate_tokens(message) > 24000:
+            raise ValueError("成果超过单次整理的输入预算，请按独立主题拆成相互链接的文档。")
+        result = await self.executor.run_capability(provider=provider, capability_id="wiki_synthesize", message=message,
                                                     conversation=conversation)
         if result.validation_error or not isinstance(result.parsed, dict):
             raise ValueError(result.validation_error or "未得到有效的项目知识")
+        if result.parsed.get("expected_digest"):
+            current = next((page for page in candidates if page["id"] == result.parsed.get("id")), {})
+            if not current.get("complete") or current.get("digest") != result.parsed["expected_digest"]:
+                raise ValueError("原知识正文未完整进入本次上下文，请读取完整文档后再更新。")
         # Re-check the artifact after the model call before pinning an exact version.
         self.resolver.resolve_content(conversation, ref)
         archive = SessionArchiveStore(conversation.work_dir, conversation.id, data_dir=self.data_dir)
@@ -117,7 +124,11 @@ class KnowledgeService:
         source = ContentRef(id=record.id, name=ref.name, mime="text/markdown", size=record.size, digest=record.digest,
                             ref=f"archive:{record.id}", kind="archive", source="artifact", workspace=conversation.work_dir,
                             conversation_id=conversation.id)
-        ok, page_id = self.wiki.apply(conversation.work_dir, {**result.parsed, "sources": [source.to_dict()]})
+        sources = [source.to_dict()]
+        if result.parsed.get("id") and result.parsed.get("expected_digest"):
+            existing = self.wiki.read(conversation.work_dir, result.parsed["id"])
+            sources = (existing["sources"] + sources)[-16:]
+        ok, page_id = self.wiki.apply(conversation.work_dir, {**result.parsed, "sources": sources})
         if not ok:
             raise ValueError(page_id)
         self._changed(conversation.work_dir, conversation.id, ("wiki",))

@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import os
 
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QFrame, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QWidget,
-    QSizePolicy,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import pyqtSignal, Qt
 
 from pycat.gui.utils.image_loader import load_pixmap
 
@@ -89,12 +93,12 @@ class AttachmentPreviewItem(QFrame):
     def set_error(self, error: str) -> None:
         detail = str(error or "").strip()
         tooltip = (
-            "粘贴图片"
+            QCoreApplication.translate('AttachmentPreviewStrip', "粘贴图片")
             if self.source.startswith("data:image")
             else self.display_name or os.path.basename(self.source)
         )
         if detail:
-            tooltip = f"{tooltip}\n准备失败：{detail}"
+            tooltip = QCoreApplication.translate('AttachmentPreviewStrip', '{tooltip}\n准备失败：{detail}').format(tooltip=tooltip, detail=detail)
         self.setToolTip(tooltip)
         self._thumb.setToolTip(tooltip)
 

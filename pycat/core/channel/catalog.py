@@ -174,10 +174,6 @@ class ChannelCatalog:
     def summarize(self, channel: ChannelConfig) -> str:
         return self.build_instance(channel).summary
 
-    def featured_types(self) -> tuple[str, ...]:
-        return tuple(definition.type for definition in self.definitions(featured_only=True))
-
-
 def build_channel_catalog(definitions: Iterable[ChannelDefinitionAdapter]) -> ChannelCatalog:
     return ChannelCatalog(definitions)
 

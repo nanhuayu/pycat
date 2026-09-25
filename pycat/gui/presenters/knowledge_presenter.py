@@ -1,6 +1,9 @@
 """Coordinate the existing application projections and one detail lifecycle."""
 from copy import copy
-from PyQt6.QtCore import QThreadPool
+
+from PyQt6.QtCore import QCoreApplication, QThreadPool
+from PyQt6.QtWidgets import QMessageBox
+
 from pycat.gui.dialogs.content_preview import ContentPreviewDialog
 from pycat.gui.runtime.background_job import BackgroundJob
 
@@ -21,6 +24,7 @@ class KnowledgePresenter:
         panel.memory.opened.connect(self.open_memory)
         panel.memory.retry_requested.connect(self.retry_memory)
         panel.memory.assign_requested.connect(self.assign_memory)
+        panel.memory.forget_requested.connect(self.forget_memory)
         self.context_changed(self.host.current_conversation)
 
     def show_library(self):
@@ -59,8 +63,8 @@ class KnowledgePresenter:
             if self.detail and not self.detail.dirty and not self.detail.busy:
                 self.detail.close()
         if conversation is None:
-            self.panel.materials.set_status("选择会话后查看资料")
-            self.panel.memory.apply({"status": "选择会话后查看记忆"})
+            self.panel.materials.set_status(QCoreApplication.translate('KnowledgePresenter', '选择会话后查看资料'))
+            self.panel.memory.apply({"status": QCoreApplication.translate('KnowledgePresenter', '选择会话后查看记忆')})
             return
         self.refresh_memory()
         if self.panel.materials.isVisible():
@@ -68,7 +72,7 @@ class KnowledgePresenter:
         detail = self.detail
         if refresh_detail and not changed and detail and detail.isVisible() and detail._page.get("kind") in {"wiki", "memory"}:
             if detail._editing:
-                detail.set_status("资料已更新；当前编辑已保留，保存时将核对版本。")
+                detail.set_status(QCoreApplication.translate('KnowledgePresenter', '资料已更新；当前编辑已保留，保存时将核对版本。'))
             elif not detail.busy and not detail.loading:
                 detail.reload_current()
 
@@ -80,7 +84,7 @@ class KnowledgePresenter:
         conversation = copy(conv)
         conversation.messages = list(conv.messages)
         kind, query, offset = panel.kind.currentData(), panel.search.text().strip(), panel.offset
-        panel.set_status("正在读取…")
+        panel.set_status(QCoreApplication.translate('KnowledgePresenter', '正在读取…'))
         def apply(page, error):
             if error:
                 panel.set_status(str(error))
@@ -95,7 +99,7 @@ class KnowledgePresenter:
             return
         work_dir, enabled = conv.work_dir, bool(conv.settings.get("memory_enabled", True))
         self._run("memory", lambda: self.host.services.knowledge_service.memory_snapshot(work_dir, enabled=enabled),
-                  lambda result, error: self.panel.memory.apply(result if error is None else {"status": "存储不可读", "error": str(error)}))
+                  lambda result, error: self.panel.memory.apply(result if error is None else {"status": QCoreApplication.translate('KnowledgePresenter', '存储不可读'), "error": str(error)}))
 
     def ensure_detail(self):
         if self.detail is None:
@@ -109,7 +113,7 @@ class KnowledgePresenter:
         conv = self.host.current_conversation
         if request == detail._request and self._scope == (
                 getattr(detail.conversation, "id", ""), getattr(detail.conversation, "work_dir", "")) and detail.isVisible():
-            detail.raise_()
+            detail.show_window()
         else:
             detail.open_request(request, conv)
         return detail
@@ -125,6 +129,23 @@ class KnowledgePresenter:
         work_dir = self.host.current_conversation.work_dir
         self._run("retry", lambda: self.host.services.knowledge_service.retry_memory(work_dir),
                   lambda _, error: self.refresh_memory() if error is None else self.panel.memory.set_status(str(error)))
+
+    def forget_memory(self, scope, entry_id, digest):
+        conv = self.host.current_conversation
+        if conv is None or not self.allow_context_change(lambda: self.forget_memory(scope, entry_id, digest)):
+            return
+        if QMessageBox.question(self.panel, QCoreApplication.translate("KnowledgePresenter", "忘记这条记忆"), QCoreApplication.translate("KnowledgePresenter", "确定忘记这条记忆？")) != QMessageBox.StandardButton.Yes:
+            return
+        conv = copy(conv)
+        def done(result, error):
+            if error or not result[0]:
+                self.panel.memory.set_status(str(error or result[1]))
+            else:
+                self.refresh_memory()
+                if self.detail and not self.detail.dirty:
+                    self.detail.close()
+        self._run("forget", lambda: self.host.services.knowledge_service.edit_memory(
+            conv, scope, entry_id=entry_id, expected_digest=digest, forget=True), done)
 
     def assign_memory(self):
         conv = copy(self.host.current_conversation)

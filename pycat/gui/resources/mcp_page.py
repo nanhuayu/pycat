@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtCore import QCoreApplication
+from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from pycat.gui.resources.mcp_editor import McpSettingsWidget
 from pycat.gui.settings.page_header import build_page_header
@@ -27,7 +28,7 @@ class McpPage(QWidget):
         layout.setSpacing(12)
 
         if show_header:
-            layout.addWidget(build_page_header("MCP", "加载和管理外部 MCP Server。工具权限由“权限”页统一控制。"))
+            layout.addWidget(build_page_header("MCP", QCoreApplication.translate('McpPage', '加载和管理外部 MCP Server。工具权限由“权限”页统一控制。')))
         self.editor = McpSettingsWidget(
             servers=servers,
             reload_provider=reload_provider,

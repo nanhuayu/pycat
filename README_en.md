@@ -29,6 +29,8 @@ PyCat is for developers, automation builders and advanced users working on real 
 
 ## Quick start
 
+**0.2.2** improves concurrent conversations, context compaction and durable memory, streamlines tool and run status displays, and adds an English desktop preview. See the [release notes and downloads](https://github.com/nanhuayu/pycat/releases/tag/v0.2.2).
+
 **Use the desktop**
 
 1. Download the Windows portable package from [Releases](https://github.com/nanhuayu/pycat/releases), extract it completely, and run **`pycat.exe`** inside `pycat-windows-x64`.

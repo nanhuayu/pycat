@@ -7,8 +7,12 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from pycat.core.memory.service import MemoryService
 from pycat.core.commands.types import CommandAction, CommandResult, PromptInvocation
+from pycat.core.config import get_global_subdir
+from pycat.core.memory.service import MemoryService
+from pycat.core.skills import SkillsManager
+
+
 def cmd_help(args: str, ctx: Dict[str, Any], *, list_commands) -> str:
     """Show available commands."""
     lines = ["**Available commands** (`/` only):"]
@@ -48,8 +52,6 @@ def cmd_clear(args: str, ctx: Dict[str, Any]) -> CommandResult:
 
 
 def cmd_skills(args: str, ctx: Dict[str, Any]) -> CommandResult:
-    from pycat.core.skills import SkillsManager
-    from pycat.core.config import get_global_subdir
 
     mgr = SkillsManager(str(ctx.get("work_dir") or ""), data_dir=ctx.get("data_dir"))
     skills = mgr.list_skills()

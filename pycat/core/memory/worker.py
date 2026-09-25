@@ -20,8 +20,8 @@ from pycat.core.content.archive_store import SessionArchiveStore
 from pycat.core.memory.evolution import MemoryEvolutionLedger, failure_code
 from pycat.core.memory.review import MemoryReviewService, source_fragments
 from pycat.core.memory.service import MemoryService, memory_enabled
-from pycat.models.session_paths import normalize_work_dir, resolve_session_root
 from pycat.models.contracts.tooling import ToolDescriptor
+from pycat.models.session_paths import normalize_work_dir, resolve_session_root
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +164,13 @@ class CurationWorker:
         if not jobs:
             return 0
         self._changed(work_dir, "", ("memory",))
+        def defer(job, exc):
+            logger.warning("Memory curation deferred: %s", exc)
+            code = "invalid_plan" if isinstance(exc, json.JSONDecodeError) else failure_code(str(exc))
+            if code != "transient":
+                ledger.invalidate_plan(job)
+            ledger.finish(job, "retry_wait", reason=str(exc), reason_code=code)
+
         try:
             valid = []
             for job in jobs:
@@ -184,28 +191,33 @@ class CurationWorker:
                 source = job["source"]
                 groups.setdefault((source.get("provider_id"), source.get("model")), []).append(job)
             for group in groups.values():
-                provider = self._provider(group[0]["source"]) if self._provider else None
-                plans = await asyncio.wait_for(self.review.extract(group, provider=provider), timeout=120)
-                for job in group:
-                    if ledger.save_plan(job, plans[job["id"]]):
-                        job["plan"] = json.dumps(plans[job["id"]], ensure_ascii=False)
+                try:
+                    provider = self._provider(group[0]["source"]) if self._provider else None
+                    plans = await asyncio.wait_for(self.review.extract(group, provider=provider), timeout=120)
+                    for job in group:
+                        if ledger.save_plan(job, plans[job["id"]]):
+                            job["plan"] = json.dumps(plans[job["id"]], ensure_ascii=False)
+                except Exception as exc:
+                    for job in group:
+                        defer(job, exc)
             for job in valid:
-                state, reason = self.review.apply(ledger, job, json.loads(job["plan"]), authorized=self._authorized)
-                code = failure_code(reason) if state in {"failed", "retry_wait"} else ""
-                if state == "retry_wait" and code != "transient":
-                    ledger.invalidate_plan(job)
-                ledger.finish(job, state, reason=reason, reason_code=code)
+                if not job.get("plan") or not ledger.is_live(job):
+                    continue
+                try:
+                    state, reason = self.review.apply(ledger, job, json.loads(job["plan"]), authorized=self._authorized)
+                    code = failure_code(reason) if state in {"failed", "retry_wait"} else ""
+                    if state == "retry_wait" and code != "transient":
+                        ledger.invalidate_plan(job)
+                    ledger.finish(job, state, reason=reason, reason_code=code)
+                except Exception as exc:
+                    defer(job, exc)
         except asyncio.CancelledError:
             for job in jobs:
                 ledger.finish(job, "retry_wait", reason="application closed during curation")
             raise
         except Exception as exc:
-            logger.warning("Memory curation deferred: %s", exc)
             for job in jobs:
-                code = "invalid_plan" if isinstance(exc, json.JSONDecodeError) else failure_code(str(exc))
-                if code != "transient":
-                    ledger.invalidate_plan(job)
-                ledger.finish(job, "retry_wait", reason=str(exc), reason_code=code)
+                defer(job, exc)
         finally:
             self._changed(work_dir, "", ("memory", "wiki", "skill"))
         return len(jobs)

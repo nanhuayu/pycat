@@ -10,12 +10,10 @@ from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from pycat.gui.runtime.loop_utils import cancel_loop_task
-
 from pycat.core.capabilities.executor import CapabilityExecutor
 from pycat.core.llm.model_selection import ResolvedModelSelection
+from pycat.gui.runtime.loop_utils import cancel_loop_task
 from pycat.models.provider import Provider
-
 
 logger = logging.getLogger(__name__)
 

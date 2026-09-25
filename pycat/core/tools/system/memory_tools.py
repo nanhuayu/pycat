@@ -24,7 +24,8 @@ class ManageMemoryTool(BaseTool):
         return (
             "Read and curate durable two-file memory. target=memory holds project "
             "notes (workspace); target=user holds the user profile (global). Writes "
-            "persist immediately and inject on the next run."
+            "persist immediately and inject on the next run. Each file holds at most 8000 characters; "
+            "keep concise facts here and save detailed project knowledge with state__wiki."
         )
 
     @property
@@ -53,6 +54,8 @@ class ManageMemoryTool(BaseTool):
                 },
                 "content": {"type": "string", "description": "Entry content for add."},
                 "entry_id": {"type": "string", "description": "Stable id from read; selects an entry for read, replace or remove."},
+                "offset": {"type": "integer", "minimum": 0, "description": "Read entry-list offset, or character offset when entry_id is set."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20000, "description": "Read page size: default 20 entries (max 50), or 12000 characters (max 20000) with entry_id."},
                 "expected_digest": {"type": "string", "description": "Version from read; required for conflict-safe edits."},
                 "old_text": {"type": "string", "description": "Exact existing entry text for replace/remove."},
                 "new_text": {"type": "string", "description": "Replacement entry text for replace."},
@@ -95,6 +98,7 @@ class ManageMemoryTool(BaseTool):
             conversation=getattr(context, "conversation", None),
             entry_id=str(arguments.get("entry_id") or ""),
             expected_digest=arguments.get("expected_digest"),
+            offset=arguments.get("offset", 0), limit=arguments.get("limit"),
             data_dir=context.data_dir,
         )
         return ToolResult(message, is_error=not ok,

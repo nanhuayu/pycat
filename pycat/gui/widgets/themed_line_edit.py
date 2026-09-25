@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pycat.gui.shortcuts import shortcut_sequence
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import (
@@ -16,6 +14,7 @@ from PyQt6.QtWidgets import (
     QTextEdit,
 )
 
+from pycat.gui.shortcuts import shortcut_sequence
 from pycat.gui.utils.theme import prepare_context_menu
 
 

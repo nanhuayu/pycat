@@ -15,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pycat.core.content.mime import guess_mime
+from pycat.core.persistence import atomic_write_bytes, atomic_write_text
 from pycat.models.contracts.content import (
     ARCHIVE_KINDS,
     ArchivedContentRecord,
@@ -22,8 +24,7 @@ from pycat.models.contracts.content import (
     ContentRef,
     normalize_archive_kind,
 )
-from pycat.models.session_paths import resolve_project_data_root, normalize_work_dir, resolve_session_root
-from pycat.core.persistence import atomic_write_text, atomic_write_bytes
+from pycat.models.session_paths import normalize_work_dir, resolve_project_data_root, resolve_session_root
 
 ARCHIVE_KIND_DIRS: dict[str, str] = {
     "tool_call": "tool-call",
@@ -66,7 +67,13 @@ class SessionArchiveStore:
         text = stringify_content(content)
         prepared_images = self._prepare_images(images or [])
         digest = self._content_digest(text, prepared_images)
-        content_id = self._content_id(source=source, title=title, digest=digest)
+        identity_digest = digest
+        if input_payload is not None:
+            # A result belongs to its invocation even when two calls return the
+            # same bytes. Content checksums remain hashes of the exact output.
+            identity = json.dumps(input_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            identity_digest = hashlib.sha256((digest + "\0" + identity).encode("utf-8")).hexdigest()
+        content_id = self._content_id(source=source, title=title, digest=identity_digest)
         existing = self.read_record(content_id, kind=archive_kind)
         ext = normalize_extension(extension or detect_extension(source, text))
         target_dir = self.kind_root(archive_kind) / content_id
@@ -167,13 +174,6 @@ class SessionArchiveStore:
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return None
-
-    def read_input(self, record_or_id: ArchivedContentRecord | str) -> Any:
-        """Read the archived tool input without exposing storage paths to callers."""
-        record = record_or_id if isinstance(record_or_id, ArchivedContentRecord) else self.read_record(str(record_or_id))
-        if record is None or not isinstance(record.metadata, dict):
-            return None
-        return self._read_json_ref(str(record.metadata.get("input_ref") or ""))
 
     def read_images(self, record_or_id: ArchivedContentRecord | str) -> list[str]:
         record = record_or_id if isinstance(record_or_id, ArchivedContentRecord) else self.read_record(str(record_or_id))
@@ -550,8 +550,7 @@ def detect_extension(source: str, text: str) -> str:
         return ".json"
     if "<html" in raw[:2000].lower() or "<!doctype html" in raw[:2000].lower():
         return ".html"
-    guessed, _ = mimetypes.guess_type(name)
-    if guessed == "text/markdown":
+    if guess_mime(name) == "text/markdown":
         return ".md"
     return ".txt"
 

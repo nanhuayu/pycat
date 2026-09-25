@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import mimetypes
 import hashlib
 from copy import copy
 from dataclasses import dataclass, replace
@@ -10,11 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from pycat.core.content.archive_store import SessionArchiveStore
+from pycat.core.content.mime import DEFAULT_MIME, guess_mime
 from pycat.core.state.artifact import ArtifactService
 from pycat.models.contracts.content import ContentRef
 from pycat.models.conversation import Conversation
-from pycat.models.session_paths import resolve_session_root
-from pycat.models.session_paths import resolve_project_data_root
+from pycat.models.session_paths import resolve_project_data_root, resolve_session_root
 from pycat.models.workspace import WorkspaceLocation
 
 
@@ -31,11 +30,7 @@ class ResolvedContent:
 
     @property
     def mime(self) -> str:
-        return str(
-            self.ref.mime
-            or mimetypes.guess_type(self.name)[0]
-            or "application/octet-stream"
-        ).lower()
+        return str(self.ref.mime or guess_mime(self.name)).lower()
 
     @property
     def digest(self) -> str:
@@ -129,7 +124,7 @@ class SessionContentResolver:
         return ContentRef(
             id=identifier or value,
             name=identifier or value,
-            mime="application/octet-stream",
+            mime=DEFAULT_MIME,
             size=0,
             digest="",
             ref=value,
@@ -174,7 +169,7 @@ class SessionContentResolver:
     @staticmethod
     def _workspace_ref(path: Path, requested: ContentRef) -> ContentRef:
         name = str(requested.name or path.name)
-        mime = str(requested.mime or mimetypes.guess_type(name)[0] or "application/octet-stream")
+        mime = str(requested.mime or guess_mime(name))
         return replace(requested,
             id=str(requested.id or name),
             name=name,
@@ -188,10 +183,6 @@ class SessionContentResolver:
             message_id=str(requested.message_id or ""),
             created_at=str(requested.created_at or ""),
         )
-
-    def _resolve_artifact(self, conversation: Any, ref: ContentRef) -> Path:
-        path, _artifact_ref = self._resolve_artifact_content(conversation, ref)
-        return path
 
     def _resolve_artifact_content(self, conversation: Any, ref: ContentRef, *, verify_digest: bool = True) -> tuple[Path, ContentRef]:
         state = conversation.get_state()
@@ -243,10 +234,6 @@ class SessionContentResolver:
             conversation_id=str(getattr(conversation, "id", "") or ""),
             locator=str(artifact.content_path),
         )
-
-    def _resolve_archive(self, conversation: Any, ref: ContentRef) -> Path:
-        path, _archive_ref = self._resolve_archive_content(conversation, ref)
-        return path
 
     def _resolve_archive_content(self, conversation: Any, ref: ContentRef, *, verify_digest: bool = True) -> tuple[Path, ContentRef]:
         content_id = str(ref.id or "").strip()

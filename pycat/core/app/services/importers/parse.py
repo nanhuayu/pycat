@@ -4,10 +4,10 @@ from typing import Any, Optional
 
 from pycat.models.conversation import Conversation
 
-from .openai_payload import try_import_openai_payload
-from .conversation_json import try_import_conversation_dict
 from .chatgpt_export import try_import_chatgpt_export
+from .conversation_json import try_import_conversation_dict
 from .messages_array import try_import_messages_array
+from .openai_payload import try_import_openai_payload
 
 
 def parse_imported_data(data: Any) -> Optional[Conversation]:

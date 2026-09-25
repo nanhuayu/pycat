@@ -6,7 +6,7 @@ import logging
 import os
 from typing import List
 
-from PyQt6.QtCore import QEvent, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QFrame,
@@ -37,15 +37,15 @@ from pycat.gui.utils.image_utils import (
     extract_attachment_sources_from_clipboard,
     extract_attachment_sources_from_mime,
 )
+from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
 from pycat.gui.view_models.message_runs import (
     AssistantRunGroup,
     SingleMessageItem,
     project_message_runs,
 )
-from pycat.gui.widgets.themed_line_edit import ThemedSelectableLabel
+from pycat.gui.view_models.runtime_status import project_runtime_status
 from pycat.models.contracts.agent import RunStatus
 from pycat.models.conversation import Conversation, Message
-from pycat.models.provider import Provider
 from pycat.models.workspace import WorkspaceLocation
 
 from .assistant_run_widget import AssistantRunWidget
@@ -90,7 +90,7 @@ class ChatView(QWidget):
         self._work_dir = ""
         self._header_model_ref = ""
         self._header_message_count = 0
-        self._runtime_detail = "等待下一次请求"
+        self._runtime_detail = QCoreApplication.translate('ChatView', "等待下一次请求")
         self._bulk_loading = False
         self._inline_question_card: QuestionForm | None = None
         self._nav_update_timer: QTimer | None = None
@@ -122,11 +122,11 @@ class ChatView(QWidget):
         # ===== Workspace/Folder Button =====
         self.work_dir_btn = QPushButton()
         self.work_dir_btn.setIcon(Icons.get_muted(Icons.FOLDER))
-        self.work_dir_btn.setText("个人空间")
+        self.work_dir_btn.setText(QCoreApplication.translate('ChatView', "个人空间"))
         self.work_dir_btn.setObjectName("work_dir_btn")
-        self.work_dir_btn.setAccessibleName("工作区")
+        self.work_dir_btn.setAccessibleName(QCoreApplication.translate('ChatView', "工作区"))
         self.work_dir_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.work_dir_btn.setToolTip("未设置工作区；只读工具以用户目录为默认范围。点击设置")
+        self.work_dir_btn.setToolTip(QCoreApplication.translate('ChatView', "未设置工作区；只读工具以用户目录为默认范围。点击设置"))
         self.work_dir_btn.setIconSize(QSize(Icons.SIZE_NAV, Icons.SIZE_NAV))
         self.work_dir_btn.setFixedHeight(30)
         self.work_dir_btn.setMaximumWidth(160)
@@ -157,13 +157,15 @@ class ChatView(QWidget):
 
         self.runtime_indicator = QToolButton()
         self.runtime_indicator.setObjectName("runtime_indicator")
-        self.runtime_indicator.setText("运行检查")
+        self.runtime_indicator.setText(QCoreApplication.translate('ChatView', "运行检查"))
         self.runtime_indicator.setIcon(Icons.get_muted(Icons.CHART_BARS))
         self.runtime_indicator.setProperty("active", False)
-        self.runtime_indicator.setToolTip("等待下一次请求")
-        self.runtime_indicator.setAccessibleName("运行状态与调用链路")
+        self.runtime_indicator.setToolTip(QCoreApplication.translate('ChatView', "等待下一次请求"))
+        self.runtime_indicator.setAccessibleName(QCoreApplication.translate('ChatView', "运行状态与调用链路"))
         self.runtime_indicator.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.runtime_indicator.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.runtime_indicator.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.runtime_indicator.setIconSize(QSize(18, 18))
+        self.runtime_indicator.setMinimumWidth(30)
         self.runtime_indicator.setFixedHeight(30)
         self.runtime_indicator.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.runtime_indicator.clicked.connect(self.trace_requested.emit)
@@ -283,11 +285,11 @@ class ChatView(QWidget):
         nav_layout.setSpacing(2)
 
 
-        self.nav_prev_btn = self._create_nav_button(Icons.CHEVRON_UP, "上一条消息")
+        self.nav_prev_btn = self._create_nav_button(Icons.CHEVRON_UP, QCoreApplication.translate('ChatView', "上一条消息"))
         self.nav_prev_btn.clicked.connect(self.go_prev_message)
         nav_layout.addWidget(self.nav_prev_btn)
 
-        self.nav_next_btn = self._create_nav_button(Icons.CHEVRON_DOWN, "下一条消息")
+        self.nav_next_btn = self._create_nav_button(Icons.CHEVRON_DOWN, QCoreApplication.translate('ChatView', "下一条消息"))
         self.nav_next_btn.clicked.connect(self.go_next_message)
         nav_layout.addWidget(self.nav_next_btn)
 
@@ -307,7 +309,7 @@ class ChatView(QWidget):
         btn.setToolTip(tooltip)
         btn.setObjectName("toolbar_btn")
         btn.setProperty("nav", True)
-        btn.setFixedSize(30, 30)
+        btn.setFixedSize(COMPACT_CONTROL_HEIGHT, COMPACT_CONTROL_HEIGHT)
         btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         return btn
 
@@ -342,21 +344,21 @@ class ChatView(QWidget):
         heading.addStretch()
         heading.addWidget(hero_icon)
 
-        title = QLabel(f"和 {PRODUCT_NAME} 开始对话")
+        title = QLabel(QCoreApplication.translate('ChatView', '和 {PRODUCT_NAME} 开始对话').format(PRODUCT_NAME=PRODUCT_NAME))
         title.setObjectName("chat_empty_title")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         heading.addWidget(title)
         heading.addStretch()
         layout.addLayout(heading)
-        hint = QLabel("写下目标，或添加资料开始。")
+        hint = QLabel(QCoreApplication.translate('ChatView', "写下目标，或添加资料开始。"))
         hint.setProperty("muted", True)
         layout.addWidget(hint, 0, Qt.AlignmentFlag.AlignHCenter)
         actions = QHBoxLayout()
         actions.setSpacing(6)
         actions.addStretch()
-        for label, icon, signal in (("选择工作区", Icons.FOLDER, self.workspace_requested),
-                                    ("添加图片或文件", Icons.PLUS, self.attach_requested),
-                                    ("选择模型", Icons.MODEL, self.model_requested)):
+        for label, icon, signal in ((QCoreApplication.translate('ChatView', "选择工作区"), Icons.FOLDER, self.workspace_requested),
+                                    (QCoreApplication.translate('ChatView', "添加图片或文件"), Icons.PLUS, self.attach_requested),
+                                    (QCoreApplication.translate('ChatView', "选择模型"), Icons.MODEL, self.model_requested)):
             button = QPushButton(label)
             button.setIcon(Icons.get_muted(icon))
             button.clicked.connect(signal.emit)
@@ -382,9 +384,9 @@ class ChatView(QWidget):
             widget.set_work_dir(self._work_dir)
         if not path:
             self.work_dir_btn.setIcon(Icons.get_muted(Icons.FOLDER))
-            self.work_dir_btn.setText("个人空间")
+            self.work_dir_btn.setText(QCoreApplication.translate('ChatView', "个人空间"))
             self.work_dir_btn.setProperty("workspace_state", "empty")
-            self.work_dir_btn.setToolTip("未设置工作区；只读工具以用户目录为默认范围。点击设置")
+            self.work_dir_btn.setToolTip(QCoreApplication.translate('ChatView', "未设置工作区；只读工具以用户目录为默认范围。点击设置"))
         else:
             location = WorkspaceLocation.parse(path)
             name = location.label
@@ -397,11 +399,11 @@ class ChatView(QWidget):
             self.work_dir_btn.setText(self.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, 112))
             self.work_dir_btn.setProperty("workspace_state", state)
             if location.is_remote:
-                self.work_dir_btn.setToolTip(f"SSH 工作区：{location.endpoint}:{location.root}\n运行前检查连接；点击重新连接或选择目录")
+                self.work_dir_btn.setToolTip(QCoreApplication.translate('ChatView', 'SSH 工作区：{endpoint}:{root}\n运行前检查连接；点击重新连接或选择目录').format(endpoint=location.endpoint, root=location.root))
             elif accessible:
-                self.work_dir_btn.setToolTip(f"工作区：{path}")
+                self.work_dir_btn.setToolTip(QCoreApplication.translate('ChatView', '工作区：{path}').format(path=path))
             else:
-                self.work_dir_btn.setToolTip(f"工作区不可访问：{path}。点击重新选择")
+                self.work_dir_btn.setToolTip(QCoreApplication.translate('ChatView', '工作区不可访问：{path}。点击重新选择').format(path=path))
         self.work_dir_btn.style().unpolish(self.work_dir_btn)
         self.work_dir_btn.style().polish(self.work_dir_btn)
 
@@ -420,16 +422,13 @@ class ChatView(QWidget):
     def _set_conversation_title(self, title: object) -> None:
         text = str(title or "").strip()
         if self._conversation is not None and not text:
-            text = "新会话"
+            text = QCoreApplication.translate('ChatView', "新会话")
         self.conversation_title_label.setText(text)
         self.conversation_title_label.setToolTip(text)
         self.conversation_title_label.setAccessibleName(
-            f"当前会话：{text}" if text else ""
+            QCoreApplication.translate('ChatView', '当前会话：{text}').format(text=text) if text else ""
         )
         self.conversation_title_label.setVisible(True)
-
-    def set_model_options(self, providers: list[Provider], current_model_ref: str = "") -> None:
-        return
 
     def update_runtime_state(
         self,
@@ -439,32 +438,32 @@ class ChatView(QWidget):
         pending_guidance: int = 0,
         pending_interactions: int = 0,
     ) -> None:
-        title, detail, active = self._resolve_runtime_labels(
+        status = project_runtime_status(
             stream_state,
             operation=operation,
             pending_guidance=pending_guidance,
+            pending_interactions=pending_interactions,
         )
-        if pending_interactions:
-            title = "等待回复"
-            detail = f"此会话有 {pending_interactions} 项问题或工具确认等待你处理。"
-            active = True
-        self.runtime_indicator.setText(title if active else "运行检查")
+        self.runtime_indicator.setText(status.title if status.active else self.tr("运行检查"))
+        self.runtime_indicator.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon if status.active else Qt.ToolButtonStyle.ToolButtonIconOnly
+        )
         self.runtime_indicator.setEnabled(bool(self._conversation))
-        self.runtime_indicator.setProperty("active", bool(active))
-        self._runtime_detail = detail or title
-        if active:
-            self._stream.set_waiting_hint(title, detail)
+        self.runtime_indicator.setProperty("active", status.active)
+        self._runtime_detail = "\n".join(dict.fromkeys(filter(None, (status.title, status.detail))))
+        if status.active:
+            self._stream.set_status_hint(status.hint, status.detail)
         self._refresh_runtime_tooltip()
         self.runtime_indicator.style().unpolish(self.runtime_indicator)
         self.runtime_indicator.style().polish(self.runtime_indicator)
 
     def _refresh_runtime_tooltip(self) -> None:
-        detail = str(getattr(self, "_runtime_detail", "等待下一次请求") or "等待下一次请求")
-        lines = [detail]
+        detail = str(getattr(self, "_runtime_detail", QCoreApplication.translate('ChatView', "等待下一次请求")) or QCoreApplication.translate('ChatView', "等待下一次请求"))
+        lines = [self.tr("运行检查"), detail]
         if self._header_model_ref:
-            lines.append(f"模型：{self._header_model_ref}")
+            lines.append(QCoreApplication.translate('ChatView', '模型：{_header_model_ref}').format(_header_model_ref=self._header_model_ref))
         if self._header_message_count:
-            lines.append(f"消息：{self._header_message_count} 条")
+            lines.append(QCoreApplication.translate('ChatView', '消息：{_header_message_count} 条').format(_header_message_count=self._header_message_count))
         self.runtime_indicator.setToolTip("\n".join(lines))
 
     def show_notice(
@@ -490,7 +489,7 @@ class ChatView(QWidget):
         self._notice_timer.stop()
         self.status_notice.setText(value)
         self.status_notice.setToolTip(value)
-        self.status_notice.setAccessibleName(f"操作反馈：{value}")
+        self.status_notice.setAccessibleName(QCoreApplication.translate('ChatView', '操作反馈：{value}').format(value=value))
         self.status_notice.setProperty("tone", normalized_tone)
         self.status_notice.setVisible(True)
         self.status_notice.style().unpolish(self.status_notice)
@@ -551,6 +550,31 @@ class ChatView(QWidget):
     @property
     def conversation_id(self) -> str:
         return self._conversation.id if self._conversation is not None else ""
+
+    def reveal_message(self, conversation_id: str, message_id: str):
+        if self.conversation_id != conversation_id:
+            return
+        widget = self._message_container_by_id.get(message_id)
+        if widget is not None:
+            self.scroll_area.ensureWidgetVisible(widget)
+
+    def reveal_subtask(self, conversation_id: str, message_id: str, tool_call_id: str) -> bool:
+        if self.conversation_id != conversation_id:
+            return False
+        container = self._message_container_by_id.get(message_id)
+        if isinstance(container, AssistantRunWidget):
+            container.expand_process()
+            self._sync_message_widget_index()
+        message = self._message_widget_by_id.get(message_id)
+        tools = getattr(message, 'tool_calls_widget', None)
+        item = tools.items.get(tool_call_id) if tools is not None else None
+        if item is None:
+            return False
+        target = item.reveal_subtask()
+        if target is None:
+            return False
+        self.scroll_area.ensureWidgetVisible(target)
+        return True
 
     def bind_conversation(self, conversation: Conversation) -> None:
         """Bind a replacement snapshot before rendering incremental messages."""
@@ -671,33 +695,6 @@ class ChatView(QWidget):
                 self._schedule_nav_update()
                 return True
         return False
-
-    def append_transcript_notice(self, text: str, *, kind: str = "runtime") -> None:
-        """Insert a transient UI-only runtime notice.
-
-        These notices are intentionally not persisted as conversation messages
-        and are not replayed to the model.
-        """
-        value = str(text or "").strip()
-        if not value:
-            return
-        row = QFrame()
-        row.setObjectName("runtime_notice")
-        row.setProperty("kind", str(kind or "runtime"))
-        row.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(9, 4, 9, 4)
-        layout.setSpacing(6)
-        label = ThemedSelectableLabel(value)
-        label.setObjectName("runtime_notice_text")
-        label.setWordWrap(True)
-        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(label)
-        self._insert_above_bottom_spacer(row)
-        self._update_empty_state()
-        if self._should_follow_output():
-            QTimer.singleShot(50, self._scroll_to_bottom)
-        self._schedule_nav_update()
 
     def _create_message_widget(self, message: Message) -> MessageWidget:
         allow_external = self._allows_external_revisions()
@@ -1153,8 +1150,8 @@ class ChatView(QWidget):
             self.nav_prev_btn.setEnabled(False)
             self.nav_next_btn.setEnabled(False)
             
-            self.nav_prev_btn.setToolTip("上一条消息")
-            self.nav_next_btn.setToolTip("下一条消息")
+            self.nav_prev_btn.setToolTip(QCoreApplication.translate('ChatView', "上一条消息"))
+            self.nav_next_btn.setToolTip(QCoreApplication.translate('ChatView', "下一条消息"))
             return
 
         idx = self._find_current_message_index()
@@ -1166,8 +1163,8 @@ class ChatView(QWidget):
 
         # Keep the UI minimal: show position in tooltips instead of an always-visible counter.
         pos_text = f"{idx + 1}/{total}"
-        self.nav_prev_btn.setToolTip(f"上一条消息 ({pos_text})")
-        self.nav_next_btn.setToolTip(f"下一条消息 ({pos_text})")
+        self.nav_prev_btn.setToolTip(QCoreApplication.translate('ChatView', '上一条消息 ({pos_text})').format(pos_text=pos_text))
+        self.nav_next_btn.setToolTip(QCoreApplication.translate('ChatView', '下一条消息 ({pos_text})').format(pos_text=pos_text))
     
     def _scroll_to_bottom(self):
         scrollbar = self.scroll_area.verticalScrollBar()
@@ -1178,61 +1175,3 @@ class ChatView(QWidget):
         scrollbar = self.scroll_area.verticalScrollBar()
         scrollbar.setValue(scrollbar.minimum())
         self._follow_output = False
-
-    @staticmethod
-    def _runtime_event_label(kind: str) -> str:
-        labels = {
-            "turn_start": "开始执行",
-            "tool_start": "工具中",
-            "tool_end": "工具完成",
-            "retry": "重试中",
-            "complete": "已完成",
-            "error": "出错",
-            "step": "处理中",
-        }
-        return labels.get(str(kind or ""), str(kind or "运行中"))
-
-    def _resolve_runtime_labels(
-        self,
-        stream_state,
-        *,
-        operation: str = "",
-        pending_guidance: int = 0,
-    ) -> tuple[str, str, bool]:
-        operation_key = str(operation or "").strip().lower()
-        if operation_key and operation_key != "turn":
-            labels = {
-                "prepare-input": ("准备附件", "正在创建会话附件快照"),
-                "revision": ("修订中", "正在替换消息并重建活动会话历史"),
-                "compact": ("压缩中", "正在压缩当前会话上下文"),
-                "workspace": ("迁移中", "正在迁移当前会话文件"),
-                "delete": ("删除中", "正在删除当前会话"),
-            }
-            title, detail = labels.get(operation_key, ("处理中", "正在处理当前会话"))
-            return (title, detail, True)
-        if stream_state is None:
-            return ("空闲", "等待下一次请求", False)
-
-        pending = max(0, int(pending_guidance or 0))
-        active_tool = str(getattr(stream_state, "active_tool", "") or "").strip()
-        last_kind = str(getattr(stream_state, "last_event_kind", "") or "").strip()
-        last_detail = str(getattr(stream_state, "last_event_detail", "") or "").strip()
-        if active_tool:
-            title, detail = f"工具 · {active_tool}", last_detail or "正在等待工具返回"
-            if pending:
-                return (f"待处理 {pending}", f"{detail}；当前步骤完成后处理补充要求", True)
-            return (title, detail, True)
-        if last_kind:
-            title, detail = self._runtime_event_label(last_kind), last_detail or "-"
-            if pending:
-                return (f"待处理 {pending}", f"{detail}；当前步骤完成后处理补充要求", True)
-            return (title, detail, True)
-
-        model = str(getattr(stream_state, "model", "") or "").strip()
-        if pending:
-            return (
-                f"待处理 {pending}",
-                f"{model or '正在等待模型响应'}；当前步骤完成后处理补充要求",
-                True,
-            )
-        return ("生成中", model or "正在等待模型响应", True)

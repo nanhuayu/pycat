@@ -8,7 +8,6 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 from zipfile import ZIP_DEFLATED, ZipFile
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_FILES = (
     "README.md",

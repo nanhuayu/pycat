@@ -2,26 +2,23 @@
 from __future__ import annotations
 
 import logging
-from pycat.models.session_paths import resolve_project_data_root
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from pycat.core.config import get_global_subdir
 from pycat.models.contracts.skill import Skill
+from pycat.models.session_paths import resolve_project_data_root
 
 from .manifest import (
     bundled_skill_dir,
     external_user_skill_dirs,
     load_skill_file,
-    parse_skill_frontmatter,
-    parse_skill_frontmatter_value,
     skill_dir_scope,
 )
 from .resources import (
     list_skill_resource_paths,
     read_skill_resource,
     resolve_skill_resource_path,
-    resolve_skill_root,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,22 +54,6 @@ class SkillsManager:
 
     def list_skills(self) -> List[Skill]:
         return list(self.skills.values())
-
-    def get_content(self, name: str) -> Optional[str]:
-        skill = self.get(name)
-        return skill.content if skill else None
-
-    def get_entrypoint(self, name: str) -> Optional[Path]:
-        skill = self.get(name)
-        if skill is None:
-            return None
-        return Path(skill.source)
-
-    def get_root_dir(self, name: str) -> Optional[Path]:
-        skill = self.get(name)
-        if skill is None:
-            return None
-        return resolve_skill_root(Path(skill.source))
 
     def list_resources(self, name: str) -> List[str]:
         skill = self.get(name)
@@ -176,11 +157,3 @@ class SkillsManager:
             source_scope=source_scope,
             read_only=read_only,
         )
-
-    @staticmethod
-    def _parse_frontmatter(content: str):
-        return parse_skill_frontmatter(content)
-
-    @staticmethod
-    def _parse_frontmatter_value(value: str):
-        return parse_skill_frontmatter_value(value)

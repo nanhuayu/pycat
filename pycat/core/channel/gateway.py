@@ -25,7 +25,6 @@ from pycat.core.channel.worker import ChannelWorker
 from pycat.models.contracts.channel import ChannelConfig
 from pycat.models.conversation import Conversation, Message
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -66,8 +66,4 @@ class QQBotDelivery:
             channel = ChannelConfig.from_dict(payload)
         self._client.send_text_message(channel, receive_id=receive_id, text=content, context_token=context_token)
 
-    def normalize_reply_text(self, content: Any, *, limit: int = 2000) -> str:
-        return self._client.normalize_reply_text(content, limit=limit)
-
-
 __all__ = ["QQBotDelivery"]

@@ -5,19 +5,19 @@ conversation lifecycle concerns can stay focused.
 """
 from __future__ import annotations
 
-import re
-from copy import deepcopy
-from pathlib import Path
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Callable
+from copy import deepcopy
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog
 
 from pycat.core.content.export import CONVERSATION_FORMATS, document_format
 from pycat.gui.runtime.background_job import BackgroundJob
-from pycat.models.conversation import Conversation, Message
+from pycat.models.conversation import Conversation
+from pycat.models.filenames import safe_filename
 
 if TYPE_CHECKING:
     from pycat.core.commands import PromptInvocation
@@ -67,7 +67,8 @@ class ConversationCommandPresenter:
             host.chat_view.show_notice(str(exc), tone="error", conversation_id=conversation.id)
             return
         suffix, label = CONVERSATION_FORMATS[fmt]
-        default_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", conversation.title or "conversation").strip(" .")
+        title = str(conversation.title or "").replace("/", "_").replace("\\", "_")
+        default_name = safe_filename(title, "conversation")
         path, _ = QFileDialog.getSaveFileName(host, "导出会话", f"{default_name}{suffix}", f"{label} (*{suffix})")
         if not path:
             return
@@ -138,6 +139,10 @@ class ConversationCommandPresenter:
             if payload is None:
                 return
             self._run_prompt_invocation(payload)
+            return
+
+        if result.action == CommandAction.BACKGROUND:
+            self._host.delegation_presenter.submit(str(result.data or ''), from_composer=True)
             return
 
         if result.action == CommandAction.SHELL_RUN:

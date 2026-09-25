@@ -7,9 +7,9 @@ from urllib.parse import quote
 
 import httpx
 
-from pycat.models.contracts.channel import ChannelConfig
 from pycat.core.channel.media import OutboundFile, read_media_response, save_attachment
-
+from pycat.core.channel.replies import fit_reply_text
+from pycat.models.contracts.channel import ChannelConfig
 
 FEISHU_OPEN_BASE = "https://open.feishu.cn"
 
@@ -150,12 +150,7 @@ class FeishuChannelClient:
 
     @staticmethod
     def normalize_reply_text(content: Any, *, limit: int = 4000) -> str:
-        text = str(content or "").replace("\r\n", "\n").strip()
-        if not text:
-            return "已收到消息，但暂时没有可发送的文本回复。"
-        if len(text) <= limit:
-            return text
-        return text[: max(1, limit - 1)].rstrip() + "…"
+        return fit_reply_text(content, limit)
 
 
 __all__ = ["FEISHU_OPEN_BASE", "FeishuChannelClient"]

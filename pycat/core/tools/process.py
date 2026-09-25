@@ -16,11 +16,10 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO
 
-from pycat.models.contracts.config import ShellConfig
 from pycat.core.hosts.process import SshProcess
-from pycat.core.tools.shell import process_invocation, resolve_shell, shell_command
+from pycat.core.hosts.shell import process_invocation, resolve_shell, shell_command
 from pycat.core.tools.terminal import TerminalProcess
-
+from pycat.models.contracts.config import ShellConfig
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +127,6 @@ def truncate_process_output(text: str) -> str:
 def is_dangerous_command(command: str) -> bool:
     cmd_lower = command.lower()
     return any(re.search(pattern, cmd_lower) for pattern in _DANGEROUS_PATTERNS)
-
-
-def build_shell_command(command: str, cwd: Path, *, shell_config: ShellConfig | None = None) -> list[str]:
-    return shell_command(command, cwd, shell_config or ShellConfig())
 
 
 @dataclass(frozen=True)

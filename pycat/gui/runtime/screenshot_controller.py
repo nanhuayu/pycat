@@ -1,12 +1,12 @@
 """Window-owned capture lifecycle, with no screenshot history or extra runtime."""
-from PyQt6.QtCore import QObject, QTimer, Qt, QEvent, pyqtSignal
+from PyQt6 import sip
+from PyQt6.QtCore import QCoreApplication, QEvent, QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QApplication, QKeySequenceEdit
-from PyQt6 import sip
 
 from pycat.gui.dialogs.screenshot import CaptureOverlay, PinnedImage, ScreenshotDialog
-from pycat.gui.runtime.screen_capture import capture_screens
 from pycat.gui.runtime.global_shortcut import GlobalShortcut
+from pycat.gui.runtime.screen_capture import capture_screens
 
 
 class ScreenshotController(QObject):
@@ -49,14 +49,16 @@ class ScreenshotController(QObject):
             current = current.parentWidget()
         previous = self.shortcut_status
         error = self.hotkey.bind(self._shortcut)
-        self.shortcut_status = error or (f'全局截图 · {self._shortcut}' if self.hotkey.active else '截图快捷键已停用')
+        # The editable shortcut row already shows the binding. Only exceptional
+        # status needs another visible line; normal scope remains in the tooltip.
+        self.shortcut_status = error
         if self.shortcut_status != previous:
             self.shortcut_changed.emit(self.shortcut_status)
         if error and self.hotkey.supported and self.shortcut_status != previous:
             self.failed.emit(error)
         action = getattr(self.window, 'capture_action', None)
         if action is not None:
-            action.setToolTip(self.shortcut_status)
+            action.setToolTip(error or (QCoreApplication.translate('ScreenshotController', '全局截图 · {_shortcut}').format(_shortcut=self._shortcut) if self.hotkey.active else QCoreApplication.translate('ScreenshotController', '截图快捷键已停用')))
 
     def start(self):
         if self._disposed or self.window._shutdown_started or self._timer.isActive() or self.overlays:
@@ -82,7 +84,7 @@ class ScreenshotController(QObject):
     def _capture(self):
         try:
             if QApplication.activeModalWidget() is not self._modal:
-                raise ValueError('当前弹窗已变化，请处理后重新截图。')
+                raise ValueError(QCoreApplication.translate('ScreenshotController', '当前弹窗已变化，请处理后重新截图。'))
             snapshots = capture_screens()
             for image, geometry in snapshots:
                 parent = self._modal if self._modal is not None and not sip.isdeleted(self._modal) else None
@@ -147,7 +149,7 @@ class ScreenshotController(QObject):
         dialog.finished.connect(self._review_closed)
         if parent is not self.window or self.window.settings_presenter._settings_dialog is not None:
             dialog.attach_button.setEnabled(False)
-            dialog.attach_button.setToolTip('请先关闭当前弹窗并返回会话；仍可复制图片后粘贴')
+            dialog.attach_button.setToolTip(QCoreApplication.translate('ScreenshotController', '请先关闭当前弹窗并返回会话；仍可复制图片后粘贴'))
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
@@ -157,7 +159,7 @@ class ScreenshotController(QObject):
 
     def _attach(self, data_url):
         if QApplication.activeModalWidget() is not None or self.window.settings_presenter._settings_dialog is not None:
-            self.dialog.notice.setText('请先返回会话，或复制图片后粘贴')
+            self.dialog.notice.setText(QCoreApplication.translate('ScreenshotController', '请先返回会话，或复制图片后粘贴'))
             return
         self.window.tray_controller.restore_window()
         self.window.input_area.add_attachments([data_url])

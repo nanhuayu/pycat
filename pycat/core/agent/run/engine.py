@@ -1,74 +1,62 @@
-"""Unified task execution engine - main coordinator.
+"""Agent run engine: turn loop, completion protocol and sub-task delegation.
 
-Simplified from 574 lines to ~200 lines by extracting:
-- RequestPipeline: LLM API calls with retry
-- ToolExecutor: Tool execution and state management
-- EventEmitter: Event streaming
-
-This module now focuses on orchestration:
-- Turn-based execution loop
-- Hook management
-- Auto-continue logic
-- Sub-task delegation
+Model requests go through RequestPipeline, tool batches through
+ToolCallCoordinator/ToolExecutor, and live events through EventEmitter.
 """
 from __future__ import annotations
 
 import asyncio
-import logging
 import json
-import uuid
+import logging
 import threading
+import uuid
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from pycat.models.contracts.config import AppConfig
-from pycat.models.conversation import Conversation, Message, normalize_tool_result
-from pycat.models.provider import Provider
-
+from pycat.core.agent.delegation.runner import SubagentRunner
+from pycat.core.agent.delegation.subagent import build_root_run
+from pycat.core.agent.events.conversation import (
+    emit_conversation_patch,
+)
+from pycat.core.agent.events.emitter import EventEmitter
+from pycat.core.agent.request.pipeline import RequestPipeline
+from pycat.core.agent.run.compression_tasks import CompressionTaskSet
+from pycat.core.agent.run.control import RunControl, effective_run_policy
+from pycat.core.agent.run.control_messages import EXPLICIT_COMPLETION_REMINDER, MAX_EXPLICIT_COMPLETION_RETRIES
+from pycat.core.agent.run.stop_policy import TaskStopPolicy
+from pycat.core.agent.tooling.executor import ToolExecutor
+from pycat.core.agent.tooling.loop import ToolCallCoordinator
+from pycat.core.agent.tooling.repetition import ToolRepetitionDetector
+from pycat.core.agent.tooling.result_recorder import ToolResultRecorder
+from pycat.core.capabilities.compression import CapabilityCompressor
+from pycat.core.content.archive_store import SessionArchiveStore
+from pycat.core.content.archive_view_service import ArchiveViewService
+from pycat.core.content.session_content import SessionContentService
+from pycat.core.context.maintainer import ContextMaintainer
 from pycat.core.llm.client import LLMClient
 from pycat.core.llm.token_budget import resolve_token_budget
+from pycat.core.memory.service import MemoryService
+from pycat.core.observability.debug_trace import DebugTraceContext, ensure_debug_trace
 from pycat.core.prompts.renderer import PromptRenderer
 from pycat.core.prompts.sections import PromptSections
+from pycat.core.tools.base import ToolApprovalRequest, ToolResult
 from pycat.core.tools.manager import ToolManager
-from pycat.core.tools.base import ToolResult
-from pycat.core.context.maintainer import ContextMaintainer
-from pycat.core.content.session_content import SessionContentService
-from pycat.core.capabilities.compression import CapabilityCompressor
+from pycat.core.tools.tool_call_archive import ToolResultViewService
 from pycat.models.contracts.agent import (
-    RunPolicy,
     RunEvent,
     RunEventKind,
+    RunPolicy,
     RunResult,
-    RunStopReason,
     RunStatus,
-    TurnState,
+    RunStopReason,
     TurnContext,
     TurnOutcome,
     TurnOutcomeKind,
 )
-from pycat.core.agent.tooling.repetition import ToolRepetitionDetector
-from pycat.core.agent.request.pipeline import RequestPipeline
-from pycat.core.agent.tooling.executor import ToolExecutor
-from pycat.core.agent.events.emitter import EventEmitter
-from pycat.core.agent.events.conversation import (
-    conversation_patch_payload,
-    emit_conversation_patch,
-)
-from pycat.core.agent.delegation.subagent import build_root_run
-from pycat.core.agent.run.stop_policy import TaskStopPolicy
-from pycat.core.agent.run.control import RunControl, effective_run_policy
-from pycat.core.agent.run.compression_tasks import CompressionTaskSet
-from pycat.core.agent.delegation.runner import SubagentRunner
-from pycat.core.agent.tooling.loop import ToolCallCoordinator
-from pycat.core.agent.tooling.result_recorder import ToolResultRecorder
-from pycat.core.observability.debug_trace import DebugTraceContext, ensure_debug_trace
-from pycat.core.tools.base import ToolApprovalRequest
-from pycat.core.agent.run.control_messages import EXPLICIT_COMPLETION_REMINDER, MAX_EXPLICIT_COMPLETION_RETRIES
-from pycat.core.memory.service import MemoryService
-from pycat.core.content.archive_store import SessionArchiveStore
-from pycat.core.content.archive_view_service import ArchiveViewService
-from pycat.core.tools.tool_call_archive import ToolResultViewService
+from pycat.models.contracts.config import AppConfig
+from pycat.models.conversation import Conversation, Message, normalize_tool_result
+from pycat.models.provider import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +113,6 @@ class AgentRunEngine:
             provider_catalog_provider=provider_catalog_provider,
         )
         self._tool_result_recorder = ToolResultRecorder()
-        self._pre_turn_hooks: list[Callable] = []
-        self._post_turn_hooks: list[Callable] = []
 
     @staticmethod
     def _build_compression_factory(capability_executor: Any):
@@ -141,14 +127,6 @@ class AgentRunEngine:
             )
 
         return factory
-
-    def add_pre_turn_hook(self, hook: Callable) -> None:
-        """Register a hook called before each LLM turn. Signature: (conversation, turn, policy) -> None"""
-        self._pre_turn_hooks.append(hook)
-
-    def add_post_turn_hook(self, hook: Callable) -> None:
-        """Register a hook called after each LLM turn. Signature: (conversation, turn, assistant_msg) -> None"""
-        self._post_turn_hooks.append(hook)
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -521,7 +499,6 @@ class AgentRunEngine:
         forced_assistant: Message | None = None,
     ) -> TurnOutcome:
         if cancel_event and cancel_event.is_set():
-            turn_context.state = TurnState.CANCELLED
             return TurnOutcome(kind=TurnOutcomeKind.CANCELLED, context=turn_context)
 
         emitter.emit(RunEventKind.TURN_START, turn=turn_context.turn, detail=f"Turn {turn_context.turn}/{turns_limit}")
@@ -539,13 +516,6 @@ class AgentRunEngine:
             )
             debug_trace = debug_trace.child(default_purpose="main")
         state_version_before_request = self._state_version(conversation)
-        turn_context.state = TurnState.PRE_TURN_HOOKS
-        for hook in self._pre_turn_hooks:
-            try:
-                hook(conversation, turn_context.turn, policy)
-            except Exception as he:
-                logger.debug("Pre-turn hook error: %s", he)
-
         assistant_msg = forced_assistant or await self._request_assistant_message(
             provider=provider,
             conversation=conversation,
@@ -571,7 +541,6 @@ class AgentRunEngine:
             return assistant_msg
 
         turn_context.runtime_messages = []
-        turn_context.state = TurnState.ASSISTANT_RECEIVED
         response_metadata = getattr(assistant_msg, "metadata", {}) or {}
         if bool(response_metadata.get("runtime_error")):
             return TurnOutcome(
@@ -616,7 +585,6 @@ class AgentRunEngine:
         emitter.emit(RunEventKind.STEP, turn=turn_context.turn, data=assistant_msg)
 
         if response_incomplete:
-            turn_context.state = TurnState.TURN_COMPLETE
             return TurnOutcome(
                 kind=TurnOutcomeKind.INTERRUPTED,
                 context=turn_context,
@@ -633,14 +601,7 @@ class AgentRunEngine:
                 ),
             )
 
-        for hook in self._post_turn_hooks:
-            try:
-                hook(conversation, turn_context.turn, assistant_msg)
-            except Exception as he:
-                logger.debug("Post-turn hook error: %s", he)
-
         if cancel_event and cancel_event.is_set():
-            turn_context.state = TurnState.CANCELLED
             return TurnOutcome(kind=TurnOutcomeKind.CANCELLED, context=turn_context, final_message=assistant_msg)
 
         if not assistant_msg.tool_calls:
@@ -652,7 +613,6 @@ class AgentRunEngine:
                 assistant_msg=assistant_msg,
             )
 
-        turn_context.state = TurnState.TOOL_EXECUTION
         return await self._execute_tool_calls(
             provider=provider,
             conversation=conversation,
@@ -689,7 +649,6 @@ class AgentRunEngine:
         stable_prompt_sections: PromptSections,
         compression_tasks: CompressionTaskSet | None = None,
     ) -> Message | TurnOutcome:
-        turn_context.state = TurnState.LLM_CALL
         try:
             return await self._llm_executor.call_with_retry(
                 provider=provider,
@@ -709,7 +668,6 @@ class AgentRunEngine:
                 compression_tasks=compression_tasks,
             )
         except Exception as e:
-            turn_context.state = TurnState.FAILED
             return TurnOutcome(
                 kind=TurnOutcomeKind.FAILED,
                 context=turn_context,
@@ -732,7 +690,6 @@ class AgentRunEngine:
             assistant_msg.metadata["completion_policy"] = "explicit"
             assistant_msg.metadata["intermediate"] = True
             self._attach_state_snapshot(conversation, assistant_msg)
-            turn_context.state = TurnState.TURN_COMPLETE
             if turn_context.incomplete_responses <= MAX_EXPLICIT_COMPLETION_RETRIES:
                 turn_context.runtime_messages = [Message(role="user", content=EXPLICIT_COMPLETION_REMINDER)]
                 return TurnOutcome(
@@ -760,7 +717,6 @@ class AgentRunEngine:
                     "interrupt_reason": "empty_response",
                 }
             )
-            turn_context.state = TurnState.TURN_COMPLETE
             return TurnOutcome(
                 kind=TurnOutcomeKind.INTERRUPTED,
                 context=turn_context,
@@ -770,7 +726,6 @@ class AgentRunEngine:
             )
         assistant_msg.metadata["completion"] = True
         assistant_msg.metadata["completion_policy"] = "text"
-        turn_context.state = TurnState.TURN_COMPLETE
         return TurnOutcome(kind=TurnOutcomeKind.COMPLETE, context=turn_context, final_message=assistant_msg)
 
     async def _execute_tool_calls(
@@ -1003,53 +958,12 @@ class AgentRunEngine:
                 if chars <= ToolResultViewService.SHORT_LIMIT:
                     continue
                 record = store.read_record(content_id)
-                if record is not None and not record.summary:
+                if record is not None and not record.summary and not record.metadata.get("summary_skipped"):
                     compression_tasks.submit(content_id, priority="background")
 
     @staticmethod
     def _tool_result_to_string(result: ToolResult | str) -> str:
         return ToolResultRecorder.tool_result_to_string(result)
-
-    @staticmethod
-    def _extract_tool_images(result: ToolResult | str) -> list[str]:
-        return ToolResultRecorder.extract_tool_images(result)
-
-    @staticmethod
-    def _record_work_trace_step(
-        *,
-        state,
-        conversation: Conversation,
-        tool_name: str,
-        tool_call_id: Optional[str],
-        result_summary: str,
-        metadata: dict[str, Any],
-        handle,
-    ) -> None:
-        ToolResultRecorder.record_work_trace_step(
-            state=state,
-            conversation=conversation,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-            result_summary=result_summary,
-            metadata=metadata,
-            handle=handle,
-        )
-
-    @staticmethod
-    def _work_trace_label(tool_name: str) -> str:
-        return ToolResultRecorder.work_trace_label(tool_name)
-
-    @staticmethod
-    def _work_trace_target(tool_name: str, metadata: dict[str, Any]) -> str:
-        return ToolResultRecorder.work_trace_target(tool_name, metadata)
-
-    @staticmethod
-    def _latest_user_goal(conversation: Conversation) -> str:
-        return ToolResultRecorder.latest_user_goal(conversation)
-
-    @staticmethod
-    def _conversation_patch_payload(conversation: Conversation) -> dict[str, Any]:
-        return conversation_patch_payload(conversation)
 
     def _emit_conversation_patch(
         self,

@@ -1,18 +1,16 @@
 """Mode and delegated-agent profile loading."""
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pycat.core.config.io import get_user_modes_json_path, load_project_config, load_user_modes_dict
-from pycat.core.config.migrations import migrate_mode_payload, migrate_modes_payload, migrate_category
+from pycat.core.config.io import load_project_config, load_user_modes_dict
+from pycat.core.config.migrations import migrate_category, migrate_mode_payload, migrate_modes_payload
 from pycat.core.modes.defaults import get_default_modes, get_primary_mode_slugs
 from pycat.models.contracts.mode import ModeConfig, normalize_mode_slug
 from pycat.models.contracts.model_target import ModelTarget
-
 
 logger = logging.getLogger(__name__)
 

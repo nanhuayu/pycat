@@ -32,12 +32,13 @@ class ManageWikiTool(BaseTool):
         return {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["search", "read", "apply", "delete"]},
             "query": {"type": "string"}, "id": {"type": "string"},
-            "title": {"type": "string", "maxLength": 120}, "summary": {"type": "string", "maxLength": 300},
-            "body": {"type": "string", "maxLength": 12000}, "expected_digest": {"type": "string"},
+            "title": {"type": "string"}, "summary": {"type": "string", "description": "Optional description; defaults to the title."},
+            "body": {"type": "string", "description": "Complete Markdown document; read before updating."}, "expected_digest": {"type": "string"},
             "sources": {"type": "array", "maxItems": 16, "items": {"type": "object", "properties": {
                 key: {"type": "string"} for key in ("id", "kind", "name", "digest", "workspace", "conversation_id", "locator", "ref")},
                 "required": ["id", "kind", "digest", "workspace"], "additionalProperties": False}},
-            "offset": {"type": "integer", "minimum": 0},
+            "offset": {"type": "integer", "minimum": 0, "description": "Search row offset, or read body character offset."},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 20000, "description": "Read body character count (default 12000)."},
         }, "required": ["action"], "additionalProperties": False}
 
     async def execute(self, arguments: dict, context: ToolContext) -> ToolResult:
@@ -49,7 +50,14 @@ class ManageWikiTool(BaseTool):
             if action == "search":
                 return ToolResult(json.dumps(self.service.search(work_dir, arguments.get("query", ""), offset=int(arguments.get("offset", 0))), ensure_ascii=False))
             if action == "read":
-                return ToolResult(json.dumps(self.service.read(work_dir, arguments.get("id", "")), ensure_ascii=False))
+                page = self.service.read(work_dir, arguments.get("id", ""))
+                page.pop("_frontmatter", None)
+                body = page["body"]
+                offset = max(0, int(arguments.get("offset", 0)))
+                limit = min(20000, max(1, int(arguments.get("limit", 12000))))
+                page.update(body=body[offset:offset + limit], total_chars=len(body), offset=offset,
+                            next_offset=offset + limit if offset + limit < len(body) else None)
+                return ToolResult(json.dumps(page, ensure_ascii=False))
             if action == "apply":
                 ok, message = self.service.apply(work_dir, arguments)
                 return ToolResult(message, is_error=not ok, metadata={"changed_domains": ["wiki"]} if ok else {})

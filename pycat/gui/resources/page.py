@@ -1,12 +1,14 @@
 """One resource type under Settings: installed items and market discovery."""
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QLabel, QPushButton, QStackedWidget, QTabBar, QVBoxLayout, QWidget
+from PyQt6.QtCore import QCoreApplication, pyqtSignal
+from PyQt6.QtWidgets import QLabel, QStackedWidget, QTabBar, QToolButton, QVBoxLayout, QWidget
 
 from pycat.gui.resources.discovery import DiscoveryPanel
 from pycat.gui.resources.mcp_page import McpPage
 from pycat.gui.resources.skills_page import SkillsPage
+from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button
 
 
 class ResourcePage(QWidget):
@@ -21,7 +23,7 @@ class ResourcePage(QWidget):
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
         self.view_tabs = QTabBar()
-        for title in ("已安装", "市场"):
+        for title in (QCoreApplication.translate('ResourcePage', '已安装'), QCoreApplication.translate('ResourcePage', '发现')):
             self.view_tabs.addTab(title)
         self.view_tabs.setExpanding(False)
         root.addWidget(self.view_tabs)
@@ -44,8 +46,10 @@ class ResourcePage(QWidget):
             page.layout().setContentsMargins(0, 0, 0, 0)
             self.content.addWidget(page)
         root.addWidget(self.content, 1)
-        self.view_tabs.currentChanged.connect(self.content.setCurrentIndex)
-        self.update_btn = QPushButton("版本与更新")
+        self.view_tabs.currentChanged.connect(self._change_view)
+        self.update_btn = QToolButton()
+        self.update_btn.setObjectName("resource_update_button")
+        configure_icon_button(self.update_btn, Icons.get_muted(Icons.CIRCLE_INFO), QCoreApplication.translate('ResourcePage', '版本与更新'))
         self.update_btn.clicked.connect(self._show_update)
         browser.header_layout.addWidget(self.update_btn)
         self.status_label = QLabel()
@@ -54,9 +58,14 @@ class ResourcePage(QWidget):
         root.addWidget(self.status_label)
 
     def show_market(self, extension_id=""):
-        self.view_tabs.setCurrentIndex(1)
         if extension_id:
             self.market.show_installed(extension_id)
+        self.view_tabs.setCurrentIndex(1)
+
+    def _change_view(self, index):
+        if index == 1:
+            self.market.ensure_loaded()
+        self.content.setCurrentIndex(index)
 
     def _show_update(self):
         try:

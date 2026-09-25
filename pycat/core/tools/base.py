@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import inspect
+import os
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-import os
-import hashlib
-import asyncio
-import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
@@ -14,7 +15,6 @@ from pycat.models.contracts.tooling import (
     RiskLevel,
     ToolDescriptor,
     normalize_risk_level,
-    normalize_tool_category,
 )
 from pycat.models.session_paths import normalize_work_dir
 from pycat.models.workspace import WorkspaceLocation
@@ -355,7 +355,6 @@ class ToolContext:
 
         payload = dict(question or {})
         if self.questions_callback:
-            import inspect
             if inspect.iscoroutinefunction(self.questions_callback):
                 return _normalize_answer(payload, await self.questions_callback(payload))
             result = self.questions_callback(payload)

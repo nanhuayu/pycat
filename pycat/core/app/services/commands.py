@@ -3,15 +3,24 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from dataclasses import dataclass, replace
 
 from pycat.core.commands import CommandAction, CommandResult, PromptInvocation, ShellInvocation
 from pycat.core.commands.parser import parse_bang_command_text
 from pycat.core.llm.model_selection import provider_has_model, resolve_provider_model_ref, select_default_provider_model
-from pycat.models.contracts.agent import ConversationBusyError, InvalidRequestError, PersistenceError, RunRequest, RunResult, RunStatus, RunStopReason
+from pycat.models.contracts.agent import (
+    ConversationBusyError,
+    InvalidRequestError,
+    PersistenceError,
+    RunRequest,
+    RunResult,
+    RunStatus,
+    RunStopReason,
+)
 from pycat.models.contracts.config import AppConfig
 from pycat.models.conversation import Conversation, Message
-from pycat.models.model_ref import build_model_ref, split_model_ref, provider_matches_name
+from pycat.models.model_ref import build_model_ref, provider_matches_name, split_model_ref
 
 
 @dataclass
@@ -127,7 +136,7 @@ class CommandService:
         return invocation.message_metadata()
 
     async def dispatch(self, request: RunRequest, *, source="cli", approval_callback=None,
-                       questions_callback=None) -> CommandExecution:
+                       questions_callback=None, dispatch_id=None) -> CommandExecution:
         conversation = self.require_session(request.conversation_id) if request.conversation_id else None
         if request.revision:
             return CommandExecution('run', conversation=conversation, handle=self.runs.start(request, source=source,
@@ -151,6 +160,20 @@ class CommandService:
                 questions_callback=questions_callback)
             return CommandExecution("run", conversation=conversation, handle=handle)
         action, value = result.action, result.data
+        if action == CommandAction.BACKGROUND:
+            brief = str(value or '').strip()
+            read_only = brief.split(maxsplit=1)[0:1] == ['--read-only']
+            if read_only:
+                brief = brief[len('--read-only'):].strip()
+            if not brief or request.attachments or request.references or request.mentions:
+                raise InvalidRequestError('请提供独立任务简报；首版通过简报交接必要资料，不复制附件或主会话历史。')
+            if conversation is None:
+                conversation = await asyncio.to_thread(self.create, work_dir=work_dir, model=request.model, mode='agent')
+            dispatch_id = dispatch_id or uuid.uuid4().hex
+            receipt = await self.runs.delegation.submit(conversation.id, brief, dispatch_id=dispatch_id,
+                source_message_id=dispatch_id, read_only=read_only)
+            return CommandExecution('display', f"已派发独立任务：{receipt['title']} ({receipt['id']})",
+                                    conversation, data=receipt)
         if action == CommandAction.DISPLAY:
             return CommandExecution("display", result.display_text, conversation)
         if action == CommandAction.EXIT:

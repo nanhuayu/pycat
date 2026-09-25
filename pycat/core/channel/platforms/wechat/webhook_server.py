@@ -14,7 +14,6 @@ from pycat.core.channel.platforms.wechat.protocol import (
 )
 from pycat.models.contracts.channel import ChannelConfig
 
-
 logger = logging.getLogger(__name__)
 
 

@@ -16,7 +16,6 @@ from pycat.core.channel.platforms.wechat.router import (
     normalize_wechat_ilink_message,
 )
 
-
 __all__ = [
     "WeChatChannelPlatformBackend",
     "WeChatChannelClient",

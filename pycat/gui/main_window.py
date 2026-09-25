@@ -1,43 +1,55 @@
 """
-Main application window - Chinese UI with fixed streaming
+Main application window over the shared application services.
 """
 
 import logging
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QSplitter, QMenu, QToolButton, QStackedWidget, QSizePolicy
-)
-from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction
 from typing import Optional
 
+from PyQt6.QtCore import QCoreApplication, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QMainWindow,
+    QMenu,
+    QSizePolicy,
+    QSplitter,
+    QStackedWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from pycat.core.app.container import AppContainer
+from pycat.core.content.export import CONVERSATION_FORMATS
+from pycat.gui.dialogs.debug_trace_dialog import DebugTraceDialog
+from pycat.gui.i18n import install_language
+from pycat.gui.runtime.channel_gateway_bridge import ChannelGatewayBridge
+from pycat.gui.runtime.message_runtime import MessageRuntime
+from pycat.gui.runtime.prompt_optimizer_runtime import PromptOptimizer
+from pycat.gui.runtime.screenshot_controller import ScreenshotController
+from pycat.gui.runtime.tray_controller import TrayController
+from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
-from pycat.core.app.container import AppContainer
-from pycat.gui.runtime.message_runtime import MessageRuntime
-from pycat.gui.runtime.channel_gateway_bridge import ChannelGatewayBridge
-from pycat.gui.runtime.prompt_optimizer_runtime import PromptOptimizer
-from pycat.gui.runtime.tray_controller import TrayController
-from pycat.gui.runtime.screenshot_controller import ScreenshotController
-from pycat.gui.dialogs.debug_trace_dialog import DebugTraceDialog
 
-from .widgets.sidebar import Sidebar
-from .widgets.chat_view import ChatView
-from .widgets.input_area import InputArea
-from .widgets.inspector_panel import InspectorPanel
+from .presenters.conversation_presenter import ConversationPresenter
+from .presenters.delegation_presenter import DelegationPresenter
+from .presenters.interaction_presenter import InteractionPresenter
 from .presenters.knowledge_presenter import KnowledgePresenter
+from .presenters.message_presenter import MessagePresenter
+from .presenters.settings_presenter import SettingsPresenter
+from .presenters.shell_presenter import ShellPresenter
+from .presenters.window_state_presenter import WindowStatePresenter
+from .presenters.workspace_files_presenter import WorkspaceFilesPresenter
+from .shortcuts import shortcut_sequence, validate_shortcuts
 from .utils.icon_manager import Icons
 from .utils.theme import prepare_context_menu
 from .utils.window_geometry import MAIN_WINDOW_MINIMUM, MAIN_WINDOW_PREFERRED, apply_window_size
-from pycat.core.content.export import CONVERSATION_FORMATS
-from .shortcuts import shortcut_sequence, validate_shortcuts
-
-from .presenters.conversation_presenter import ConversationPresenter
-from .presenters.message_presenter import MessagePresenter
-from .presenters.interaction_presenter import InteractionPresenter
-from .presenters.shell_presenter import ShellPresenter
-from .presenters.settings_presenter import SettingsPresenter
-from .presenters.window_state_presenter import WindowStatePresenter
+from .widgets.chat_view import ChatView
+from .widgets.input_area import InputArea
+from .widgets.inspector_panel import InspectorPanel
+from .widgets.sidebar import Sidebar
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +64,8 @@ class MainWindow(QMainWindow):
         # Centralized dependency container
         self.container = AppContainer(background_loop=True)
         self.services = self.container.services
+        bootstrap_state = self.services.app_bootstrap.load()
+        install_language(QApplication.instance(), bootstrap_state.settings.get("language", "zh_CN"))
         self.message_runtime = MessageRuntime(
             run_service=self.services.run_service,
             parent=self,
@@ -60,7 +74,7 @@ class MainWindow(QMainWindow):
         
         self.providers: list[Provider] = []
         self.current_conversation: Optional[Conversation] = None
-        self.app_settings: dict = {}
+        self.app_settings: dict = dict(bootstrap_state.settings)
         self.is_syncing_input_selection: bool = False
         self._force_quit = False
         self._shutdown_started = False
@@ -83,6 +97,7 @@ class MainWindow(QMainWindow):
         self.shell_presenter = ShellPresenter(self)
         self.settings_presenter = SettingsPresenter(self)
         self.knowledge_presenter = KnowledgePresenter(self)
+        self.workspace_files_presenter = WorkspaceFilesPresenter(self)
         self.tray_controller = TrayController(self)
         self.screenshot_controller = ScreenshotController(self)
         self.tray_controller.quit_requested.connect(self.request_quit)
@@ -115,14 +130,16 @@ class MainWindow(QMainWindow):
         self.channel_gateway_bridge.conversation_updated.connect(self.conversation_presenter.on_channel_gateway_event)
         
         self._setup_ui()
+        self.delegation_presenter = DelegationPresenter(self)
         self.chat_view.conversation_changed.connect(self.interaction_presenter.refresh)
-        self._load_data()
+        self._load_data(bootstrap_state)
         self.apply_shortcuts()
         self.settings_presenter.apply_theme()
 
     def _on_app_state_store_changed(self):
         if not self._shutdown_started:
             self.window_state_presenter.on_app_state_store_changed()
+            self.delegation_presenter.on_app_state(self.services.app_coordinator.store.get_state())
     
     def _setup_ui(self):
         self.setWindowTitle("PyCat | LLM chat · agent · tools")
@@ -209,6 +226,7 @@ class MainWindow(QMainWindow):
 
         self.inspector_panel = InspectorPanel()
         self.knowledge_presenter.bind(self.inspector_panel)
+        self.workspace_files_presenter.bind(self.inspector_panel)
         self.inspector_panel.task_create_requested.connect(self.conversation_presenter.create_task)
         self.inspector_panel.task_complete_requested.connect(self.conversation_presenter.complete_task)
         self.inspector_panel.task_delete_requested.connect(self.conversation_presenter.delete_task)
@@ -280,7 +298,7 @@ class MainWindow(QMainWindow):
 
         self.toggle_sidebar_btn = self._create_title_tool_button(
             Icons.PANEL_LEFT,
-            "展开/折叠左侧会话栏",
+            QCoreApplication.translate('MainWindow', "展开/折叠左侧会话栏"),
             checkable=True,
         )
         self.toggle_sidebar_btn.clicked.connect(self.settings_presenter.toggle_sidebar_panel)
@@ -288,18 +306,18 @@ class MainWindow(QMainWindow):
 
         self.toggle_inspector_btn = self._create_title_tool_button(
             Icons.PANEL_RIGHT,
-            "显示/隐藏右侧辅助栏",
+            QCoreApplication.translate('MainWindow', "显示/隐藏右侧辅助栏"),
             checkable=True,
         )
         self.toggle_inspector_btn.clicked.connect(self.settings_presenter.toggle_inspector_panel)
         corner_layout.addWidget(self.toggle_inspector_btn)
 
-        self.more_btn = self._create_title_tool_button(Icons.MORE, "更多操作")
+        self.more_btn = self._create_title_tool_button(Icons.MORE, QCoreApplication.translate('MainWindow', "更多操作"))
         self.more_btn.setProperty("noMenuIndicator", True)
         self.more_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         corner_layout.addWidget(self.more_btn)
 
-        self.update_available_btn = self._create_title_tool_button(Icons.DOWNLOAD, "有新版本可用")
+        self.update_available_btn = self._create_title_tool_button(Icons.DOWNLOAD, QCoreApplication.translate('MainWindow', "有新版本可用"))
         self.update_available_btn.setIcon(Icons.get(Icons.DOWNLOAD, color=Icons.COLOR_PRIMARY, scale_factor=0.9))
         self.update_available_btn.clicked.connect(
             lambda _checked=False: self.settings_presenter.open_release_url()
@@ -319,62 +337,66 @@ class MainWindow(QMainWindow):
             self.addAction(item)
             return item
 
-        self.new_conversation_action = action("新建对话", self.conversation_presenter.new, "new_conversation")
-        self.capture_action = action("截图...", self.screenshot_controller.start, "capture")
+        self.new_conversation_action = action(QCoreApplication.translate('MainWindow', "新建对话"), self.conversation_presenter.new, "new_conversation")
+        self.capture_action = action(QCoreApplication.translate('MainWindow', "截图..."), self.screenshot_controller.start, "capture")
         self.capture_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self.tray_controller.bind_actions(self.new_conversation_action, self.capture_action)
-        self.import_conversation_action = action("导入 JSON...", self.sidebar.prompt_import_conversation, "import_conversation")
-        action("设置...", self.settings_presenter.open_settings, "open_settings")
-        self.cancel_action = action("停止运行 / 返回会话", self._cancel_or_return, "cancel_generation")
+        self.import_conversation_action = action(QCoreApplication.translate('MainWindow', "导入 JSON..."), self.sidebar.prompt_import_conversation, "import_conversation")
+        action(QCoreApplication.translate('MainWindow', "设置..."), self.settings_presenter.open_settings, "open_settings")
+        self.cancel_action = action(QCoreApplication.translate('MainWindow', "停止运行 / 返回会话"), self._cancel_or_return, "cancel_generation")
 
         menu = prepare_context_menu(QMenu(self), self)
         menu.aboutToShow.connect(lambda: prepare_context_menu(menu, self))
-        self.conversation_settings_action = action("会话设置...", self.conversation_presenter.open_settings)
+        independent_task_action = action(QCoreApplication.translate('MainWindow', '新建独立任务...'), lambda: self.delegation_presenter.prompt_task())
+        self.conversation_settings_action = action(QCoreApplication.translate('MainWindow', "会话设置..."), self.conversation_presenter.open_settings)
         menu.addAction(self.conversation_settings_action)
-        compact = self.services.command_registry.get_menu_presentation("compact")
-        self.compact_action = action(getattr(compact, "menu_label", "") or "压缩上下文", self.conversation_presenter.compact_current)
-        self.compact_action.setToolTip(getattr(compact, "menu_tooltip", "") or "压缩上下文")
+        self.compact_action = action(QCoreApplication.translate('MainWindow', "压缩上下文"), self.conversation_presenter.compact_current)
+        self.compact_action.setToolTip(QCoreApplication.translate('MainWindow', "压缩较早历史为摘要，同时保留最近完整轮次。"))
         menu.addAction(self.compact_action)
-        export_menu = prepare_context_menu(QMenu("导出当前会话", self), self)
+        export_menu = prepare_context_menu(QMenu(QCoreApplication.translate('MainWindow', "导出当前会话"), self), self)
         self.export_actions = {}
         for fmt, (_, label) in CONVERSATION_FORMATS.items():
-            item = export_menu.addAction(f"导出为 {label}...")
+            item = export_menu.addAction(QCoreApplication.translate('MainWindow', '导出为 {label}...').format(label=label))
             item.triggered.connect(lambda checked=False, value=fmt: self.conversation_presenter.export_current(value))
             self.export_actions[fmt] = item
         menu.addMenu(export_menu)
-        self.delete_conversation_action = action("删除当前会话", self.conversation_presenter.delete_current)
+        self.delete_conversation_action = action(QCoreApplication.translate('MainWindow', "删除当前会话"), self.conversation_presenter.delete_current)
         menu.addAction(self.delete_conversation_action)
         menu.addSeparator()
-        navigation = self.sidebar.management_menu()
-        navigation.setTitle("项目与对话")
+        def navigation_menu():
+            items = self.sidebar.management_menu()
+            items.setTitle(QCoreApplication.translate('MainWindow', "项目与对话").replace("&", "&&"))
+            items.insertAction(items.actions()[0] if items.actions() else None, independent_task_action)
+            return items
+
+        navigation = navigation_menu()
         menu.addMenu(navigation)
 
         def refresh_navigation():
             nonlocal navigation
-            replacement = self.sidebar.management_menu()
-            replacement.setTitle("项目与对话")
+            replacement = navigation_menu()
             menu.insertMenu(navigation.menuAction(), replacement)
             menu.removeAction(navigation.menuAction())
             navigation.deleteLater()
             navigation = replacement
         menu.aboutToShow.connect(refresh_navigation)
         menu.addAction(self.capture_action)
-        self.shortcuts_action = action("快捷键...", self._show_shortcuts)
+        self.shortcuts_action = action(QCoreApplication.translate('MainWindow', "快捷键..."), self._show_shortcuts)
         menu.addAction(self.shortcuts_action)
-        self.reset_layout_action = action("恢复默认布局", self.settings_presenter.reset_default_layout)
+        self.reset_layout_action = action(QCoreApplication.translate('MainWindow', "恢复默认布局"), self.settings_presenter.reset_default_layout)
         menu.addAction(self.reset_layout_action)
         menu.addSeparator()
-        menu.addAction(action("退出", self.request_quit, "quit"))
+        menu.addAction(action(QCoreApplication.translate('MainWindow', "退出"), self.request_quit, "quit"))
         self.more_btn.setMenu(menu)
         self.window_state_presenter.refresh_menu_action_states()
-        self._search_shortcut = action("搜索对话或设置", self._focus_conversation_search, "search_conversations")
+        self._search_shortcut = action(QCoreApplication.translate('MainWindow', "搜索对话或设置"), self._focus_conversation_search, "search_conversations")
 
     def apply_shortcuts(self):
         try:
             overrides = validate_shortcuts(self.app_settings.get("shortcuts", {}))
         except ValueError as exc:
             overrides = {}
-            self.chat_view.show_notice(f"快捷键配置冲突，暂用默认绑定：{exc}")
+            self.chat_view.show_notice(QCoreApplication.translate('MainWindow', '快捷键配置冲突，暂用默认绑定：{exc}').format(exc=exc))
         for key, action in self._shortcut_actions.items():
             action.setShortcut(shortcut_sequence(key, overrides))
         self.screenshot_controller.bind_shortcut(shortcut_sequence('capture', overrides))
@@ -382,7 +404,7 @@ class MainWindow(QMainWindow):
             shortcut.setKey(shortcut_sequence(key, overrides))
         search_key = shortcut_sequence("search_conversations", overrides)
         self.sidebar.search_input.set_shortcut_text(search_key)
-        self.sidebar.search_btn.setToolTip("搜索对话" + (f" · {search_key}" if search_key else ""))
+        self.sidebar.search_btn.setToolTip(QCoreApplication.translate('MainWindow', "搜索对话") + (f" · {search_key}" if search_key else ""))
         self.input_area.set_app_settings(self.app_settings)
 
     def _focus_conversation_search(self):
@@ -419,7 +441,7 @@ class MainWindow(QMainWindow):
         button.setAccessibleName(tooltip)
         button.setCheckable(bool(checkable))
         button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        button.setFixedSize(28, 28)
+        button.setFixedSize(COMPACT_CONTROL_HEIGHT, COMPACT_CONTROL_HEIGHT)
         return button
 
     def _open_debug_trace_dialog(self, request_ids=()) -> None:
@@ -463,8 +485,7 @@ class MainWindow(QMainWindow):
     def _show_shortcuts(self) -> None:
         self.settings_presenter.open_settings(initial_page="shortcuts")
     
-    def _load_data(self):
-        bootstrap_state = self.services.app_bootstrap.load()
+    def _load_data(self, bootstrap_state):
         self.window_state_presenter.apply_bootstrap_state(bootstrap_state)
         try:
             self.services.channel_gateway.start(
@@ -497,6 +518,7 @@ class MainWindow(QMainWindow):
         self.screenshot_controller.dispose()
         self._update_check_timer.stop()
         self.knowledge_presenter.dispose()
+        self.workspace_files_presenter.dispose()
         self.settings_presenter.abandon_release_job()
         self.interaction_presenter.dispose()
         self.shell_presenter.dispose()

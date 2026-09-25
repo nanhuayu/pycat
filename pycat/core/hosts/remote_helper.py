@@ -10,7 +10,6 @@ import fnmatch
 import hashlib
 import json
 import os
-from pathlib import Path
 import queue
 import shutil
 import signal
@@ -20,6 +19,7 @@ import tempfile
 import threading
 import time
 import uuid
+from pathlib import Path
 
 PROTOCOL = 2
 CHUNK = 65536

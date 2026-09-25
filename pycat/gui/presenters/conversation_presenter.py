@@ -12,7 +12,7 @@ import uuid
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, QThreadPool
+from PyQt6.QtCore import QCoreApplication, QObject, QThreadPool
 from PyQt6.QtWidgets import QMessageBox
 
 from pycat.core.agent.events.conversation import conversation_patch_payload
@@ -194,11 +194,13 @@ class ConversationPresenter:
             if previous is not None:
                 host.sidebar.select_conversation(previous.id)
             return
-        conversation = host.services.conv_service.load(conversation_id)
+        stream_state = host.message_runtime.get_state(conversation_id)
+        conversation = getattr(stream_state, "conversation", None)
+        if not isinstance(conversation, Conversation):
+            conversation = host.services.conv_service.load(conversation_id)
         if not conversation:
             return
 
-        stream_state = host.message_runtime.get_state(conversation.id)
         host.services.app_coordinator.remember_current_conversation(
             conversation,
             providers=host.providers,
@@ -304,6 +306,7 @@ class ConversationPresenter:
         if show_active is not None:
             show_active()
         selection = self._capture_selection(prefer_app_default=True)
+        selection = replace(selection, mode_slug='agent')
         if work_dir is not None:
             selection = replace(selection, work_dir=work_dir)
         host.current_conversation = host.services.app_coordinator.create_conversation(selection)
@@ -869,10 +872,9 @@ class ConversationPresenter:
                 return
             if not error:
                 update(result)
-                button = getattr(host.input_area, "shell_button", None)
-                if button is not None:
-                    count = sum(s.running for s in result)
-                    button.setToolTip(f"打开 Shell · {count} 个运行中")
+                set_count = getattr(host.input_area, "set_running_shell_count", None)
+                if callable(set_count):
+                    set_count(sum(s.running for s in result))
 
         job.signals.finished.connect(done)
         QThreadPool.globalInstance().start(job)
@@ -1247,7 +1249,7 @@ class ConversationPresenter:
             host.message_presenter.on_conversation_patch(conversation_id, request_id, patch)
         host.chat_view.show_notice(
             self._compact_result_text(report),
-            tone="success",
+            tone="success" if int(getattr(report, "archived_messages", 0) or 0) > 0 else "info",
             timeout_ms=5000,
             conversation_id=conversation_id,
         )
@@ -1277,17 +1279,21 @@ class ConversationPresenter:
     @staticmethod
     def _compact_result_text(report) -> str:
         archived = int(getattr(report, "archived_messages", 0) or 0)
-        if archived > 0 and bool(getattr(report, "summary_updated", False)):
-            return f"已压缩 {archived} 条历史消息"
+        if archived > 0:
+            return QCoreApplication.translate('ConversationPresenter', '已压缩 {count} 条历史消息').format(count=archived)
         reason = str(getattr(report, "reason", "") or "")
         if reason == "maintenance_in_progress":
-            return "该会话正在压缩"
-        if reason in {"no_candidates", "up_to_date", "below_threshold"}:
-            return "当前没有可压缩的历史"
+            return QCoreApplication.translate('ConversationPresenter', '该会话正在压缩')
+        if reason == "up_to_date":
+            return QCoreApplication.translate('ConversationPresenter', '历史上下文已是最新状态')
+        if reason == "below_threshold":
+            return QCoreApplication.translate('ConversationPresenter', '当前上下文未达到自动压缩阈值')
+        if reason == "no_candidates":
+            return QCoreApplication.translate('ConversationPresenter', '没有可进一步压缩的历史；最近一轮和未完成的工具调用会保留')
         metrics = dict(getattr(report, "metrics", {}) or {})
         if metrics.get("fallback_reason") or metrics.get("skip_reason"):
-            return "压缩未产生有效节省，历史保持不变"
-        return "当前没有可压缩的历史"
+            return QCoreApplication.translate('ConversationPresenter', '压缩未产生有效节省，历史保持不变')
+        return QCoreApplication.translate('ConversationPresenter', '没有可进一步压缩的历史；最近一轮和未完成的工具调用会保留')
 
     def create_task(self, content: str) -> None:
         text = (content or "").strip()
@@ -1324,14 +1330,6 @@ class ConversationPresenter:
 
     def handle_command_result(self, result) -> None:
         self._command_presenter.handle_command_result(result)
-
-    def _apply_toggle(self, key: str, value: bool) -> None:
-        host = self._host
-        if host.current_conversation and self.is_conversation_active(host.current_conversation.id):
-            return
-        conversation = self.ensure_current_conversation_shell()
-        host.services.app_coordinator.apply_toggle(conversation, key=key, value=bool(value))
-        self._save_current_conversation(conversation)
 
     def _apply_task_ops(self, ops: list[dict]) -> None:
         host = self._host

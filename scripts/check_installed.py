@@ -40,6 +40,8 @@ def main():
     for resource in (
         "assets/pycat.svg",
         "assets/styles/base.qss",
+        "assets/translations/pycat_en.qm",
+        "assets/translations/pycat_en.ts",
         "assets/pycat.ico",
         "assets/ocr/ppocrv6-small/manifest.json",
         "assets/default_models.json",

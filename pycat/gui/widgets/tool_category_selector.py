@@ -1,10 +1,11 @@
 """Shared tool-category ceiling editor for settings and dialogs."""
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtWidgets import QCheckBox, QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from pycat.models.contracts.tooling import TOOL_CATEGORIES, TOOL_CATEGORY_LABELS, ToolSelectionPolicy
+from pycat.gui.view_models.tooling_labels import tool_category_label
+from pycat.models.contracts.tooling import TOOL_CATEGORIES, ToolSelectionPolicy
 
 
 class ToolCategorySelector(QWidget):
@@ -40,7 +41,7 @@ class ToolCategorySelector(QWidget):
         self.checks: dict[str, QCheckBox] = {}
         column_count = max(1, int(columns or 1))
         for index, category in enumerate(TOOL_CATEGORIES):
-            label = TOOL_CATEGORY_LABELS.get(category, category)
+            label = tool_category_label(category)
             checkbox = QCheckBox(f"{label} ({category})" if show_ids else label)
             checkbox.setObjectName(f"{object_prefix}_{category}")
             checkbox.toggled.connect(self._mark_explicit)
@@ -48,7 +49,7 @@ class ToolCategorySelector(QWidget):
             self.checks[category] = checkbox
         layout.addLayout(grid)
 
-        self.reset_button = QPushButton("重置为继承")
+        self.reset_button = QPushButton(QCoreApplication.translate('ToolCategorySelector', '重置为继承'))
         self.reset_button.setObjectName("settings_action_btn")
         self.reset_button.clicked.connect(self.reset_to_inherit)
         self.reset_button.setVisible(self._allow_inherit)
@@ -75,7 +76,7 @@ class ToolCategorySelector(QWidget):
                 allowed = category in self._ceiling
                 checkbox.setEnabled(allowed)
                 checkbox.setChecked(allowed and category in selected)
-                checkbox.setToolTip("可在当前层取消该类别。" if allowed else "上层未允许，当前层不能开启。")
+                checkbox.setToolTip(QCoreApplication.translate('ToolCategorySelector', '可在当前层取消该类别。') if allowed else QCoreApplication.translate('ToolCategorySelector', '上层未允许，当前层不能开启。'))
             self.inheritance_label.setText(str(inheritance_path or ""))
             self.inheritance_label.setVisible(bool(inheritance_path))
             self._sync_reset_button()

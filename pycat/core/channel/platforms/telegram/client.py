@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from typing import Any
 import json
 from io import BytesIO
+from typing import Any
 from urllib.parse import quote
 
 import httpx
 from PIL import Image
 
-from pycat.models.contracts.channel import ChannelConfig
 from pycat.core.channel.media import read_media_response, save_attachment
-
+from pycat.core.channel.replies import fit_reply_text
+from pycat.models.coercion import as_bool
+from pycat.models.contracts.channel import ChannelConfig
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
 TELEGRAM_MESSAGE_LIMIT = 4096
@@ -54,7 +55,7 @@ class TelegramChannelClient:
         payload = {'chat_id': chat_id}
         if message_thread_id:
             payload['message_thread_id'] = str(message_thread_id)
-        if context_token and _truthy(channel.config.get('reply_to_message')):
+        if context_token and as_bool(channel.config.get('reply_to_message')):
             reply_message_id = _to_int(context_token)
             if reply_message_id is not None:
                 payload['reply_parameters'] = json.dumps({'message_id': reply_message_id, 'allow_sending_without_reply': True})
@@ -118,7 +119,7 @@ class TelegramChannelClient:
         if thread_id is not None:
             payload["message_thread_id"] = thread_id
 
-        if _truthy(config.get("reply_to_message")):
+        if as_bool(config.get("reply_to_message")):
             reply_message_id = _to_int(context_token)
             if reply_message_id is not None:
                 payload["reply_parameters"] = {
@@ -203,13 +204,7 @@ class TelegramChannelClient:
 
     @staticmethod
     def normalize_reply_text(content: Any, *, limit: int = TELEGRAM_MESSAGE_LIMIT) -> str:
-        text = str(content or "").replace("\r\n", "\n").strip()
-        if not text:
-            return "已收到消息，但暂时没有可发送的文本回复。"
-        max_len = max(1, int(limit or TELEGRAM_MESSAGE_LIMIT))
-        if len(text) <= max_len:
-            return text
-        return text[: max(1, max_len - 1)].rstrip() + "…"
+        return fit_reply_text(content, limit or TELEGRAM_MESSAGE_LIMIT)
 
 
 def _to_int(value: Any) -> int | None:
@@ -220,10 +215,6 @@ def _to_int(value: Any) -> int | None:
         return int(text)
     except Exception:
         return None
-
-
-def _truthy(value: Any) -> bool:
-    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 __all__ = ["TELEGRAM_API_BASE", "TELEGRAM_MESSAGE_LIMIT", "TelegramChannelClient"]

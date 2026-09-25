@@ -1,12 +1,12 @@
 """Pure workspace identity. Remote paths never depend on the client's OS."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-import posixpath
 import ntpath
-from pathlib import PurePosixPath, PureWindowsPath
-import re
 import os
+import posixpath
+import re
+from dataclasses import dataclass
+from pathlib import PurePosixPath, PureWindowsPath
 from urllib.parse import quote, unquote, urlsplit
 
 

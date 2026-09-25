@@ -5,32 +5,39 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QFrame,
-    QToolButton,
+    QMenu,
     QScrollArea,
     QSizePolicy,
     QTabWidget,
-    QMenu,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from pycat.models.conversation import Conversation
-from pycat.models.contracts.session_state import TodoStatus
-from pycat.core.channel import channel_origin_from_message
+from pycat.core.channel.envelope import channel_origin_from_message
 from pycat.core.state.operations import get_active_todos
-from pycat.gui.widgets.capsule import CapsuleLabel, CapsuleRow, SingleLineLabel
-from pycat.gui.utils.theme import INSPECTOR_MARGIN, configure_icon_button, prepare_context_menu
-from pycat.gui.widgets.collapsible_section import CollapsibleSection
-from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
+from pycat.gui.dialogs.content_preview import show_content
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import (
+    COMPACT_ICON_BUTTON_SIZE,
+    INSPECTOR_MARGIN,
+    configure_icon_button,
+    prepare_context_menu,
+)
+from pycat.gui.widgets.capsule import CapsuleLabel, CapsuleRow, SingleLineLabel
+from pycat.gui.widgets.collapsible_section import CollapsibleSection
+from pycat.gui.widgets.delegated_tasks import DelegatedTasksWidget
 from pycat.gui.widgets.materials_panel import MaterialsPanel
 from pycat.gui.widgets.memory_panel import MemoryPanel
-from pycat.gui.dialogs.content_preview import show_content
+from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
+from pycat.gui.widgets.workspace_files import WorkspaceFilesPanel
+from pycat.models.contracts.session_state import TodoStatus
+from pycat.models.conversation import Conversation
 
 
 class _TwoLineElideLabel(QLabel):
@@ -65,13 +72,6 @@ class _TwoLineElideLabel(QLabel):
             super().setText(text)
 
 
-def _soft_wrap_reference(value: object) -> str:
-    text = str(value or "")
-    if len(text) <= 48:
-        return text
-    return "".join(f"{char}\u200b" if char in "/\\:?#&=_-." else char for char in text)
-
-
 def _format_process_elapsed(seconds: float) -> str:
     total = max(0, int(seconds or 0))
     if total < 60:
@@ -85,16 +85,16 @@ def _format_process_elapsed(seconds: float) -> str:
 
 def _format_last_output(modified_at) -> str:
     if not modified_at:
-        return "无输出"
+        return QCoreApplication.translate('InspectorPanel', '无输出')
     delta = max(0, int(datetime.now().timestamp() - float(modified_at)))
     if delta < 5:
-        return "刚刚"
+        return QCoreApplication.translate('InspectorPanel', '刚刚')
     if delta < 60:
-        return f"{delta}s 前"
+        return QCoreApplication.translate('InspectorPanel', '{delta}s 前').format(delta=delta)
     minutes = delta // 60
     if minutes < 60:
-        return f"{minutes}min 前"
-    return f"{minutes // 60}h 前"
+        return QCoreApplication.translate('InspectorPanel', '{minutes}min 前').format(minutes=minutes)
+    return QCoreApplication.translate('InspectorPanel', '{value}h 前').format(value=minutes // 60)
 
 
 class InspectorPanel(QWidget):
@@ -155,7 +155,7 @@ class InspectorPanel(QWidget):
         section.body_layout.setSpacing(4)
         section.header.layout().setContentsMargins(0, 0, 0, 0)
         section.header.layout().setSpacing(4)
-        section.toggle_btn.setFixedSize(28, 28)
+        section.toggle_btn.setFixedSize(COMPACT_ICON_BUTTON_SIZE, COMPACT_ICON_BUTTON_SIZE)
         section.toggle_btn.setAccessibleName(title)
         parent_layout.addWidget(section)
         container = QFrame()
@@ -174,18 +174,20 @@ class InspectorPanel(QWidget):
 
         self.tabs = QTabWidget()
         self.tabs.setObjectName("inspector_tabs")
-        self.tabs.setAccessibleName("辅助栏")
+        self.tabs.setAccessibleName(QCoreApplication.translate('InspectorPanel', '辅助栏'))
         root.addWidget(self.tabs)
         self.scroll = QScrollArea()
         self.scroll.setObjectName("inspector_scroll")
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.tabs.addTab(self.scroll, "任务")
+        self.tabs.addTab(self.scroll, QCoreApplication.translate('InspectorPanel', '任务'))
         self.materials = MaterialsPanel()
+        self.files = WorkspaceFilesPanel()
         self.memory = MemoryPanel()
-        self.tabs.addTab(self.materials, "资料")
-        self.tabs.addTab(self.memory, "记忆")
+        self.tabs.addTab(self.materials, QCoreApplication.translate('InspectorPanel', '资料'))
+        self.tabs.addTab(self.files, QCoreApplication.translate('InspectorPanel', '文件'))
+        self.tabs.addTab(self.memory, QCoreApplication.translate('InspectorPanel', '记忆'))
 
         content = QWidget()
         content.setObjectName("inspector_scroll_content")
@@ -196,18 +198,20 @@ class InspectorPanel(QWidget):
         layout.setContentsMargins(INSPECTOR_MARGIN, INSPECTOR_MARGIN, INSPECTOR_MARGIN, INSPECTOR_MARGIN)
         layout.setSpacing(4)
 
+        self.delegated_tasks = DelegatedTasksWidget()
+        layout.addWidget(self.delegated_tasks)
         add_row = QHBoxLayout()
         add_row.setSpacing(4)
 
         self.task_input_edit = ThemedLineEdit()
         self.task_input_edit.setObjectName("task_input_edit")
-        self.task_input_edit.setPlaceholderText("新增任务…")
+        self.task_input_edit.setPlaceholderText(QCoreApplication.translate('InspectorPanel', '添加待办…'))
         self.task_input_edit.returnPressed.connect(self._emit_create_task)
         add_row.addWidget(self.task_input_edit, 1)
 
         self.add_task_btn = QToolButton()
         self.add_task_btn.setObjectName("add_task_btn")
-        configure_icon_button(self.add_task_btn, Icons.get_muted(Icons.PLUS), "新增任务")
+        configure_icon_button(self.add_task_btn, Icons.get_muted(Icons.PLUS), QCoreApplication.translate('InspectorPanel', '添加待办'))
         self.add_task_btn.clicked.connect(self._emit_create_task)
         add_row.addWidget(self.add_task_btn)
 
@@ -220,22 +224,22 @@ class InspectorPanel(QWidget):
         layout.addWidget(self.tasks_container)
 
         (self.processes_section, self.processes_container, self.processes_layout) = self._add_list_section(
-            layout, "Shell 进程", summary="无后台进程", collapsed=True, object_name="processes",
+            layout, QCoreApplication.translate('InspectorPanel', 'Shell 进程'), summary=QCoreApplication.translate('InspectorPanel', '无后台进程'), collapsed=True, object_name="processes",
         )
 
         self.stop_all_processes_btn = QToolButton()
         self.stop_all_processes_btn.setObjectName("stop_all_processes_btn")
-        configure_icon_button(self.stop_all_processes_btn, Icons.get_muted(Icons.STOP), "全部停止")
+        configure_icon_button(self.stop_all_processes_btn, Icons.get_muted(Icons.STOP), QCoreApplication.translate('InspectorPanel', '全部停止'))
         self.stop_all_processes_btn.clicked.connect(self.process_stop_all_requested.emit)
         self.processes_section.header.layout().addWidget(self.stop_all_processes_btn)
 
         (self.completed_tasks_section, self.completed_tasks_container, self.completed_tasks_layout) = self._add_list_section(
-            layout, "最近完成", summary="暂无已完成任务", collapsed=True,
+            layout, QCoreApplication.translate('InspectorPanel', '最近完成待办'), summary=QCoreApplication.translate('InspectorPanel', '暂无已完成待办'), collapsed=True,
             object_name="completed_tasks", spacing=4, visible=False,
         )
 
         (self.channels_section, self.channels_container, self.channels_layout) = self._add_list_section(
-            layout, "通道", summary="外部来源", collapsed=True,
+            layout, QCoreApplication.translate('InspectorPanel', '通道'), summary=QCoreApplication.translate('InspectorPanel', '外部来源'), collapsed=True,
             object_name="channels", visible=False,
         )
 
@@ -272,7 +276,7 @@ class InspectorPanel(QWidget):
 
         if not conversation:
             self.completed_tasks_section.setVisible(False)
-            empty = QLabel("选择会话后查看任务")
+            empty = QLabel(QCoreApplication.translate('InspectorPanel', '选择会话后查看待办'))
             empty.setProperty("muted", True)
             self.tasks_layout.addWidget(empty)
             return
@@ -286,7 +290,7 @@ class InspectorPanel(QWidget):
             recent_tasks = []
 
         if not active_tasks:
-            empty = QLabel("暂无任务")
+            empty = QLabel(QCoreApplication.translate('InspectorPanel', '暂无待办'))
             empty.setProperty("muted", True)
             self.tasks_layout.addWidget(empty)
         else:
@@ -295,8 +299,8 @@ class InspectorPanel(QWidget):
                 self.tasks_layout.addWidget(self._create_task_row(task, actions=True))
             if len(active_tasks) > 8:
                 more = QToolButton()
-                more.setText(f"下一页 · {start // 8 + 1}/{(len(active_tasks) + 7) // 8}")
-                more.setAccessibleName("浏览下一页任务")
+                more.setText(QCoreApplication.translate('InspectorPanel', '下一页 · {value}/{value_}').format(value=start // 8 + 1, value_=(len(active_tasks) + 7) // 8))
+                more.setAccessibleName(QCoreApplication.translate('InspectorPanel', '浏览下一页任务'))
                 def next_tasks():
                     self._task_offset = 0 if start + 8 >= len(active_tasks) else start + 8
                     self._render_tasks(self._conversation)
@@ -306,9 +310,9 @@ class InspectorPanel(QWidget):
         completed = list(reversed(recent_tasks[-4:]))
         self.completed_tasks_section.setVisible(bool(completed))
         self.completed_tasks_section.set_title(
-            f"最近完成 ({len(completed)})" if completed else "最近完成"
+            QCoreApplication.translate('InspectorPanel', '最近完成待办 ({value})').format(value=len(completed)) if completed else QCoreApplication.translate('InspectorPanel', '最近完成待办')
         )
-        self.completed_tasks_section.set_summary("最近里程碑" if completed else "暂无已完成任务")
+        self.completed_tasks_section.set_summary(QCoreApplication.translate('InspectorPanel', '最近里程碑') if completed else QCoreApplication.translate('InspectorPanel', '暂无已完成待办'))
         for task in completed:
             self.completed_tasks_layout.addWidget(self._create_task_row(task, actions=False))
 
@@ -319,7 +323,7 @@ class InspectorPanel(QWidget):
 
         status = self._todo_status(getattr(task, "status", TodoStatus.PENDING))
         status_label = self._todo_status_label(status)
-        title = str(getattr(task, "title", "") or "").strip() or "未命名任务"
+        title = str(getattr(task, "title", "") or "").strip() or QCoreApplication.translate('InspectorPanel', '未命名任务')
         icon = QLabel()
         icon.setObjectName("task_status_icon")
         icon.setProperty("status", status.value)
@@ -333,13 +337,13 @@ class InspectorPanel(QWidget):
         label.setObjectName("task_text")
         label.setWordWrap(False)
         label.setMinimumWidth(0)
-        tooltip_parts = [f"状态：{status_label}", title]
+        tooltip_parts = [QCoreApplication.translate('InspectorPanel', '状态：{status_label}').format(status_label=status_label), title]
         description = str(getattr(task, "note", "") or "").strip()
         blocked_reason = str(getattr(task, "blocked_reason", "") or "").strip()
         if description:
             tooltip_parts.append(description)
         if blocked_reason:
-            tooltip_parts.append(f"阻塞：{blocked_reason}")
+            tooltip_parts.append(QCoreApplication.translate('InspectorPanel', '阻塞：{blocked_reason}').format(blocked_reason=blocked_reason))
         label.setToolTip("\n".join(tooltip_parts))
         label.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         row_layout.addWidget(label, 1)
@@ -353,19 +357,19 @@ class InspectorPanel(QWidget):
         if (actions and task_id) or refs:
             more = QToolButton()
             more.setObjectName("task_more_btn")
-            configure_icon_button(more, Icons.get_muted(Icons.MORE), "任务操作")
+            configure_icon_button(more, Icons.get_muted(Icons.MORE), QCoreApplication.translate('InspectorPanel', '任务操作'))
             menu = prepare_context_menu(QMenu(more), self)
             def populate():
                 prepare_context_menu(menu, self)
                 menu.clear()
                 for ref in refs:
-                    menu.addAction(f"查看来源：{ref}", lambda _checked=False, value=ref: show_content(self, ref=value))
+                    menu.addAction(QCoreApplication.translate('InspectorPanel', '查看来源：{ref}').format(ref=ref), lambda _checked=False, value=ref: show_content(self, ref=value))
                 if actions and task_id:
                     if refs:
                         menu.addSeparator()
-                    complete = menu.addAction(Icons.get_success(Icons.CHECK), "标记完成", lambda: mutate(self.task_complete_requested))
+                    complete = menu.addAction(Icons.get_success(Icons.CHECK), QCoreApplication.translate('InspectorPanel', '标记完成'), lambda: mutate(self.task_complete_requested))
                     complete.setEnabled(self._mutations_enabled)
-                    delete = menu.addAction("删除任务", lambda: mutate(self.task_delete_requested))
+                    delete = menu.addAction(QCoreApplication.translate('InspectorPanel', '删除任务'), lambda: mutate(self.task_delete_requested))
                     delete.setEnabled(self._mutations_enabled)
             menu.aboutToShow.connect(populate)
             more.setMenu(menu)
@@ -383,12 +387,12 @@ class InspectorPanel(QWidget):
     @staticmethod
     def _todo_status_label(status: TodoStatus) -> str:
         return {
-            TodoStatus.IN_PROGRESS: "进行中",
-            TodoStatus.PENDING: "待办",
-            TodoStatus.BLOCKED: "阻塞",
-            TodoStatus.COMPLETED: "已完成",
-            TodoStatus.CANCELLED: "已取消",
-        }.get(status, "待办")
+            TodoStatus.IN_PROGRESS: QCoreApplication.translate('InspectorPanel', '进行中'),
+            TodoStatus.PENDING: QCoreApplication.translate('InspectorPanel', '待办'),
+            TodoStatus.BLOCKED: QCoreApplication.translate('InspectorPanel', '阻塞'),
+            TodoStatus.COMPLETED: QCoreApplication.translate('InspectorPanel', '已完成'),
+            TodoStatus.CANCELLED: QCoreApplication.translate('InspectorPanel', '已取消'),
+        }.get(status, QCoreApplication.translate('InspectorPanel', '待办'))
 
     @staticmethod
     def _todo_status_icon(status: TodoStatus):
@@ -436,8 +440,8 @@ class InspectorPanel(QWidget):
             return
 
         self.channels_section.setVisible(True)
-        self.channels_section.set_title(f"外部来源 ({len(origins)})")
-        self.channels_section.set_summary("Channel 会话")
+        self.channels_section.set_title(QCoreApplication.translate('InspectorPanel', '外部来源 ({value})').format(value=len(origins)))
+        self.channels_section.set_summary(QCoreApplication.translate('InspectorPanel', 'Channel 会话'))
         for origin in origins:
             details = [value for value in (origin.thread_id, origin.message_id) if value]
             self._add_channel_row(
@@ -451,7 +455,7 @@ class InspectorPanel(QWidget):
         self._process_snapshots = list(snapshots or [])
         count = len(self._process_snapshots)
         self.processes_section.setVisible(count > 0)
-        self.processes_section.set_title("Shell 进程" if count == 0 else f"Shell 进程 ({count})")
+        self.processes_section.set_title(QCoreApplication.translate('InspectorPanel', 'Shell 进程') if count == 0 else QCoreApplication.translate('InspectorPanel', 'Shell 进程 ({count})').format(count=count))
         self.processes_section.set_summary("")
         if was_empty or count == 0:
             self.processes_section.set_collapsed(count == 0)
@@ -468,7 +472,7 @@ class InspectorPanel(QWidget):
                 row = self._create_process_row(snapshot)
                 self._process_rows[snapshot.process_id] = row
                 self.processes_layout.addWidget(row)
-            status = "运行中" if snapshot.running else f"已退出({snapshot.exit_code})"
+            status = QCoreApplication.translate('InspectorPanel', '运行中') if snapshot.running else QCoreApplication.translate('InspectorPanel', '已退出({exit_code})').format(exit_code=snapshot.exit_code)
             row.findChild(QLabel, "process_meta").setText(
                 f"pid={snapshot.pid} · {status} · {_format_process_elapsed(snapshot.elapsed_sec)}")
             row.findChild(QToolButton, "process_stop_btn").setEnabled(snapshot.running)
@@ -492,11 +496,9 @@ class InspectorPanel(QWidget):
         )
         text_column.addWidget(command_label)
 
-        status = "运行中" if bool(getattr(snapshot, "running", False)) else f"已退出({getattr(snapshot, 'exit_code', '')})"
+        status = QCoreApplication.translate('InspectorPanel', '运行中') if bool(getattr(snapshot, "running", False)) else QCoreApplication.translate('InspectorPanel', '已退出({value})').format(value=getattr(snapshot, 'exit_code', ''))
         meta = (
-            f"pid={int(getattr(snapshot, 'pid', 0) or 0)} · {status} · "
-            f"{_format_process_elapsed(float(getattr(snapshot, 'elapsed_sec', 0.0) or 0.0))} · "
-            f"输出 {_format_last_output(getattr(snapshot, 'last_output_at', None))}"
+            QCoreApplication.translate('InspectorPanel', 'pid={value} · {status} · {value_} · 输出 {value__}').format(value=int(getattr(snapshot, 'pid', 0) or 0), status=status, value_=_format_process_elapsed(float(getattr(snapshot, 'elapsed_sec', 0.0) or 0.0)), value__=_format_last_output(getattr(snapshot, 'last_output_at', None)))
         )
         meta_label = QLabel(meta)
         meta_label.setObjectName("process_meta")
@@ -509,13 +511,13 @@ class InspectorPanel(QWidget):
 
         open_btn = QToolButton()
         open_btn.setObjectName("process_open_btn")
-        configure_icon_button(open_btn, Icons.get_muted(Icons.TERMINAL), "查看 Shell")
+        configure_icon_button(open_btn, Icons.get_muted(Icons.TERMINAL), QCoreApplication.translate('InspectorPanel', '查看 Shell'))
         open_btn.clicked.connect(lambda _checked=False, pid=snapshot.process_id: self.process_open_requested.emit(pid))
         row_layout.addWidget(open_btn, 0, Qt.AlignmentFlag.AlignTop)
 
         stop_btn = QToolButton()
         stop_btn.setObjectName("process_stop_btn")
-        configure_icon_button(stop_btn, Icons.get_muted(Icons.STOP), "停止该进程")
+        configure_icon_button(stop_btn, Icons.get_muted(Icons.STOP), QCoreApplication.translate('InspectorPanel', '停止该进程'))
         process_id = str(getattr(snapshot, "process_id", "") or "")
         stop_btn.clicked.connect(lambda _checked=False, pid=process_id: self.process_stop_requested.emit(pid))
         row_layout.addWidget(stop_btn, 0, Qt.AlignmentFlag.AlignTop)
@@ -525,6 +527,7 @@ class InspectorPanel(QWidget):
         if getattr(conversation, "id", "") != getattr(self._conversation, "id", ""):
             self._task_offset = 0
         self._conversation = conversation
+        self.delegated_tasks.set_conversation(getattr(conversation, 'id', ''))
         self._set_task_controls_enabled(bool(conversation))
         self._render_tasks(conversation)
         self.projection_changed.emit(conversation)
@@ -570,12 +573,12 @@ class InspectorPanel(QWidget):
         row_layout.setContentsMargins(0, 2, 0, 2)
         row_layout.setSpacing(1)
 
-        title = SingleLineLabel(self._channel_row_title(str(title_text or "通道")))
+        title = SingleLineLabel(self._channel_row_title(str(title_text or QCoreApplication.translate('InspectorPanel', '通道'))))
         title.setObjectName("channel_origin_title")
         title.setWordWrap(False)
         title.setMinimumWidth(0)
         title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        title.setToolTip(str(title_text or "通道"))
+        title.setToolTip(str(title_text or QCoreApplication.translate('InspectorPanel', '通道')))
         row_layout.addWidget(title)
 
         detail_label = _TwoLineElideLabel(str(detail_text or "-"))
@@ -589,7 +592,7 @@ class InspectorPanel(QWidget):
 
     @staticmethod
     def _channel_row_title(text: str) -> str:
-        value = str(text or "").strip() or "通道"
+        value = str(text or "").strip() or QCoreApplication.translate('InspectorPanel', '通道')
         if " / " in value:
             value = value.split(" / ", 1)[0].strip() or value
         if ":" in value:

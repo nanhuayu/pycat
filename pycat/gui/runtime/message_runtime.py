@@ -15,7 +15,7 @@ from pycat.core.agent.run.control import RunControl
 from pycat.core.app.services.run import RunService
 from pycat.core.tools.base import ApprovalDecision, ToolApprovalRequest
 from pycat.gui.runtime.loop_utils import cancel_loop_task
-from pycat.models.contracts.agent import RunEvent, RunEventKind, RunPolicy, RunStatus, PersistenceError
+from pycat.models.contracts.agent import PersistenceError, RunEvent, RunEventKind, RunPolicy, RunStatus
 from pycat.models.contracts.tooling import FilesystemScope, ToolPermissionConfig
 from pycat.models.conversation import Conversation, Message
 from pycat.models.model_ref import build_model_ref
@@ -176,6 +176,7 @@ class MessageRuntime(QObject):
             conversation_id=conversation_id,
             request_id=request_id,
             model=model_name,
+            conversation=conversation,
         )
         self._streams[conversation_id] = state
         self._last_request_id[conversation_id] = request_id
@@ -494,6 +495,13 @@ class MessageRuntime(QObject):
             try:
                 state.visible_text += visible
                 state.thinking_text += thinking
+                phase = RunEventKind.TEXT_DELTA if visible else RunEventKind.THINKING_DELTA
+                if (visible or thinking) and state.last_event_kind != phase.value:
+                    # Phase changes update the existing projection, without
+                    # appending every token batch to the recent-event history.
+                    state.last_event_kind = phase.value
+                    state.last_event_detail = ""
+                    self.runtime_event.emit(conversation_id, request_id, RunEvent(kind=phase))
             except Exception as exc:
                 logger.debug("Failed to append streaming batch: %s", exc)
         if visible:
@@ -557,6 +565,10 @@ class MessageRuntime(QObject):
     def _on_raw_retry(self, conversation_id: str, request_id: str, detail: str) -> None:
         if not self._accept_event(conversation_id, request_id):
             return
+        state = self._streams.get(conversation_id)
+        if state:
+            state.visible_text = ""
+            state.thinking_text = ""
         self.retry_attempt.emit(conversation_id, request_id, detail)
 
     def _on_raw_runtime_event(self, conversation_id: str, request_id: str, event: RunEvent) -> None:
@@ -566,6 +578,16 @@ class MessageRuntime(QObject):
         if state:
             try:
                 raw_data = getattr(event, "data", None)
+                trace = raw_data.get('subtask') if isinstance(raw_data, dict) else None
+                if isinstance(trace, dict) and state.conversation is not None:
+                    # Keep live traces on the existing GUI conversation, including
+                    # when another conversation is selected. Nested children remain
+                    # inside their root trace, not separate navigation entities.
+                    parent_id, call_id = event.parent_message_id, event.parent_tool_call_id
+                    parent = next((message for message in reversed(state.conversation.messages)
+                                   if message.id == parent_id), None)
+                    if parent is not None and any(call.get('id') == call_id for call in parent.tool_calls or ()):
+                        state.conversation.attach_tool_result(call_id, {'type': 'subtask_run', 'run': trace})
                 request_usage = raw_data.get("request_usage") if isinstance(raw_data, dict) else None
                 if isinstance(request_usage, dict):
                     state.request_usage = dict(request_usage)

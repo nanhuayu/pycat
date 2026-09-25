@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from typing import List
 
+from pycat.core.content.archive_store import SessionArchiveStore
 from pycat.core.context.sections import normalize_user_message
-from pycat.models.conversation import Message, normalize_tool_result
-
+from pycat.models.conversation import Conversation, Message, normalize_tool_result
 
 CONTROL_MESSAGE_PREFIXES = (
     "[AUTO-CONTINUE]",
@@ -129,13 +130,6 @@ def build_turn_blocks(messages: List[Message]) -> List[List[Message]]:
     return blocks
 
 
-def flatten_turn_blocks(blocks: List[List[Message]]) -> List[Message]:
-    flattened: List[Message] = []
-    for block in blocks:
-        flattened.extend(block)
-    return flattened
-
-
 def turn_fingerprint(messages: List[Message]) -> str:
     """Return a stable fingerprint of one canonical exact user turn."""
     payload = [_message_fingerprint_fact(message) for message in messages]
@@ -223,6 +217,80 @@ def count_user_turn_blocks(messages: List[Message]) -> int:
     return sum(1 for block in build_turn_blocks(get_effective_history(messages)) if any(msg.role == "user" for msg in block))
 
 
+def history_projection_signature(conversation: Conversation) -> str:
+    """Identify compact/user changes without hashing large tool bodies on UI refresh.
+
+    Appending assistant output or creating a dormant capsule leaves the last
+    request estimate usable. Selecting a capsule/checkpoint or a new user input
+    changes the projection and invalidates that estimate.
+    """
+    messages = conversation.messages
+    latest_user = next((message.id for message in reversed(messages) if is_real_user_message(message)), "")
+    facts = (
+        latest_user,
+        str(conversation.get_state().summary or ""),
+        [(message.id, message.archived_content_id) for message in messages if message.archived_content_id],
+    )
+    return hashlib.sha256(json.dumps(facts, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def project_history(conversation: Conversation, *, messages: list[Message] | None = None) -> list[Message]:
+    """Project exact history and selected capsules for both requests and savings checks."""
+    store = SessionArchiveStore(conversation.work_dir, conversation.id, data_dir=getattr(conversation, "data_dir", None))
+    projected: list[Message] = []
+    for block in build_turn_blocks(list(conversation.messages if messages is None else messages)):
+        if not block or not is_real_user_message(block[0]):
+            projected.extend(copy.deepcopy(message) for message in get_effective_history(block))
+            continue
+        user = block[0]
+        if user.archived_content_id:
+            continue
+        ref = (user.metadata or {}).get("turn_capsule_ref") if isinstance(user.metadata, dict) else None
+        content_id = str(ref.get("content_id") or "") if isinstance(ref, dict) else ""
+        tail = block[1:]
+        selected = bool(tail and content_id) and all(
+            str(getattr(message, "archived_content_id", "") or "") == content_id
+            for message in tail
+        )
+        record = store.read_record(content_id, kind="history") if selected else None
+        metadata = record.metadata if record is not None and isinstance(record.metadata, dict) else {}
+        valid = bool(
+            record is not None
+            and record.summary
+            and metadata.get("scope") == "turn_capsule"
+            and isinstance(ref, dict)
+            and metadata.get("fingerprint") == ref.get("fingerprint")
+        )
+        fingerprint = turn_fingerprint(block) if valid else ""
+        valid = valid and ref.get("fingerprint") == fingerprint
+        if not valid:
+            exact = copy.deepcopy(block)
+            for message in exact:
+                if message is not exact[0] and str(message.archived_content_id or "") == content_id:
+                    message.archived_content_id = None
+            projected.extend(get_effective_history(exact))
+            continue
+        projected.extend(get_effective_history([copy.deepcopy(user)]))
+        projected.append(
+            Message(
+                role="assistant",
+                content=record.summary,
+                metadata={
+                    "synthetic": True,
+                    "context_kind": "turn_capsule",
+                    "content_id": record.id,
+                    "fingerprint": fingerprint,
+                    "coverage": {
+                        "start_seq": int(metadata.get("start_seq", 0) or 0),
+                        "end_seq": int(metadata.get("end_seq", 0) or 0),
+                    },
+                    "trust": "mixed_provenance",
+                },
+            )
+        )
+    return projected
+
+
 def get_effective_history(messages: List[Message]) -> List[Message]:
     """Return every active canonical message suitable for provider projection."""
     effective: List[Message] = []
@@ -248,33 +316,3 @@ def get_effective_history(messages: List[Message]) -> List[Message]:
                     effective.append(normalized)
                 break
     return effective
-
-
-def apply_context_window(messages: List[Message], max_messages: int) -> List[Message]:
-    """Keep only the last N messages while preferring whole turn blocks."""
-    if not isinstance(max_messages, int) or max_messages <= 0:
-        return messages
-    if len(messages) <= max_messages:
-        return messages
-
-    blocks = build_turn_blocks(messages)
-    selected: List[List[Message]] = []
-    used = 0
-    for block in reversed(blocks):
-        block_size = len(block)
-        if selected and used + block_size > max_messages:
-            break
-        if not selected and block_size > max_messages:
-            selected.append(block[-max_messages:])
-            used = max_messages
-            break
-        selected.append(block)
-        used += block_size
-
-    result = flatten_turn_blocks(list(reversed(selected)))
-    if not any(m.role == "user" for m in result):
-        for msg in reversed(messages):
-            if msg.role == "user":
-                result.insert(0, msg)
-                break
-    return result

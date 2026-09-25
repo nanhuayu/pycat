@@ -1,6 +1,6 @@
 """Search configuration; public engines and optional API providers."""
-from dataclasses import dataclass, field
-from typing import Dict, Any
+from dataclasses import dataclass
+from typing import Any, Dict
 
 # Valid provider IDs
 SEARCH_PROVIDERS = ["tavily", "duckduckgo", "bing", "google", "brave", "searxng"]

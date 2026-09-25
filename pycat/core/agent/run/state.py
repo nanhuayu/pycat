@@ -10,9 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from pycat.models.contracts.agent import RunPolicy, RunResult, SubtaskTrace
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
-from pycat.models.contracts.agent import RunPolicy, SubtaskTrace, RunResult
 
 
 @dataclass(frozen=True)
@@ -35,10 +35,6 @@ class AgentRunContext:
     parent: AgentRunParent | None = None
     trace: SubtaskTrace | None = None
     metadata: dict[str, Any] | None = None
-
-    @property
-    def is_nested(self) -> bool:
-        return self.parent is not None or self.depth > 0
 
     @property
     def parent_tool_call_id(self) -> str:

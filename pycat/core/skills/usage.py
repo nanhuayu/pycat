@@ -10,7 +10,6 @@ from typing import Any, Callable, Mapping
 from pycat.core.config import get_global_subdir
 from pycat.core.persistence import atomic_write_text, exclusive_file_lock
 
-
 USAGE_FILE_NAME = ".usage.json"
 
 
@@ -133,40 +132,6 @@ class SkillUsageStore:
 
         return self._mutate(mutate)
 
-    def bump_view(self, name: str) -> bool:
-        return self._bump(name, "view_count", used=False)
-
-    def bump_use(self, name: str) -> bool:
-        return self._bump(name, "use_count", used=True)
-
-    def mark_state(self, name: str, state: str) -> bool:
-        key = self._key(name)
-        if not key:
-            return False
-
-        def mutate(data: dict[str, dict[str, Any]]) -> None:
-            record = dict(data.get(key) or {})
-            record["scope"] = self._scope
-            record["root"] = self._root_display
-            record["state"] = str(state or "active")
-            data[key] = record
-
-        return self._mutate(mutate)
-
-    def set_pinned(self, name: str, pinned: bool) -> bool:
-        key = self._key(name)
-        if not key:
-            return False
-
-        def mutate(data: dict[str, dict[str, Any]]) -> None:
-            record = dict(data.get(key) or {})
-            record["scope"] = self._scope
-            record["root"] = self._root_display
-            record["pinned"] = bool(pinned)
-            data[key] = record
-
-        return self._mutate(mutate)
-
     # ------------------------------------------------------------- internals
 
     @staticmethod
@@ -179,26 +144,6 @@ class SkillUsageStore:
     @staticmethod
     def _key(name: str) -> str:
         return str(name or "").strip().lower()
-
-    def _bump(self, name: str, counter: str, *, used: bool) -> bool:
-        key = self._key(name)
-        if not key:
-            return False
-        now = _now()
-
-        def mutate(data: dict[str, dict[str, Any]]) -> None:
-            record = dict(data.get(key) or {})
-            record["scope"] = self._scope
-            record["root"] = self._root_display
-            record[counter] = self._positive_int(record.get(counter)) + 1
-            if used:
-                record["last_used_at"] = now
-            else:
-                record["last_view_at"] = now
-            record["last_activity_at"] = now
-            data[key] = record
-
-        return self._mutate(mutate)
 
     def _load_locked(self) -> tuple[dict[str, dict[str, Any]] | None, str]:
         try:

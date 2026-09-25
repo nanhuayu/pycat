@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtWidgets import QComboBox, QCompleter, QListView
 
 from pycat.core.llm.model_selection import provider_model_ids
@@ -64,7 +64,7 @@ class ModelRefCombo(QComboBox):
         *,
         current_model_ref: str = "",
         allow_empty: bool = True,
-        empty_label: str = "跟随当前对话模型",
+        empty_label: str | None = None,
         allow_unlisted_current: bool = False,
         model_type: str = "chat",
         require_image_input: bool = False,
@@ -72,7 +72,7 @@ class ModelRefCombo(QComboBox):
     ) -> None:
         super().__init__(parent)
         self._allow_empty = bool(allow_empty)
-        self._empty_label = str(empty_label or "跟随当前对话模型")
+        self._empty_label = str(empty_label or self.tr("跟随当前对话模型"))
         self._allow_unlisted_current = bool(allow_unlisted_current)
         self._last_valid_ref = ""
         self._model_type = model_type
@@ -83,8 +83,8 @@ class ModelRefCombo(QComboBox):
         self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.setMaxVisibleItems(18)
         configure_combo_popup(self, popup_minimum_width=320)
-        self.lineEdit().setPlaceholderText("搜索模型 / provider|model")
-        self.setToolTip("从已添加的常用模型中搜索选择。")
+        self.lineEdit().setPlaceholderText(self.tr("搜索模型 / provider|model"))
+        self.setToolTip(self.tr("从已添加的常用模型中搜索选择。"))
         self.currentIndexChanged.connect(self._remember_current_index)
         self.set_providers(providers or [], current_model_ref=current_model_ref)
 
@@ -101,7 +101,7 @@ class ModelRefCombo(QComboBox):
             self.clear()
             if self._allow_empty:
                 self.addItem(self._empty_label, "")
-                self.setItemData(0, "留空表示跟随当前对话正在使用的模型。", Qt.ItemDataRole.ToolTipRole)
+                self.setItemData(0, self.tr("留空表示跟随当前对话正在使用的模型。"), Qt.ItemDataRole.ToolTipRole)
 
             for option in build_model_ref_options(providers, model_type=self._model_type, require_image_input=self._require_image_input):
                 self.addItem(option.label, option.value)
@@ -141,7 +141,9 @@ class ModelRefCombo(QComboBox):
         if self._allow_unlisted_current:
             self.addItem(value, value)
             index = self.count() - 1
-            self.setItemData(index, "当前绑定模型不在可用目录中；请检查服务、模型用途和输入能力。", Qt.ItemDataRole.ToolTipRole)
+            # This method is inherited; QObject.tr() would use the subclass's
+            # context, while pylupdate extracts the message under ModelRefCombo.
+            self.setItemData(index, QCoreApplication.translate("ModelRefCombo", "当前绑定模型不在可用目录中；请检查服务、模型用途和输入能力。"), Qt.ItemDataRole.ToolTipRole)
             self.setCurrentIndex(index)
             self._last_valid_ref = value
             return
@@ -218,7 +220,7 @@ class ModelTargetCombo(ModelRefCombo):
     ) -> None:
         QComboBox.__init__(self, parent)
         self._allow_empty = True
-        self._empty_label = "使用辅助模型默认值"
+        self._empty_label = self.tr("使用辅助模型默认值")
         self._allow_unlisted_current = False
         self._last_valid_ref = ""
         self._model_type = model_type
@@ -232,8 +234,8 @@ class ModelTargetCombo(ModelRefCombo):
         self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.setMaxVisibleItems(18)
         configure_combo_popup(self, popup_minimum_width=320)
-        self.lineEdit().setPlaceholderText("搜索模型 / provider|model")
-        self.setToolTip("可跟随辅助默认、跟随会话主模型，或指定 provider|model。")
+        self.lineEdit().setPlaceholderText(self.tr("搜索模型 / provider|model"))
+        self.setToolTip(self.tr("可跟随辅助默认、跟随会话主模型，或指定 provider|model。"))
         self.currentIndexChanged.connect(self._remember_current_index)
         self.set_providers(providers or [], current_model_ref="")
         self.set_model_target(current_target or ModelTarget())
@@ -253,10 +255,10 @@ class ModelTargetCombo(ModelRefCombo):
         try:
             self.clear()
             if self._allow_inherit:
-                self.addItem("使用辅助模型默认值", self._AUXILIARY_VALUE)
-                self.addItem("跟随会话主模型", self._PRIMARY_VALUE)
+                self.addItem(self.tr("使用辅助模型默认值"), self._AUXILIARY_VALUE)
+                self.addItem(self.tr("跟随会话主模型"), self._PRIMARY_VALUE)
             else:
-                self.addItem("请选择模型", "")
+                self.addItem(self.tr("请选择模型"), "")
             for option in build_model_ref_options(self._providers, model_type=self._model_type):
                 self.addItem(option.label, option.value)
                 idx = self.count() - 1
@@ -286,13 +288,8 @@ class ModelTargetCombo(ModelRefCombo):
         self.setCurrentIndex(max(0, self.findData(self._AUXILIARY_VALUE)))
 
     def model_target(self) -> ModelTarget:
-        idx = self.currentIndex()
-        data = str(self.itemData(idx) or "") if idx >= 0 else ""
-        text = str(self.currentText() or "").strip()
-        if data == self._PRIMARY_VALUE:
-            return ModelTarget(source="primary")
-        if data == self._AUXILIARY_VALUE or text == "使用辅助模型默认值":
-            return ModelTarget(source="auxiliary")
+        # Resolve typed/completed text through the same catalog as the base combo.
+        # currentData() alone still points at the previous item while editing.
         value = self.model_ref()
         if value in {self._PRIMARY_VALUE, self._AUXILIARY_VALUE}:
             return ModelTarget(source="primary" if value == self._PRIMARY_VALUE else "auxiliary")

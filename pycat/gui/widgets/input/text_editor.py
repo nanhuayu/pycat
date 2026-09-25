@@ -4,16 +4,15 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
-from PyQt6.QtWidgets import QListWidget, QTextEdit
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent, QTextCursor
+from PyQt6.QtWidgets import QListWidget, QTextEdit
 
 from pycat.core.commands import CommandRegistry
-from pycat.core.commands.mentions import MentionCandidate, MentionKind, MentionQuery, utf16_to_python, python_to_utf16
+from pycat.core.commands.mentions import MentionCandidate, MentionKind, MentionQuery, python_to_utf16, utf16_to_python
 from pycat.gui.shortcuts import matches_shortcut
 from pycat.gui.utils.image_utils import extract_attachment_sources_from_mime
 from pycat.gui.widgets.themed_line_edit import ThemedContextMenuMixin
-
 
 logger = logging.getLogger(__name__)
 

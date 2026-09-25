@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from pycat.core.channel.connection import ChannelConnectionSnapshot, ChannelConnectionState
-from pycat.core.channel.platforms.base import ChannelPlatformBackend
 from pycat.core.channel.host import ChannelHost
+from pycat.core.channel.platforms.base import ChannelPlatformBackend
 from pycat.core.channel.platforms.telegram.client import TELEGRAM_API_BASE
 from pycat.core.channel.platforms.telegram.delivery import TelegramDelivery
 from pycat.core.channel.platforms.telegram.poller import start_telegram_poller

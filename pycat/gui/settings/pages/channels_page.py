@@ -2,43 +2,49 @@ from __future__ import annotations
 
 from typing import List
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QCoreApplication, QSize, Qt
 from PyQt6.QtWidgets import (
     QFrame,
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QToolButton,
     QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from pycat.core.app.services.channel import ChannelService
-from pycat.core.channel import ChannelDefinition, ChannelInstance
+from pycat.core.channel.catalog import ChannelDefinition, ChannelInstance
 from pycat.core.channel.connection import ChannelConnectionSnapshot, ChannelConnectionState
-from pycat.models.contracts.channel import ChannelConfig
 from pycat.gui.dialogs.channel_instance_dialog import ChannelInstanceDialog
 from pycat.gui.dialogs.channel_session_picker_dialog import ChannelSessionPickerDialog
-from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.settings.components import (
     SettingsActionBar,
     SettingsListDetailLayout,
     SettingsStatusListItem,
     configure_settings_resource_list,
 )
+from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.view_models.channel_status import (
+    channel_detail_label,
+    channel_metadata_text,
+    channel_state_label,
+    channel_type_name,
+)
 from pycat.gui.widgets.themed_line_edit import ThemedSelectableLabel
+from pycat.models.contracts.channel import ChannelConfig
 
 
 class ChannelTypeItem(QListWidgetItem):
     def __init__(self, definition: ChannelDefinition):
         super().__init__()
         self.definition = definition
-        self.setText(definition.name)
+        self.setText(channel_type_name(definition))
         self.setIcon(Icons.get(definition.icon_name, scale_factor=0.95))
-        tags = f"\n标签：{' / '.join(definition.tags)}" if definition.tags else ""
-        self.setToolTip(f"{definition.description}{tags}")
+        tags = QCoreApplication.translate('ChannelsPage', '\n标签：{value}').format(value=' / '.join(channel_metadata_text(tag) for tag in definition.tags)) if definition.tags else ""
+        self.setToolTip(f"{channel_metadata_text(definition.description)}{tags}")
         self.setSizeHint(QSize(0, 40))
 
 
@@ -46,33 +52,22 @@ class ChannelInstanceItem(SettingsStatusListItem):
     def __init__(self, instance: ChannelInstance, snapshot: ChannelConnectionSnapshot):
         super().__init__(instance)
         self.instance = instance
-        validation = "\n".join(instance.validation_errors) if instance.validation_errors else "配置校验通过"
-        summary = instance.summary or instance.config.source or "未填写摘要"
-        state_label = {
-            ChannelConnectionState.DISABLED: "已停用",
-            ChannelConnectionState.INCOMPLETE: "配置不完整",
-            ChannelConnectionState.CONNECTING: "连接中",
-            ChannelConnectionState.WAITING_USER: "等待操作",
-            ChannelConnectionState.READY: "已连接",
-            ChannelConnectionState.RECONNECTING: "正在重连",
-            ChannelConnectionState.ERROR: "异常",
-        }.get(snapshot.state, snapshot.state.value)
+        validation = "\n".join(instance.validation_errors) if instance.validation_errors else QCoreApplication.translate('ChannelsPage', '配置校验通过')
+        summary = instance.summary or instance.config.source or QCoreApplication.translate('ChannelsPage', '未填写摘要')
+        state_label = channel_state_label(snapshot.state)
         self.set_status(
             instance.title,
             enabled=snapshot.state in {ChannelConnectionState.READY, ChannelConnectionState.CONNECTING, ChannelConnectionState.RECONNECTING},
             detail=state_label,
             tooltip=(
-                f"类型：{instance.definition.name}\n"
-                f"来源：{instance.config.source}\n"
-                f"摘要：{summary}\n"
-                f"校验：{validation}"
+                QCoreApplication.translate('ChannelsPage', '类型：{value}\n来源：{source}\n摘要：{summary}\n校验：{validation}').format(value=channel_type_name(instance.definition), source=instance.config.source, summary=summary, validation=validation)
             ),
             two_lines=True,
         )
 
 
 class ChannelsPage(QWidget):
-    page_title = "频道"
+    page_title = "消息通道"
     def __init__(
         self,
         channels: List[ChannelConfig],
@@ -95,8 +90,8 @@ class ChannelsPage(QWidget):
 
         layout.addWidget(
             build_page_header(
-                "频道",
-                "连接消息平台，管理绑定的对话。",
+                QCoreApplication.translate('ChannelsPage', '消息通道'),
+                QCoreApplication.translate('ChannelsPage', '连接消息平台，管理绑定的对话。'),
             )
         )
 
@@ -112,12 +107,12 @@ class ChannelsPage(QWidget):
         self._detail_layout = right_panel
 
         actions = SettingsActionBar(spacing=8)
-        self.add_btn = actions.add_action("新增", Icons.get(Icons.PLUS), self._add_channel)
-        self.edit_btn = actions.add_action("编辑", Icons.get(Icons.EDIT), self._edit_channel)
-        self.toggle_btn = actions.add_action("启用", Icons.get(Icons.PLAY), self._toggle_channel_enabled)
-        self.remove_btn = actions.add_action(
-            "删除",
-            Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR),
+        self.add_btn = actions.add_icon_action(QCoreApplication.translate('ChannelsPage', '添加频道'), Icons.get(Icons.PLUS), self._add_channel)
+        self.edit_btn = actions.add_icon_action(QCoreApplication.translate('ChannelsPage', '编辑频道'), Icons.get(Icons.EDIT), self._edit_channel)
+        self.toggle_btn = actions.add_action(QCoreApplication.translate('ChannelsPage', '启用'), Icons.get(Icons.PLAY), self._toggle_channel_enabled)
+        self.remove_btn = actions.add_icon_action(
+            QCoreApplication.translate('ChannelsPage', '删除频道'),
+            Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR),
             self._remove_channel,
             danger=True,
         )
@@ -137,7 +132,7 @@ class ChannelsPage(QWidget):
         detail_layout.setContentsMargins(10, 8, 10, 8)
         detail_layout.setSpacing(6)
 
-        self.detail_summary = QLabel("请选择一个频道查看详情。")
+        self.detail_summary = QLabel(QCoreApplication.translate('ChannelsPage', '请选择一个频道查看详情。'))
         self.detail_summary.setWordWrap(True)
         detail_layout.addWidget(self.detail_summary)
 
@@ -147,7 +142,7 @@ class ChannelsPage(QWidget):
         detail_layout.addWidget(self.detail_hint)
 
         self.diagnostics_toggle = QToolButton()
-        self.diagnostics_toggle.setText("诊断信息")
+        self.diagnostics_toggle.setText(QCoreApplication.translate('ChannelsPage', '诊断信息'))
         self.diagnostics_toggle.setCheckable(True)
         self.diagnostics_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.diagnostics_toggle.toggled.connect(self._toggle_diagnostics)
@@ -161,12 +156,12 @@ class ChannelsPage(QWidget):
 
         detail_actions = SettingsActionBar(spacing=8)
         self.open_session_btn = detail_actions.add_action(
-            "打开对话",
+            QCoreApplication.translate('ChannelsPage', '打开对话'),
             Icons.get(Icons.CHAT),
             self._focus_bound_session,
         )
         self.change_session_btn = detail_actions.add_action(
-            "更换对话",
+            QCoreApplication.translate('ChannelsPage', '更换对话'),
             Icons.get(Icons.EDIT),
             self._change_bound_session,
         )
@@ -207,7 +202,7 @@ class ChannelsPage(QWidget):
         definition = self._current_definition()
         self.instance_list.clear()
         if definition is None:
-            self._set_empty_overview("当前没有可用的频道类型。")
+            self._set_empty_overview(QCoreApplication.translate('ChannelsPage', '当前没有可用的频道类型。'))
             self._update_action_state(False)
             return
 
@@ -218,7 +213,7 @@ class ChannelsPage(QWidget):
             )
 
         if not instances:
-            self._set_empty_overview("该频道类型还没有配置，点击“新增”开始。")
+            self._set_empty_overview(QCoreApplication.translate('ChannelsPage', '该频道类型还没有配置，点击“+”添加。'))
             self._update_action_state(False)
             return
 
@@ -234,7 +229,7 @@ class ChannelsPage(QWidget):
     def _on_instance_changed(self, row: int) -> None:
         item = self.instance_list.item(row)
         if not isinstance(item, ChannelInstanceItem):
-            self._set_empty_overview("请选择一个频道查看详情。")
+            self._set_empty_overview(QCoreApplication.translate('ChannelsPage', '请选择一个频道查看详情。'))
             self._update_action_state(False)
             return
         self._render_instance_overview(item.instance.config)
@@ -246,7 +241,7 @@ class ChannelsPage(QWidget):
         self.detail_card.show()
         self.detail_summary.setText(message)
         definition = self._current_definition()
-        self.detail_hint.setText(definition.description if definition else '')
+        self.detail_hint.setText(channel_metadata_text(definition.description) if definition else '')
         self.detail_hint.setVisible(bool(definition))
         self.diagnostics_toggle.hide()
         self.diagnostics_label.setText("")
@@ -265,30 +260,22 @@ class ChannelsPage(QWidget):
         instance = self._channel_catalog.build_instance(normalized)
 
         snapshot = self._channel_service.connection_snapshot(normalized)
-        state_label = {
-            ChannelConnectionState.DISABLED: "已停用",
-            ChannelConnectionState.INCOMPLETE: "配置不完整",
-            ChannelConnectionState.CONNECTING: "连接中",
-            ChannelConnectionState.WAITING_USER: "等待操作",
-            ChannelConnectionState.READY: "已连接",
-            ChannelConnectionState.RECONNECTING: "正在重连",
-            ChannelConnectionState.ERROR: "异常",
-        }.get(snapshot.state, snapshot.state.value)
+        state_label = channel_state_label(snapshot.state)
         session = str(normalized.session_id or "").strip()
-        self.detail_summary.setText(f"{state_label} · " + ("已绑定对话" if session else "保存后自动新建对话"))
+        self.detail_summary.setText(f"{state_label} · " + (QCoreApplication.translate('ChannelsPage', '已绑定对话') if session else QCoreApplication.translate('ChannelsPage', '保存后自动新建对话')))
         self.detail_summary.setToolTip(session)
 
         hint_lines: list[str] = []
         if instance.validation_errors:
-            hint_lines.append(f"校验：{'；'.join(instance.validation_errors)}")
+            hint_lines.append(QCoreApplication.translate('ChannelsPage', '校验：{value}').format(value='；'.join(instance.validation_errors)))
         if str(snapshot.detail or "").strip():
-            hint_lines.append(snapshot.detail)
+            hint_lines.append(channel_detail_label(snapshot))
 
         self.detail_hint.setText("\n".join(hint_lines))
         self.detail_hint.setVisible(bool(hint_lines))
         self.diagnostics_toggle.show()
         self.diagnostics_label.setText(
-            f"ID: {normalized.id or '-'}\nSource: {normalized.source or '-'}\nMode: {snapshot.mode or '-'}\n绑定对话：{session or '-'}"
+            QCoreApplication.translate('ChannelsPage', 'ID: {value}\nSource: {value_}\nMode: {value__}\n绑定对话：{value___}').format(value=normalized.id or '-', value_=normalized.source or '-', value__=snapshot.mode or '-', value___=session or '-')
         )
         self.open_session_btn.setEnabled(bool(str(normalized.session_id or "").strip()))
         self.change_session_btn.setEnabled(True)
@@ -301,10 +288,10 @@ class ChannelsPage(QWidget):
         self.open_session_btn.setEnabled(bool(has_selection and current is not None and str(current.session_id or "").strip()))
         self.change_session_btn.setEnabled(bool(has_selection))
         if current is not None and current.enabled:
-            self.toggle_btn.setText("停用")
+            self.toggle_btn.setText(QCoreApplication.translate('ChannelsPage', '停用'))
             self.toggle_btn.setIcon(Icons.get(Icons.PAUSE, scale_factor=1.0))
         else:
-            self.toggle_btn.setText("启用")
+            self.toggle_btn.setText(QCoreApplication.translate('ChannelsPage', '启用'))
             self.toggle_btn.setIcon(Icons.get(Icons.PLAY, scale_factor=1.0))
 
     def _current_selected_channel(self) -> ChannelConfig | None:
@@ -420,15 +407,3 @@ class ChannelsPage(QWidget):
 
     def _toggle_diagnostics(self, visible: bool) -> None:
         self.diagnostics_label.setVisible(bool(visible))
-
-    @staticmethod
-    def _connection_label(channel: ChannelConfig) -> str:
-        mode = str((channel.config or {}).get("connection_mode", "") or "").strip().lower()
-        labels = {
-            "ilink": "个人微信扫码",
-            "webhook": "Webhook",
-            "websocket": "长连接",
-            "polling": "长轮询",
-            "stream": "Stream 长连接",
-        }
-        return labels.get(mode, mode or "连接")

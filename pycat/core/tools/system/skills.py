@@ -1,11 +1,10 @@
 from pathlib import Path
 from typing import Any, Dict
 
-from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
+from pycat.core.security.threats import scan_for_threats
 from pycat.core.skills import SkillsManager, resolve_skill_invocation_spec
 from pycat.core.skills.usage import SkillUsageStore
-from pycat.core.security.threats import scan_for_threats
-
+from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
 
 MAX_SKILL_ENTRYPOINT_CHARS = 12_000
 

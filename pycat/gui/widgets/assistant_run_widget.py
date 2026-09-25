@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QHBoxLayout, QWidget
+from PyQt6.QtCore import QCoreApplication, QSize, Qt, pyqtSignal
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.utils.display_text import message_time
-from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
 from pycat.core.content.references import delivery_refs_for_messages
 from pycat.gui.runtime.content_navigation import ContentTargetResolver
+from pycat.gui.utils.display_text import message_time
+from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
 from pycat.gui.view_models.message_runs import AssistantRunGroup
 from pycat.gui.widgets.message_widget import MessageWidget
-from pycat.models.conversation import Message
 from pycat.models.contracts.agent import RunStatus
 from pycat.models.contracts.content import ContentRef
+from pycat.models.conversation import Message
 
 
 class AssistantRunWidget(QFrame):
@@ -91,8 +91,12 @@ class AssistantRunWidget(QFrame):
         progress_layout.setContentsMargins(0, 0, 0, 0)
         progress_layout.setSpacing(0)
         progress_layout.addWidget(self.process_toggle, 1)
-        self.trace_btn = QPushButton("查看本次运行")
+        self.trace_btn = QPushButton()
         self.trace_btn.setObjectName("run_trace_btn")
+        self.trace_btn.setIcon(Icons.get_muted(Icons.CHART_BARS))
+        self.trace_btn.setIconSize(QSize(18, 18))
+        self.trace_btn.setFixedSize(COMPACT_CONTROL_HEIGHT, COMPACT_CONTROL_HEIGHT)
+        self.trace_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.trace_btn.clicked.connect(lambda: self.trace_requested.emit(self.request_ids))
         progress_layout.addWidget(self.trace_btn)
         layout.addWidget(self.progress_row)
@@ -193,13 +197,21 @@ class AssistantRunWidget(QFrame):
             widget.style().polish(widget)
         self.process_toggle.setFixedHeight(COMPACT_CONTROL_HEIGHT)
         run = AssistantRunGroup(tuple(self._messages))
-        status = "运行中" if self._run_active else {
-            RunStatus.FAILED: "失败", RunStatus.CANCELLED: "已停止", RunStatus.INTERRUPTED: "未完成",
-        }.get(self._terminal_status or self._saved_status(), "已完成")
+        status = QCoreApplication.translate('AssistantRunWidget', '运行中') if self._run_active else {
+            RunStatus.FAILED: QCoreApplication.translate('AssistantRunWidget', '失败'),
+            RunStatus.CANCELLED: QCoreApplication.translate('AssistantRunWidget', '已停止'),
+            RunStatus.INTERRUPTED: QCoreApplication.translate('AssistantRunWidget', '未完成'),
+        }.get(self._terminal_status or self._saved_status(), QCoreApplication.translate('AssistantRunWidget', '已完成'))
         self.process_toggle.setIcon(Icons.get_muted(Icons.CHEVRON_UP if expanded else Icons.CHEVRON_DOWN))
-        self.process_toggle.setText(f"{status} · {len(self._messages)} 步 · {run.tool_call_count} 次工具调用")
-        self.trace_btn.setText("查看本次运行" if self.request_ids else "查看会话运行")
-        self.process_toggle.setAccessibleName(f"{status}，{'收起' if expanded else '展开'}执行过程")
+        self.process_toggle.setText(QCoreApplication.translate(
+            'AssistantRunWidget', '{status} · {steps} 步 · {tool_calls} 次工具调用',
+        ).format(status=status, steps=len(self._messages), tool_calls=run.tool_call_count))
+        self.trace_btn.setVisible(bool(self.request_ids))
+        self.trace_btn.setToolTip(QCoreApplication.translate('AssistantRunWidget', '查看本次运行'))
+        self.trace_btn.setAccessibleName(self.trace_btn.toolTip())
+        action = (QCoreApplication.translate('AssistantRunWidget', '收起执行过程') if expanded
+                  else QCoreApplication.translate('AssistantRunWidget', '展开执行过程'))
+        self.process_toggle.setAccessibleName(f'{status} · {action}')
 
     def _create_message_widget(
         self,
@@ -299,16 +311,18 @@ class AssistantRunWidget(QFrame):
             if str(getattr(message, "id", "") or "")
         }
 
-        process_count = len(run.process_messages)
         self.process_toggle.setVisible(True)
         self.progress_row.setVisible(True)
-        self.process_toggle.setText(
-            f"执行过程 · {process_count} 步 · {run.tool_call_count} 次工具调用 >"
-        )
-        self.process_toggle.setToolTip("展开本次回复的中间思考、工具调用和阶段输出")
+        self.process_toggle.setToolTip(QCoreApplication.translate('AssistantRunWidget', '展开本次回复的中间思考、工具调用和阶段输出'))
         self._sync_process_visibility()
 
     def _toggle_process(self) -> None:
         self._manual_process_expanded = not self._effective_process_expanded()
+        self._sync_process_visibility()
+        self.projection_changed.emit()
+
+    def expand_process(self) -> None:
+        """Reveal a process selected from the Inspector without replacing the run."""
+        self._manual_process_expanded = True
         self._sync_process_visibility()
         self.projection_changed.emit()

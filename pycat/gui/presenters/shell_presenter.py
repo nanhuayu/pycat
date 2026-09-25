@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from collections import deque
 
-from PyQt6.QtCore import QObject, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThreadPool, QTimer, pyqtSignal
 
 from pycat.gui.dialogs.shell_window import ShellWindow
 from pycat.gui.runtime.background_job import BackgroundJob
@@ -197,7 +197,7 @@ class ShellPresenter(QObject):
             return
         size = len(text.encode("utf-8"))
         if self._input_bytes + size > 65536:
-            self._notice("待发送输入已达 64 KiB，请等待后再输入。")
+            self._notice(QCoreApplication.translate('ShellPresenter', '待发送输入已达 64 KiB，请等待后再输入。'))
             return
         self._input.append((self.window.conversation_id, process_id, text))
         self._input_bytes += size

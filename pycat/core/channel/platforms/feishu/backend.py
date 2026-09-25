@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pycat.core.channel.platforms.base import ChannelPlatformBackend
 from pycat.core.channel.connection import ChannelConnectionSnapshot, ChannelConnectionState
 from pycat.core.channel.host import ChannelHost
+from pycat.core.channel.platforms.base import ChannelPlatformBackend
 from pycat.core.channel.platforms.feishu.delivery import FeishuDelivery
 from pycat.core.channel.platforms.feishu.webhook_server import start_feishu_webhook_server
 from pycat.core.channel.platforms.feishu.ws_client import start_feishu_ws_client

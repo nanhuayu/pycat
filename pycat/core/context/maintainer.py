@@ -11,7 +11,6 @@ import logging
 import threading
 from typing import Any
 
-from pycat.models.contracts.config import AppConfig
 from pycat.core.context.maintenance import (
     ContextMaintenance,
     MaintenancePolicy,
@@ -20,6 +19,7 @@ from pycat.core.context.maintenance import (
 )
 from pycat.core.llm.token_budget import resolve_token_budget
 from pycat.models.contracts.agent import RunPolicy
+from pycat.models.contracts.config import AppConfig
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
 

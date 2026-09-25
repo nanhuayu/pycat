@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from pycat.models.contracts.config import AppConfig, ProjectConfig
 from pycat.core.config.migrations import (
     SCHEMA_VERSION,
     migrate_modes_payload,
     migrate_settings_payload,
     restore_migrated_capabilities_from_modes,
 )
-
+from pycat.core.persistence import atomic_write_text
+from pycat.models.contracts.config import AppConfig, ProjectConfig
 
 _APP_CACHE: AppConfig | None = None
 logger = logging.getLogger(__name__)
@@ -55,16 +53,7 @@ def get_user_modes_json_path(*, data_dir: str | Path | None = None) -> Path:
 def _atomic_write_json(path: Path, data: Dict[str, Any]) -> bool:
     """Write JSON beside the target and atomically replace it."""
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(data or {}, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-            os.replace(temp_name, path)
-        finally:
-            if os.path.exists(temp_name):
-                os.unlink(temp_name)
+        atomic_write_text(path, json.dumps(data or {}, ensure_ascii=False, indent=2) + "\n")
         return True
     except Exception as exc:
         logger.debug("Failed to atomically write %s: %s", path, exc)

@@ -48,3 +48,7 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Doc scripts run as `python docs/<script>.py` and put the repo root on sys.path first.
+"docs/*.py" = ["E402"]

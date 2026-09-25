@@ -6,10 +6,11 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from pycat.core.channel.envelope import channel_value
+from pycat.core.channel.media import MAX_MEDIA_ITEMS
 from pycat.core.channel.platforms.wechat.client import WeChatChannelClient
+from pycat.core.channel.platforms.wechat.media import WeChatMediaClient
 from pycat.core.channel.platforms.wechat.protocol import normalize_wechat_reply_text
 from pycat.core.channel.platforms.wechat.router import normalize_wechat_ilink_message
-from pycat.core.channel.platforms.wechat.media import MAX_MEDIA_ITEMS, WeChatMediaClient
 from pycat.core.channel.replies import channel_reply_policy
 from pycat.core.content.references import delivery_refs_for_messages
 from pycat.core.content.session_content import MAX_INPUT_BATCH_BYTES

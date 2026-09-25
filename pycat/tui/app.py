@@ -11,6 +11,7 @@ from textual.containers import Vertical
 from textual.widgets import Label, TextArea
 
 from pycat.core.app.client import LocalClient
+from pycat.core.content.mime import is_text_mime
 from pycat.models.contracts.agent import MentionRef, RunRequest, TurnRevision
 from pycat.tui.composer import InputPanel, single_line
 from pycat.tui.panels import Form, Interaction, Picker, Reader
@@ -234,7 +235,7 @@ class WorkbenchApp(App):
 
     async def open_content(self, identity, ref):
         mime = ref.get('mime') or ''
-        if mime and not (mime.startswith('text/') or mime in {'application/json', 'application/xml'}):
+        if mime and not is_text_mime(mime):
             self.push_screen(Reader(ref.get('name', '资料'), {'ref': ref['ref'], 'mime': mime,
                 '说明': '此内容可在桌面或 Web 资料视图中打开；终端不将二进制文件解码为文本。'}))
             return

@@ -1,45 +1,48 @@
 """Installed skills and candidate-method management."""
 from __future__ import annotations
 
+import difflib
 from collections.abc import Callable
 from pathlib import Path
-from pycat.models.session_paths import resolve_project_data_root
-import difflib
 
-from PyQt6.QtCore import QEvent, Qt, QUrl
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
-    QWidget,
-    QVBoxLayout,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
-    QHBoxLayout,
-    QMenu,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from pycat.core.config import get_global_subdir
 from pycat.core.app.services.skill import SkillService
+from pycat.core.config import get_global_subdir
 from pycat.core.skills.usage import SkillUsageStore
-from pycat.gui.settings.components import SettingsListDetailLayout, RESOURCE_DESCRIPTION_ROLE, RESOURCE_TOGGLE_ROLE
-from pycat.gui.settings.page_header import build_page_header
-from pycat.gui.utils.settings_controls import SettingsFormLayout
+from pycat.gui.dialogs.skill_evaluation_dialog import SkillEvaluationDialog
 from pycat.gui.settings.components import (
+    RESOURCE_DESCRIPTION_ROLE,
+    RESOURCE_TOGGLE_ROLE,
     SettingsActionBar,
+    SettingsListDetailLayout,
     SettingsStatusListItem,
+    build_dialog_button_box,
     configure_settings_resource_list,
 )
+from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.widgets.themed_line_edit import ThemedTextEdit
-from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
-from pycat.gui.dialogs.skill_evaluation_dialog import SkillEvaluationDialog
+from pycat.gui.utils.settings_controls import SettingsFormLayout
+from pycat.gui.utils.theme import configure_menu_button
+from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
+from pycat.models.session_paths import resolve_project_data_root
 
 
 class SkillDropListWidget(QListWidget):
@@ -98,7 +101,7 @@ class SkillCreateDialog(QDialog):
 
     def __init__(self, *, has_project: bool, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("创建技能")
+        self.setWindowTitle(QCoreApplication.translate('SkillsPage', '创建技能'))
         self.setModal(True)
         self.setMinimumWidth(420)
         layout = QVBoxLayout(self)
@@ -107,23 +110,18 @@ class SkillCreateDialog(QDialog):
         form = SettingsFormLayout()
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.name_edit = ThemedLineEdit()
-        self.name_edit.setPlaceholderText("例如 review-code")
+        self.name_edit.setPlaceholderText(QCoreApplication.translate('SkillsPage', '例如 review-code'))
         self.description_edit = ThemedLineEdit()
-        self.description_edit.setPlaceholderText("一句话说明用途")
+        self.description_edit.setPlaceholderText(QCoreApplication.translate('SkillsPage', '一句话说明用途'))
         self.scope_combo = QComboBox()
-        self.scope_combo.addItem("全局", "global")
+        self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '全局'), "global")
         if has_project:
-            self.scope_combo.addItem("当前工作区", "project")
-        form.addRow("名称", self.name_edit)
-        form.addRow("说明", self.description_edit)
-        form.addRow("范围", self.scope_combo)
+            self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '当前工作区'), "project")
+        form.addRow(QCoreApplication.translate('SkillsPage', '名称'), self.name_edit)
+        form.addRow(QCoreApplication.translate('SkillsPage', '说明'), self.description_edit)
+        form.addRow(QCoreApplication.translate('SkillsPage', '范围'), self.scope_combo)
         layout.addLayout(form)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("创建")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons = build_dialog_button_box(self, accept_text=QCoreApplication.translate('SkillsPage', '创建'))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -141,28 +139,23 @@ class SkillImportDialog(QDialog):
 
     def __init__(self, source_name: str, *, has_project: bool, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("导入技能")
+        self.setWindowTitle(QCoreApplication.translate('SkillsPage', '导入技能'))
         self.setModal(True)
         self.setMinimumWidth(420)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
-        label = QLabel(f"导入“{source_name}”到哪个范围？")
+        label = QLabel(QCoreApplication.translate('SkillsPage', '导入“{source_name}”到哪个范围？').format(source_name=source_name))
         label.setWordWrap(True)
         layout.addWidget(label)
         form = SettingsFormLayout()
         self.scope_combo = QComboBox()
-        self.scope_combo.addItem("全局", "global")
+        self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '全局'), "global")
         if has_project:
-            self.scope_combo.addItem("当前工作区", "project")
-        form.addRow("范围", self.scope_combo)
+            self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '当前工作区'), "project")
+        form.addRow(QCoreApplication.translate('SkillsPage', '范围'), self.scope_combo)
         layout.addLayout(form)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("导入")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons = build_dialog_button_box(self, accept_text=QCoreApplication.translate('SkillsPage', '导入'))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -192,37 +185,38 @@ class SkillsPage(QWidget):
         layout.setSpacing(12)
 
         if self._show_header:
-            layout.addWidget(build_page_header("技能", "加载、管理全局与项目技能。停用的技能不会进入运行时列表。"))
+            layout.addWidget(build_page_header(QCoreApplication.translate('SkillsPage', '技能'), QCoreApplication.translate('SkillsPage', '加载、管理全局与项目技能。停用的技能不会进入运行时列表。')))
 
         body = SettingsListDetailLayout()
         self._view = "active"
         self.list_body = body
         overview = QHBoxLayout()
         self.search = ThemedLineEdit()
-        self.search.setPlaceholderText("搜索已安装技能")
-        self.search.setAccessibleName("搜索已安装技能")
+        self.search.setPlaceholderText(QCoreApplication.translate('SkillsPage', '搜索已安装技能'))
+        self.search.setAccessibleName(QCoreApplication.translate('SkillsPage', '搜索已安装技能'))
         self.search.textChanged.connect(self._filter_list)
         overview.addWidget(self.search, 1)
-        self.add_btn = QPushButton("＋ 添加")
+        self.add_btn = QPushButton()
         add_menu = QMenu(self.add_btn)
-        add_menu.addAction("创建技能", self._add_skill)
-        self.import_btn = add_menu.addAction("导入 SKILL.md / ZIP", self._import_skill_picker)
-        self.add_btn.setMenu(add_menu)
+        add_menu.addAction(QCoreApplication.translate('SkillsPage', '创建技能'), self._add_skill)
+        self.import_btn = add_menu.addAction(QCoreApplication.translate('SkillsPage', '导入 SKILL.md / ZIP'), self._import_skill_picker)
+        configure_menu_button(self.add_btn, add_menu, Icons.get(Icons.PLUS), QCoreApplication.translate('SkillsPage', '添加'))
         overview.addWidget(self.add_btn)
-        more = QPushButton("更多")
+        more = QToolButton()
+        more.setObjectName("resource_more_button")
         menu = QMenu(more)
-        menu.addAction("重新扫描", self._refresh_list)
-        menu.addAction("查看技能", lambda: self._set_view("active"))
-        menu.addAction("候选方法", lambda: self._set_view("candidates"))
-        more.setMenu(menu)
+        menu.addAction(QCoreApplication.translate('SkillsPage', '重新扫描'), self._refresh_list)
+        menu.addAction(QCoreApplication.translate('SkillsPage', '查看技能'), lambda: self._set_view("active"))
+        menu.addAction(QCoreApplication.translate('SkillsPage', '候选方法'), lambda: self._set_view("candidates"))
+        configure_menu_button(more, menu, Icons.get_muted(Icons.MORE), QCoreApplication.translate('SkillsPage', '更多技能操作'))
         overview.addWidget(more)
         body.toolbar_layout.addLayout(overview)
         toolbar = SettingsActionBar(spacing=4)
-        self.edit_btn = toolbar.add_icon_action("编辑技能", Icons.get(Icons.EDIT), self._open_skill_file)
-        self.toggle_btn = toolbar.add_icon_action("停用技能", Icons.get(Icons.PAUSE), self._toggle_skill_enabled)
+        self.edit_btn = toolbar.add_icon_action(QCoreApplication.translate('SkillsPage', '编辑技能'), Icons.get(Icons.EDIT), self._open_skill_file)
+        self.toggle_btn = toolbar.add_icon_action(QCoreApplication.translate('SkillsPage', '停用技能'), Icons.get(Icons.PAUSE), self._toggle_skill_enabled)
         self.delete_btn = toolbar.add_icon_action(
-            "删除技能",
-            Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR),
+            QCoreApplication.translate('SkillsPage', '删除技能'),
+            Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR),
             self._delete_skill,
             danger=True,
         )
@@ -256,16 +250,16 @@ class SkillsPage(QWidget):
         self.preview.setObjectName("resource_preview")
         self.preview.setFrameShape(ThemedTextEdit.Shape.NoFrame)
         self.preview.setReadOnly(True)
-        self.preview.setPlaceholderText("选择技能查看内容")
+        self.preview.setPlaceholderText(QCoreApplication.translate('SkillsPage', '选择技能查看内容'))
         right.addWidget(self.preview)
         candidate_actions = QHBoxLayout()
-        self.evaluate_btn = QPushButton("对照试验")
+        self.evaluate_btn = QPushButton(QCoreApplication.translate('SkillsPage', '对照试验'))
         self.evaluate_btn.clicked.connect(self._evaluate_candidate)
         candidate_actions.addWidget(self.evaluate_btn)
-        self.publish_btn = QPushButton("发布")
+        self.publish_btn = QPushButton(QCoreApplication.translate('SkillsPage', '发布'))
         self.publish_btn.clicked.connect(lambda: self._publish_candidate())
         candidate_actions.addWidget(self.publish_btn)
-        self.rollback_btn = QPushButton("回滚")
+        self.rollback_btn = QPushButton(QCoreApplication.translate('SkillsPage', '回滚'))
         self.rollback_btn.clicked.connect(lambda: self._publish_candidate(rollback=True))
         candidate_actions.addWidget(self.rollback_btn)
         for button in (self.evaluate_btn, self.publish_btn, self.rollback_btn):
@@ -277,7 +271,7 @@ class SkillsPage(QWidget):
     def _set_view(self, view: str) -> None:
         self._view = view
         self.search.clear()
-        label = "搜索候选方法" if view == "candidates" else "搜索已安装技能"
+        label = QCoreApplication.translate('SkillsPage', '搜索候选方法') if view == "candidates" else QCoreApplication.translate('SkillsPage', '搜索已安装技能')
         self.search.setPlaceholderText(label)
         self.search.setAccessibleName(label)
         self.list_body.show_list()
@@ -300,13 +294,13 @@ class SkillsPage(QWidget):
             for candidate in self._candidates:
                 item = QListWidgetItem(candidate["name"])
                 item.setData(Qt.ItemDataRole.UserRole, candidate["id"])
-                item.setToolTip(candidate.get("reason") or "待试验的方法")
+                item.setToolTip(candidate.get("reason") or QCoreApplication.translate('SkillsPage', '待试验的方法'))
                 self.skill_list.addItem(item)
             self._sync_actions(None)
             if self.skill_list.count():
                 self.skill_list.setCurrentRow(0)
             else:
-                self.description_label.setText("暂无候选方法。自动整理提出的方法会先保留在这里，通过对照试验后再发布。")
+                self.description_label.setText(QCoreApplication.translate('SkillsPage', '暂无候选方法。自动整理提出的方法会先保留在这里，通过对照试验后再发布。'))
             return
         self._skills = list(
             self._service.list_for_workdir(self._work_dir, include_disabled=True)
@@ -321,28 +315,26 @@ class SkillsPage(QWidget):
 
         self.skill_list.clear()
         self.skill_list.setToolTip(
-            f"已发现 {len(self._skills)} 个技能\n"
-            f"全局目录：{get_global_subdir('skills')}\n"
-            f"项目目录：{resolve_project_data_root(self._work_dir, data_dir=getattr(self._service, 'data_dir', None)) / 'skills'}"
+            QCoreApplication.translate('SkillsPage', '已发现 {value} 个技能\n全局目录：{value_}\n项目目录：{value__}').format(value=len(self._skills), value_=get_global_subdir('skills'), value__=resolve_project_data_root(self._work_dir, data_dir=getattr(self._service, 'data_dir', None)) / 'skills')
         )
         for skill in self._skills:
             enabled = bool(getattr(skill, "enabled", True))
-            status = "启用" if enabled else "停用"
+            status = QCoreApplication.translate('SkillsPage', '已启用') if enabled else QCoreApplication.translate('SkillsPage', '已停用')
             item = SettingsStatusListItem(skill.name)
             item.set_status(
                 skill.name,
                 enabled=enabled,
                 detail=self._source_scope(skill),
-                tooltip=f"状态：{status}\n来源：{skill.source}\n说明：{skill.description or '-'}",
+                tooltip=QCoreApplication.translate('SkillsPage', '状态：{status}\n来源：{source}\n说明：{value}').format(status=status, source=skill.source, value=skill.description or '-'),
                 two_lines=True,
             )
-            item.setData(RESOURCE_DESCRIPTION_ROLE, skill.description or "暂无说明")
+            item.setData(RESOURCE_DESCRIPTION_ROLE, skill.description or QCoreApplication.translate('SkillsPage', '暂无说明'))
             item.setData(RESOURCE_TOGGLE_ROLE, "skill" if not skill.read_only or skill.source_scope == "bundled" else "")
             self.skill_list.addItem(item)
 
         if self.skill_list.count() == 0:
-            self.source_label.setText("暂无技能")
-            self.description_label.setText("可以新增一个全局技能，或把目录型 SKILL.md 放入项目 .pycat/skills。")
+            self.source_label.setText(QCoreApplication.translate('SkillsPage', '暂无技能'))
+            self.description_label.setText(QCoreApplication.translate('SkillsPage', '可以添加一个全局技能，或把目录型 SKILL.md 放入项目 .pycat/skills。'))
             self.preview.clear()
             self._sync_actions(None)
             return
@@ -373,13 +365,13 @@ class SkillsPage(QWidget):
             if candidate:
                 try:
                     detail = self._service.candidate_detail(candidate["id"], work_dir=self._work_dir, scope=candidate["scope"])
-                    status = {"draft": "待试验", "passed": "试验通过", "failed": "试验未通过", "published": "已发布", "rolled_back": "已回滚",
-                              "publishing": "发布中断，可继续发布", "rolling_back": "回退中断，可继续回退"}.get(detail["status"], "存储不可读")
+                    status = {"draft": QCoreApplication.translate('SkillsPage', '待试验'), "passed": QCoreApplication.translate('SkillsPage', '试验通过'), "failed": QCoreApplication.translate('SkillsPage', '试验未通过'), "published": QCoreApplication.translate('SkillsPage', '已发布'), "rolled_back": QCoreApplication.translate('SkillsPage', '已回滚'),
+                              "publishing": QCoreApplication.translate('SkillsPage', '发布中断，可继续发布'), "rolling_back": QCoreApplication.translate('SkillsPage', '回退中断，可继续回退')}.get(detail["status"], QCoreApplication.translate('SkillsPage', '存储不可读'))
                     self.source_label.setText(status)
                     self.description_label.setText(detail["description"])
-                    self.preview.setPlainText("\n".join(difflib.unified_diff(detail["before"].splitlines(), detail["after"].splitlines(), fromfile="原方法", tofile="候选方法", lineterm="")))
+                    self.preview.setPlainText("\n".join(difflib.unified_diff(detail["before"].splitlines(), detail["after"].splitlines(), fromfile=QCoreApplication.translate('SkillsPage', '原方法'), tofile=QCoreApplication.translate('SkillsPage', '候选方法'), lineterm="")))
                 except (OSError, ValueError, KeyError) as exc:
-                    self.source_label.setText(f"存储不可读：{exc}")
+                    self.source_label.setText(QCoreApplication.translate('SkillsPage', '存储不可读：{exc}').format(exc=exc))
             return
         if not current:
             self.preview.clear()
@@ -394,10 +386,10 @@ class SkillsPage(QWidget):
             include_disabled=True,
         )
         if skill:
-            status = "启用" if getattr(skill, "enabled", True) else "停用"
+            status = QCoreApplication.translate('SkillsPage', '已启用') if getattr(skill, "enabled", True) else QCoreApplication.translate('SkillsPage', '已停用')
             usage_line = self._usage_summary(skill)
-            source_text = f"{self._source_scope(skill)} · 已{status}"
-            self.source_label.setToolTip(f"文件：{skill.source}")
+            source_text = f"{self._source_scope(skill)} · {status}"
+            self.source_label.setToolTip(QCoreApplication.translate('SkillsPage', '文件：{source}').format(source=skill.source))
             if usage_line:
                 source_text += f"\n{usage_line}"
             self.source_label.setText(source_text)
@@ -459,14 +451,14 @@ class SkillsPage(QWidget):
         if not record:
             return ""
         created_by = str(record.get("created_by") or "user")
-        creator_label = {"user": "用户", "agent": "agent", "import": "导入"}.get(created_by, created_by)
+        creator_label = {"user": QCoreApplication.translate('SkillsPage', '用户'), "agent": "agent", "import": QCoreApplication.translate('SkillsPage', '导入')}.get(created_by, created_by)
         loads = record.get("load_count")
-        parts = [f"创建者: {creator_label}"]
+        parts = [QCoreApplication.translate('SkillsPage', '创建者: {creator_label}').format(creator_label=creator_label)]
         if isinstance(loads, int):
-            parts.append(f"加载 {loads} 次")
+            parts.append(QCoreApplication.translate('SkillsPage', '加载 {loads} 次').format(loads=loads))
         last_used = str(record.get("last_used_at") or "").strip()
         if last_used:
-            parts.append(f"最近使用 {last_used[:10]}")
+            parts.append(QCoreApplication.translate('SkillsPage', '最近使用 {value}').format(value=last_used[:10]))
         return " · ".join(parts)
 
     def _current_skill(self):
@@ -484,19 +476,15 @@ class SkillsPage(QWidget):
         editable = has_selection and not bool(getattr(skill, "read_only", False))
         self.edit_btn.setEnabled(self._skill_file(skill) is not None)
         self.toggle_btn.setEnabled(editable or getattr(skill, "source_scope", "") == "bundled")
-        edit_label = "复制为用户技能后编辑" if has_selection and skill.read_only else "编辑技能"
+        edit_label = QCoreApplication.translate('SkillsPage', '复制为用户技能后编辑') if has_selection and skill.read_only else QCoreApplication.translate('SkillsPage', '编辑技能')
         self.edit_btn.setToolTip(edit_label)
         self.edit_btn.setAccessibleName(edit_label)
         self.delete_btn.setEnabled(editable and self._skill_root(skill) is not None)
         enabled = bool(getattr(skill, "enabled", True)) if skill is not None else True
-        action_label = "停用技能" if enabled else "启用技能"
+        action_label = QCoreApplication.translate('SkillsPage', '停用技能') if enabled else QCoreApplication.translate('SkillsPage', '启用技能')
         self.toggle_btn.setToolTip(action_label)
         self.toggle_btn.setAccessibleName(action_label)
         self.toggle_btn.setIcon(Icons.get(Icons.PAUSE if enabled else Icons.PLAY, scale_factor=1.0))
-
-    def _open_selected_item(self, item: QListWidgetItem) -> None:
-        self.skill_list.setCurrentItem(item)
-        self._open_skill_file()
 
     def _open_skill_file(self) -> None:
         skill = self._current_skill()
@@ -504,7 +492,7 @@ class SkillsPage(QWidget):
             try:
                 self._service.copy_to_managed(skill.name, work_dir=self._work_dir)
             except Exception as exc:
-                QMessageBox.warning(self, "复制技能失败", str(exc))
+                QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '复制技能失败'), str(exc))
                 return
             self._refresh_list()
             self._select_skill(skill.name)
@@ -527,7 +515,7 @@ class SkillsPage(QWidget):
                 work_dir=self._work_dir,
             )
         except Exception as exc:
-            QMessageBox.warning(self, "创建技能失败", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '创建技能失败'), str(exc))
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(skill_file)))
         self._refresh_list()
@@ -536,9 +524,9 @@ class SkillsPage(QWidget):
     def _import_skill_picker(self) -> None:
         path, _selected = QFileDialog.getOpenFileName(
             self,
-            "选择技能文件",
+            QCoreApplication.translate('SkillsPage', '选择技能文件'),
             "",
-            "技能文件 (*.md *.zip);;所有文件 (*)",
+            QCoreApplication.translate('SkillsPage', '技能文件 (*.md *.zip);;所有文件 (*)'),
         )
         if not path:
             return
@@ -546,7 +534,7 @@ class SkillsPage(QWidget):
 
     def _on_skill_sources_dropped(self, sources: list[Path]) -> None:
         if len(sources) > 1:
-            QMessageBox.warning(self, "导入技能", "一次只能导入一个技能文件或压缩包。")
+            QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '导入技能'), QCoreApplication.translate('SkillsPage', '一次只能导入一个技能文件或压缩包。'))
             return
         if not sources:
             return
@@ -555,15 +543,15 @@ class SkillsPage(QWidget):
     def _import_skill_source(self, source: Path) -> None:
         source = Path(source)
         if not source.exists():
-            QMessageBox.warning(self, "导入技能", "导入来源不存在。")
+            QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '导入技能'), QCoreApplication.translate('SkillsPage', '导入来源不存在。'))
             return
         is_zip = source.is_file() and source.suffix.lower() == ".zip"
         is_md_file = source.is_file() and source.suffix.lower() == ".md"
         if not is_zip and not is_md_file and not source.is_dir():
             QMessageBox.warning(
                 self,
-                "导入技能",
-                "只支持 .md 技能文件、包含 SKILL.md 的目录或 .zip 压缩包。",
+                QCoreApplication.translate('SkillsPage', '导入技能'),
+                QCoreApplication.translate('SkillsPage', '只支持 .md 技能文件、包含 SKILL.md 的目录或 .zip 压缩包。'),
             )
             return
         dialog = SkillImportDialog(
@@ -585,8 +573,8 @@ class SkillsPage(QWidget):
         except FileExistsError:
             answer = QMessageBox.question(
                 self,
-                "技能已存在",
-                "同名技能已存在，是否覆盖？",
+                QCoreApplication.translate('SkillsPage', '技能已存在'),
+                QCoreApplication.translate('SkillsPage', '同名技能已存在，是否覆盖？'),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -600,12 +588,12 @@ class SkillsPage(QWidget):
                     overwrite=True,
                 )
             except Exception as exc:
-                QMessageBox.warning(self, "导入技能失败", str(exc))
+                QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '导入技能失败'), str(exc))
                 return
         except Exception as exc:
-            QMessageBox.warning(self, "导入技能失败", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '导入技能失败'), str(exc))
             return
-        QMessageBox.information(self, "导入技能", f"已导入技能：\n{skill_file}")
+        QMessageBox.information(self, QCoreApplication.translate('SkillsPage', '导入技能'), QCoreApplication.translate('SkillsPage', '已导入技能：\n{skill_file}').format(skill_file=skill_file))
         self._refresh_list()
         self._select_skill(skill_file.parent.name)
 
@@ -621,7 +609,7 @@ class SkillsPage(QWidget):
                 work_dir=self._work_dir,
             )
         except Exception as exc:
-            QMessageBox.warning(self, "技能状态更新失败", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '技能状态更新失败'), str(exc))
             return
         name = skill.name
         self._refresh_list()
@@ -634,14 +622,14 @@ class SkillsPage(QWidget):
             return
         if QMessageBox.question(
             self,
-            "删除技能",
-            f'确定删除技能 "{skill.name}" 吗？\n{root}',
+            QCoreApplication.translate("SkillsPage", "删除技能"),
+            QCoreApplication.translate("SkillsPage", '确定删除技能 "{name}" 吗？\n{root}').format(name=skill.name, root=root),
         ) != QMessageBox.StandardButton.Yes:
             return
         try:
             self._service.delete_managed(skill, work_dir=self._work_dir)
         except Exception as exc:
-            QMessageBox.warning(self, "删除技能失败", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '删除技能失败'), str(exc))
             return
         self._refresh_list()
 
@@ -691,25 +679,25 @@ class SkillsPage(QWidget):
     def _source_scope(self, skill) -> str:
         scope = str(getattr(skill, "source_scope", "") or "").strip().lower()
         if scope == "project":
-            return "项目"
+            return QCoreApplication.translate('SkillsPage', '项目')
         if scope == "global":
-            return "全局"
+            return QCoreApplication.translate('SkillsPage', '全局')
         if scope == "external":
-            return "外部"
+            return QCoreApplication.translate('SkillsPage', '外部')
         if scope == "bundled":
-            return "内置"
+            return QCoreApplication.translate('SkillsPage', '内置')
         root = self._skill_root(skill)
         if root is None:
-            return "外部"
+            return QCoreApplication.translate('SkillsPage', '外部')
         try:
             if str(self._work_dir or "").strip():
                 try:
                     root.relative_to((resolve_project_data_root(self._work_dir, data_dir=getattr(self._service, "data_dir", None)) / "skills").resolve())
-                    return "项目"
+                    return QCoreApplication.translate('SkillsPage', '项目')
                 except ValueError:
                     pass
             root.relative_to(get_global_subdir("skills").resolve())
-            return "全局"
+            return QCoreApplication.translate('SkillsPage', '全局')
         except ValueError:
-            return "外部"
-        return "外部"
+            return QCoreApplication.translate('SkillsPage', '外部')
+        return QCoreApplication.translate('SkillsPage', '外部')

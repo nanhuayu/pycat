@@ -1,7 +1,8 @@
 """Tavily AI search provider."""
 
+from typing import Any, Dict, List
+
 import httpx
-from typing import List, Dict, Any
 
 from pycat.core.app.services.search_providers.base import BaseSearchProvider, SearchResult
 

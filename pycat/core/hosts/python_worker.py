@@ -1,4 +1,4 @@
-"""Hidden Python execution worker shared by main and python__exec."""
+"""Hidden Python worker shared by tools and bounded document parsing."""
 from __future__ import annotations
 
 import os

@@ -1,14 +1,13 @@
 """Category-based tri-state permission editor backed by ToolDescriptor metadata."""
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
-    QHeaderView,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
-    QLineEdit,
     QPushButton,
     QToolButton,
     QTreeWidget,
@@ -21,12 +20,12 @@ from pycat.core.tools.manager import ToolManager
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button
+from pycat.gui.view_models.tooling_labels import risk_level_label, tool_category_label, tool_display_name
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
 from pycat.models.contracts.capability import CapabilitiesConfig
 from pycat.models.contracts.tooling import (
-    RISK_LEVEL_LABELS,
     TOOL_CATEGORIES,
-    TOOL_CATEGORY_LABELS,
     TOOL_CATEGORY_SORT_ORDER,
     ToolDescriptor,
     ToolPermissionConfig,
@@ -68,14 +67,14 @@ class PermissionsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
-        root.addWidget(build_page_header("工具规则（高级）", "这里维护“自定义规则”；会话级工具操作和文件范围在输入区选择，Mode 决定工具上限。"))
+        root.addWidget(build_page_header(QCoreApplication.translate('PermissionsPage', '工具规则（高级）'), QCoreApplication.translate('PermissionsPage', '这里维护“自定义规则”；会话级工具操作和文件范围在输入区选择，Mode 决定工具上限。')))
 
         preset_row = QHBoxLayout()
         preset_row.setSpacing(8)
         for text, callback in (
-            ("安全默认", self._fill_safe_defaults),
-            ("全部确认", self._fill_all_ask),
-            ("全部允许工具", self._fill_all_allow),
+            (QCoreApplication.translate('PermissionsPage', '安全默认'), self._fill_safe_defaults),
+            (QCoreApplication.translate('PermissionsPage', '全部确认'), self._fill_all_ask),
+            (QCoreApplication.translate('PermissionsPage', '全部允许工具'), self._fill_all_allow),
         ):
             button = QPushButton(text)
             button.setObjectName("settings_action_btn")
@@ -85,8 +84,7 @@ class PermissionsPage(QWidget):
         root.addLayout(preset_row)
 
         self.warning_label = QLabel(
-            "“全部允许工具”只填充自定义工具规则，不会改变会话的工具操作或文件范围，也不授予工作区外路径。"
-            "Channel 仍受无人值守安全上限约束；Mode、会话和父 Agent 的工具范围也不会被扩大。"
+            QCoreApplication.translate('PermissionsPage', '“全部允许工具”只填充自定义工具规则，不会改变会话的工具操作或文件范围，也不授予工作区外路径。Channel 仍受无人值守安全上限约束；Mode、会话和父 Agent 的工具范围也不会被扩大。')
         )
         self.warning_label.setObjectName("permission_warning")
         self.warning_label.setProperty("warning", True)
@@ -94,7 +92,7 @@ class PermissionsPage(QWidget):
         root.addWidget(self.warning_label)
 
         self.search_edit = ThemedLineEdit()
-        self.search_edit.setPlaceholderText("搜索工具名称、技术 ID、类别或来源")
+        self.search_edit.setPlaceholderText(QCoreApplication.translate('PermissionsPage', '搜索工具名称、技术 ID、类别或来源'))
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._filter_rows)
         root.addWidget(self.search_edit)
@@ -102,7 +100,7 @@ class PermissionsPage(QWidget):
         self.tree = QTreeWidget()
         self.tree.setObjectName("permission_tree")
         self.tree.setColumnCount(6)
-        self.tree.setHeaderLabels(["工具", "类别", "来源", "风险", "策略", ""])
+        self.tree.setHeaderLabels([QCoreApplication.translate('PermissionsPage', '工具'), QCoreApplication.translate('PermissionsPage', '类别'), QCoreApplication.translate('PermissionsPage', '来源'), QCoreApplication.translate('PermissionsPage', '风险'), QCoreApplication.translate('PermissionsPage', '策略'), ""])
         self.tree.setAlternatingRowColors(True)
         self.tree.setRootIsDecorated(True)
         self.tree.setUniformRowHeights(False)
@@ -123,7 +121,7 @@ class PermissionsPage(QWidget):
             descriptors,
             key=lambda item: (
                 TOOL_CATEGORY_SORT_ORDER.get(item.category, 999),
-                item.display_name.lower(),
+                tool_display_name(item).lower(),
                 item.name,
             ),
         )
@@ -145,10 +143,10 @@ class PermissionsPage(QWidget):
                     continue
                 policy = self._category_defaults.get(category, ToolPolicy())
                 parent = QTreeWidgetItem(self.tree)
-                parent.setText(0, f"{TOOL_CATEGORY_LABELS.get(category, category)} ({len(children)})")
-                parent.setText(1, TOOL_CATEGORY_LABELS.get(category, category))
-                parent.setText(2, "全局")
-                parent.setText(3, "混合")
+                parent.setText(0, f"{tool_category_label(category)} ({len(children)})")
+                parent.setText(1, tool_category_label(category))
+                parent.setText(2, QCoreApplication.translate('PermissionsPage', '全局'))
+                parent.setText(3, QCoreApplication.translate('PermissionsPage', '混合'))
                 font = QFont(parent.font(0))
                 font.setBold(True)
                 parent.setFont(0, font)
@@ -159,20 +157,18 @@ class PermissionsPage(QWidget):
                 self.tree.setItemWidget(parent, 4, action_combo)
 
                 reset = QToolButton()
-                reset.setIcon(Icons.get(Icons.REFRESH))
-                reset.setAutoRaise(True)
-                reset.setFixedSize(24, 24)
-                reset.setToolTip("恢复该类别默认值")
+                configure_icon_button(reset, Icons.get_muted(Icons.REFRESH),
+                                      QCoreApplication.translate('PermissionsPage', '恢复该类别默认值'))
                 reset.clicked.connect(lambda _checked=False, category=category: self._reset_category(category))
                 self.tree.setItemWidget(parent, 5, reset)
                 self._category_rows[category] = {"item": parent, "action": action_combo}
 
                 for descriptor in children:
                     child = QTreeWidgetItem(parent)
-                    child.setText(0, descriptor.display_name or descriptor.name)
-                    child.setText(1, TOOL_CATEGORY_LABELS.get(descriptor.category, descriptor.category))
+                    child.setText(0, tool_display_name(descriptor))
+                    child.setText(1, tool_category_label(descriptor.category))
                     child.setText(2, descriptor.source)
-                    child.setText(3, RISK_LEVEL_LABELS.get(descriptor.risk, descriptor.risk))
+                    child.setText(3, risk_level_label(descriptor.risk))
                     child.setToolTip(0, f"{descriptor.name}\n{descriptor.description}")
                     child.setData(0, Qt.ItemDataRole.UserRole, descriptor.name)
 
@@ -185,10 +181,8 @@ class PermissionsPage(QWidget):
                     self.tree.setItemWidget(child, 4, tool_combo)
 
                     tool_reset = QToolButton()
-                    tool_reset.setIcon(Icons.get(Icons.REFRESH))
-                    tool_reset.setAutoRaise(True)
-                    tool_reset.setFixedSize(24, 24)
-                    tool_reset.setToolTip("重置为类别继承")
+                    configure_icon_button(tool_reset, Icons.get_muted(Icons.REFRESH),
+                                          QCoreApplication.translate('PermissionsPage', '重置为类别继承'))
                     tool_reset.clicked.connect(
                         lambda _checked=False, tool_name=descriptor.name: self._reset_tool(tool_name)
                     )
@@ -203,16 +197,20 @@ class PermissionsPage(QWidget):
         finally:
             self._loading = False
 
-    _ACTION_ITEMS = (("放行", "allow"), ("确认", "ask"), ("禁用", "deny"))
-    _ACTION_LABELS = {"allow": "放行", "ask": "确认", "deny": "禁用"}
+    _ACTION_LABELS = {
+        "allow": QT_TRANSLATE_NOOP("PermissionsPage", "放行"),
+        "ask": QT_TRANSLATE_NOOP("PermissionsPage", "确认"),
+        "deny": QT_TRANSLATE_NOOP("PermissionsPage", "禁用"),
+    }
 
     @classmethod
     def _action_combo(cls, action: str, *, inherited: str | None) -> QComboBox:
         combo = QComboBox()
         if inherited is not None:
-            combo.addItem(f"继承（{cls._ACTION_LABELS.get(inherited, inherited)}）", "inherit")
-        for label, value in cls._ACTION_ITEMS:
-            combo.addItem(label, value)
+            label = QCoreApplication.translate("PermissionsPage", cls._ACTION_LABELS.get(inherited, inherited))
+            combo.addItem(QCoreApplication.translate('PermissionsPage', '继承（{value}）').format(value=label), "inherit")
+        for value, label in cls._ACTION_LABELS.items():
+            combo.addItem(QCoreApplication.translate("PermissionsPage", label), value)
         if inherited is not None and action == "inherit":
             combo.setCurrentIndex(0)
         else:
@@ -253,7 +251,7 @@ class PermissionsPage(QWidget):
         for category, controls in self._category_rows.items():
             parent = controls["item"]
             category_match = needle in " ".join(
-                (category, TOOL_CATEGORY_LABELS.get(category, category))
+                (category, tool_category_label(category))
             ).lower()
             visible_children = 0
             for index in range(parent.childCount()):
@@ -265,6 +263,7 @@ class PermissionsPage(QWidget):
                     (
                         getattr(descriptor, "name", ""),
                         getattr(descriptor, "display_name", ""),
+                        child.text(0),
                         getattr(descriptor, "category", ""),
                         getattr(descriptor, "source", ""),
                         getattr(descriptor, "description", ""),
@@ -296,6 +295,3 @@ class PermissionsPage(QWidget):
             category_defaults=dict(self._category_defaults),
             tools=dict(self._overrides),
         )
-
-    def _reset_defaults(self) -> None:
-        self._fill_safe_defaults()

@@ -1,14 +1,14 @@
 """Host-owned agent-browser session boundaries; no parallel tool executor."""
-from copy import deepcopy
-from dataclasses import replace
-from importlib.resources import files
 import asyncio
 import os
 import subprocess
+from copy import deepcopy
+from dataclasses import replace
+from importlib.resources import files
+
 import psutil
 
 from pycat.models.contracts.mcp import McpServerConfig
-
 
 ALLOWED_TOOLS = {"agent_browser_" + name for name in (
     "tools_profiles", "open", "read", "snapshot", "back", "forward", "reload", "click", "fill", "type",

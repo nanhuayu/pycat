@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 from pathlib import Path
 
+from pycat.core.persistence import atomic_write_text
 from pycat.models.provider import PROVIDER_SCHEMA_VERSION, Provider
 
 logger = logging.getLogger(__name__)
@@ -55,29 +54,15 @@ class ProviderRepository:
         return []
 
     def save(self, providers: list[Provider]) -> bool:
-        temp_name = ""
         try:
             payload = {
                 "schema_version": PROVIDER_SCHEMA_VERSION,
                 "providers": [provider.to_dict() for provider in providers],
             }
-            fd, temp_name = tempfile.mkstemp(
-                prefix=".providers.",
-                suffix=".tmp",
-                dir=str(self.data_dir),
-                text=True,
-            )
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(json.dumps(payload, ensure_ascii=False, indent=2))
-            os.replace(temp_name, self.providers_file)
+            atomic_write_text(self.providers_file, json.dumps(payload, ensure_ascii=False, indent=2))
             self._loaded_schema_version = PROVIDER_SCHEMA_VERSION
             self._has_catalog = True
             return True
         except Exception as exc:
             logger.warning("Error saving providers: %s", exc)
-            try:
-                if temp_name:
-                    Path(temp_name).unlink(missing_ok=True)
-            except Exception:
-                pass
             return False

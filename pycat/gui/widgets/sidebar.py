@@ -1,16 +1,38 @@
 """Painted project/conversation navigation over repository summaries."""
 from __future__ import annotations
-import os
+
 from pathlib import Path
-from PyQt6.QtCore import QEvent, QRect, QSize, Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QFont, QPainter, QColor
-from PyQt6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QInputDialog, QListWidget,
-    QListWidgetItem, QMenu, QMessageBox, QPushButton, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget)
-from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.utils.display_text import single_line
-from pycat.gui.utils.theme import prepare_context_menu, resolve_accent, resolve_theme, theme_colors
-from pycat.gui.widgets.themed_line_edit import SearchLineEdit
+
+from PyQt6.QtCore import QCoreApplication, QEvent, QRect, QSize, Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor, QDesktopServices, QFont, QPainter
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QInputDialog,
+    QListWidget,
+    QListWidgetItem,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QVBoxLayout,
+    QWidget,
+)
+
 from pycat.core.content.export import CONVERSATION_FORMATS
+from pycat.gui.utils.display_text import single_line
+from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import (
+    COMPACT_CONTROL_HEIGHT,
+    prepare_context_menu,
+    resolve_accent,
+    resolve_theme,
+    theme_colors,
+)
+from pycat.gui.widgets.themed_line_edit import SearchLineEdit
 from pycat.models.workspace import WorkspaceLocation, workspace_identity
 
 TITLE_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -20,6 +42,7 @@ RUNNING_ROLE = Qt.ItemDataRole.UserRole + 4
 KIND_ROLE = Qt.ItemDataRole.UserRole + 5
 EXPANDED_ROLE = Qt.ItemDataRole.UserRole + 6
 WAITING_ROLE = Qt.ItemDataRole.UserRole + 7
+SECTION_ROLE = Qt.ItemDataRole.UserRole + 8
 
 
 def project_key(path: str) -> str:
@@ -31,7 +54,7 @@ class ConversationItem(QListWidgetItem):
     def __init__(self, data: dict):
         super().__init__()
         self.conversation_data = data
-        self.title = str(data.get("title") or "无标题")
+        self.title = str(data.get("title") or QCoreApplication.translate('Sidebar', "无标题"))
         self.work_dir = str(data.get("work_dir") or "")
         self.setText(self.title)
         self.setData(TITLE_ROLE, self.title)
@@ -40,16 +63,17 @@ class ConversationItem(QListWidgetItem):
         self.setData(HAS_WORK_DIR_ROLE, bool(self.work_dir))
         self.setData(RUNNING_ROLE, False)
         self.setSizeHint(QSize(0, 36))
-        self._base_tooltip = f"{self.title}\n{self.work_dir or '个人空间'}\nSession ID: {data.get('id', '')}"
+        location = self.work_dir or QCoreApplication.translate("Sidebar", "个人空间")
+        self._base_tooltip = f"{self.title}\n{location}\nSession ID: {data.get('id', '')}"
         if data.get("archived"):
-            self._base_tooltip += "\n已归档"
+            self._base_tooltip += QCoreApplication.translate('Sidebar', "\n已归档")
         self.setToolTip(self._base_tooltip)
 
     def set_runtime_state(self, streaming, waiting=False):
         self.setData(RUNNING_ROLE, bool(streaming))
         self.setData(WAITING_ROLE, bool(waiting))
-        status = "等待你的回复" if waiting else "正在生成" if streaming else ""
-        self.setToolTip(self._base_tooltip + (f"\n状态: {status}" if status else ""))
+        status = QCoreApplication.translate('Sidebar', "等待你的回复") if waiting else QCoreApplication.translate('Sidebar', "正在生成") if streaming else ""
+        self.setToolTip(self._base_tooltip + (QCoreApplication.translate('Sidebar', '\n状态: {status}').format(status=status) if status else ""))
         self.setData(Qt.ItemDataRole.AccessibleTextRole, f"{self.title}，{status}" if status else self.title)
 
     def matches_search(self, query):
@@ -62,7 +86,7 @@ class ConversationItem(QListWidgetItem):
             text = str(entry.get("text") or "")
             index = text.casefold().find(query)
             if index >= 0:
-                role = "你" if entry.get("role") == "user" else "助手"
+                role = QCoreApplication.translate('Sidebar', "你") if entry.get("role") == "user" else QCoreApplication.translate('Sidebar', "助手")
                 self.setData(META_ROLE, f"{role}：{text[max(0, index - 18):index + len(query) + 54]}")
                 return True
         return False
@@ -118,7 +142,7 @@ class ConversationItemDelegate(QStyledItemDelegate):
         action_rect = QRect(rect.right() - 22, rect.top() + 8, 16, 16)
         if waiting:
             painter.setPen(QColor(colors["primary"]))
-            painter.drawText(QRect(rect.right() - 76, rect.top(), 50, 32), Qt.AlignmentFlag.AlignVCenter, "待回复")
+            painter.drawText(QRect(rect.right() - 76, rect.top(), 50, 32), Qt.AlignmentFlag.AlignVCenter, QCoreApplication.translate('Sidebar', "待回复"))
         if kind == "section":
             Icons.get_muted(Icons.PLUS).paint(painter, action_rect)
         elif hovered:
@@ -175,34 +199,32 @@ class Sidebar(QWidget):
         self.brand_btn.setObjectName("brand_btn")
         self.brand_btn.setIcon(Icons.brand())
         self.brand_btn.setIconSize(QSize(28, 28))
-        self.brand_btn.setToolTip("关于 PyCat")
-        self.brand_btn.setAccessibleName("关于 PyCat")
+        self.brand_btn.setToolTip(QCoreApplication.translate('Sidebar', "关于 PyCat"))
+        self.brand_btn.setAccessibleName(QCoreApplication.translate('Sidebar', "关于 PyCat"))
         self.brand_btn.clicked.connect(self.about_requested)
         brand.addWidget(self.brand_btn)
         brand.addStretch()
         self.new_chat_btn = QPushButton()
         self.new_chat_btn.setObjectName("new_chat_btn")
         self.new_chat_btn.setIcon(Icons.get(Icons.PLUS))
-        self.new_chat_btn.setFixedSize(30, 30)
-        self.new_chat_btn.setToolTip("新建对话 · Ctrl+N")
-        self.new_chat_btn.setAccessibleName("新建对话")
+        self.new_chat_btn.setToolTip(QCoreApplication.translate('Sidebar', "新建对话 · Ctrl+N"))
+        self.new_chat_btn.setAccessibleName(QCoreApplication.translate('Sidebar', "新建对话"))
         self.new_chat_btn.clicked.connect(self.new_conversation)
         brand.addWidget(self.new_chat_btn)
         layout.addWidget(self.brand_row)
         self.search_btn = QPushButton()
         self.search_btn.setObjectName("sidebar_search_btn")
         self.search_btn.setIcon(Icons.get_muted(Icons.SEARCH))
-        self.search_btn.setFixedSize(36, 34)
-        self.search_btn.setToolTip("搜索对话")
-        self.search_btn.setAccessibleName("搜索对话")
+        self.search_btn.setToolTip(QCoreApplication.translate('Sidebar', "搜索对话"))
+        self.search_btn.setAccessibleName(QCoreApplication.translate('Sidebar', "搜索对话"))
         self.search_btn.clicked.connect(self.search_requested)
         self.search_btn.hide()
         layout.addWidget(self.search_btn)
         self.search_input = SearchLineEdit()
         self.search_input.setObjectName("search_input")
-        self.search_input.setPlaceholderText("搜索对话")
+        self.search_input.setPlaceholderText(QCoreApplication.translate('Sidebar', "搜索对话"))
         self.search_input.setClearButtonEnabled(True)
-        self.search_input.setFixedHeight(34)
+        self.search_input.setFixedHeight(COMPACT_CONTROL_HEIGHT)
         self.search_input.textChanged.connect(self._filter_conversations)
         layout.addWidget(self.search_input)
         self.conversation_list = QListWidget()
@@ -218,8 +240,12 @@ class Sidebar(QWidget):
         layout.addWidget(self.conversation_list, 1)
         layout.addStretch(0)
         self._rail_spacer_index = layout.count() - 1
-        for label, icon, signal in (("资料与记忆", Icons.BOOK, self.materials_requested), ("设置", Icons.SETTINGS, self.settings_requested)):
-            button = QPushButton(label)
+        separator = QFrame()
+        separator.setObjectName("sidebar_footer_separator")
+        separator.setFixedHeight(1)
+        layout.addWidget(separator)
+        for label, icon, signal in ((QCoreApplication.translate('Sidebar', "记忆与资料"), Icons.BOOKS, self.materials_requested), (QCoreApplication.translate('Sidebar', "设置"), Icons.SETTINGS, self.settings_requested)):
+            button = QPushButton(label.replace("&", "&&"))
             button.setIcon(Icons.get_muted(icon))
             button.setProperty("icon_name", icon)
             button.setObjectName("sidebar_footer_btn")
@@ -246,7 +272,7 @@ class Sidebar(QWidget):
         self.conversation_list.setVisible(not collapsed)
         self.layout().setStretch(self._rail_spacer_index, 1 if collapsed else 0)
         for button in self.findChildren(QPushButton, "sidebar_footer_btn"):
-            button.setText("" if collapsed else button.property("label"))
+            button.setText("" if collapsed else button.property("label").replace("&", "&&"))
 
     def refresh_theme(self):
         self.new_chat_btn.setIcon(Icons.get(Icons.PLUS))
@@ -282,10 +308,11 @@ class Sidebar(QWidget):
         self._all_conversations = conversations
         self._filter_conversations(self.search_input.text())
 
-    def _section(self, title):
+    def _section(self, key, title):
         item = QListWidgetItem(title)
         item.setData(TITLE_ROLE, title)
         item.setData(KIND_ROLE, "section")
+        item.setData(SECTION_ROLE, key)
         item.setFlags(Qt.ItemFlag.ItemIsEnabled)
         self.conversation_list.addItem(item)
 
@@ -316,13 +343,13 @@ class Sidebar(QWidget):
                     recent.append(row)
                 else:
                     groups.setdefault(path, []).append(row)
-            self._section("项目")
+            self._section("projects", QCoreApplication.translate('Sidebar', "项目"))
             for path in sorted(groups, key=lambda p: (p not in self._projects["pinned"], p.casefold())):
                 expanded = path not in self._projects["collapsed"]
                 self.conversation_list.addItem(ProjectItem(path, expanded=expanded, pinned=path in self._projects["pinned"]))
                 for row in groups[path]:
                     self._add_conversation(row, hidden=not expanded)
-            self._section("已归档" if self._show_archived else "最近")
+            self._section("conversations", QCoreApplication.translate('Sidebar', "已归档") if self._show_archived else QCoreApplication.translate('Sidebar', "最近"))
             for row in recent:
                 self._add_conversation(row)
         if current_id:
@@ -375,7 +402,7 @@ class Sidebar(QWidget):
                 right = self.conversation_list.visualItemRect(item).right() - pos.x()
                 if 0 <= right < 34:
                     if item.data(KIND_ROLE) == "section":
-                        self.add_project() if item.text() == "项目" else self.new_in_project.emit("")
+                        self.add_project() if item.data(SECTION_ROLE) == "projects" else self.new_in_project.emit("")
                     else:
                         self._show_context_menu(pos)
                     return True
@@ -393,10 +420,10 @@ class Sidebar(QWidget):
             menu = self._build_context_menu(item)
         elif isinstance(item, ProjectItem):
             menu = prepare_context_menu(QMenu(self), self)
-            menu.addAction("新建对话", lambda: self.new_in_project.emit(item.path))
-            menu.addAction("取消置顶" if item.pinned else "置顶项目", lambda: self._project_preference("pinned", item.path, not item.pinned))
-            menu.addAction("复制路径", lambda: QApplication.clipboard().setText(item.path))
-            menu.addAction("从侧边栏移除", lambda: self.set_project_hidden(item.path, True))
+            menu.addAction(QCoreApplication.translate('Sidebar', "新建对话"), lambda: self.new_in_project.emit(item.path))
+            menu.addAction(QCoreApplication.translate('Sidebar', "取消置顶") if item.pinned else QCoreApplication.translate('Sidebar', "置顶项目"), lambda: self._project_preference("pinned", item.path, not item.pinned))
+            menu.addAction(QCoreApplication.translate('Sidebar', "复制路径"), lambda: QApplication.clipboard().setText(item.path))
+            menu.addAction(QCoreApplication.translate('Sidebar', "从侧边栏移除"), lambda: self.set_project_hidden(item.path, True))
         else:
             menu = self.management_menu()
         try:
@@ -406,12 +433,12 @@ class Sidebar(QWidget):
 
     def management_menu(self):
         menu = prepare_context_menu(QMenu(self), self)
-        menu.addAction("新建个人对话", lambda: self.new_in_project.emit(""))
-        menu.addAction("添加项目", self.add_project)
-        menu.addAction("显示最近对话" if self._show_archived else "查看已归档", self._toggle_archived)
-        menu.addAction("导入 JSON…", self.prompt_import_conversation)
+        menu.addAction(QCoreApplication.translate('Sidebar', "新建个人对话"), lambda: self.new_in_project.emit(""))
+        menu.addAction(QCoreApplication.translate('Sidebar', "添加项目"), self.add_project)
+        menu.addAction(QCoreApplication.translate('Sidebar', "显示最近对话") if self._show_archived else QCoreApplication.translate('Sidebar', "查看已归档"), self._toggle_archived)
+        menu.addAction(QCoreApplication.translate('Sidebar', "导入 JSON…"), self.prompt_import_conversation)
         if self._projects["hidden"]:
-            submenu = menu.addMenu("恢复项目显示")
+            submenu = menu.addMenu(QCoreApplication.translate('Sidebar', "恢复项目显示"))
             for path in self._projects["hidden"]:
                 submenu.addAction(path, lambda checked=False, p=path: self.set_project_hidden(p, False))
         return menu
@@ -424,26 +451,26 @@ class Sidebar(QWidget):
     def _build_context_menu(self, item):
         menu = prepare_context_menu(QMenu(self), self)
         cid = str(item.conversation_data.get("id") or "")
-        menu.addAction("新建对话", lambda: self.new_in_project.emit(item.work_dir))
-        for label, key in (("置顶", "pinned"), ("归档", "archived")):
+        menu.addAction(QCoreApplication.translate('Sidebar', "新建对话"), lambda: self.new_in_project.emit(item.work_dir))
+        for label, key in ((QCoreApplication.translate('Sidebar', "置顶"), "pinned"), (QCoreApplication.translate('Sidebar', "归档"), "archived")):
             value = bool(item.conversation_data.get(key))
-            title = ("取消置顶" if key == "pinned" else "恢复对话") if value else label
+            title = (QCoreApplication.translate('Sidebar', "取消置顶") if key == "pinned" else QCoreApplication.translate('Sidebar', "恢复对话")) if value else label
             action = menu.addAction(title, lambda checked=False, k=key, v=not value: self.navigation_requested.emit(cid, {k: v}))
             action.setEnabled(cid not in self._streaming_conversation_ids)
-        menu.addAction("重命名", lambda: self._rename(cid, item.title))
-        export = menu.addMenu("导出会话")
+        menu.addAction(QCoreApplication.translate('Sidebar', "重命名"), lambda: self._rename(cid, item.title))
+        export = menu.addMenu(QCoreApplication.translate('Sidebar', "导出会话"))
         for fmt, (_, label) in CONVERSATION_FORMATS.items():
-            export.addAction(f"导出为 {label}…", lambda checked=False, f=fmt: self.export_conversation.emit(cid, f))
-        menu.addAction("复制 Session ID", lambda: self._copy_session_id(cid))
-        action = menu.addAction("在资源管理器中打开", lambda: self._open_work_dir(item.work_dir))
+            export.addAction(QCoreApplication.translate('Sidebar', '导出为 {label}…').format(label=label), lambda checked=False, f=fmt: self.export_conversation.emit(cid, f))
+        menu.addAction(QCoreApplication.translate('Sidebar', "复制 Session ID"), lambda: self._copy_session_id(cid))
+        action = menu.addAction(QCoreApplication.translate('Sidebar', "在资源管理器中打开"), lambda: self._open_work_dir(item.work_dir))
         action.setEnabled(bool(item.work_dir and Path(item.work_dir).is_dir()))
         menu.addSeparator()
-        action = menu.addAction("删除", lambda: self._confirm_delete(cid))
+        action = menu.addAction(QCoreApplication.translate('Sidebar', "删除"), lambda: self._confirm_delete(cid))
         action.setEnabled(cid not in self._streaming_conversation_ids)
         return menu
 
     def _rename(self, cid, title):
-        text, ok = QInputDialog.getText(self, "重命名对话", "名称", text=title)
+        text, ok = QInputDialog.getText(self, QCoreApplication.translate('Sidebar', "重命名对话"), QCoreApplication.translate('Sidebar', "名称"), text=title)
         if ok and text.strip():
             self.navigation_requested.emit(cid, {"title": text.strip()})
 
@@ -456,10 +483,10 @@ class Sidebar(QWidget):
         QApplication.clipboard().setText(conversation_id)
 
     def _confirm_delete(self, conversation_id):
-        if QMessageBox.question(self, "删除会话", "确定要删除这个会话吗？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, QCoreApplication.translate('Sidebar', "删除会话"), QCoreApplication.translate('Sidebar', "确定要删除这个会话吗？"), QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
             self.delete_conversation.emit(conversation_id)
 
     def prompt_import_conversation(self):
-        path, _ = QFileDialog.getOpenFileName(self, "导入会话", "", "JSON 文件 (*.json);;所有文件 (*)")
+        path, _ = QFileDialog.getOpenFileName(self, QCoreApplication.translate('Sidebar', "导入会话"), "", QCoreApplication.translate('Sidebar', "JSON 文件 (*.json);;所有文件 (*)"))
         if path:
             self.import_conversation.emit(path)

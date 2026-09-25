@@ -1,12 +1,12 @@
 """DingTalk application robot API; no ephemeral session webhooks in storage."""
 import json
-from pathlib import Path
 import time
+from pathlib import Path
 
 import httpx
 
 from pycat.core.channel.media import download_public_media, save_attachment
-
+from pycat.core.channel.replies import fit_reply_text
 
 DINGTALK_API = 'https://api.dingtalk.com'
 
@@ -97,5 +97,4 @@ class DingTalkChannelClient:
 
     @staticmethod
     def normalize_reply_text(content, *, limit=4000):
-        text = str(content or '').replace('\r\n', '\n').strip()
-        return text[:limit] or '已收到消息，但暂时没有可发送的文本回复。'
+        return fit_reply_text(content, limit)

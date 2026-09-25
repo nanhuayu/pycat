@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import uuid
 import threading
 import time
+import uuid
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Iterable
 
@@ -13,6 +13,7 @@ from pycat.core.channel.connection import (
     ChannelRequiredAction,
 )
 from pycat.models.contracts.channel import ChannelConfig
+from pycat.models.contracts.config import AppConfig
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,6 @@ class ChannelService:
 
     def runtime_channels(self, settings: dict[str, Any] | Iterable[ChannelConfig]) -> tuple[ChannelConfig, ...]:
         if isinstance(settings, dict):
-            from pycat.models.contracts.config import AppConfig
 
             channels = AppConfig.from_dict(settings).channels
         else:

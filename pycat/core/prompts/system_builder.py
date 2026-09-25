@@ -5,12 +5,11 @@ from typing import Dict, List
 
 from pycat.core.modes.manager import resolve_mode_config
 from pycat.core.prompts.sections import PromptSections
-from pycat.models.contracts.config import AppConfig
 from pycat.models.contracts.agent import effective_pycat_assistant_enabled
+from pycat.models.contracts.config import AppConfig
 from pycat.models.contracts.mode import normalize_mode_slug
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
-
 
 GLOBAL_PRINCIPLES = """You are PyCat, a precise desktop assistant.
 
@@ -19,7 +18,6 @@ GLOBAL_PRINCIPLES = """You are PyCat, a precise desktop assistant.
 - Tool failures are evidence: explain the boundary and choose a different valid path instead of repeating the same call.
 - Treat `captured_at` on the tail `<current_state>` as the request snapshot time. For today/latest news, weather, prices, schedules, or other time-sensitive facts, refresh with available tools, check source publication/update dates, and never label prior-day results as today; state when live verification is unavailable.
 - `web__search` discovers sources; `web__fetch` reads a specific URL. Interactive browser challenges require a separately configured browser tool or another source.
-- Delegate only focused work to `agent__run`. A sub-agent never gains permissions its parent does not have.
 - State results, important verification, and any remaining limitation plainly."""
 
 
@@ -78,8 +76,10 @@ def _tool_usage_rules(tools: List[Dict]) -> str:
         )
     if "state__artifact" in visible:
         rules.append(
-            "- state__artifact: Put long plans, reports, and durable working material in an Artifact; read a relevant "
-            "existing Artifact before replacing it."
+            "- state__artifact: For substantial investigations, plans or reports, create a descriptive draft early, "
+            "then update that same Artifact at meaningful checkpoints with findings, evidence and open questions. "
+            "Read an existing Artifact before replacing it. Return a concise conclusion and artifact references "
+            "when finished; short lookups can return directly without a document."
         )
     if "state__memory" in visible:
         rules.append(
@@ -90,6 +90,22 @@ def _tool_usage_rules(tools: List[Dict]) -> str:
     if "state__wiki" in visible:
         rules.append("- state__wiki: Search relevant project knowledge before repeating an investigation. Store synthesized conclusions, "
                      "conditions and limits with pinned source references; keep session deliverables in artifacts.")
+    if "agent__run" in visible:
+        rules.append(
+            "- agent__run: Delegate focused work needed for the current result; children cannot gain parent permissions. "
+            "When delegating a substantial investigation or report, ask the child to maintain a "
+            "session Artifact and return its references plus a concise conclusion. Specify concrete questions, "
+            "evidence and scope. Avoid asking every small lookup to create a document."
+        )
+    if "agent__task" in visible:
+        rules.append(
+            "- agent__task: Hand off independent work to a separate durable conversation with a self-contained brief "
+            "and required facts; parent history and attachments are not copied. The source run can finish while it "
+            "continues. A queued/running receipt is "
+            "acceptance, not a completed result. Query current status with the returned task id when needed; "
+            "old receipts are not live status. Do not repeatedly poll an unchanged or terminal status. "
+            "Report failed/interrupted tasks accurately and diagnose the reported cause before resubmitting."
+        )
     if "shell__run" in visible:
         rules.append(
             "- shell__run: Waits are bounded; a command that outlives the wait is NOT killed — it keeps "
@@ -108,6 +124,15 @@ def _tool_usage_rules(tools: List[Dict]) -> str:
             "agent__complete.result, using ![description](<returned image ref>). Reuse the exact workspace: or archive: "
             "reference returned by a successful tool; do not invent paths or return only a filename. "
             "Follow an explicit structured output schema instead when one is required."
+        )
+    if "capability__image" in visible:
+        rules.append(
+            "- capability__image: Distinguish generating from editing. For edits, inspect the source and pass explicit "
+            "image_refs; describe what must change and what must stay fixed. Give each reference a role, quote exact "
+            "visible text, and specify composition, style and constraints. Inspect returned images before claiming "
+            "success; iterate with focused changes when needed. Save final project assets in the workspace with "
+            "descriptive names, versioning instead of overwriting unless requested. A transport failure does not "
+            "establish a model limitation; follow the error receipt and never silently switch models or methods."
         )
     if not rules:
         return ""
@@ -135,34 +160,6 @@ def _prompt_mode_and_assistant(
         mode=mode_slug,
     )
     return mode, assistant_enabled
-
-
-def resolve_base_system_prompt_text(
-    *,
-    conversation: Conversation,
-    app_config: AppConfig,
-    default_work_dir: str = "",
-    include_conversation_override: bool = False,
-    pycat_assistant_enabled: bool | None = None,
-    completion_policy: str | None = None,
-) -> str:
-    """Return stable/global/Mode instructions for read-only UI previews."""
-    del include_conversation_override
-    mode, assistant_enabled = _prompt_mode_and_assistant(
-        conversation,
-        default_work_dir,
-        pycat_assistant_enabled,
-    )
-    mode_prompt = str(getattr(mode, "prompt", "") or "") if assistant_enabled else ""
-    completion_contract = _completion_contract(mode, completion_policy) if assistant_enabled else ""
-    return _join(
-        [
-            GLOBAL_PRINCIPLES if assistant_enabled else "",
-            app_config.prompts.global_instructions,
-            mode_prompt,
-            completion_contract,
-        ]
-    )
 
 
 def build_system_prompt(

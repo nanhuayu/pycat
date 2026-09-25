@@ -10,7 +10,7 @@ class FeishuChannelDefinition(DeclarativeChannelDefinition):
                 type="feishu",
                 name="飞书",
                 description="默认使用飞书长连接模式直连开放平台，也兼容高级场景下的 webhook 回调模式。",
-                icon_name="book-open",
+                icon_name="comments",
                 default_name="飞书频道",
                 default_config={
                     "connection_mode": "websocket",

@@ -332,15 +332,6 @@ class ProviderCatalogService:
                 return provider, index
         return None, -1
 
-    def select_or_first(self, providers: Iterable[Provider], provider_id: str = "") -> tuple[Provider | None, int]:
-        provider_list = list(providers)
-        provider, index = self.find(provider_list, provider_id)
-        if provider is not None:
-            return provider, index
-        if provider_list:
-            return provider_list[0], 0
-        return None, -1
-
     def upsert(self, providers: Iterable[Provider], provider: Provider) -> list[Provider]:
         next_providers = self.snapshot(providers)
         updated = self.clone_provider(provider)

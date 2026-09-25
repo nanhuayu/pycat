@@ -247,6 +247,12 @@ class CapabilityExecutor:
                 model=str(metadata.get("model") or model),
                 metadata=metadata,
             )
+        if metadata.get("incomplete"):
+            return CapabilityRunResult(
+                content=content,
+                validation_error="Model response incomplete: " + str(metadata.get("incomplete_reason") or metadata.get("finish_reason") or "unknown"),
+                model=str(metadata.get("model") or model), metadata=metadata,
+            )
         parsed, validation_error = parse_and_validate_output(content, capability.output_schema)
         return CapabilityRunResult(
             content=content,

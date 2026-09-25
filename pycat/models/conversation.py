@@ -1,19 +1,21 @@
 
+import json
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
-import uuid
-import json
-import hashlib
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pycat.models.contracts.content import ContentRef
+from pycat.models.contracts.delegation import TaskDelegation
+from pycat.models.contracts.session_state import SessionState
 from pycat.models.contracts.tooling import (
     DEFAULT_FILESYSTEM_MODE,
     DEFAULT_TOOL_APPROVAL,
     normalize_filesystem_scope_mode,
     normalize_tool_approval,
 )
+from pycat.models.llm_config import LLMConfig
 from pycat.models.session_paths import normalize_work_dir
 
 if TYPE_CHECKING:
@@ -156,38 +158,6 @@ def set_tool_call_result(tool_call: Dict[str, Any], result_payload: Any) -> Dict
 
 def is_state_checkpoint_snapshot(value: Any) -> bool:
     return isinstance(value, dict) and str(value.get("_snapshot_kind") or "") == "checkpoint"
-
-
-def state_checkpoint_from_dict(state: Dict[str, Any]) -> Dict[str, Any]:
-    payload = dict(state or {})
-    archive_index = payload.get("archive_index") if isinstance(payload.get("archive_index"), dict) else {}
-    archive_digest = hashlib.sha1(
-        json.dumps(
-            [
-                {
-                    "id": str((record or {}).get("id") or key),
-                    "digest": str((record or {}).get("digest") or ""),
-                    "updated_seq": int((record or {}).get("updated_seq", 0) or 0),
-                }
-                for key, record in archive_index.items()
-                if isinstance(record, dict)
-            ],
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        ).encode("utf-8", errors="replace")
-    ).hexdigest()[:16]
-    work_trace = payload.get("work_trace") if isinstance(payload.get("work_trace"), dict) else {}
-    return {
-        "_snapshot_kind": "checkpoint",
-        "state_version": int(payload.get("state_version", 0) or 0),
-        "last_updated_seq": int(payload.get("last_updated_seq", 0) or 0),
-        "last_maintenance_seq": int(payload.get("last_maintenance_seq", 0) or 0),
-        "summary_digest": hashlib.sha1(str(payload.get("summary") or "").encode("utf-8", errors="replace")).hexdigest()[:16],
-        "archive_count": len(archive_index),
-        "archive_digest": archive_digest,
-        "work_trace_updated_seq": int(work_trace.get("updated_seq", 0) or 0),
-    }
 
 
 @dataclass
@@ -366,6 +336,7 @@ class Conversation:
     settings: Dict[str, Any] = field(default_factory=dict)
     mode: str = "chat" # "chat" or "agent"
     llm_config: Dict[str, Any] = field(default_factory=dict)
+    delegation: TaskDelegation | None = None
     
     # === SessionState: Centralized state management ===
     # Lazy-loaded to avoid circular import; use get_state() method
@@ -409,7 +380,6 @@ class Conversation:
 
     def _sync_llm_config_projection(self) -> None:
         try:
-            from pycat.models.llm_config import LLMConfig
 
             cfg = LLMConfig.from_conversation(self)
             cfg.apply_to_conversation(self)
@@ -436,6 +406,7 @@ class Conversation:
             'settings': self.settings,
             'mode': self.mode,
             'llm_config': self.get_llm_config().to_dict(),
+            'delegation': self.delegation.to_dict() if self.delegation else None,
             'state': self._state_dict,
             '_seq_counter': self._seq_counter
         }
@@ -516,6 +487,7 @@ class Conversation:
             settings=settings,
             mode=data.get('mode', 'chat'),
             llm_config=llm_config,
+            delegation=TaskDelegation.from_dict(data['delegation']) if data.get('delegation') else None,
             _state_dict=state_dict,
             _seq_counter=seq_counter
         )
@@ -641,20 +613,6 @@ class Conversation:
                 self.updated_at = datetime.now()
                 break
 
-    def get_tokens_per_minute(self) -> float:
-        """Calculate average tokens per minute for assistant responses"""
-        total_tokens = 0
-        total_time_ms = 0
-        
-        for msg in self.messages:
-            if msg.role == 'assistant' and msg.tokens and msg.response_time_ms:
-                total_tokens += msg.tokens
-                total_time_ms += msg.response_time_ms
-        
-        if total_time_ms > 0:
-            return (total_tokens / total_time_ms) * 60000  # Convert to per minute
-        return 0.0
-
     def generate_title_from_first_message(self):
         """Generate a deterministic title from the first real user message."""
         for msg in self.messages:
@@ -684,14 +642,8 @@ class Conversation:
         """Get current sequence ID without incrementing"""
         return self._seq_counter
 
-    def add_message_with_seq(self, message: Message) -> Message:
-        """Compatibility wrapper for the canonical add_message path."""
-        self.add_message(message)
-        return message
-
     def get_llm_config(self):
         """Return the normalized LLM request config for this conversation."""
-        from pycat.models.llm_config import LLMConfig
 
         cfg = LLMConfig.from_conversation(self)
         try:
@@ -702,7 +654,6 @@ class Conversation:
 
     def set_llm_config(self, config):
         """Persist a normalized LLM request config onto this conversation."""
-        from pycat.models.llm_config import LLMConfig
 
         if isinstance(config, LLMConfig):
             cfg = config
@@ -719,31 +670,9 @@ class Conversation:
     
     def get_state(self) -> 'SessionState':
         """Get the SessionState object (lazy-loaded to avoid circular import)"""
-        from pycat.models.contracts.session_state import SessionState
         return SessionState.from_dict(self._state_dict)
 
     def set_state(self, state: 'SessionState'):
         """Update the internal state dictionary from a SessionState object"""
         self._state_dict = state.to_dict()
         self.updated_at = datetime.now()
-
-    def update_state_dict(self, updates: Dict[str, Any]):
-        """Directly update state dictionary fields"""
-        self._state_dict.update(updates)
-        self.updated_at = datetime.now()
-
-    def attach_state_snapshot(self, message_id: str):
-        """Attach a bounded state checkpoint for projection diagnostics."""
-        for msg in self.messages:
-            if msg.id == message_id:
-                try:
-                    msg.state_snapshot = state_checkpoint_from_dict(self._state_dict)
-                except Exception:
-                    msg.state_snapshot = {
-                        "_snapshot_kind": "checkpoint",
-                        "state_version": 0,
-                        "last_updated_seq": 0,
-                    }
-                self.updated_at = datetime.now()
-                return True
-        return False

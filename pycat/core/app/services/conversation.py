@@ -19,25 +19,26 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pycat.core.app.repositories.conversation import ConversationRepository
+from pycat.core.app.services.importers import parse_imported_data
 from pycat.core.app.state import ConversationSettingsUpdate
 from pycat.core.channel.bindings import is_bound_channel_conversation
-from pycat.core.content.export import document_format, export_document
 from pycat.core.content.archive_store import SessionArchiveStore
-from pycat.core.persistence import atomic_write_text
+from pycat.core.content.export import document_format, export_document
 from pycat.core.context.history import (
     is_real_user_message,
     restartable_user_by_id,
     restartable_user_for_assistant,
 )
 from pycat.core.context.turn_restart import reconcile_after_turn_restart
-from pycat.core.state.artifact import ArtifactService
-from pycat.core.state.todo import TodoService
 from pycat.core.memory.evolution import MemoryEvolutionLedger
 from pycat.core.memory.service import MemoryService
 from pycat.core.observability.debug_trace import resolve_debug_trace_dir
-from pycat.core.observability.reader import read_trace_events, read_trace_node, read_trace_payload, MAX_EVENTS
+from pycat.core.observability.reader import MAX_EVENTS, read_trace_events, read_trace_node, read_trace_payload
+from pycat.core.persistence import atomic_write_text
+from pycat.core.state.artifact import ArtifactService
+from pycat.core.state.todo import TodoService
+from pycat.models.contracts.agent import ConversationBusyError, InvalidRequestError, PersistenceError
 from pycat.models.conversation import Conversation, Message
-from pycat.models.contracts.agent import PersistenceError, InvalidRequestError, ConversationBusyError
 from pycat.models.model_ref import build_model_ref, provider_matches_name
 from pycat.models.session_paths import normalize_work_dir, resolve_session_root
 
@@ -195,6 +196,24 @@ class ConversationService:
     def list_all(self) -> List[Dict[str, Any]]:
         return self._repository.list_all()
 
+    def reconcile_index(self) -> List[Dict[str, Any]]:
+        """One startup reconciliation; ordinary views keep using the small index."""
+        with self._activity_lock:
+            return self._repository.reconcile_index()
+
+    def cancel_delegation(self, conversation_id: str) -> Conversation:
+        """Persist cancellation without replacing a live run's transcript."""
+        with self._activity_lock:
+            conversation = self.load(conversation_id)
+            if conversation is None or conversation.delegation is None:
+                raise ValueError('独立任务不存在。')
+            if conversation.delegation.submission == 'settled':
+                return conversation
+            conversation.delegation.cancel_requested = True
+            if not self._repository.save(conversation):
+                raise OSError('无法保存任务停止请求。')
+            return conversation
+
     def update_navigation(
         self, conversation_id: str, *, title: str | None = None,
         pinned: bool | None = None, archived: bool | None = None,
@@ -233,6 +252,23 @@ class ConversationService:
             if owner is not None and owner != activity_token:
                 logger.debug("Rejected save for conversation %s during lifecycle operation", conversation_id)
                 return False
+            # A view or a late run cannot erase the authoritative task handoff.
+            latest = self._repository.load(conversation_id)
+            if latest is not None and latest.delegation is not None:
+                current = latest.delegation
+                incoming = conversation.delegation
+                owns = activity_token and activity_token in {
+                    self._active_turns.get(conversation_id), owner}
+                if incoming is None or (incoming.to_dict() != current.to_dict() and not owns):
+                    return False
+                if incoming.run_id != current.run_id and not (owner and owner == activity_token):
+                    return False
+                if incoming.run_id == current.run_id:
+                    phases = {'queued': 0, 'started': 1, 'settled': 2}
+                    if current.cancel_requested and not incoming.cancel_requested:
+                        return False
+                    if phases[incoming.submission] < phases[current.submission]:
+                        return False
             self.reconcile_artifacts(conversation)
             return self._repository.save(conversation)
 
@@ -330,15 +366,14 @@ class ConversationService:
 
     def import_from_file(self, file_path: str) -> Optional[Conversation]:
         try:
-            import json
 
-            from pycat.core.app.services.importers import parse_imported_data
 
             with open(file_path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
             conversation = parse_imported_data(data)
             if conversation:
                 conversation.id = str(uuid.uuid4())
+                conversation.delegation = None
                 if self.save(conversation):
                     return conversation
                 logger.warning("Could not save imported conversation from %s", file_path)
@@ -445,12 +480,6 @@ class ConversationService:
         conversation.add_message(message)
         if auto_save:
             self.save(conversation)
-
-    def find_message(self, conversation: Conversation, message_id: str) -> Optional[Message]:
-        for msg in conversation.messages:
-            if msg.id == message_id:
-                return msg
-        return None
 
     def replace_user_turn(
         self,

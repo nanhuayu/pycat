@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from pycat.core.content.archive_store import SessionArchiveStore
 from pycat.core.llm.token_budget import estimate_tokens
-from pycat.models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 from pycat.models.contracts.session_state import SessionState
-
+from pycat.models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 
 MIN_LLM_COMPRESSION_CHARS = 2_000
 MAX_TOOL_ARGUMENT_CHARS = 1_000
@@ -198,8 +198,10 @@ def parse_compression_result(content: str) -> CompressionResult:
             except Exception:
                 payload = None
     if not parsed:
-        # Degraded acceptance: a non-empty plain-text answer is still a usable
-        # summary. The strict JSON contract must not discard valid model work.
+        # A broken JSON envelope is incomplete output, not a prose summary.
+        if text.startswith(("{", "[")) or re.search(r'\{\s*"summary"\s*:', text) or raw.lower().startswith("```json"):
+            return CompressionResult(status="error", error="model_output_not_json")
+        # Preserve complete prose from models that omit the JSON wrapper.
         degraded = text or raw
         if degraded:
             return CompressionResult(
@@ -219,18 +221,21 @@ def parse_compression_result(content: str) -> CompressionResult:
                 error="model_output_invalid_schema",
                 token_estimate=estimate_tokens(content),
             )
-        # Degraded acceptance: JSON object without a "summary" key. Fall back
-        # to the longest string value, or the raw text when none exists.
-        candidates = [value for value in payload.values() if isinstance(value, str) and value.strip()]
-        degraded = max(candidates, key=len).strip() if candidates else (text or raw)
+        # Accept known prose aliases only. Provider error envelopes also contain
+        # strings (msg/error), which must never become continuation state.
+        candidates = [payload[key] for key in ("content", "text")
+                      if isinstance(payload.get(key), str) and payload[key].strip()]
+        degraded = max(candidates, key=len).strip() if candidates else ""
         if degraded:
             return CompressionResult(
                 summary=degraded.replace("\r\n", "\n").replace("\r", "\n").strip(),
                 status="degraded",
                 token_estimate=estimate_tokens(degraded),
             )
-        return CompressionResult(status="empty", error="summary_empty")
-    summary = str(payload.get("summary") or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        return CompressionResult(status="error", error="model_output_invalid_schema")
+    if not isinstance(payload["summary"], str):
+        return CompressionResult(status="error", error="model_output_invalid_schema")
+    summary = payload["summary"].replace("\r\n", "\n").replace("\r", "\n").strip()
     if not summary:
         return CompressionResult(status="empty", error="summary_empty")
     return CompressionResult(

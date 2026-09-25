@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pycat.core.content.archive_store import SessionArchiveStore
 from pycat.core.context.history import build_turn_blocks, is_real_user_message, turn_fingerprint
-from pycat.models.conversation import Conversation, Message
 from pycat.models.contracts.session_state import WorkTrace
+from pycat.models.conversation import Conversation
 
 
 def _history_range(record) -> tuple[int, set[str]]:

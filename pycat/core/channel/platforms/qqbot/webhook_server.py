@@ -12,7 +12,6 @@ from pycat.core.channel.http_server import start_http_server
 from pycat.core.channel.platforms.qqbot.router import normalize_qqbot_webhook_payload
 from pycat.models.contracts.channel import ChannelConfig
 
-
 logger = logging.getLogger(__name__)
 
 

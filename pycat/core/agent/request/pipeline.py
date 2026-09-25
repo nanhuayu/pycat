@@ -12,13 +12,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from pycat.models.conversation import Conversation, Message
-from pycat.models.provider import Provider
-from pycat.models.contracts.channel import channel_file_delivery_enabled
-
-from pycat.core.llm.client import LLMClient
-from pycat.core.context.maintainer import ContextMaintainer
+from pycat.core.agent.request.retry import classify_error, retry_with_backoff
 from pycat.core.config import AppConfig
+from pycat.core.content.session_content import (
+    RequestContentCache,
+    SessionContentService,
+    text_attachment_byte_budget,
+)
+from pycat.core.context.builder import prepare_api_messages, prepare_context_messages
+from pycat.core.context.history import is_real_user_message
+from pycat.core.context.maintainer import ContextMaintainer
+from pycat.core.llm.client import LLMClient
 from pycat.core.llm.token_budget import (
     REQUEST_USAGE_METADATA_KEY,
     TokenBudget,
@@ -27,24 +31,19 @@ from pycat.core.llm.token_budget import (
     request_usage_payload,
     resolve_token_budget,
 )
-from pycat.core.context.builder import prepare_api_messages, prepare_context_messages
-from pycat.core.context.history import is_real_user_message
-from pycat.core.content.session_content import (
-    RequestContentCache,
-    SessionContentService,
-    text_attachment_byte_budget,
-)
-from pycat.core.prompts.renderer import PromptRenderer
-from pycat.core.prompts.channel import build_channel_prompt_section
-from pycat.core.prompts.sections import PromptSections
-from pycat.core.prompts.project_instructions import ProjectInstructionService
 from pycat.core.memory.service import MemoryService, memory_enabled
-from pycat.core.skills import build_skill_prompt_section
-from pycat.models.contracts.agent import RunPolicy, RunEventKind
-from pycat.models.contracts.tooling import ToolAvailabilityContext, ToolSelectionPolicy
-from pycat.core.tools.manager import ToolManager, MCP_AVAILABLE
-from pycat.core.agent.request.retry import classify_error, retry_with_backoff
 from pycat.core.observability.debug_trace import DebugTraceContext, ensure_debug_trace
+from pycat.core.prompts.channel import build_channel_prompt_section
+from pycat.core.prompts.project_instructions import ProjectInstructionService
+from pycat.core.prompts.renderer import PromptRenderer
+from pycat.core.prompts.sections import PromptSections
+from pycat.core.skills import build_skill_prompt_section
+from pycat.core.tools.manager import MCP_AVAILABLE, ToolManager
+from pycat.models.contracts.agent import RunEventKind, RunPolicy
+from pycat.models.contracts.channel import channel_file_delivery_enabled
+from pycat.models.contracts.tooling import ToolAvailabilityContext, ToolSelectionPolicy
+from pycat.models.conversation import Conversation, Message
+from pycat.models.provider import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +130,10 @@ class RequestPipeline:
             debug_trace=trace_context,
             content_cache=RequestContentCache(),
             compression_tasks=compression_tasks,
+            emit=emit,
         )
         usage = request_usage_payload(
+            conversation=conversation,
             token_estimate=prepared_request.token_estimate,
             budget=prepared_request.token_budget,
             replay_pressure=prepared_request.replay_pressure,
@@ -210,6 +211,7 @@ class RequestPipeline:
         debug_trace: DebugTraceContext | None = None,
         content_cache: RequestContentCache | None = None,
         compression_tasks: Any = None,
+        emit: Optional[Callable[..., None]] = None,
     ) -> PreparedRequest:
         """Build one immutable logical request before transport retries."""
         request_conversation = self._build_request_conversation(
@@ -238,6 +240,7 @@ class RequestPipeline:
             content_cache=content_cache,
             compression_tasks=compression_tasks,
             token_budget=token_budget,
+            emit=emit,
         )
 
     async def _send_prepared_request(
@@ -291,6 +294,7 @@ class RequestPipeline:
         content_cache: RequestContentCache | None = None,
         compression_tasks: Any = None,
         token_budget: TokenBudget | None = None,
+        emit: Optional[Callable[..., None]] = None,
     ) -> PreparedRequest:
         """Materialize, measure, and select one provider request."""
         app_config = self._app_config
@@ -326,7 +330,6 @@ class RequestPipeline:
         threshold_tokens = int(prompt_limit * threshold_ratio)
         current_messages: list[Message] | None = None
         compression_errors: list[str] = []
-        attempted_targets: set[int] = set()
 
         async def prepare_messages() -> list[Message]:
             messages = await self._prepare_messages(
@@ -374,7 +377,10 @@ class RequestPipeline:
 
         async def compact(*, reason: str, recent_turn_target: int, selected: PreparedRequest) -> None:
             nonlocal captured_at, request_conversation, current_messages
-            attempted_targets.add(int(recent_turn_target))
+            if emit:
+                emit(kind=RunEventKind.CONDENSE, data={
+                    'phase': 'start', 'reason': reason, 'recent_turn_target': recent_turn_target,
+                })
             try:
                 report = await self._context_maintenance.maintain_async(
                     conversation,
@@ -400,6 +406,11 @@ class RequestPipeline:
             except Exception as exc:
                 compression_errors.append(str(exc))
                 logger.warning("Pre-send compact failed (%s): %s", reason, exc)
+            finally:
+                if emit:
+                    emit(kind=RunEventKind.CONDENSE, data={
+                        'phase': 'end', 'reason': reason, 'recent_turn_target': recent_turn_target,
+                    })
             request_conversation = self._build_request_conversation(
                 conversation=conversation,
                 provider=provider,
@@ -443,27 +454,20 @@ class RequestPipeline:
             return materialize("normal")
         selected = await choose_replay()
 
-        if (
-            selected.token_estimate >= threshold_tokens
-            and self._context_maintenance.auto_enabled(policy)
-        ):
-            await compact(reason="threshold", recent_turn_target=3, selected=selected)
-            selected = await choose_replay()
-
-        if selected.token_estimate <= prompt_limit:
-            return selected
-
+        auto_compact = self._context_maintenance.auto_enabled(policy)
         for recent_turn_target in (3, 2, 1):
-            if recent_turn_target in attempted_targets:
-                continue
+            if selected.token_estimate <= prompt_limit and (
+                not auto_compact or selected.token_estimate < threshold_tokens
+            ):
+                return selected
             await compact(
-                reason="hard_limit",
+                reason="hard_limit" if selected.token_estimate > prompt_limit else "threshold",
                 recent_turn_target=recent_turn_target,
                 selected=selected,
             )
             selected = await choose_replay()
-            if selected.token_estimate <= prompt_limit:
-                return selected
+        if selected.token_estimate <= prompt_limit:
+            return selected
 
         # Deterministic last-resort fallback: bound the oldest tool results
         # in a request-scoped copy so a hard-limit overflow degrades instead
@@ -823,16 +827,6 @@ class RequestPipeline:
         except Exception as exc:
             logger.debug("Failed to build skill prompt section: %s", exc)
             return ""
-
-    @staticmethod
-    def _latest_user_query(conversation: Conversation) -> str:
-        for msg in reversed(getattr(conversation, "messages", []) or []):
-            if getattr(msg, "role", "") != "user":
-                continue
-            content = str(getattr(msg, "content", "") or "").strip()
-            if content:
-                return content
-        return ""
 
     @staticmethod
     def _resolve_prompt_budget(*, conversation: Conversation, provider: Provider):

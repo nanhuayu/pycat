@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pycat.core.app.state import AppSettingsUpdate
 from pycat.core.app.repositories.settings import SettingsRepository
+from pycat.core.app.state import AppSettingsUpdate
 
 
 class AppSettingsService:

@@ -36,3 +36,5 @@ pycat/assets/web/vendor/* text eol=lf
 *.otf binary
 *.pdf binary
 *.onnx binary
+*.qm binary
+pycat/assets/translations/*.ts text eol=lf

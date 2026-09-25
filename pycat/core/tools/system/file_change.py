@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -14,20 +13,6 @@ from pycat.models.contracts.content import FileChange
 def digest_bytes(data: bytes) -> str:
     """Return the SHA-256 digest used by the FileChange contract."""
     return hashlib.sha256(bytes(data or b"")).hexdigest()
-
-
-def digest_path(path: Path) -> str:
-    """Hash one regular file without loading it all into memory."""
-    try:
-        if not path.is_file():
-            return ""
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-    except (OSError, ValueError):
-        return ""
 
 
 def file_change_metadata(

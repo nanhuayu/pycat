@@ -6,12 +6,12 @@ import platform
 import re
 from dataclasses import replace
 from datetime import datetime
-from typing import List
 
 from pycat.core.context.file_context import get_file_tree
+from pycat.core.hosts.shell import resolve_shell
+from pycat.models.contracts.config import ShellConfig
 from pycat.models.conversation import Conversation, Message
 from pycat.models.workspace import WorkspaceLocation
-
 
 RUNTIME_CONTEXT_TAGS = (
     "environment_info",
@@ -37,6 +37,7 @@ def build_environment_info(
     cwd: str | None = None,
     now: datetime | None = None,
     include_time: bool = True,
+    shell_config: ShellConfig | None = None,
 ) -> str:
     """Build the OS, shell, and working-directory context section."""
     location = WorkspaceLocation.parse(cwd)
@@ -53,7 +54,11 @@ def build_environment_info(
     os_release = platform.release()
     os_version = platform.version()
     machine = platform.machine() or "unknown"
-    shell = os.environ.get("SHELL") or os.environ.get("COMSPEC") or "unknown"
+    try:
+        shell_kind, shell_program = resolve_shell(shell_config or ShellConfig())
+        shell = f"{shell_kind} ({shell_program})"
+    except (ValueError, OSError) as exc:
+        shell = f"unavailable ({exc})"
     raw_cwd = None if cwd is None else str(cwd).strip()
     resolved_cwd = os.path.abspath(os.getcwd() if raw_cwd is None else raw_cwd) if raw_cwd is None or raw_cwd else ""
     lines = [
@@ -62,6 +67,7 @@ def build_environment_info(
         f"OS Version: {os_version}",
         f"Machine: {machine}",
         f"Shell: {shell}",
+        "Shell describes non-interactive shell__run commands; program/argv bypass shell parsing.",
     ]
     if include_time:
         lines.append(f"Current Time: {_iso_time_text(now or datetime.now().astimezone())}")
@@ -113,81 +119,3 @@ def normalize_user_message(message: Message) -> Message:
     if message.role != "user":
         return message
     return replace(message, content=extract_user_request(message.content))
-
-
-def build_runtime_context_block(
-    conversation: Conversation,
-    *,
-    include_environment: bool = True,
-    include_workspace: bool = True,
-    include_summary: bool = False,
-    max_depth: int = 2,
-) -> str:
-    """Build the ephemeral runtime context block for a user request."""
-    work_dir = str(getattr(conversation, "work_dir", "") or "").strip()
-    sections: List[str] = []
-    if include_environment:
-        sections.append(build_environment_info(cwd=work_dir))
-    if include_workspace:
-        workspace_info = build_workspace_info(work_dir, max_depth=max_depth)
-        if workspace_info:
-            sections.append(workspace_info)
-    if include_summary:
-        summary = build_conversation_summary(conversation)
-        if summary:
-            sections.append(summary)
-    return "\n".join(sections).strip()
-
-
-def wrap_user_request(content: str, context_block: str) -> str:
-    """Wrap a plain user request with runtime context tags."""
-    request = extract_user_request(content)
-    if not context_block:
-        return request
-    return f"{context_block}\n<user_request>\n{request}\n</user_request>"
-
-
-def inject_user_context(
-    conversation: Conversation,
-    *,
-    include_environment: bool = True,
-    include_workspace: bool = True,
-    include_summary: bool = True,
-    inject_mode: str = "first",
-) -> None:
-    """Inject XML-like context sections into user messages in place."""
-    context_block = build_runtime_context_block(
-        conversation,
-        include_environment=include_environment,
-        include_workspace=include_workspace,
-        include_summary=include_summary,
-    )
-    if not context_block:
-        return
-
-    messages = conversation.messages or []
-    if inject_mode == "first":
-        for msg in messages:
-            if msg.role == "user" and not _already_injected(msg):
-                _prepend_context(msg, context_block)
-                break
-    elif inject_mode == "latest":
-        for msg in reversed(messages):
-            if msg.role == "user" and not _already_injected(msg):
-                _prepend_context(msg, context_block)
-                break
-    elif inject_mode == "all":
-        for msg in messages:
-            if msg.role == "user" and not _already_injected(msg):
-                _prepend_context(msg, context_block)
-
-
-_MARKER = "<environment_info>"
-
-
-def _already_injected(msg: Message) -> bool:
-    return bool(msg.content and (_MARKER in msg.content or "<user_request>" in msg.content))
-
-
-def _prepend_context(msg: Message, block: str) -> None:
-    msg.content = wrap_user_request(msg.content or "", block)

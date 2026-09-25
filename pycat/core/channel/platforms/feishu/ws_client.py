@@ -35,7 +35,6 @@ from pycat.core.channel.platforms.feishu.ws_protocol import (
 )
 from pycat.models.contracts.channel import ChannelConfig
 
-
 logger = logging.getLogger(__name__)
 
 

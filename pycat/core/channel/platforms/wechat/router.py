@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 WECHAT_ILINK_MESSAGE_USER = 1
 WECHAT_ILINK_ITEM_TEXT = 1
 WECHAT_ILINK_ITEM_IMAGE = 2

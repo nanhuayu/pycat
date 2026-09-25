@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Mapping
 
+from pycat.models.coercion import optional_bool
 from pycat.models.provider import DEFAULT_API_TYPE, normalize_api_type
 
 if TYPE_CHECKING:
@@ -54,23 +55,6 @@ def _coerce_float(value: Any) -> float | None:
         return None
 
 
-def _coerce_bool(value: Any) -> bool | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        text = value.strip().lower()
-        if text in {"1", "true", "yes", "on"}:
-            return True
-        if text in {"0", "false", "no", "off"}:
-            return False
-    try:
-        return bool(value)
-    except Exception:
-        return None
-
-
 @dataclass(frozen=True)
 class LLMConfig:
     """Normalized per-conversation LLM request configuration.
@@ -113,7 +97,7 @@ class LLMConfig:
             temperature=_coerce_float(payload.get("temperature")),
             top_p=_coerce_float(payload.get("top_p")),
             max_tokens=_coerce_positive_int(payload.get("max_tokens")),
-            stream=_coerce_bool(payload.get("stream")),
+            stream=optional_bool(payload.get("stream")),
             reasoning_mode=legacy_mode or None,
             system_prompt_override=str(payload.get("system_prompt_override") or "").strip(),
         )
@@ -147,7 +131,7 @@ class LLMConfig:
         if cfg.max_tokens is None and "max_tokens" in settings:
             updates["max_tokens"] = _coerce_positive_int(settings.get("max_tokens"))
         if cfg.stream is None and "stream" in settings:
-            updates["stream"] = _coerce_bool(settings.get("stream"))
+            updates["stream"] = optional_bool(settings.get("stream"))
         if cfg.reasoning_mode is None:
             legacy_mode = settings.get("reasoning_mode") or settings.get("reasoning_effort")
             if legacy_mode not in (None, ""):

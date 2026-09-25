@@ -5,18 +5,20 @@ import logging
 import os
 import re
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
 from pycat.core.content.attachments import extract_composer_text
-from pycat.models.conversation import Conversation
+from pycat.core.persistence import atomic_write_text
 from pycat.models.contracts.agent import InvalidRequestError
-
+from pycat.models.contracts.delegation import task_projection
+from pycat.models.conversation import Conversation
 
 logger = logging.getLogger(__name__)
 
 
-CONVERSATION_INDEX_SCHEMA_VERSION = 3
+CONVERSATION_INDEX_SCHEMA_VERSION = 4
 _SEARCH_ENTRY_LIMIT = 48
 _SEARCH_ENTRY_TEXT_LIMIT = 600
 _CONTROL_MESSAGE_PREFIXES = ("[AUTO-CONTINUE]", "[WARNING]")
@@ -66,6 +68,7 @@ class ConversationRepository:
     """File repository for persisted conversation JSON and metadata index."""
 
     def __init__(self, data_dir: str | Path) -> None:
+        self._lock = threading.RLock()
         self.data_dir = Path(data_dir)
         self.conversations_dir = self.data_dir / "conversations"
         self.conversations_index_file = self.data_dir / "conversations_index.json"
@@ -78,6 +81,10 @@ class ConversationRepository:
         return self.conversations_dir / f"{conversation_id}.json"
 
     def save(self, conversation: Conversation) -> bool:
+        with self._lock:
+            return self._save(conversation)
+
+    def _save(self, conversation: Conversation) -> bool:
         temp_name = ""
         try:
             file_path = self._path(conversation.id)
@@ -125,6 +132,16 @@ class ConversationRepository:
             return False
 
     def list_all(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return self._list_all()
+
+    def reconcile_index(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._rebuild_index()
+            self._save_index(rows)
+            return rows
+
+    def _list_all(self) -> list[dict[str, Any]]:
         indexed = self._load_index()
         if indexed is not None:
             return indexed
@@ -174,6 +191,10 @@ class ConversationRepository:
         return references
 
     def delete(self, conversation_id: str) -> bool:
+        with self._lock:
+            return self._delete(conversation_id)
+
+    def _delete(self, conversation_id: str) -> bool:
         try:
             file_path = self._path(conversation_id)
             if file_path.exists():
@@ -191,6 +212,11 @@ class ConversationRepository:
         if not conversation_id:
             return None
         messages = data.get("messages", [])
+        try:
+            stat = self._path(conversation_id).stat()
+            version = [stat.st_mtime_ns, stat.st_size]
+        except OSError:
+            version = None
         return {
             "id": conversation_id,
             "title": data.get("title", "Untitled"),
@@ -204,6 +230,8 @@ class ConversationRepository:
             "model": data.get("model", ""),
             "message_count": len(messages) if isinstance(messages, list) else 0,
             "search_entries": _search_entries(messages),
+            "delegation": task_projection(data),
+            "file_version": version,
         }
 
     def _metadata(self, conversation: Conversation) -> dict[str, Any]:
@@ -222,7 +250,7 @@ class ConversationRepository:
             ),
         }
 
-    def _load_index(self) -> list[dict[str, Any]] | None:
+    def _load_index(self, *, changed_id: str = '') -> list[dict[str, Any]] | None:
         try:
             if not self.conversations_index_file.exists():
                 return None
@@ -246,8 +274,14 @@ class ConversationRepository:
                 for item in rows
                 if isinstance(item, dict) and str(item.get("id") or "").strip()
             }
-            disk_ids = {path.stem for path in self.conversations_dir.glob("*.json") if path.stat().st_size > 0}
-            if ids != disk_ids:
+            versions = {path.stem: [stat.st_mtime_ns, stat.st_size]
+                        for path in self.conversations_dir.glob("*.json") if (stat := path.stat()).st_size > 0}
+            disk_ids = set(versions)
+            # A known atomic save/delete will replace this one metadata row.
+            # Validate every other file without rebuilding all histories on each save.
+            if ids - {changed_id} != disk_ids - {changed_id}:
+                return None
+            if any(row.get('file_version') != versions.get(row['id']) for row in rows if row['id'] != changed_id):
                 return None
             out = [dict(item) for item in rows if isinstance(item, dict)]
             out.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
@@ -258,7 +292,7 @@ class ConversationRepository:
 
     def _save_index(self, conversations: list[dict[str, Any]]) -> None:
         try:
-            self.conversations_index_file.write_text(
+            atomic_write_text(self.conversations_index_file,
                 json.dumps(
                     {
                         "schema_version": CONVERSATION_INDEX_SCHEMA_VERSION,
@@ -267,13 +301,12 @@ class ConversationRepository:
                     ensure_ascii=False,
                     indent=2,
                 ),
-                encoding="utf-8",
             )
         except Exception as exc:
             logger.debug("Failed to save conversation index: %s", exc)
 
     def _upsert_index(self, conversation: Conversation) -> None:
-        rows = self._load_index()
+        rows = self._load_index(changed_id=conversation.id)
         if rows is None:
             rows = self._rebuild_index()
         metadata = self._metadata(conversation)
@@ -283,7 +316,7 @@ class ConversationRepository:
         self._save_index(next_rows)
 
     def _remove_index(self, conversation_id: str) -> None:
-        rows = self._load_index()
+        rows = self._load_index(changed_id=conversation_id)
         if rows is None:
             rows = self._rebuild_index()
         next_rows = [row for row in rows if str(row.get("id") or "") != str(conversation_id or "")]

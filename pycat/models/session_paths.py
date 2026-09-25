@@ -15,8 +15,8 @@ process manager) must call :func:`resolve_session_root` instead of joining
 """
 from __future__ import annotations
 
-import os
 import hashlib
+import os
 from pathlib import Path
 
 from pycat.models.workspace import WorkspaceLocation, workspace_identity

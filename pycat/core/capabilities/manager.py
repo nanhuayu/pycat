@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from collections.abc import Mapping
+
+from pycat.core.config.migrations import migrate_capabilities_payload
+from pycat.core.persistence import atomic_write_text
+from pycat.models.contracts.capability import CapabilitiesConfig, CapabilityConfig
 
 from .defaults import default_capabilities_config
-from pycat.models.contracts.capability import CapabilitiesConfig, CapabilityConfig
-from pycat.core.config.migrations import migrate_capabilities_payload
 
 
 def merge_capability(base: CapabilityConfig, override: CapabilityConfig) -> CapabilityConfig:
@@ -26,7 +26,8 @@ def merge_capability(base: CapabilityConfig, override: CapabilityConfig) -> Capa
         description=override.description or base.description,
         prompt=override.prompt or base.prompt,
         input_schema=override.input_schema or base.input_schema,
-        output_schema=override.output_schema or base.output_schema,
+        output_schema=(base.output_schema if base.id in {"memory_review", "wiki_synthesize"}
+                       else override.output_schema or base.output_schema),
         allowed_tool_categories=override.allowed_tool_categories or base.allowed_tool_categories,
         max_turns=override.max_turns if override.max_turns is not None else base.max_turns,
         temperature=override.temperature if override.temperature is not None else base.temperature,
@@ -81,13 +82,4 @@ class CapabilitiesManager:
     def _write(self, payload: dict) -> None:
         if not self.config_path:
             return
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_name = tempfile.mkstemp(prefix=f".{self.config_path.name}.", suffix=".tmp", dir=str(self.config_path.parent))
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-            os.replace(temp_name, self.config_path)
-        finally:
-            if os.path.exists(temp_name):
-                os.unlink(temp_name)
+        atomic_write_text(self.config_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")

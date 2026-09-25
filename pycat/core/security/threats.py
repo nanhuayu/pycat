@@ -11,7 +11,6 @@ import re
 import unicodedata
 from typing import Final
 
-
 MAX_SCAN_CHARS: Final[int] = 65_536
 _FILLER = r"(?:\w+\s+){0,8}"
 

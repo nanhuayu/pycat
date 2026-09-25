@@ -1,11 +1,11 @@
 """Versioned CLI output: final text, one JSON result, or NDJSON events."""
 from __future__ import annotations
 
-import json
-import sys
 import asyncio
 import io
+import json
 import os
+import sys
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any, TextIO
 

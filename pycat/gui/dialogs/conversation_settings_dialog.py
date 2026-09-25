@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from PyQt6.QtCore import QSize, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QSize, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -26,9 +26,11 @@ from PyQt6.QtWidgets import (
 from pycat.core.app.state import ConversationSettingsUpdate
 from pycat.core.config import AppConfig, load_app_config
 from pycat.core.modes.manager import ModeManager
+from pycat.gui.settings.components import build_dialog_button_box
 from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.form_builder import FormSection
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
 from pycat.gui.widgets.model_ref_selector import ModelRefCombo
 from pycat.gui.widgets.tool_category_selector import ToolCategorySelector
 from pycat.models.contracts.agent import effective_pycat_assistant_enabled
@@ -51,7 +53,7 @@ class ConversationSettingsDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("对话设置")
+        self.setWindowTitle(QCoreApplication.translate('ConversationSettingsDialog', '对话设置'))
         self.setObjectName("conversation_settings_dialog")
         self.setModal(True)
         self.setMinimumSize(620, 580)
@@ -72,9 +74,9 @@ class ConversationSettingsDialog(QDialog):
         tabs.setObjectName("conversation_settings_tabs")
         root.addWidget(tabs, 1)
 
-        common_body = self._add_scroll_tab(tabs, "常用")
-        context_body = self._add_scroll_tab(tabs, "上下文")
-        tools_body = self._add_scroll_tab(tabs, "工具与频道")
+        common_body = self._add_scroll_tab(tabs, QCoreApplication.translate('ConversationSettingsDialog', '常用'))
+        context_body = self._add_scroll_tab(tabs, QCoreApplication.translate('ConversationSettingsDialog', '上下文'))
+        tools_body = self._add_scroll_tab(tabs, QCoreApplication.translate('ConversationSettingsDialog', '工具与频道'))
 
         settings = conversation.settings or {}
         self._system_prompt_display_text = str(settings.get("session_instructions") or "").strip()
@@ -98,12 +100,9 @@ class ConversationSettingsDialog(QDialog):
 
         self._on_mode_changed(self.mode_combo.currentIndex())
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons = build_dialog_button_box(self)
         self.save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
         self.cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-        self.save_btn.setText("保存")
-        self.save_btn.setProperty("primary", True)
-        self.cancel_btn.setText("取消")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
@@ -124,8 +123,8 @@ class ConversationSettingsDialog(QDialog):
         return body
 
     def _build_basic_section(self, body: QVBoxLayout, conversation: Conversation) -> None:
-        section = FormSection("基本信息")
-        self.title_edit = section.add_line_edit("名称", text=conversation.title or "", object_name="conv_title")
+        section = FormSection(QCoreApplication.translate('ConversationSettingsDialog', '基本信息'))
+        self.title_edit = section.add_line_edit(QCoreApplication.translate('ConversationSettingsDialog', '名称'), text=conversation.title or "", object_name="conv_title")
 
         self.mode_combo = QComboBox()
         self.mode_combo.setObjectName("conv_mode")
@@ -152,41 +151,41 @@ class ConversationSettingsDialog(QDialog):
             logger.debug("Failed to restore conversation mode selection in settings dialog: %s", exc)
         self.mode_combo.blockSignals(False)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-        section.form.addRow("模式", self.mode_combo)
+        section.form.addRow(QCoreApplication.translate('ConversationSettingsDialog', '模式'), self.mode_combo)
         body.addWidget(section.group)
 
     def _build_system_prompt_section(self, body: QVBoxLayout) -> None:
-        section = FormSection("会话指令")
+        section = FormSection(QCoreApplication.translate('ConversationSettingsDialog', '会话指令'))
         self.pycat_assistant_check = section.add_checkbox(
-            "使用 PyCat 助手提示",
+            QCoreApplication.translate('ConversationSettingsDialog', '使用 PyCat 助手提示'),
             checked=bool(self._pycat_assistant_enabled),
-            row_label="默认提示",
+            row_label=QCoreApplication.translate('ConversationSettingsDialog', '默认提示'),
             object_name="conv_pycat_assistant",
         )
-        self.pycat_assistant_check.setToolTip("注入 PyCat 默认提示和当前环境信息；仅 Chat 模式可关闭。")
+        self.pycat_assistant_check.setToolTip(QCoreApplication.translate('ConversationSettingsDialog', '注入 PyCat 默认提示和当前环境信息；仅 Chat 模式可关闭。'))
         self.pycat_assistant_check.toggled.connect(self._on_pycat_assistant_toggled)
         self.system_prompt_edit = section.add_text_edit(
-            "内容",
+            QCoreApplication.translate('ConversationSettingsDialog', '内容'),
             text=self._system_prompt_display_text,
-            placeholder="追加本会话的指令",
+            placeholder=QCoreApplication.translate('ConversationSettingsDialog', '追加本会话的指令'),
             max_height=140,
             object_name="conv_system_prompt",
         )
-        self.system_prompt_note = QLabel("会话指令只会追加到当前请求，不替换全局或模式规则。")
+        self.system_prompt_note = QLabel(QCoreApplication.translate('ConversationSettingsDialog', '会话指令只会追加到当前请求，不替换全局或模式规则。'))
         self.system_prompt_note.setWordWrap(True)
         self.system_prompt_note.setProperty("muted", True)
-        self.system_prompt_edit.setPlaceholderText("仅追加到其它显式指令之后")
+        self.system_prompt_edit.setPlaceholderText(QCoreApplication.translate('ConversationSettingsDialog', '仅追加到其它显式指令之后'))
         section.form.addRow("", self.system_prompt_note)
         body.addWidget(section.group)
 
     def _build_model_section(self, body: QVBoxLayout, conversation: Conversation) -> None:
-        section = FormSection("会话模型")
+        section = FormSection(QCoreApplication.translate('ConversationSettingsDialog', '会话模型'))
 
         self.primary_model_combo = ModelRefCombo(
             self._providers,
             current_model_ref=self._current_primary_model_ref(conversation),
             allow_empty=False,
-            empty_label="选择主模型",
+            empty_label=QCoreApplication.translate('ConversationSettingsDialog', '选择主模型'),
         )
         self.primary_model_combo.setObjectName("conv_primary_model")
         model_row = QWidget()
@@ -198,44 +197,45 @@ class ConversationSettingsDialog(QDialog):
         self.edit_model_btn.setObjectName("toolbar_btn")
         self.edit_model_btn.setIcon(Icons.get(Icons.EDIT))
         self.edit_model_btn.setIconSize(QSize(18, 18))
-        self.edit_model_btn.setFixedSize(30, 30)
-        self.edit_model_btn.setToolTip("编辑模型")
-        self.edit_model_btn.setAccessibleName("编辑模型")
+        self.edit_model_btn.setFixedSize(COMPACT_CONTROL_HEIGHT, COMPACT_CONTROL_HEIGHT)
+        self.edit_model_btn.setToolTip(QCoreApplication.translate('ConversationSettingsDialog', '编辑模型'))
+        self.edit_model_btn.setAccessibleName(QCoreApplication.translate('ConversationSettingsDialog', '编辑模型'))
         self.edit_model_btn.clicked.connect(
             lambda: self.model_edit_requested.emit(self.primary_model_combo.model_ref().strip())
         )
         model_row_layout.addWidget(self.edit_model_btn)
-        section.form.addRow("主模型", model_row)
+        section.form.addRow(QCoreApplication.translate('ConversationSettingsDialog', '主模型'), model_row)
 
         self.edit_model_btn.setEnabled(bool(self.primary_model_combo.model_ref().strip()))
         self.primary_model_combo.currentIndexChanged.connect(self._on_primary_model_changed)
 
         llm_config = self._conversation.get_llm_config()
         self.stream_enabled = section.add_checkbox(
-            "启用",
+            QCoreApplication.translate('ConversationSettingsDialog', '启用'),
             checked=llm_config.resolved_stream(default=True),
-            row_label="流式输出",
+            row_label=QCoreApplication.translate('ConversationSettingsDialog', '流式输出'),
             object_name="conv_stream",
         )
 
         self.max_tokens_spin = QSpinBox()
         self.max_tokens_spin.setRange(0, 10_000_000)
         self.max_tokens_spin.setSingleStep(1024)
-        self.max_tokens_spin.setSpecialValueText("继承模型")
+        self.max_tokens_spin.setSpecialValueText(QCoreApplication.translate('ConversationSettingsDialog', '使用默认值'))
         self.max_tokens_spin.setValue(int(llm_config.max_tokens or 0))
         self.max_tokens_spin.setToolTip(
-            "本次请求输出上限；0 表示使用产品默认 65,536，再按模型档案能力上限和总窗口校准。"
+            QCoreApplication.translate('ConversationSettingsDialog', '本次请求输出上限；0 表示使用产品默认 65,536，再按模型档案能力上限和总窗口校准。')
         )
-        section.form.addRow("本次输出上限", self.max_tokens_spin)
+        section.form.addRow(QCoreApplication.translate('ConversationSettingsDialog', '本次输出上限'), self.max_tokens_spin)
 
-        hint = QLabel("推理强度和协议统一在“编辑模型”中设置。")
+        hint = QLabel(QCoreApplication.translate('ConversationSettingsDialog', '推理强度和协议统一在“编辑模型”中设置。'))
+        hint.setWordWrap(True)
         hint.setProperty("muted", True)
-        section.form.addRow("推理", hint)
+        section.form.addRow(QCoreApplication.translate('ConversationSettingsDialog', '推理'), hint)
 
         body.addWidget(section.group)
 
     def _build_tool_selection_section(self, body: QVBoxLayout, settings: dict) -> None:
-        group = QGroupBox("模型工具调用能力")
+        group = QGroupBox(QCoreApplication.translate('ConversationSettingsDialog', '模型工具调用能力'))
         layout = QVBoxLayout(group)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(8)
@@ -251,10 +251,10 @@ class ConversationSettingsDialog(QDialog):
         body.addWidget(group)
 
     def _build_feature_section(self, body: QVBoxLayout, settings: dict) -> None:
-        section = FormSection("显示")
+        section = FormSection(QCoreApplication.translate('ConversationSettingsDialog', '显示'))
         show_thinking = settings.get("show_thinking")
         self.show_thinking = section.add_checkbox(
-            "显示推理过程",
+            QCoreApplication.translate('ConversationSettingsDialog', '显示推理过程'),
             checked=show_thinking if isinstance(show_thinking, bool) else self._default_show_thinking,
             object_name="conv_show_thinking",
         )
@@ -262,11 +262,6 @@ class ConversationSettingsDialog(QDialog):
 
     def _on_primary_model_changed(self, _index: int) -> None:
         self.edit_model_btn.setEnabled(bool(self.primary_model_combo.model_ref().strip()))
-
-    def _selected_model_profile(self):
-        provider = self._resolve_provider_from_model_ref(self.primary_model_combo.model_ref().strip())
-        _provider_name, model_id = split_model_ref(self.primary_model_combo.model_ref().strip())
-        return provider.effective_model_profile(model_id) if provider is not None and model_id else None
 
     def build_update(self) -> ConversationSettingsUpdate:
         primary_model_ref = self.primary_model_combo.model_ref().strip()
@@ -314,18 +309,18 @@ class ConversationSettingsDialog(QDialog):
         )
 
     def _build_memory_policy_group(self, settings: dict) -> QGroupBox:
-        group = QGroupBox("记忆策略")
+        group = QGroupBox(QCoreApplication.translate('ConversationSettingsDialog', '记忆策略'))
         layout = QVBoxLayout(group)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(8)
 
         memory_enabled = settings.get("memory_enabled")
-        self.memory_enabled_check = QCheckBox("记住有用的偏好与项目经验")
+        self.memory_enabled_check = QCheckBox(QCoreApplication.translate('ConversationSettingsDialog', '记住有用的偏好与项目经验'))
         self.memory_enabled_check.setChecked(memory_enabled if isinstance(memory_enabled, bool) else True)
         layout.addWidget(self.memory_enabled_check)
 
         hint = QLabel(
-            "任务结束后在后台整理，下次运行时使用。关闭后停止收集、整理和使用记忆；已有内容仍可在右侧“记忆”中查看，重新启用后可编辑或忘记。"
+            QCoreApplication.translate('ConversationSettingsDialog', '任务结束后在后台整理，下次运行时使用。关闭后停止收集、整理和使用记忆；已有内容仍可在右侧“记忆”中查看，重新启用后可编辑或忘记。')
         )
         hint.setWordWrap(True)
         hint.setProperty("muted", True)
@@ -333,20 +328,20 @@ class ConversationSettingsDialog(QDialog):
         return group
 
     def _build_channel_policy_group(self, settings: dict) -> QGroupBox:
-        group = QGroupBox("频道策略")
+        group = QGroupBox(QCoreApplication.translate('ConversationSettingsDialog', '频道策略'))
         layout = QVBoxLayout(group)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(8)
 
         self.channel_notice_combo = QComboBox()
         configure_combo_popup(self.channel_notice_combo)
-        self.channel_notice_combo.addItem("默认提醒来源", "notice")
-        self.channel_notice_combo.addItem("严格限制未信任来源", "strict")
-        self.channel_notice_combo.addItem("简洁提示来源", "silent")
+        self.channel_notice_combo.addItem(QCoreApplication.translate('ConversationSettingsDialog', '默认提醒来源'), "notice")
+        self.channel_notice_combo.addItem(QCoreApplication.translate('ConversationSettingsDialog', '严格限制未信任来源'), "strict")
+        self.channel_notice_combo.addItem(QCoreApplication.translate('ConversationSettingsDialog', '简洁提示来源'), "silent")
 
         notice_row = QHBoxLayout()
         notice_row.setSpacing(8)
-        notice_row.addWidget(QLabel("来源提示策略"))
+        notice_row.addWidget(QLabel(QCoreApplication.translate('ConversationSettingsDialog', '来源提示策略')))
         notice_row.addWidget(self.channel_notice_combo, 1)
         layout.addLayout(notice_row)
 
@@ -362,7 +357,7 @@ class ConversationSettingsDialog(QDialog):
         self.channel_notice_combo.setCurrentIndex(idx if idx >= 0 else 0)
 
         if not enabled_channels:
-            empty = QLabel("当前没有启用的外部频道来源。可先到设置页的“频道”中配置来源，再在这里做会话级允许/信任控制。")
+            empty = QLabel(QCoreApplication.translate('ConversationSettingsDialog', '当前没有启用的外部频道来源。可先到设置页的“频道”中配置来源，再在这里做会话级允许/信任控制。'))
             empty.setWordWrap(True)
             empty.setProperty("muted", True)
             layout.addWidget(empty)
@@ -381,16 +376,16 @@ class ConversationSettingsDialog(QDialog):
             allow_check.setToolTip(source)
             row.addWidget(allow_check, 1)
 
-            trust_check = QCheckBox("可信来源")
+            trust_check = QCheckBox(QCoreApplication.translate('ConversationSettingsDialog', '可信来源'))
             trust_check.setChecked(source in trusted_sources and source in allowed_sources)
             trust_check.setEnabled(bool(allow_check.isChecked()))
-            trust_check.setToolTip("可信来源会在 prompt 中作为较高置信度的运行上下文，但仍不会覆盖系统规则。")
+            trust_check.setToolTip(QCoreApplication.translate('ConversationSettingsDialog', '可信来源会在 prompt 中作为较高置信度的运行上下文，但仍不会覆盖系统规则。'))
             row.addWidget(trust_check)
 
             allow_check.toggled.connect(lambda checked, src=source: self._on_channel_allow_toggled(src, checked))
             layout.addLayout(row)
 
-            source_label = QLabel(f"来源标识：{source}")
+            source_label = QLabel(QCoreApplication.translate('ConversationSettingsDialog', '来源标识：{source}').format(source=source))
             source_label.setProperty("muted", True)
             source_label.setWordWrap(True)
             layout.addWidget(source_label)
@@ -398,7 +393,7 @@ class ConversationSettingsDialog(QDialog):
             self._channel_allow_checks[source] = allow_check
             self._channel_trust_checks[source] = trust_check
 
-        hint = QLabel("允许来源控制哪些外部频道可进入当前会话；可信来源是允许来源的子集，用于更清晰地表达 trust boundary。")
+        hint = QLabel(QCoreApplication.translate('ConversationSettingsDialog', '允许来源控制哪些外部频道可进入当前会话；可信来源是允许来源的子集，用于更清晰地表达 trust boundary。'))
         hint.setWordWrap(True)
         hint.setProperty("muted", True)
         layout.addWidget(hint)
@@ -411,11 +406,11 @@ class ConversationSettingsDialog(QDialog):
         if slug == "chat":
             self.pycat_assistant_check.setEnabled(True)
             self.pycat_assistant_check.setChecked(bool(self._pycat_assistant_enabled))
-            self.pycat_assistant_check.setToolTip("注入 PyCat 默认提示和当前环境信息；可关闭用于原生模型提示词调试。")
+            self.pycat_assistant_check.setToolTip(QCoreApplication.translate('ConversationSettingsDialog', '注入 PyCat 默认提示和当前环境信息；可关闭用于原生模型提示词调试。'))
         else:
             self.pycat_assistant_check.setEnabled(False)
             self.pycat_assistant_check.setChecked(True)
-            self.pycat_assistant_check.setToolTip("Agent、Plan、Review 和频道模式固定使用运行规则。")
+            self.pycat_assistant_check.setToolTip(QCoreApplication.translate('ConversationSettingsDialog', 'Agent、Plan、Review 和频道模式固定使用运行规则。'))
         try:
             manager = ModeManager(getattr(self._conversation, "work_dir", "") or None)
             mode = manager.get(slug)
@@ -459,7 +454,7 @@ class ConversationSettingsDialog(QDialog):
 
     def _tool_selection_parent(self, mode_categories: set[str]) -> tuple[set[str], str]:
         ceiling = set(mode_categories)
-        path = "继承路径：Mode"
+        path = QCoreApplication.translate('ConversationSettingsDialog', '继承路径：Mode')
         settings = self._conversation.settings or {}
         binding = settings.get("channel_binding") if isinstance(settings.get("channel_binding"), dict) else {}
         channel_id = str(binding.get("channel_id") or "").strip()
@@ -473,8 +468,8 @@ class ConversationSettingsDialog(QDialog):
         channel_selection = getattr(channel, "tool_selection", None) if channel is not None else None
         if channel_selection is not None and channel_selection.allowed_categories is not None:
             ceiling &= set(channel_selection.allowed_categories)
-            path += " ∩ 频道实例"
-        path += " ∩ 当前会话"
+            path += QCoreApplication.translate('ConversationSettingsDialog', ' ∩ 频道实例')
+        path += QCoreApplication.translate('ConversationSettingsDialog', ' ∩ 当前会话')
         return ceiling, path
 
     def _selected_tool_selection(self) -> ToolSelectionPolicy | None:
@@ -505,15 +500,6 @@ class ConversationSettingsDialog(QDialog):
         provider = self._resolve_provider_by_id(provider_id)
         if provider is not None:
             return str(getattr(provider, "name", "") or "").strip()
-        return ""
-
-    def _resolve_provider_api_type(self, provider_id: str) -> str:
-        normalized_id = str(provider_id or "").strip()
-        if not normalized_id:
-            return ""
-        for provider in self._providers:
-            if getattr(provider, "id", "") == normalized_id:
-                return str(getattr(provider, "api_type", "") or "").strip().lower()
         return ""
 
     def _resolve_provider_from_model_ref(self, model_ref: str) -> Provider | None:

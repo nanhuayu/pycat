@@ -8,6 +8,7 @@ import pyte
 from PyQt6.QtCore import QPoint, QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QKeySequence, QPainter
 from PyQt6.QtWidgets import QAbstractScrollArea, QApplication, QMenu
+
 from pycat.gui.utils.theme import TERMINAL_COLORS, prepare_context_menu
 
 

@@ -13,7 +13,6 @@ from pycat.core.channel.host import ChannelHost
 from pycat.core.channel.platforms.wechat.delivery import WeChatDelivery
 from pycat.models.contracts.channel import ChannelConfig
 
-
 logger = logging.getLogger(__name__)
 
 

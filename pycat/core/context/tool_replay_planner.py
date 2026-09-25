@@ -6,9 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pycat.core.content.archive_store import SessionArchiveStore, estimate_tokens
-from pycat.core.content.view_protocol import ContentExactness, TOOL_SUMMARY_PROJECTION_CHARS
+from pycat.core.content.view_protocol import TOOL_SUMMARY_PROJECTION_CHARS, ContentExactness
 from pycat.models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
-
 
 EXACT_VIEW_KINDS = {"content", "full", "line", "char"}
 CCR_PRESSURE_LEVELS = {"tight", "compact"}

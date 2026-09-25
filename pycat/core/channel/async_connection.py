@@ -6,7 +6,6 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
-
 logger = logging.getLogger(__name__)
 
 

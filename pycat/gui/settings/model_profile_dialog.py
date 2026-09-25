@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -60,11 +60,11 @@ _COMMON_REQUEST_FIELDS = {
 }
 _OUTPUT_BUDGET_FIELDS = {"max_tokens", "max_output_tokens"}
 _CODEC_LABELS = {
-    "none": "无（使用接口默认）",
-    "responses_effort": "Responses 推理强度",
-    "chat_reasoning": "兼容接口推理（含 OpenRouter）",
-    "chat_thinking_effort": "兼容接口 thinking + effort",
-    "chat_toggle_budget": "兼容接口 thinking 开关",
+    "none": QT_TRANSLATE_NOOP('ModelProfileDialog', "无（使用接口默认）"),
+    "responses_effort": QT_TRANSLATE_NOOP('ModelProfileDialog', "Responses 推理强度"),
+    "chat_reasoning": QT_TRANSLATE_NOOP('ModelProfileDialog', "兼容接口推理（含 OpenRouter）"),
+    "chat_thinking_effort": QT_TRANSLATE_NOOP('ModelProfileDialog', "兼容接口 thinking + effort"),
+    "chat_toggle_budget": QT_TRANSLATE_NOOP('ModelProfileDialog', "兼容接口 thinking 开关"),
     "anthropic_adaptive": "Anthropic adaptive",
     "ollama_think": "Ollama think",
 }
@@ -120,7 +120,7 @@ class ModelProfileDialog(QDialog):
         return self._provider.model_profile_template()
 
     def _setup_ui(self) -> None:
-        self.setWindowTitle("添加模型" if not self._original_model_id else "编辑模型")
+        self.setWindowTitle(QCoreApplication.translate('ModelProfileDialog', '添加模型') if not self._original_model_id else QCoreApplication.translate('ModelProfileDialog', '编辑模型'))
         self.setObjectName("model_profile_dialog")
         self.setMinimumSize(560, 500)
         self.resize(620, 590)
@@ -130,7 +130,7 @@ class ModelProfileDialog(QDialog):
         root.setSpacing(10)
 
         self.tabs = QTabWidget()
-        for title, content in (("基本", self._build_basic_tab()), ("高级", self._build_advanced_tab())):
+        for title, content in ((QCoreApplication.translate('ModelProfileDialog', '基本'), self._build_basic_tab()), (QCoreApplication.translate('ModelProfileDialog', '高级'), self._build_advanced_tab())):
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -149,35 +149,35 @@ class ModelProfileDialog(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        identity = FormSection("模型")
-        self.model_id_input = identity.add_line_edit("模型 ID", placeholder="实际发送给接口的完整 ID")
+        identity = FormSection(QCoreApplication.translate('ModelProfileDialog', '模型'))
+        self.model_id_input = identity.add_line_edit(QCoreApplication.translate('ModelProfileDialog', '模型 ID'), placeholder=QCoreApplication.translate('ModelProfileDialog', '实际发送给接口的完整 ID'))
         self.model_id_input.setReadOnly(bool(self._original_model_id))
         self.model_id_input.textEdited.connect(self._suggest_model_type)
-        self.display_name_input = identity.add_line_edit("显示名称", placeholder="可选")
+        self.display_name_input = identity.add_line_edit(QCoreApplication.translate('ModelProfileDialog', '显示名称'), placeholder=QCoreApplication.translate('ModelProfileDialog', '可选'))
         self.model_type_combo = QComboBox()
-        self.model_type_combo.addItem("聊天与视觉理解", "chat")
-        self.model_type_combo.addItem("图像生成与编辑", "image")
+        self.model_type_combo.addItem(QCoreApplication.translate('ModelProfileDialog', '聊天与视觉理解'), "chat")
+        self.model_type_combo.addItem(QCoreApplication.translate('ModelProfileDialog', '图像生成与编辑'), "image")
         configure_combo_popup(self.model_type_combo)
-        identity.form.addRow("模型用途", self.model_type_combo)
+        identity.form.addRow(QCoreApplication.translate('ModelProfileDialog', '模型用途'), self.model_type_combo)
         for editor in (self.model_id_input, self.display_name_input):
             editor.setMinimumHeight(30)
         layout.addWidget(identity.group)
 
-        self.image_connection_note = QLabel("接口与认证由所属服务连接统一管理；尺寸、质量和数量在图像能力中设置。")
+        self.image_connection_note = QLabel(QCoreApplication.translate('ModelProfileDialog', '接口与认证由所属服务连接统一管理；尺寸、质量和数量在图像能力中设置。'))
         self.image_connection_note.setWordWrap(True)
         self.image_connection_note.setProperty("muted", True)
         layout.addWidget(self.image_connection_note)
 
-        capability = FormSection("能力")
+        capability = FormSection(QCoreApplication.translate('ModelProfileDialog', '能力'))
         abilities = QWidget()
         abilities_layout = QHBoxLayout(abilities)
         abilities_layout.setContentsMargins(0, 0, 0, 0)
         abilities_layout.setSpacing(14)
-        self.tools_check = QCheckBox("工具调用")
-        self.reasoning_check = QCheckBox("推理")
-        self.image_input_check = QCheckBox("图片输入")
-        self.audio_input_check = QCheckBox("音频输入")
-        self.audio_input_check.setToolTip("用于模型能力档案；当前输入框尚不发送音频附件。")
+        self.tools_check = QCheckBox(QCoreApplication.translate('ModelProfileDialog', '工具调用'))
+        self.reasoning_check = QCheckBox(QCoreApplication.translate('ModelProfileDialog', '推理'))
+        self.image_input_check = QCheckBox(QCoreApplication.translate('ModelProfileDialog', '图片输入'))
+        self.audio_input_check = QCheckBox(QCoreApplication.translate('ModelProfileDialog', '音频输入'))
+        self.audio_input_check.setToolTip(QCoreApplication.translate('ModelProfileDialog', '用于模型能力档案；当前输入框尚不发送音频附件。'))
         for checkbox in (
             self.tools_check,
             self.reasoning_check,
@@ -186,10 +186,10 @@ class ModelProfileDialog(QDialog):
         ):
             abilities_layout.addWidget(checkbox)
         abilities_layout.addStretch(1)
-        capability.form.addRow("支持", abilities)
+        capability.form.addRow(QCoreApplication.translate('ModelProfileDialog', '支持'), abilities)
         layout.addWidget(capability.group)
 
-        generation = FormSection("生成")
+        generation = FormSection(QCoreApplication.translate('ModelProfileDialog', '生成'))
         self.context_window_spin = self._optional_spin(10_000_000, 8192)
         self.max_output_spin = self._optional_spin(1_000_000, 1024)
         self.temperature_spin = self._optional_double_spin(2.0)
@@ -201,14 +201,14 @@ class ModelProfileDialog(QDialog):
         generation_grid.setVerticalSpacing(6)
         for column in (1, 3):
             generation_grid.setColumnStretch(column, 1)
-        context_window_label = QLabel("总窗口")
-        context_window_tooltip = "模型总上下文窗口，输入与输出共享。"
+        context_window_label = QLabel(QCoreApplication.translate('ModelProfileDialog', '总窗口'))
+        context_window_tooltip = QCoreApplication.translate('ModelProfileDialog', '模型总上下文窗口，输入与输出共享。')
         context_window_label.setToolTip(context_window_tooltip)
         self.context_window_spin.setToolTip(context_window_tooltip)
         generation_grid.addWidget(context_window_label, 0, 0)
         generation_grid.addWidget(self.context_window_spin, 0, 1)
-        max_output_label = QLabel("最大输出")
-        max_output_tooltip = "模型档案声明的单次输出上限；运行时会与会话请求和总窗口共同校准。"
+        max_output_label = QLabel(QCoreApplication.translate('ModelProfileDialog', '最大输出'))
+        max_output_tooltip = QCoreApplication.translate('ModelProfileDialog', '模型档案声明的单次输出上限，不会提高默认请求预算。请在会话设置中调整“本次输出上限”；服务端可能另有限制。')
         max_output_label.setToolTip(max_output_tooltip)
         self.max_output_spin.setToolTip(max_output_tooltip)
         generation_grid.addWidget(max_output_label, 0, 2)
@@ -224,17 +224,17 @@ class ModelProfileDialog(QDialog):
             spin.setMinimumWidth(100)
         layout.addWidget(generation.group)
 
-        reasoning = FormSection("推理")
+        reasoning = FormSection(QCoreApplication.translate('ModelProfileDialog', '推理'))
         self.reasoning_default_combo = QComboBox()
         self.reasoning_default_combo.setMinimumHeight(30)
         self.reasoning_default_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         configure_combo_popup(self.reasoning_default_combo)
-        reasoning.form.addRow("默认推理", self.reasoning_default_combo)
+        reasoning.form.addRow(QCoreApplication.translate('ModelProfileDialog', '默认推理'), self.reasoning_default_combo)
         self.reasoning_codec_combo = QComboBox()
         self.reasoning_codec_combo.setMinimumHeight(30)
         self.reasoning_codec_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         configure_combo_popup(self.reasoning_codec_combo)
-        reasoning.form.addRow("推理协议", self.reasoning_codec_combo)
+        reasoning.form.addRow(QCoreApplication.translate('ModelProfileDialog', '推理协议'), self.reasoning_codec_combo)
         self.reasoning_note = QLabel("")
         self.reasoning_note.setWordWrap(True)
         self.reasoning_note.setProperty("muted", True)
@@ -265,20 +265,20 @@ class ModelProfileDialog(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        advanced = FormSection("附加请求")
+        advanced = FormSection(QCoreApplication.translate('ModelProfileDialog', '附加请求'))
         self.custom_headers_edit = self._json_editor('{"X-Model-Header": "value"}')
         self.custom_headers_edit.setToolTip(
-            "仅附加到当前模型；普通同名字段覆盖 Provider 请求头，认证和传输保留头会被忽略。"
+            QCoreApplication.translate('ModelProfileDialog', '仅附加到当前模型；普通同名字段覆盖 Provider 请求头，认证和传输保留头会被忽略。')
         )
-        advanced.form.addRow("自定义请求头", self.custom_headers_edit)
+        advanced.form.addRow(QCoreApplication.translate('ModelProfileDialog', '自定义请求头'), self.custom_headers_edit)
         self.extra_body_edit = self._json_editor('{"service_tier": "priority"}')
         self.extra_body_edit.setToolTip(
-            "在 envelope 与推理协议之后做一次顶层覆盖；用于未内置的 Provider 私有字段。"
+            QCoreApplication.translate('ModelProfileDialog', '在 envelope 与推理协议之后做一次顶层覆盖；用于未内置的 Provider 私有字段。')
         )
         self.extra_body_warning = QLabel("")
         self.extra_body_warning.setWordWrap(True)
         self.extra_body_warning.setProperty("muted", True)
-        advanced.form.addRow("请求字段", self.extra_body_edit)
+        advanced.form.addRow(QCoreApplication.translate('ModelProfileDialog', '请求字段'), self.extra_body_edit)
         advanced.form.addRow("", self.extra_body_warning)
         layout.addWidget(advanced.group, 1)
 
@@ -292,7 +292,7 @@ class ModelProfileDialog(QDialog):
         spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         spin.setRange(0, maximum)
         spin.setSingleStep(step)
-        spin.setSpecialValueText("未设置")
+        spin.setSpecialValueText(QCoreApplication.translate('ModelProfileDialog', '未设置'))
         return spin
 
     @staticmethod
@@ -303,7 +303,7 @@ class ModelProfileDialog(QDialog):
         spin.setRange(-0.01, maximum)
         spin.setDecimals(2)
         spin.setSingleStep(0.05)
-        spin.setSpecialValueText("未设置")
+        spin.setSpecialValueText(QCoreApplication.translate('ModelProfileDialog', '未设置'))
         spin.setValue(-0.01)
         return spin
 
@@ -362,7 +362,7 @@ class ModelProfileDialog(QDialog):
         try:
             self.reasoning_codec_combo.clear()
             for codec in options:
-                self.reasoning_codec_combo.addItem(_CODEC_LABELS.get(codec, codec), codec)
+                self.reasoning_codec_combo.addItem(QCoreApplication.translate("ModelProfileDialog", _CODEC_LABELS.get(codec, codec)), codec)
                 index = self.reasoning_codec_combo.count() - 1
                 self.reasoning_codec_combo.setItemData(index, codec)
                 self.reasoning_codec_combo.setItemData(index, codec, Qt.ItemDataRole.ToolTipRole)
@@ -396,10 +396,10 @@ class ModelProfileDialog(QDialog):
         try:
             self.reasoning_default_combo.clear()
             labels = {
-                "inherit": "接口默认",
-                "off": "关闭",
-                "on": "开启",
-                "auto": "自动",
+                "inherit": QCoreApplication.translate('ModelProfileDialog', '接口默认'),
+                "off": QCoreApplication.translate('ModelProfileDialog', '关闭'),
+                "on": QCoreApplication.translate('ModelProfileDialog', '开启'),
+                "auto": QCoreApplication.translate('ModelProfileDialog', '自动'),
             }
             for mode in options:
                 self.reasoning_default_combo.addItem(labels.get(mode, mode), mode)
@@ -409,9 +409,9 @@ class ModelProfileDialog(QDialog):
         finally:
             self.reasoning_default_combo.blockSignals(False)
         self.reasoning_note.setText(
-            "未发送显式推理字段（接口默认）。"
+            QCoreApplication.translate('ModelProfileDialog', '未发送显式推理字段（接口默认）。')
             if codec == "none"
-            else f"可用模式：{'、'.join(options)}"
+            else QCoreApplication.translate('ModelProfileDialog', '可用模式：{value}').format(value='、'.join(options))
         )
 
     def _on_codec_changed(self, _index: int) -> None:
@@ -441,14 +441,14 @@ class ModelProfileDialog(QDialog):
         try:
             value = json.loads(text)
         except Exception as exc:
-            raise ValueError(f"{label} JSON 无效：{exc}") from exc
+            raise ValueError(QCoreApplication.translate('ModelProfileDialog', '{label} JSON 无效：{exc}').format(label=label, exc=exc)) from exc
         if not isinstance(value, dict):
-            raise ValueError(f"{label}必须是 JSON 对象")
+            raise ValueError(QCoreApplication.translate('ModelProfileDialog', '{label}必须是 JSON 对象').format(label=label))
         return value
 
     def _update_extra_body_warning(self) -> None:
         if self.model_type_combo.currentData() == "image":
-            self.extra_body_warning.setText("仅填写所选图像协议支持的附加参数；不能覆盖模型、提示词、输入图片与图像参数。Qwen 原生参数放在 parameters 对象中。")
+            self.extra_body_warning.setText(QCoreApplication.translate('ModelProfileDialog', '仅填写所选图像协议支持的附加参数；不能覆盖模型、提示词、输入图片与图像参数。Qwen 原生参数放在 parameters 对象中。'))
             return
         text = self.extra_body_edit.toPlainText().strip()
         if not text:
@@ -457,10 +457,10 @@ class ModelProfileDialog(QDialog):
         try:
             value = json.loads(text)
         except Exception:
-            self.extra_body_warning.setText("JSON 尚未完成。")
+            self.extra_body_warning.setText(QCoreApplication.translate('ModelProfileDialog', 'JSON 尚未完成。'))
             return
         if not isinstance(value, dict):
-            self.extra_body_warning.setText("请求字段必须是 JSON 对象。")
+            self.extra_body_warning.setText(QCoreApplication.translate('ModelProfileDialog', '请求字段必须是 JSON 对象。'))
             return
         structural = sorted(set(value).intersection(_STRUCTURAL_REQUEST_FIELDS))
         budget_fields = sorted(set(value).intersection(_OUTPUT_BUDGET_FIELDS))
@@ -469,22 +469,22 @@ class ModelProfileDialog(QDialog):
         )
         parts: list[str] = []
         if structural:
-            parts.append("发送时忽略结构字段：" + ", ".join(structural))
+            parts.append(QCoreApplication.translate('ModelProfileDialog', '发送时忽略结构字段：') + ", ".join(structural))
         if budget_fields:
-            parts.append("作为输出预算输入并在发送前校准：" + ", ".join(budget_fields))
+            parts.append(QCoreApplication.translate('ModelProfileDialog', '作为输出预算输入并在发送前校准：') + ", ".join(budget_fields))
         if overrides:
-            parts.append("将覆盖生成/推理字段：" + ", ".join(overrides))
+            parts.append(QCoreApplication.translate('ModelProfileDialog', '将覆盖生成/推理字段：') + ", ".join(overrides))
         self.extra_body_warning.setText("；".join(parts))
 
     def accept(self) -> None:
         if not self.model_id():
-            QMessageBox.warning(self, "模型 ID 无效", "请输入模型 ID。")
+            QMessageBox.warning(self, QCoreApplication.translate('ModelProfileDialog', '模型 ID 无效'), QCoreApplication.translate('ModelProfileDialog', '请输入模型 ID。'))
             self.model_id_input.setFocus()
             return
         try:
             self._accepted_profile = self._collect_profile()
         except ValueError as exc:
-            QMessageBox.warning(self, "模型参数无效", str(exc))
+            QMessageBox.warning(self, QCoreApplication.translate('ModelProfileDialog', '模型参数无效'), str(exc))
             return
         super().accept()
 
@@ -531,8 +531,8 @@ class ModelProfileDialog(QDialog):
                     self.temperature_spin.value() if self.temperature_spin.value() >= 0 else None
                 ),
                 "default_top_p": self.top_p_spin.value() if self.top_p_spin.value() >= 0 else None,
-                "custom_headers": self._json_object(self.custom_headers_edit, "自定义请求头"),
-                "extra_body": self._json_object(self.extra_body_edit, "请求字段"),
+                "custom_headers": self._json_object(self.custom_headers_edit, QCoreApplication.translate('ModelProfileDialog', '自定义请求头')),
+                "extra_body": self._json_object(self.extra_body_edit, QCoreApplication.translate('ModelProfileDialog', '请求字段')),
             }
         )
         return ModelProfile.from_dict(payload).as_user_managed()

@@ -1,40 +1,35 @@
 """Workspace-aware skill discovery and declared invocation service."""
 from __future__ import annotations
 
-import os
 import asyncio
-import time
 import hashlib
 import json
+import os
 import re
 import shutil
 import stat
 import tempfile
+import time
 import uuid
 import zipfile
-from pycat.models.session_paths import resolve_project_data_root
-from pathlib import Path
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
+from pycat.core.agent.policy import RunPolicyBuilder
 from pycat.core.config import get_global_subdir
 from pycat.core.persistence import atomic_write_bytes, atomic_write_text, exclusive_file_lock
-from pycat.core.agent.policy import RunPolicyBuilder
-from pycat.models.conversation import Conversation, Message
-from pycat.models.contracts.tooling import ToolSelectionPolicy, FilesystemScope
 from pycat.core.security.threats import first_threat_message
 from pycat.core.skills import (
     Skill,
-    SkillExecutionCheck,
     SkillInvocationSpec,
     SkillsManager,
-    check_skill_execution_availability,
     resolve_skill_invocation_spec,
 )
 from pycat.core.skills import manage as skill_manage
-from pycat.core.skills.usage import SkillUsageStore
-from pycat.core.skills.usage import usage_path
 from pycat.core.skills.manifest import bundled_skill_dir
-
+from pycat.core.skills.usage import SkillUsageStore, usage_path
+from pycat.models.contracts.tooling import FilesystemScope, ToolSelectionPolicy
+from pycat.models.conversation import Conversation, Message
+from pycat.models.session_paths import resolve_project_data_root
 
 MAX_IMPORT_MEMBERS = 256
 MAX_IMPORT_FILE_BYTES = 8 * 1024 * 1024
@@ -839,20 +834,3 @@ class SkillService:
         if skill is None:
             return None
         return resolve_skill_invocation_spec(skill, fallback_mode=fallback_mode)
-
-    def check_execution(
-        self,
-        skill_name: str,
-        *,
-        work_dir: str | None,
-        tools,
-        fallback_mode: str = "agent",
-    ) -> SkillExecutionCheck | None:
-        skill = self.get(skill_name, work_dir=work_dir)
-        if skill is None:
-            return None
-        return check_skill_execution_availability(
-            skill,
-            tools,
-            fallback_mode=fallback_mode,
-        )

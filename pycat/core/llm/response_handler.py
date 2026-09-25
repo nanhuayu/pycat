@@ -6,6 +6,7 @@ on orchestration.
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import logging
@@ -858,8 +859,12 @@ async def parse_stream_response(
     anthropic_reasoning_blocks: Dict[int, dict[str, Any]] = {}
     ollama_calls: dict[str, dict[str, Any]] = {}
     chat_reasoning_details: dict[int, dict[str, Any]] = {}
+    terminal_received = False
 
     async for data in iter_sse_data_lines(response, cancel_event=cancel_event, log_fp=log_fp):
+        if data == "[DONE]":
+            terminal_received = True
+            break
         try:
             chunk_data = parse_sse_json(data)
         except json.JSONDecodeError:
@@ -880,6 +885,12 @@ async def parse_stream_response(
             _merge_response_metadata(
                 response_metadata,
                 observed_metadata,
+            )
+            finish_reason = str(observed_metadata.get("finish_reason") or "")
+            terminal_received = terminal_received or bool(
+                (finish_reason and finish_reason not in {"in_progress", "queued"})
+                or chunk_data.get("type") in {"message_stop", "response.completed"}
+                or (response_format == "ollama_chat" and chunk_data.get("done") is True)
             )
 
             # Stop at the provider's terminal failure event.  In particular,
@@ -1218,6 +1229,13 @@ async def parse_stream_response(
                 thinking_content += thinking
                 if show_thinking and on_thinking:
                     on_thinking(thinking)
+
+    if cancel_event is not None and cancel_event.is_set():
+        raise asyncio.CancelledError
+    if not terminal_received and not runtime_error:
+        # EOF alone is not a completed model response. Discard this attempt's
+        # partial tool calls and let the request pipeline retry the same body.
+        raise httpx.RemoteProtocolError("Model stream closed before a terminal event")
 
     # Stream finished
     if log_fp:

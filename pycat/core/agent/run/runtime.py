@@ -3,16 +3,16 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any, Callable
 
-from pycat.core.agent.run.engine import AgentRunEngine
 from pycat.core.agent.run.control import RunControl
-from pycat.core.context.maintainer import ContextMaintainer
-from pycat.core.content.session_content import SessionContentService
+from pycat.core.agent.run.engine import AgentRunEngine
 from pycat.core.capabilities.executor import CapabilityExecutor
-from pycat.models.contracts.config import AppConfig
+from pycat.core.content.session_content import SessionContentService
+from pycat.core.context.maintainer import ContextMaintainer
 from pycat.core.prompts.renderer import PromptRenderer
 from pycat.core.tools.base import ToolApprovalRequest
 from pycat.core.tools.manager import ToolManager
 from pycat.models.contracts.agent import RunPolicy, RunResult
+from pycat.models.contracts.config import AppConfig
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
 

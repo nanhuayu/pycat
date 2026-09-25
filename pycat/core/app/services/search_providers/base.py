@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -43,7 +43,7 @@ class BaseSearchProvider(ABC):
         Returns (is_valid, error_message).
         """
         try:
-            results = await self.search("test", max_results=1)
+            await self.search("test", max_results=1)
             return True, None
         except Exception as e:
             return False, str(e)

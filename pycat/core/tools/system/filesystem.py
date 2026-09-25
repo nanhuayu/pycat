@@ -1,11 +1,12 @@
 import asyncio
 import json
-import mimetypes
 from pathlib import Path
 from typing import Any, Dict, List
 
 from pycat.core.content.attachments import encode_image_file_to_data_url
+from pycat.core.content.mime import DEFAULT_MIME, guess_mime
 from pycat.core.content.office import extract_office_text, is_office_attachment
+from pycat.core.content.pdf import MAX_PDF_BYTES, extract_pdf_text_isolated
 from pycat.core.content.references import build_workspace_content_ref
 from pycat.core.content.resolver import SessionContentResolver
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
@@ -101,7 +102,11 @@ class ReadFileTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Read a bounded authorized file or current-session input snapshot; text can be limited to an inclusive line range."
+        return (
+            "Read an authorized file or current-session input snapshot. Text supports line ranges; "
+            "PDFs return native text, image counts and next_page in bounded page batches, without OCR. "
+            "Use file__ocr for text within images or scanned pages."
+        )
 
     @property
     def category(self) -> str:
@@ -118,6 +123,9 @@ class ReadFileTool(BaseTool):
                 },
                 "start_line": {"type": "integer", "description": "Optional 1-based start line."},
                 "end_line": {"type": "integer", "description": "Optional inclusive end line."},
+                "start_page": {"type": "integer", "minimum": 1, "description": "PDF only: 1-based start page; default 1."},
+                "page_count": {"type": "integer", "minimum": 1, "maximum": 32,
+                               "description": "PDF only: pages in this batch; default 5, maximum 32. Follow next_page."},
             },
             "required": ["path"],
             "additionalProperties": False,
@@ -159,10 +167,9 @@ class ReadFileTool(BaseTool):
 
         try:
             size = file_path.stat().st_size
-            guessed_mime = mimetypes.guess_type(content_name or str(file_path))[0]
             mime_type = content_mime
-            if not mime_type or mime_type.lower() == "application/octet-stream":
-                mime_type = guessed_mime or mime_type
+            if not mime_type or mime_type.lower() == DEFAULT_MIME:
+                mime_type = guess_mime(content_name or file_path)
             if str(mime_type or "").startswith("image/"):
                 if size > 20 * 1024 * 1024:
                     return ToolResult("Image file is larger than 20 MB.", is_error=True)
@@ -183,7 +190,7 @@ class ReadFileTool(BaseTool):
                 extracted = extract_office_text(
                     file_path.read_bytes(),
                     name=content_name or file_path.name,
-                    mime=str(mime_type or "application/octet-stream"),
+                    mime=str(mime_type),
                     max_bytes=1024 * 1024,
                 )
                 suffix = "\n[truncated=true]" if extracted.truncated else ""
@@ -191,10 +198,17 @@ class ReadFileTool(BaseTool):
 
             content_suffix = Path(content_name or file_path.name).suffix.lower()
             if str(mime_type or "").lower() == "application/pdf" or content_suffix == ".pdf":
-                return ToolResult(
-                    "PDF text extraction is not configured; open the original file or provide a text export.",
-                    is_error=True,
+                if size > MAX_PDF_BYTES:
+                    return ToolResult('PDF file is larger than 20 MB; use a smaller source.', is_error=True)
+                extracted = await asyncio.to_thread(
+                    extract_pdf_text_isolated, file_path,
+                    start_page=int(arguments.get('start_page', 1)),
+                    page_count=int(arguments.get('page_count', 5)),
                 )
+                extracted['source_ref'] = path_text
+                if not context.files:
+                    extracted['local_path'] = str(file_path.resolve())
+                return ToolResult(json.dumps(extracted, ensure_ascii=False))
 
             if size > 10 * 1024 * 1024:
                 return ToolResult("File is larger than 10 MB; use file__search or a smaller source.", is_error=True)

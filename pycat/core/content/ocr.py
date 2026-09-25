@@ -6,18 +6,17 @@ import hashlib
 import threading
 import time
 import warnings
-from io import BytesIO
 from dataclasses import dataclass, field
+from importlib.util import find_spec
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 
-from importlib.util import find_spec
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from pycat.core.capabilities.executor import CapabilityRunContext
 from pycat.models.contracts.capability import CapabilitiesConfig
 from pycat.models.contracts.config import OcrConfig
-
 
 _DET_MODEL = "PP-OCRv6_det_small.onnx"
 _REC_MODEL = "PP-OCRv6_rec_small.onnx"

@@ -1,16 +1,21 @@
 """Archive-first tool call result handling."""
 from __future__ import annotations
-from pathlib import Path
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from pycat.core.content.archive_store import ArchivedContentRecord, SessionArchiveStore, estimate_tokens, stringify_content
+from pycat.core.content.archive_store import (
+    ArchivedContentRecord,
+    SessionArchiveStore,
+    estimate_tokens,
+    stringify_content,
+)
 from pycat.core.content.view_protocol import (
+    TOOL_SUMMARY_PROJECTION_CHARS,
     ContentExactness,
     ContentViewLabel,
-    TOOL_SUMMARY_PROJECTION_CHARS,
     exact_view_from_text,
 )
 
@@ -111,13 +116,13 @@ class ToolCallArchiveService:
         seq_id: int = 0,
         images: list[str] | None = None,
         is_error: bool = False,
-        error_metadata: dict[str, Any] | None = None,
+        result_metadata: dict[str, Any] | None = None,
     ) -> ToolCallArchiveResult:
         text = stringify_content(raw_text)
         if is_error:
-            return self._error(tool_name, text, error_metadata or {})
+            return self._error(tool_name, text, result_metadata or {})
         if self._should_archive(tool_name, tool_category, text):
-            return self._archive(tool_name, text, tool_call_id, tool_args or {}, seq_id, images or [])
+            return self._archive(tool_name, text, tool_call_id, tool_args or {}, seq_id, images or [], result_metadata or {})
         return self._inline(tool_name, text)
 
     @staticmethod
@@ -190,6 +195,7 @@ class ToolCallArchiveService:
         tool_args: dict[str, Any],
         seq_id: int,
         images: list[str],
+        result_metadata: dict[str, Any],
     ) -> ToolCallArchiveResult:
         call_id = re.sub(r"[^a-zA-Z0-9_.-]+", "_", str(tool_call_id or "call")).strip("_")[:40] or "call"
         content_kind = self._detect_content_kind(tool_name, text)
@@ -200,6 +206,10 @@ class ToolCallArchiveService:
             source=str(tool_name or ""),
             seq_id=seq_id,
             metadata={
+                **{key: value for key, value in result_metadata.items() if key in {
+                    "model", "provider", "image_protocol", "image_operation", "image_options", "image_outputs",
+                    "input_image_count", "has_mask", "request_id", "image_errors", "usage",
+                }},
                 "tool_call_id": str(tool_call_id or ""),
                 "content_kind": content_kind,
                 "references": self._extract_references(text),

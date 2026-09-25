@@ -4,7 +4,6 @@ from __future__ import annotations
 from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QApplication, QWidget
 
-
 MAIN_WINDOW_PREFERRED = (1080, 680)
 MAIN_WINDOW_MINIMUM = (900, 600)
 WORKBENCH_DIALOG_PREFERRED = (980, 640)

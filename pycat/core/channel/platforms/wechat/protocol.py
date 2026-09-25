@@ -5,6 +5,8 @@ import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
+from pycat.core.channel.replies import fit_reply_text
+
 
 def verify_wechat_signature(
     token: str,
@@ -96,13 +98,7 @@ def build_wechat_text_reply(*, to_user: str, from_user: str, content: str) -> st
 
 
 def normalize_wechat_reply_text(content: str, *, limit: int = 1800) -> str:
-    text = str(content or "").replace("\r\n", "\n").strip()
-    if not text:
-        return "已收到消息，但暂时没有可发送的文本回复。"
-    text = text.replace("]]>", "] ]>")
-    if len(text) <= limit:
-        return text
-    return text[: max(1, limit - 1)].rstrip() + "…"
+    return fit_reply_text(str(content or "").replace("]]>", "] ]>"), limit)
 
 
 __all__ = [

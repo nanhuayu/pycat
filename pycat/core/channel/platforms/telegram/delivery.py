@@ -78,8 +78,4 @@ class TelegramDelivery:
             message_thread_id=message_thread_id,
         )
 
-    def normalize_reply_text(self, content: Any, *, limit: int = 4096) -> str:
-        return self._client.normalize_reply_text(content, limit=limit)
-
-
 __all__ = ["TelegramDelivery"]

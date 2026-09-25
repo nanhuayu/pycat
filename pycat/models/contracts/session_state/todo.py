@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Iterable
-import uuid
-
 
 RECENT_COMPLETED_TODO_LIMIT = 5
 

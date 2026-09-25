@@ -43,16 +43,22 @@ class SshFiles:
     def stat(self, path, *, digest=False):
         return self.call("stat", path, digest=digest)
 
-    def read_bytes(self, path, *, max_bytes=128 * 1024 * 1024):
+    def read_bytes(self, path, *, max_bytes=128 * 1024 * 1024, check_cancelled=None):
+        if check_cancelled:
+            check_cancelled()
         metadata = self.stat(path, digest=True)
         if not metadata["file"] or metadata["size"] > max_bytes:
             raise ValueError("Not a regular file or file exceeds transfer limit")
         data = bytearray()
         while len(data) < metadata["size"]:
+            if check_cancelled:
+                check_cancelled()
             chunk = base64.b64decode(self.call("read", path, version=metadata["version"], offset=len(data), size=65536), validate=True)
             if not chunk:
                 raise ValueError("Remote file ended during transfer")
             data.extend(chunk)
+        if check_cancelled:
+            check_cancelled()
         if hashlib.sha256(data).hexdigest() != metadata["digest"]:
             raise ValueError("Remote file changed during transfer")
         return bytes(data)

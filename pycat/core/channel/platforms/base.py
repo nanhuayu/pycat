@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from pycat.core.channel.connection import ChannelConnectionSnapshot, ChannelConnectionState
 from pycat.core.channel.host import ChannelHost
 from pycat.models.contracts.channel import ChannelConfig

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree as ET
 
-
 MAX_OFFICE_XML_BYTES = 8 * 1024 * 1024
 MAX_OFFICE_TOTAL_XML_BYTES = 64 * 1024 * 1024
 MAX_OFFICE_ZIP_ENTRIES = 4096

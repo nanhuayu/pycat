@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PyQt6 import sip
-from PyQt6.QtCore import QRect, QSize, Qt, pyqtSlot
+from PyQt6.QtCore import QCoreApplication, QRect, QSize, Qt, pyqtSlot
 from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QIcon, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
@@ -17,16 +17,15 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSplitter,
     QStyle,
     QStyledItemDelegate,
-    QSplitter,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from pycat.gui.utils.theme import configure_icon_button, resolve_accent, resolve_theme, theme_tokens
-
 
 SETTINGS_NAV_WIDTH = 212
 RESOURCE_LIST_MINIMUM_WIDTH = 200
@@ -67,6 +66,8 @@ class SettingsActionBar(QWidget):
         button = QPushButton(str(text or ""))
         button.setObjectName("settings_action_btn")
         button.setIcon(icon)
+        button.setIconSize(QSize(16, 16))
+        button.setAccessibleName(tooltip or text)
         if danger:
             button.setProperty("danger", True)
         if primary:
@@ -131,7 +132,7 @@ class SettingsListDetailLayout(QWidget):
         self.detail_layout = QVBoxLayout(self.detail_panel)
         self.detail_layout.setContentsMargins(0, 0, 0, 0)
         self.detail_layout.setSpacing(8)
-        self.back_button = QPushButton("返回列表")
+        self.back_button = QPushButton(QCoreApplication.translate('SettingsComponents', "返回列表"))
         self.back_button.clicked.connect(self.show_list)
         self.detail_title = QLabel()
         self.detail_title.setObjectName("resource_detail_title")
@@ -185,7 +186,7 @@ class SettingsListDetailLayout(QWidget):
         if sip.isdeleted(self) or sip.isdeleted(self.list_widget):
             return
         item = self.list_widget.currentItem()
-        self.detail_title.setText(str(item.data(RESOURCE_TITLE_ROLE) or item.text()) if item else "选择条目查看详情")
+        self.detail_title.setText(str(item.data(RESOURCE_TITLE_ROLE) or item.text()) if item else QCoreApplication.translate('SettingsComponents', "选择条目查看详情"))
         self.detail_panel.setEnabled(item is not None)
         if item is None:
             self._detail_requested = False
@@ -232,7 +233,7 @@ class SettingsEmptyState(QWidget):
         layout.setContentsMargins(12, 24, 12, 24)
         layout.setSpacing(4)
         layout.addStretch(1)
-        heading = QLabel(str(title or "暂无内容"))
+        heading = QLabel(str(title or QCoreApplication.translate('SettingsComponents', "暂无内容")))
         heading.setProperty("heading", True)
         heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(heading)
@@ -245,16 +246,27 @@ class SettingsEmptyState(QWidget):
         layout.addStretch(1)
 
 
-def build_dialog_button_box(parent=None) -> QDialogButtonBox:
+def build_dialog_button_box(parent=None, *, accept_text=None,
+                            accept_button=QDialogButtonBox.StandardButton.Save) -> QDialogButtonBox:
     buttons = QDialogButtonBox(
-        QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel,
+        accept_button | QDialogButtonBox.StandardButton.Cancel,
         parent,
     )
-    save = buttons.button(QDialogButtonBox.StandardButton.Save)
+    save = buttons.button(accept_button)
     cancel = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-    save.setText("保存")
+    save.setText(accept_text if accept_text is not None else QCoreApplication.translate("DialogButtons", "保存"))
     save.setProperty("primary", True)
-    cancel.setText("取消")
+    save.setDefault(True)
+    cancel.setText(QCoreApplication.translate("DialogButtons", "取消"))
+    cancel.setAutoDefault(False)
+    # Native styles may add platform-dependent Save/Cancel icons.
+    for button in (save, cancel):
+        button.setIcon(QIcon())
+        button.setAccessibleName(button.text())
+    # QDialogButtonBox polishes its standard buttons before properties are set.
+    # Refresh the primary surface immediately, including on an already themed app.
+    save.style().unpolish(save)
+    save.style().polish(save)
     return buttons
 
 
@@ -276,7 +288,7 @@ class SettingsStatusListItem(QListWidgetItem):
         two_lines: bool = False,
     ) -> None:
         del two_lines
-        title = str(title or "未命名")
+        title = str(title or QCoreApplication.translate('SettingsComponents', "未命名"))
         detail = str(detail or "").strip()
         self.setText(title)
         self.setData(RESOURCE_TITLE_ROLE, title)

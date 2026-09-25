@@ -88,6 +88,10 @@ class PyCat:
         return self._services.tools
 
     @property
+    def delegations(self):
+        return self._services.delegation_service
+
+    @property
     def mcp(self):
         return self._services.mcp
 

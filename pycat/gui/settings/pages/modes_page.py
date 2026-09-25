@@ -1,11 +1,11 @@
 """Direct editor for user-wide mode and subagent profiles."""
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
+from dataclasses import replace
 from typing import Iterable
 
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import QCoreApplication, Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QListWidget,
     QMessageBox,
-    QSpinBox,
     QTabBar,
     QVBoxLayout,
     QWidget,
@@ -28,17 +27,16 @@ from pycat.gui.settings.components import (
     SettingsStatusListItem,
     configure_settings_resource_list,
 )
-from pycat.gui.widgets.tool_category_selector import ToolCategorySelector
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.combo_box import configure_combo_popup
-from pycat.gui.utils.settings_controls import SettingsFormLayout
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.settings_controls import SettingsFormLayout
 from pycat.gui.widgets.model_ref_selector import ModelTargetCombo
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
+from pycat.gui.widgets.tool_category_selector import ToolCategorySelector
 from pycat.models.contracts.mode import ModeConfig
 from pycat.models.contracts.model_target import ModelTarget
 from pycat.models.provider import Provider
-
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +50,7 @@ class ModesPage(QWidget):
         *,
         providers: Iterable[Provider] | None = None,
         mode_catalog: ModeCatalogService | None = None,
+        modes: Iterable[ModeConfig] | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -61,7 +60,11 @@ class ModesPage(QWidget):
         self._current_slug = ""
         self._loading = False
         self._setup_ui()
-        self.reload_from_disk()
+        if modes is None:
+            self.reload_from_disk()
+        else:
+            self._modes = list(modes)
+            self._rebuild_list()
 
     def set_providers(self, providers: Iterable[Provider]) -> None:
         self._providers = list(providers or ())
@@ -71,26 +74,26 @@ class ModesPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(10)
-        root.addWidget(build_page_header("模式", "配置主模式与可委托的子 Agent profile。"))
+        root.addWidget(build_page_header(QCoreApplication.translate('ModesPage', '模式'), QCoreApplication.translate('ModesPage', '配置主模式与可委托的子 Agent profile。')))
 
         self.view_tabs = QTabBar()
         self.view_tabs.setExpanding(False)
-        self.view_tabs.addTab("主模式")
-        self.view_tabs.addTab("子 Agent")
+        self.view_tabs.addTab(QCoreApplication.translate('ModesPage', '主模式'))
+        self.view_tabs.addTab(QCoreApplication.translate('ModesPage', '子 Agent'))
         self.view_tabs.currentChanged.connect(self._on_view_changed)
         root.addWidget(self.view_tabs)
 
         body = SettingsListDetailLayout()
         actions = SettingsActionBar(spacing=4)
-        actions.add_icon_action("新增模式", Icons.get(Icons.PLUS), self._add_mode)
+        actions.add_icon_action(QCoreApplication.translate('ModesPage', '添加模式'), Icons.get(Icons.PLUS), self._add_mode)
         self.mode_delete_btn = actions.add_icon_action(
-            "删除模式",
-            Icons.get(Icons.XMARK, color=Icons.COLOR_ERROR),
+            QCoreApplication.translate('ModesPage', '删除模式'),
+            Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR),
             self._delete_mode,
             danger=True,
         )
-        actions.add_icon_action("重新读取模式", Icons.get(Icons.REFRESH), self.reload_from_disk)
-        actions.add_icon_action("打开模式配置", Icons.get(Icons.FOLDER), self._open_config_dir)
+        actions.add_icon_action(QCoreApplication.translate('ModesPage', '重新读取模式'), Icons.get(Icons.REFRESH), self.reload_from_disk)
+        actions.add_icon_action(QCoreApplication.translate('ModesPage', '打开模式配置'), Icons.get(Icons.FOLDER), self._open_config_dir)
         actions.add_stretch()
         body.list_layout.addWidget(actions)
 
@@ -118,43 +121,33 @@ class ModesPage(QWidget):
         )
         self.tool_categories_widget = self.tool_category_selector
         self.tool_category_checks = self.tool_category_selector.checks
-        self.profile_kind_combo = QComboBox()
-        self.profile_kind_combo.addItem("主模式", "primary")
-        self.profile_kind_combo.addItem("委托专用子 Agent", "subagent")
-        self.profile_kind_combo.addItem("主模式 + 子 Agent", "both")
-        configure_combo_popup(self.profile_kind_combo)
         self.completion_policy_combo = QComboBox()
-        self.completion_policy_combo.addItem("普通文本完成", "text")
-        self.completion_policy_combo.addItem("必须显式调用 agent__complete", "explicit")
+        self.completion_policy_combo.addItem(QCoreApplication.translate('ModesPage', '普通文本完成'), "text")
+        self.completion_policy_combo.addItem(QCoreApplication.translate('ModesPage', '必须显式调用 agent__complete'), "explicit")
         configure_combo_popup(self.completion_policy_combo)
         self.model_target_combo = ModelTargetCombo(
             self._providers,
             current_target=ModelTarget(),
         )
-        self.max_turns_spin = QSpinBox()
-        self.max_turns_spin.setRange(0, 1000)
-        self.max_turns_spin.setSpecialValueText("继承全局")
         self.shared_context_combo = QComboBox()
-        self.shared_context_combo.addItem("仅共享索引", "indexes_only")
-        self.shared_context_combo.addItem("共享选定产物", "selected_artifacts")
-        self.shared_context_combo.addItem("只读完整会话", "full_session_readonly")
+        self.shared_context_combo.addItem(QCoreApplication.translate('ModesPage', '仅共享索引'), "indexes_only")
+        self.shared_context_combo.addItem(QCoreApplication.translate('ModesPage', '共享选定产物'), "selected_artifacts")
+        self.shared_context_combo.addItem(QCoreApplication.translate('ModesPage', '只读完整会话'), "full_session_readonly")
         configure_combo_popup(self.shared_context_combo)
         self.prompt_edit = ThemedTextEdit()
         self.prompt_edit.setAcceptRichText(False)
         self.prompt_edit.setMinimumHeight(130)
 
-        form.addRow("标识", self.slug_edit)
-        form.addRow("名称", self.name_edit)
-        form.addRow("用途", self.purpose_edit)
-        form.addRow("工具类别", self.tool_categories_widget)
-        form.addRow("完成策略", self.completion_policy_combo)
-        self.model_target_label = QLabel("委托模型")
-        self.max_turns_label = QLabel("最大轮次")
-        self.shared_context_label = QLabel("共享上下文")
+        form.addRow(QCoreApplication.translate('ModesPage', '标识'), self.slug_edit)
+        form.addRow(QCoreApplication.translate('ModesPage', '名称'), self.name_edit)
+        form.addRow(QCoreApplication.translate('ModesPage', '用途'), self.purpose_edit)
+        form.addRow(QCoreApplication.translate('ModesPage', '工具类别'), self.tool_categories_widget)
+        form.addRow(QCoreApplication.translate('ModesPage', '完成策略'), self.completion_policy_combo)
+        self.model_target_label = QLabel(QCoreApplication.translate('ModesPage', '委托模型'))
+        self.shared_context_label = QLabel(QCoreApplication.translate('ModesPage', '共享上下文'))
         form.addRow(self.model_target_label, self.model_target_combo)
-        form.addRow(self.max_turns_label, self.max_turns_spin)
         form.addRow(self.shared_context_label, self.shared_context_combo)
-        form.addRow("指令", self.prompt_edit)
+        form.addRow(QCoreApplication.translate('ModesPage', '指令'), self.prompt_edit)
         body.add_detail_widget(self.editor, scrollable=True)
         root.addWidget(body, 1)
 
@@ -166,9 +159,9 @@ class ModesPage(QWidget):
     @staticmethod
     def _kind_label(mode: ModeConfig) -> str:
         return {
-            "primary": "主模式",
-            "subagent": "子 Agent",
-            "both": "主模式 + 子 Agent",
+            "primary": QCoreApplication.translate('ModeKind', '主模式'),
+            "subagent": QCoreApplication.translate('ModeKind', '子 Agent'),
+            "both": QCoreApplication.translate('ModesPage', '主模式 + 子 Agent'),
         }.get(mode.profile_kind, mode.profile_kind)
 
     def _rebuild_list(self, selected_slug: str = "") -> None:
@@ -184,7 +177,7 @@ class ModesPage(QWidget):
                 mode.name,
                 enabled=True,
                 detail=f"{kind_label} · {mode.slug}",
-                tooltip=f"{mode.name}\n标识：{mode.slug}\n类型：{kind_label}",
+                tooltip=QCoreApplication.translate('ModesPage', '{name}\n标识：{slug}\n类型：{kind_label}').format(name=mode.name, slug=mode.slug, kind_label=kind_label),
             )
             item.setData(Qt.ItemDataRole.UserRole, mode.slug)
             self.mode_list.addItem(item)
@@ -252,20 +245,17 @@ class ModesPage(QWidget):
             self.name_edit.setText(mode.name)
             self.purpose_edit.setText(mode.purpose or "")
             self.tool_category_selector.set_categories(set(mode.allowed_tool_categories))
-            index = self.profile_kind_combo.findData(mode.profile_kind)
-            self.profile_kind_combo.setCurrentIndex(index if index >= 0 else 0)
             is_channel = mode.slug == "channel"
             completion_policy = "explicit" if is_channel else mode.completion_policy
             index = self.completion_policy_combo.findData(completion_policy)
             self.completion_policy_combo.setCurrentIndex(index if index >= 0 else 0)
             self.completion_policy_combo.setEnabled(not is_channel)
             self.completion_policy_combo.setToolTip(
-                "Channel 使用 agent__complete 作为唯一正常完成协议。"
+                QCoreApplication.translate('ModesPage', 'Channel 使用 agent__complete 作为唯一正常完成协议。')
                 if is_channel
                 else ""
             )
             self.model_target_combo.set_model_target(mode.model_target)
-            self.max_turns_spin.setValue(int(mode.max_turns or 0))
             index = self.shared_context_combo.findData(mode.shared_context_policy)
             self.shared_context_combo.setCurrentIndex(index if index >= 0 else 0)
             self.prompt_edit.setPlainText(mode.prompt or "")
@@ -283,14 +273,12 @@ class ModesPage(QWidget):
         current = self._current_mode()
         if current is None:
             return
-        categories = sorted(self.tool_category_selector.selected_categories())
-        turns = int(self.max_turns_spin.value())
         updated = replace(
             current,
             name=self.name_edit.text().strip() or current.slug,
             purpose=self.purpose_edit.text().strip(),
             prompt=self.prompt_edit.toPlainText().strip(),
-            allowed_tool_categories=tuple(categories),
+            allowed_tool_categories=tuple(self.tool_category_selector.selected_categories()),
             profile_kind=current.profile_kind,
             completion_policy=(
                 "explicit"
@@ -298,7 +286,7 @@ class ModesPage(QWidget):
                 else str(self.completion_policy_combo.currentData() or "text")
             ),
             model_target=self.model_target_combo.model_target(),
-            max_turns=turns or None,
+            max_turns=current.max_turns if current.is_primary_mode() else None,
             shared_context_policy=str(
                 self.shared_context_combo.currentData() or "indexes_only"
             ),
@@ -317,7 +305,7 @@ class ModesPage(QWidget):
                 updated.name,
                 enabled=True,
                 detail=f"{kind_label} · {updated.slug}",
-                tooltip=f"{updated.name}\n标识：{updated.slug}\n类型：{kind_label}",
+                tooltip=QCoreApplication.translate('ModesPage', '{name}\n标识：{slug}\n类型：{kind_label}').format(name=updated.name, slug=updated.slug, kind_label=kind_label),
             )
 
     def _list_item(self, slug: str) -> SettingsStatusListItem | None:
@@ -333,15 +321,13 @@ class ModesPage(QWidget):
         for widget in (
             self.model_target_label,
             self.model_target_combo,
-            self.max_turns_label,
-            self.max_turns_spin,
             self.shared_context_label,
             self.shared_context_combo,
         ):
             widget.setVisible(enabled)
         self.model_target_combo.setEnabled(enabled)
         self.model_target_combo.setToolTip(
-            "该 profile 被委托运行时使用。" if enabled else "主模式使用当前会话模型。"
+            QCoreApplication.translate('ModesPage', '该 profile 被委托运行时使用，轮次上限继承父任务。') if enabled else QCoreApplication.translate('ModesPage', '主模式使用当前会话模型。')
         )
 
     def _add_mode(self) -> None:
@@ -356,8 +342,8 @@ class ModesPage(QWidget):
         self._modes.append(
             ModeConfig(
                 slug=slug,
-                name=f"自定义 Agent {index}",
-                purpose="自定义委托 profile" if is_subagent else "自定义主模式",
+                name=QCoreApplication.translate('ModesPage', '自定义 Agent {index}').format(index=index),
+                purpose=QCoreApplication.translate('ModesPage', '自定义委托 profile') if is_subagent else QCoreApplication.translate('ModesPage', '自定义主模式'),
                 allowed_tool_categories=("read", "web", "state"),
                 profile_kind="subagent" if is_subagent else "primary",
                 completion_policy="explicit" if is_subagent else "text",
@@ -372,10 +358,10 @@ class ModesPage(QWidget):
         if current is None:
             return
         if current.slug in set(get_required_mode_slugs()):
-            QMessageBox.information(self, "不能删除", "Chat、Agent、Plan、Review 和 Channel 是核心模式。")
+            QMessageBox.information(self, QCoreApplication.translate('ModesPage', '不能删除'), QCoreApplication.translate('ModesPage', 'Chat、Agent、Plan、Review 和 Channel 是核心模式。'))
             return
         if (
-            QMessageBox.question(self, "删除模式", f'确定删除“{current.name}”吗？')
+            QMessageBox.question(self, QCoreApplication.translate('ModesPage', '删除模式'), QCoreApplication.translate('ModesPage', '确定删除“{name}”吗？').format(name=current.name))
             != QMessageBox.StandardButton.Yes
         ):
             return
@@ -389,10 +375,3 @@ class ModesPage(QWidget):
     def collect_modes(self) -> list[ModeConfig]:
         self._save_current()
         return list(self._modes)
-
-    def save_to_disk(self) -> bool:
-        try:
-            return self._catalog.save(self.collect_modes())
-        except Exception as exc:
-            logger.debug("Failed to save modes: %s", exc)
-            return False

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import datetime
+from html import escape
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QSize, Qt, QUrl, QThreadPool
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, QCoreApplication, Qt, QThreadPool, QUrl
 from PyQt6.QtGui import QDesktopServices, QFontDatabase
 from PyQt6.QtWidgets import (
     QApplication,
@@ -14,7 +15,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QMenu,
     QPlainTextEdit,
     QPushButton,
@@ -27,17 +27,23 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from pycat.models.conversation import Conversation
-from pycat.core.observability import resolve_debug_trace_dir
-from pycat.core.observability.reader import read_trace_events, read_trace_node, MAX_EVENTS, MAX_TRACE_BYTES, MAX_PAYLOAD_BYTES
+from pycat.core.observability.debug_trace import resolve_debug_trace_dir
+from pycat.core.observability.reader import (
+    MAX_EVENTS,
+    MAX_PAYLOAD_BYTES,
+    MAX_TRACE_BYTES,
+    read_trace_events,
+    read_trace_node,
+)
 from pycat.gui.dialogs.tool_retest_dialog import ToolRetestDialog, show_sdk_dialog, tool_call_code
-from pycat.gui.utils.theme import prepare_context_menu
-from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.utils.display_text import single_line
-from pycat.gui.widgets.capsule import SingleLineLabel
 from pycat.gui.runtime.background_job import BackgroundJob
+from pycat.gui.utils.display_text import single_line
+from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button, prepare_context_menu
 from pycat.gui.utils.window_geometry import apply_workbench_dialog_size
-from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedPlainTextEdit, ThemedSelectableLabel
+from pycat.gui.widgets.capsule import SingleLineLabel
+from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedPlainTextEdit, ThemedTextBrowser
+from pycat.models.conversation import Conversation
 
 
 def _short_id(value: object, *, head: int = 8, tail: int = 4) -> str:
@@ -56,15 +62,22 @@ def _pretty_json(value: Any) -> str:
         return str(value)
 
 
+def _status_text(status: object) -> str:
+    value = str(status or "")
+    return {"started": QCoreApplication.translate('DebugTraceDialog', '已开始'), "running": QCoreApplication.translate('DebugTraceDialog', '运行中'), "completed": QCoreApplication.translate('DebugTraceDialog', '已完成'), "continue": QCoreApplication.translate('DebugTraceDialog', '继续'),
+            "failed": QCoreApplication.translate('DebugTraceDialog', '失败'), "error": QCoreApplication.translate('DebugTraceDialog', '错误'), "cancelled": QCoreApplication.translate('DebugTraceDialog', '已取消'), "canceled": QCoreApplication.translate('DebugTraceDialog', '已取消'),
+            "waiting": QCoreApplication.translate('DebugTraceDialog', '等待中'), "skipped": QCoreApplication.translate('DebugTraceDialog', '已跳过')}.get(value, value or QCoreApplication.translate('DebugTraceDialog', '未记录'))
+
+
 class DebugTraceDialog(QDialog):
     """Read-only trace viewer backed by ``events.jsonl``."""
 
     FILTERS = (
-        ("all", "全部"),
+        ("all", QT_TRANSLATE_NOOP('DebugTraceDialog', "全部")),
         ("llm", "LLM"),
-        ("tool", "工具"),
-        ("error", "错误"),
-        ("subtask", "子任务"),
+        ("tool", QT_TRANSLATE_NOOP('DebugTraceDialog', "工具")),
+        ("error", QT_TRANSLATE_NOOP('DebugTraceDialog', "错误")),
+        ("subtask", QT_TRANSLATE_NOOP('DebugTraceDialog', "子任务")),
     )
     MAX_EVENTS = MAX_EVENTS
     MAX_TRACE_BYTES = MAX_TRACE_BYTES
@@ -73,7 +86,7 @@ class DebugTraceDialog(QDialog):
     def __init__(self, conversation: Conversation, parent=None, *, request_ids=(), state_provider=None,
                  services=None, on_tool_finished=None):
         super().__init__(parent)
-        self.setWindowTitle("运行检查")
+        self.setWindowTitle(QCoreApplication.translate('DebugTraceDialog', '运行检查'))
         self.setObjectName("debug_trace_dialog")
         self.setModal(False)
         apply_workbench_dialog_size(self)
@@ -118,20 +131,20 @@ class DebugTraceDialog(QDialog):
         self.subtitle.setObjectName("trace_title")
         header.addWidget(self.subtitle, 1)
 
-        self.refresh_btn = self._tool_button(Icons.REFRESH, "刷新")
+        self.refresh_btn = self._tool_button(Icons.REFRESH, QCoreApplication.translate('DebugTraceDialog', '刷新'))
         self.refresh_btn.clicked.connect(self.refresh)
         header.addWidget(self.refresh_btn)
 
-        self.copy_request_btn = self._tool_button(Icons.COPY, "复制当前节点 request_id")
+        self.copy_request_btn = self._tool_button(Icons.COPY, QCoreApplication.translate('DebugTraceDialog', '复制当前节点 request_id'))
         self.copy_request_btn.clicked.connect(self._copy_request_id)
         header.addWidget(self.copy_request_btn)
 
-        self.open_dir_btn = self._tool_button(Icons.FOLDER, "打开 debug 文件夹")
+        self.open_dir_btn = self._tool_button(Icons.FOLDER, QCoreApplication.translate('DebugTraceDialog', '打开 debug 文件夹'))
         self.open_dir_btn.clicked.connect(self._open_debug_dir)
         header.addWidget(self.open_dir_btn)
-        self.more_btn = self._tool_button(Icons.MORE, "更多运行操作")
+        self.more_btn = self._tool_button(Icons.MORE, QCoreApplication.translate('DebugTraceDialog', '更多运行操作'))
         self.more_menu = prepare_context_menu(QMenu(self.more_btn), self)
-        self.more_menu.addAction("SDK 用法", self._show_sdk)
+        self.more_menu.addAction(QCoreApplication.translate('DebugTraceDialog', 'SDK 用法'), self._show_sdk)
         self.more_btn.setMenu(self.more_menu)
         self.more_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         header.addWidget(self.more_btn)
@@ -141,7 +154,7 @@ class DebugTraceDialog(QDialog):
         splitter.setChildrenCollapsible(False)
         self.pages = QTabWidget()
         self.pages.setObjectName("run_inspection_tabs")
-        self.pages.addTab(splitter, "过程")
+        self.pages.addTab(splitter, QCoreApplication.translate('DebugTraceDialog', '过程'))
         state_page = QWidget()
         state_layout = QVBoxLayout(state_page)
         state_layout.setContentsMargins(0, 8, 0, 0)
@@ -151,7 +164,7 @@ class DebugTraceDialog(QDialog):
         state_layout.addWidget(self.state_note)
         self.state_text = self._json_view()
         state_layout.addWidget(self.state_text, 1)
-        self.pages.addTab(state_page, "当前状态")
+        self.pages.addTab(state_page, QCoreApplication.translate('DebugTraceDialog', '当前状态'))
         root.addWidget(self.pages, 1)
 
         left = QWidget()
@@ -161,8 +174,8 @@ class DebugTraceDialog(QDialog):
 
         self.search_edit = ThemedLineEdit()
         self.search_edit.setFixedHeight(32)
-        self.search_edit.setAccessibleName("搜索运行节点")
-        self.search_edit.setPlaceholderText("搜索节点 / 工具 / request_id")
+        self.search_edit.setAccessibleName(QCoreApplication.translate('DebugTraceDialog', '搜索运行节点'))
+        self.search_edit.setPlaceholderText(QCoreApplication.translate('DebugTraceDialog', '搜索节点 / 工具 / request_id'))
         self.search_edit.textChanged.connect(self._apply_filter)
         left_layout.addWidget(self.search_edit)
 
@@ -170,6 +183,7 @@ class DebugTraceDialog(QDialog):
         filter_row.setSpacing(4)
         self.filter_buttons: dict[str, QToolButton] = {}
         for key, label in self.FILTERS:
+            label = QCoreApplication.translate("DebugTraceDialog", label)
             btn = QToolButton()
             btn.setText(label)
             btn.setCheckable(True)
@@ -202,15 +216,15 @@ class DebugTraceDialog(QDialog):
         right_layout.setContentsMargins(8, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        self.node_title = SingleLineLabel("选择一个运行节点")
+        self.node_title = SingleLineLabel(QCoreApplication.translate('DebugTraceDialog', '选择一个运行节点'))
         self.node_title.setObjectName("trace_node_title")
         self.node_title.setFixedHeight(28)
         node_header = QHBoxLayout()
         node_header.addWidget(self.node_title, 1)
-        self.retest_btn = QPushButton("复测工具…")
+        self.retest_btn = QPushButton(QCoreApplication.translate('DebugTraceDialog', '复测工具…'))
         self.retest_btn.clicked.connect(self._open_retest)
         node_header.addWidget(self.retest_btn)
-        self.copy_call_btn = self._tool_button(Icons.CODE, "复制调用代码")
+        self.copy_call_btn = self._tool_button(Icons.CODE, QCoreApplication.translate('DebugTraceDialog', '复制调用代码'))
         self.copy_call_btn.clicked.connect(self._copy_tool_call)
         node_header.addWidget(self.copy_call_btn)
         self.retest_btn.hide()
@@ -222,7 +236,7 @@ class DebugTraceDialog(QDialog):
         metrics = QHBoxLayout(self.metrics_bar)
         metrics.setContentsMargins(0, 0, 0, 4)
         metrics.setSpacing(8)
-        for key, caption in (("status", "状态"), ("duration", "耗时"), ("token", "Token"), ("ref", "引用")):
+        for key, caption in (("status", QCoreApplication.translate('DebugTraceDialog', '状态')), ("duration", QCoreApplication.translate('DebugTraceDialog', '耗时')), ("token", "Token"), ("ref", QCoreApplication.translate('DebugTraceDialog', '引用'))):
             label = QLabel(caption)
             label.setProperty("muted", True)
             metrics.addWidget(label)
@@ -232,23 +246,41 @@ class DebugTraceDialog(QDialog):
             setattr(self, f"{key}_value", value)
         right_layout.addWidget(self.metrics_bar)
 
+        self.overview_text = ThemedTextBrowser()
+        self.overview_text.setObjectName("trace_summary")
+        self.overview_text.setAccessibleName(QCoreApplication.translate('DebugTraceDialog', '运行摘要'))
+        self.overview_text.setFrameShape(QFrame.Shape.NoFrame)
+        self.overview_text.setOpenLinks(False)
+        self.overview_text.setOpenExternalLinks(False)
+        self.overview_text.document().setDocumentMargin(12)
+        right_layout.addWidget(self.overview_text, 1)
+        self.details_button = QToolButton()
+        self.details_button.setText(QCoreApplication.translate('DebugTraceDialog', '技术详情'))
+        self.details_button.setAccessibleName(QCoreApplication.translate('DebugTraceDialog', '展开或收起技术详情'))
+        self.details_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.details_button.setIcon(Icons.get(Icons.CHEVRON_RIGHT))
+        self.details_button.setCheckable(True)
+        self.details_button.setAutoRaise(True)
+        self.details_button.toggled.connect(self._toggle_details)
+        right_layout.addWidget(self.details_button, 0, Qt.AlignmentFlag.AlignLeft)
         self.tabs = QTabWidget()
         self.tabs.setObjectName("trace_tabs")
-        self.copy_tab_btn = self._tool_button(Icons.COPY, "复制当前页")
+        self.copy_tab_btn = self._tool_button(Icons.COPY, QCoreApplication.translate('DebugTraceDialog', '复制当前页'))
         self.copy_tab_btn.clicked.connect(self._copy_current_tab)
         self.tabs.setCornerWidget(self.copy_tab_btn, Qt.Corner.TopRightCorner)
-        self.overview_text = self._json_view()
+        self.metadata_text = self._json_view()
         self.request_text = self._json_view()
         self.raw_result_text = self._json_view()
         self.model_result_text = self._json_view()
         self.event_text = self._json_view()
         self.response_text = self.model_result_text
-        self.tabs.addTab(self.overview_text, "概览")
-        self.tabs.addTab(self.request_text, "请求")
-        self.tabs.addTab(self.raw_result_text, "原始结果")
-        self.tabs.addTab(self.model_result_text, "模型视图")
-        self.tabs.addTab(self.event_text, "事件")
-        right_layout.addWidget(self.tabs, 1)
+        self.tabs.addTab(self.metadata_text, QCoreApplication.translate('DebugTraceDialog', '节点'))
+        self.tabs.addTab(self.request_text, QCoreApplication.translate('DebugTraceDialog', '请求'))
+        self.tabs.addTab(self.raw_result_text, QCoreApplication.translate('DebugTraceDialog', '原始结果'))
+        self.tabs.addTab(self.model_result_text, QCoreApplication.translate('DebugTraceDialog', '模型视图'))
+        self.tabs.addTab(self.event_text, QCoreApplication.translate('DebugTraceDialog', '事件'))
+        right_layout.addWidget(self.tabs, 2)
+        self.tabs.hide()
         splitter.addWidget(right)
         left.setMinimumWidth(260)
         right.setMinimumWidth(360)
@@ -262,13 +294,7 @@ class DebugTraceDialog(QDialog):
 
     def _tool_button(self, icon_name: str, tooltip: str) -> QToolButton:
         btn = QToolButton(self)
-        btn.setIcon(Icons.get_muted(icon_name, scale_factor=0.9))
-        btn.setIconSize(QSize(18, 18))
-        btn.setToolTip(tooltip)
-        btn.setAutoRaise(True)
-        btn.setFixedSize(28, 28)
-        btn.setAccessibleName(tooltip)
-        btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        configure_icon_button(btn, Icons.get_muted(icon_name), tooltip)
         return btn
 
     def _json_view(self) -> QPlainTextEdit:
@@ -282,19 +308,23 @@ class DebugTraceDialog(QDialog):
         edit.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         return edit
 
+    def _toggle_details(self, expanded: bool) -> None:
+        self.tabs.setVisible(expanded)
+        self.details_button.setIcon(Icons.get(Icons.CHEVRON_DOWN if expanded else Icons.CHEVRON_RIGHT))
+
     def refresh(self) -> None:
         current = self._state_provider() if self._state_provider else None
         live = current is not None and current.id == self._conversation.id
         snapshot = current if live else self._conversation
-        self.state_note.setText("刷新时的当前会话状态，可能包含尚未保存的进度。" if live else "打开窗口时的会话快照。")
-        self.state_note.setText(self.state_note.text() + " 历史请求中的状态请在过程页查看。")
+        self.state_note.setText(QCoreApplication.translate('DebugTraceDialog', '刷新时的当前会话状态，可能包含尚未保存的进度。') if live else QCoreApplication.translate('DebugTraceDialog', '打开窗口时的会话快照。'))
+        self.state_note.setText(self.state_note.text() + QCoreApplication.translate('DebugTraceDialog', ' 历史请求中的状态请在过程页查看。'))
         self.state_text.setPlainText(_pretty_json(snapshot.get_state().to_dict()))
         if self._load_job is not None:
             self._load_job.abandon()
         path, request_ids = self._debug_dir / "events.jsonl", self.target[1]
         job = BackgroundJob(lambda: self._read_events(path, request_ids))
         self._load_job = job
-        self.subtitle.setText("正在读取运行记录…")
+        self.subtitle.setText(QCoreApplication.translate('DebugTraceDialog', '正在读取运行记录…'))
         self.refresh_btn.setEnabled(False)
         self.destroyed.connect(job.abandon)
         job.signals.finished.connect(lambda result, error: self._finish_load(job, result, error))
@@ -305,7 +335,7 @@ class DebugTraceDialog(QDialog):
             return
         self._load_job = None
         self.refresh_btn.setEnabled(True)
-        self._events, self._load_note = result if error is None else ([], f"读取失败：{error}")
+        self._events, self._load_note = result if error is None else ([], QCoreApplication.translate('DebugTraceDialog', '读取失败：{error}').format(error=error))
         self._update_context_labels()
         current = self.tree.currentItem()
         selected_key = current.data(0, Qt.ItemDataRole.UserRole) if current else ""
@@ -335,8 +365,8 @@ class DebugTraceDialog(QDialog):
             if request_id and request_id not in seen:
                 seen.add(request_id)
                 request_ids.append(request_id)
-        scope = "本次运行" if self.target[1] else f"{len(request_ids)} 次运行"
-        self.subtitle.setText(f"{self._conversation.title or '未命名对话'} · {scope} · {len(self._events)} 条事件")
+        scope = QCoreApplication.translate('DebugTraceDialog', '本次运行') if self.target[1] else QCoreApplication.translate('DebugTraceDialog', '{value} 次运行').format(value=len(request_ids))
+        self.subtitle.setText(QCoreApplication.translate('DebugTraceDialog', '{value} · {scope} · {value_} 条事件').format(value=self._conversation.title or QCoreApplication.translate('DebugTraceDialog', '未命名对话'), scope=scope, value_=len(self._events)))
         self.subtitle.setToolTip(
             f"{self._conversation.title}\nsession: {session_id}\nrequest: {', '.join(request_ids) or '-'}"
         )
@@ -351,7 +381,24 @@ class DebugTraceDialog(QDialog):
     @classmethod
     def _read_events(cls, path: Path, request_ids=()) -> tuple[list[dict[str, Any]], str]:
         page = read_trace_events(path, request_ids=request_ids, limit=cls.MAX_EVENTS, max_bytes=cls.MAX_TRACE_BYTES)
-        return page["events"], page["note"]
+        # Project the reader's structured status without translating raw records
+        # or parsing its human-readable diagnostic messages.
+        if page["status"] == "missing":
+            note = QCoreApplication.translate("DebugTraceDialog", "尚未记录运行事件，或记录已移除。")
+        elif page["status"] != "ok":
+            note = page["note"]
+        else:
+            notes = []
+            if page["truncated"]:
+                notes.append(QCoreApplication.translate("DebugTraceDialog", "显示有界预览；完整日志保留在原文件中。"))
+            if page["invalid_lines"]:
+                notes.append(QCoreApplication.translate("DebugTraceDialog", "有 {count} 行无法解析。").format(count=page["invalid_lines"]))
+            if page["incomplete_tail"]:
+                notes.append(QCoreApplication.translate("DebugTraceDialog", "末行尚不完整，可稍后从 next_cursor 重读。"))
+            if request_ids and not page["events"]:
+                notes.append(QCoreApplication.translate("DebugTraceDialog", "当前读取范围没有本次运行事件。"))
+            note = " ".join(notes)
+        return page["events"], note
 
     def _rebuild_tree(self) -> None:
         self.tree.clear()
@@ -375,7 +422,7 @@ class DebugTraceDialog(QDialog):
 
         if not order:
             self._show_node("")
-            empty = QTreeWidgetItem(["暂无 trace 事件", ""])
+            empty = QTreeWidgetItem([QCoreApplication.translate('DebugTraceDialog', '暂无 trace 事件'), ""])
             empty.setData(0, Qt.ItemDataRole.UserRole, "")
             self.tree.addTopLevelItem(empty)
             return
@@ -387,7 +434,7 @@ class DebugTraceDialog(QDialog):
             item.setTextAlignment(1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             tooltip = self._node_time_tooltip(events)
             if tooltip:
-                item.setToolTip(0, f"{self._node_title(node_id)}\n{tooltip}")
+                item.setToolTip(0, f"{self._node_title(node_id)}\n{node_id.replace(chr(31), ' / ')}\n{tooltip}")
                 item.setToolTip(1, tooltip)
             self._items[node_id] = item
             self._search_text[node_id] = " ".join(json.dumps(event, ensure_ascii=False).casefold() for event in events)
@@ -400,7 +447,7 @@ class DebugTraceDialog(QDialog):
                 parent.addChild(item)
             else:
                 self.tree.addTopLevelItem(item)
-        self.tree.expandAll()
+        self.tree.expandToDepth(0)
         if self.tree.topLevelItemCount():
             self.tree.setCurrentItem(self.tree.topLevelItem(0))
 
@@ -415,22 +462,23 @@ class DebugTraceDialog(QDialog):
         last = events[-1] if events else first
         display_node_id = node_id.rsplit("\x1f", 1)[-1]
         kind = str(first.get("kind") or last.get("kind") or "event")
-        status = str(last.get("status") or "")
+        status = _status_text(last.get("status"))
         name = str(first.get("name") or last.get("name") or "")
         if kind == "run":
-            return f"Run {_short_id(first.get('request_id'))} · {status or 'running'}"
+            return QCoreApplication.translate('DebugTraceDialog', '运行 {value} · {status}').format(value=_short_id(first.get('request_id')), status=status)
         if kind == "turn":
-            return f"{name or display_node_id} · {status or 'running'}"
+            turn = first.get("turn")
+            return QCoreApplication.translate('DebugTraceDialog', '{value} · {status}').format(value=QCoreApplication.translate('DebugTraceDialog', '第 {turn} 轮').format(turn=turn) if turn else name or display_node_id, status=status)
         if kind == "llm":
-            return f"{display_node_id} · {name or 'main'} · {status or 'running'}"
+            return QCoreApplication.translate('DebugTraceDialog', '模型 · {value} · {status}').format(value=name or display_node_id, status=status)
         if kind == "tool":
-            return f"{str(last.get('tool_name') or name or 'tool')} · {status or 'running'}"
+            return QCoreApplication.translate('DebugTraceDialog', '{value} · {status}').format(value=str(last.get('tool_name') or name or QCoreApplication.translate('DebugTraceDialog', '工具')), status=status)
         if kind == "subtask":
-            return f"Subtask · {name or node_id} · {status or 'running'}"
+            return QCoreApplication.translate('DebugTraceDialog', '子任务 · {value} · {status}').format(value=name or display_node_id, status=status)
         if kind == "condense":
-            return f"Condense · {status or name or 'event'}"
+            return QCoreApplication.translate('DebugTraceDialog', '上下文压缩 · {status}').format(status=status)
         if kind == "retry":
-            return f"Retry · {name or status or node_id}"
+            return QCoreApplication.translate('DebugTraceDialog', '重试 · {value}').format(value=name or status)
         return f"{kind} · {name or display_node_id}"
 
     def _node_time_label(self, events: list[dict[str, Any]]) -> str:
@@ -444,7 +492,7 @@ class DebugTraceDialog(QDialog):
         start = self._format_event_timestamp(events[0])
         end = self._format_event_timestamp(events[-1])
         duration = self._format_duration(events[-1].get("duration_ms"))
-        return f"开始: {start or '-'}\n结束: {end or '-'}\n耗时: {duration}"
+        return QCoreApplication.translate('DebugTraceDialog', '开始: {value}\n结束: {value_}\n耗时: {duration}').format(value=start or '-', value_=end or '-', duration=duration)
 
     @classmethod
     def _format_event_datetime_compact(cls, event: dict[str, Any]) -> str:
@@ -505,6 +553,8 @@ class DebugTraceDialog(QDialog):
                 child_ok = item_matches(item.child(idx)) or child_ok
             visible = (kind_ok and query_ok) or child_ok
             item.setHidden(not visible)
+            if child_ok and (query or self._active_filter != "all"):
+                item.setExpanded(True)
             return visible
 
         for idx in range(self.tree.topLevelItemCount()):
@@ -533,21 +583,22 @@ class DebugTraceDialog(QDialog):
         self.copy_call_btn.hide()
         events = self._node_events.get(node_id) or []
         if not events:
-            self.node_title.setText("暂无运行记录")
+            self.node_title.setText(QCoreApplication.translate('DebugTraceDialog', '暂无运行记录'))
             for label in (self.status_value, self.duration_value, self.token_value, self.ref_value):
                 label.setText("—")
-            self.overview_text.setPlainText("暂无事件")
-            self.request_text.setPlainText("未保存 payload")
-            self.raw_result_text.setPlainText("暂无原始结果")
-            self.model_result_text.setPlainText("暂无模型视图")
-            self.event_text.setPlainText("暂无事件")
+            self.overview_text.setPlainText(QCoreApplication.translate('DebugTraceDialog', '暂无事件'))
+            self.metadata_text.setPlainText(QCoreApplication.translate('DebugTraceDialog', '暂无事件'))
+            self.request_text.setPlainText(QCoreApplication.translate('DebugTraceDialog', '未保存 payload'))
+            self.raw_result_text.setPlainText(QCoreApplication.translate('DebugTraceDialog', '暂无原始结果'))
+            self.model_result_text.setPlainText(QCoreApplication.translate('DebugTraceDialog', '暂无模型视图'))
+            self.event_text.setPlainText(QCoreApplication.translate('DebugTraceDialog', '暂无事件'))
             return
         self.node_title.setText(self._node_title(node_id))
         first = events[0]
         last = events[-1]
         data = dict(last.get("data") or {})
         refs = self._merged_refs(events)
-        self.status_value.setText(str(last.get("status") or first.get("status") or "-"))
+        self.status_value.setText(_status_text(last.get("status") or first.get("status")))
         self.duration_value.setText(self._format_duration(last.get("duration_ms")))
         tokens = next(
             (
@@ -555,10 +606,10 @@ class DebugTraceDialog(QDialog):
                 for event in reversed(events)
                 if dict(event.get("data") or {}).get("tokens") not in (None, "")
             ),
-            "-",
+            QCoreApplication.translate('DebugTraceDialog', '未记录'),
         )
         self.token_value.setText(str(tokens))
-        self.ref_value.setText(" / ".join(refs.keys()) if refs else "-")
+        self.ref_value.setText(str(len(refs)) if refs else QCoreApplication.translate('DebugTraceDialog', '未记录'))
 
         overview = {
             "node_id": first.get("node_id") or node_id,
@@ -572,24 +623,37 @@ class DebugTraceDialog(QDialog):
             "tool_name": last.get("tool_name") or "",
             "subtask_id": last.get("subtask_id") or "",
             "refs": refs,
-            "summary": last.get("summary") or first.get("summary") or "",
+            "summary": next((event["summary"] for event in reversed(events) if event.get("summary")), ""),
             "data": data,
         }
-        self.overview_text.setPlainText(_pretty_json(overview))
+        self.metadata_text.setPlainText(_pretty_json(overview))
+        # A display projection of recorded facts, with no generated conclusions.
+        summary = escape(str(overview["summary"] or QCoreApplication.translate('DebugTraceDialog', '未记录摘要，可展开技术详情查看事件。')))
+        lines = [QCoreApplication.translate('DebugTraceDialog', '<h3>摘要</h3>'), "<p>" + summary.replace("\n", "<br>") + "</p>"]
+        if tool_name := overview["tool_name"]:
+            lines.append(QCoreApplication.translate('DebugTraceDialog', '<p>工具：') + escape(str(tool_name)) + "</p>")
+        recorded = self._format_event_timestamp(last)
+        if recorded:
+            lines.append(QCoreApplication.translate('DebugTraceDialog', '<p>最近记录：') + escape(recorded) + "</p>")
+        if refs:
+            lines.append(QCoreApplication.translate('DebugTraceDialog', '<h4>记录引用</h4>'))
+            lines.extend("<p>" + escape(key) + "<br>" + escape(value) + "</p>" for key, value in refs.items())
+        self.overview_text.setHtml("".join(lines))
         kind = str(first.get("kind") or last.get("kind") or "")
-        self.tabs.setTabText(1, "请求参数" if kind == "tool" else "请求")
-        self.tabs.setTabText(2, "原始结果" if kind == "tool" else "原始响应")
-        self.tabs.setTabText(3, "模型视图" if kind == "tool" else "响应")
+        self.tabs.setTabText(1, QCoreApplication.translate('DebugTraceDialog', '请求参数') if kind == "tool" else QCoreApplication.translate('DebugTraceDialog', '请求'))
+        self.tabs.setTabText(2, QCoreApplication.translate('DebugTraceDialog', '原始结果') if kind == "tool" else QCoreApplication.translate('DebugTraceDialog', '原始响应'))
+        self.tabs.setTabText(3, QCoreApplication.translate('DebugTraceDialog', '模型视图') if kind == "tool" else QCoreApplication.translate('DebugTraceDialog', '响应'))
         for view in (self.request_text, self.raw_result_text, self.model_result_text):
-            view.setPlainText("正在读取节点明细…")
+            view.setPlainText(QCoreApplication.translate('DebugTraceDialog', '正在读取节点明细…'))
         self.event_text.setPlainText(_pretty_json(events))
         services, cid = self._services, self._conversation.id
         selected = [dict(event) for event in events]
-        if services is not None:
-            operation = lambda: services.conv_service.trace_node(
-                cid, first.get("node_id", ""), run_id=first.get("request_id", ""), events=selected)
-        else:
-            operation = lambda: read_trace_node(self._debug_dir, selected, max_bytes=self.MAX_PAYLOAD_BYTES)
+        def operation():
+            if services is not None:
+                return services.conv_service.trace_node(
+                    cid, first.get("node_id", ""), run_id=first.get("request_id", ""), events=selected)
+            return read_trace_node(self._debug_dir, selected, max_bytes=self.MAX_PAYLOAD_BYTES)
+
         job = BackgroundJob(operation)
         self._detail_job = job
         self.destroyed.connect(job.abandon)
@@ -602,7 +666,7 @@ class DebugTraceDialog(QDialog):
         self._detail_job = None
         if error:
             for view in (self.request_text, self.raw_result_text, self.model_result_text):
-                view.setPlainText(f"节点明细读取失败：{error}")
+                view.setPlainText(QCoreApplication.translate('DebugTraceDialog', '节点明细读取失败：{error}').format(error=error))
             return
         self._detail = result
         for view, key in ((self.request_text, "request"), (self.raw_result_text, "raw_result"),
@@ -614,19 +678,19 @@ class DebugTraceDialog(QDialog):
         self.copy_call_btn.setVisible(ordinary)
         busy = self._services is not None and self._services.conv_service.is_active(self._conversation.id)
         self.retest_btn.setEnabled(ordinary and self._services is not None and not busy)
-        self.retest_btn.setToolTip("目标会话正在运行，请结束后刷新。" if busy else "使用当前环境和权限执行一次新调用。")
+        self.retest_btn.setToolTip(QCoreApplication.translate('DebugTraceDialog', '目标会话正在运行，请结束后刷新。') if busy else QCoreApplication.translate('DebugTraceDialog', '使用当前环境和权限执行一次新调用。'))
         self.copy_call_btn.setEnabled(ordinary and tool.get("arguments_status") == "ok")
-        self.copy_call_btn.setToolTip("复制调用代码" if ordinary and tool.get("arguments_status") == "ok"
-                                     else "参数不完整，请在复测窗口补齐。")
+        self.copy_call_btn.setToolTip(QCoreApplication.translate('DebugTraceDialog', '复制调用代码') if ordinary and tool.get("arguments_status") == "ok"
+                                     else QCoreApplication.translate('DebugTraceDialog', '参数不完整，请在复测窗口补齐。'))
 
     @staticmethod
     def _part_text(part):
-        source = {"trace": "Trace 捕获", "archive": "Archive 原文", "event": "事件预览"}.get(part["source"], part["source"])
-        status = {"ok": "已读取（脱敏诊断副本）", "partial": "不完整", "missing": "记录缺失",
-                  "not_captured": "未捕获", "too_large": "超过预览上限", "invalid_path": "引用路径无效"}.get(part["status"], part["status"])
+        source = {"trace": QCoreApplication.translate('DebugTraceDialog', 'Trace 捕获'), "archive": QCoreApplication.translate('DebugTraceDialog', 'Archive 原文'), "event": QCoreApplication.translate('DebugTraceDialog', '事件预览')}.get(part["source"], part["source"])
+        status = {"ok": QCoreApplication.translate('DebugTraceDialog', '已读取（脱敏诊断副本）'), "partial": QCoreApplication.translate('DebugTraceDialog', '不完整'), "missing": QCoreApplication.translate('DebugTraceDialog', '记录缺失'),
+                  "not_captured": QCoreApplication.translate('DebugTraceDialog', '未捕获'), "too_large": QCoreApplication.translate('DebugTraceDialog', '超过预览上限'), "invalid_path": QCoreApplication.translate('DebugTraceDialog', '引用路径无效')}.get(part["status"], part["status"])
         content = part.get("content")
         text = content if isinstance(content, str) else _pretty_json(content) if content is not None else ""
-        return f"来源：{source} · {status}\n{part.get('note', '')}\n\n{text}".strip()
+        return QCoreApplication.translate('DebugTraceDialog', '来源：{source} · {status}\n{value}\n\n{text}').format(source=source, status=status, value=part.get('note', ''), text=text).strip()
 
     def _copy_tool_call(self):
         tool = (self._detail or {}).get("tool")
@@ -648,12 +712,14 @@ class DebugTraceDialog(QDialog):
 
     @staticmethod
     def _format_duration(value: Any) -> str:
+        if value is None or value == "":
+            return QCoreApplication.translate('DebugTraceDialog', '未记录')
         try:
-            ms = int(value or 0)
-        except Exception:
-            ms = 0
-        if ms <= 0:
-            return "-"
+            ms = int(value)
+        except (TypeError, ValueError, OverflowError):
+            return QCoreApplication.translate('DebugTraceDialog', '未记录')
+        if ms < 0:
+            return QCoreApplication.translate('DebugTraceDialog', '未记录')
         if ms < 1000:
             return f"{ms} ms"
         return f"{ms / 1000:.2f} s"

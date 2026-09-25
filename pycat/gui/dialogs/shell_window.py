@@ -1,12 +1,13 @@
 """One nonmodal window projecting session-owned process handles."""
 from collections import OrderedDict
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QTabWidget, QVBoxLayout, QWidget
 
-from pycat.gui.widgets.terminal_view import TerminalView
+from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.widgets.capsule import SingleLineLabel
+from pycat.gui.widgets.terminal_view import TerminalView
 
 
 class ShellWindow(QDialog):
@@ -39,7 +40,8 @@ class ShellWindow(QDialog):
         font.setBold(True)
         self.heading.setFont(font)
         title_row.addWidget(self.heading, 1)
-        self.new_button = QPushButton("＋ 新建 Shell")
+        self.new_button = QPushButton(QCoreApplication.translate('ShellWindow', '新建 Shell'))
+        self.new_button.setIcon(Icons.get(Icons.PLUS))
         self.new_button.clicked.connect(self.new_requested.emit)
         title_row.addWidget(self.new_button)
         layout.addLayout(title_row)
@@ -51,26 +53,27 @@ class ShellWindow(QDialog):
         self.tabs.setUsesScrollButtons(True)
         self.tabs.currentChanged.connect(self._select)
         layout.addWidget(self.tabs, 1)
-        self.empty_label = QLabel("暂无 Shell\n新建交互 Shell，或在对话中运行命令后查看输出。")
+        self.empty_label = QLabel(QCoreApplication.translate('ShellWindow', '暂无 Shell\n新建交互 Shell，或在对话中运行命令后查看输出。'))
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setWordWrap(True)
         layout.addWidget(self.empty_label, 1)
         actions = QHBoxLayout()
         self.state_label = QLabel()
         self.state_label.setWordWrap(True)
         actions.addWidget(self.state_label, 1)
-        self.control_button = QPushButton("接管输入")
+        self.control_button = QPushButton(QCoreApplication.translate('ShellWindow', '接管输入'))
         self.control_button.clicked.connect(self._control)
         actions.addWidget(self.control_button)
         self.interrupt_button = QPushButton("Ctrl+C")
-        self.interrupt_button.setToolTip("中断前台程序，保留 Shell")
+        self.interrupt_button.setToolTip(QCoreApplication.translate('ShellWindow', '中断前台程序，保留 Shell'))
         self.interrupt_button.clicked.connect(lambda: self.input_requested.emit(self.process_id, "\x03"))
         actions.addWidget(self.interrupt_button)
-        self.stop_button = QPushButton("结束")
-        self.stop_button.setToolTip("结束此进程及其子进程")
+        self.stop_button = QPushButton(QCoreApplication.translate('ShellWindow', '结束'))
+        self.stop_button.setToolTip(QCoreApplication.translate('ShellWindow', '结束此进程及其子进程'))
         self.stop_button.clicked.connect(lambda: self.stop_requested.emit(self.process_id))
         actions.addWidget(self.stop_button)
         layout.addLayout(actions)
-        self.notice = QLabel("关闭窗口会隐藏终端，运行中的 Shell 会继续。")
+        self.notice = QLabel(QCoreApplication.translate('ShellWindow', '关闭窗口会隐藏终端，运行中的 Shell 会继续。'))
         self.notice.setProperty("muted", True)
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
@@ -98,8 +101,8 @@ class ShellWindow(QDialog):
                 if key not in self._views:
                     self._pages.pop(key).deleteLater()
         self.conversation_id = conversation_id
-        self.heading.setText(f"Shell · {title or '新会话'}")
-        self.scope_label.setText(f"{work_dir or '未设置工作目录'}  ·  固定在此会话")
+        self.heading.setText(QCoreApplication.translate('ShellWindow', 'Shell · {value}').format(value=title or QCoreApplication.translate('ShellWindow', '新会话')))
+        self.scope_label.setText(QCoreApplication.translate('ShellWindow', '{value}  ·  固定在此会话').format(value=work_dir or QCoreApplication.translate('ShellWindow', '未设置工作目录')))
         self._select()
 
     def update_processes(self, snapshots, selected_id=""):
@@ -143,13 +146,13 @@ class ShellWindow(QDialog):
         user = bool(snapshot and snapshot.controller == "user")
         self.control_button.setVisible(interactive)
         self.control_button.setEnabled(running)
-        self.control_button.setText("归还 Agent" if user else "接管输入")
+        self.control_button.setText(QCoreApplication.translate('ShellWindow', '归还 Agent') if user else QCoreApplication.translate('ShellWindow', '接管输入'))
         self.interrupt_button.setVisible(interactive)
         self.interrupt_button.setEnabled(running and user)
         self.stop_button.setEnabled(running)
         if snapshot:
-            status = "状态未确认" if snapshot.error else ("运行中" if running else f"已退出 · {snapshot.exit_code}")
-            self.state_label.setText(f"{status}  ·  {'由你输入' if user else 'Agent 控制'}" if interactive else f"{status}  ·  日志")
+            status = QCoreApplication.translate('ShellWindow', '状态未确认') if snapshot.error else (QCoreApplication.translate('ShellWindow', '运行中') if running else QCoreApplication.translate('ShellWindow', '已退出 · {exit_code}').format(exit_code=snapshot.exit_code))
+            self.state_label.setText(QCoreApplication.translate('ShellWindow', '{status}  ·  {value}').format(status=status, value=QCoreApplication.translate('ShellWindow', '由你输入') if user else QCoreApplication.translate('ShellWindow', 'Agent 控制')) if interactive else QCoreApplication.translate('ShellWindow', '{status}  ·  日志').format(status=status))
             key = (self.conversation_id, self.process_id)
             if key not in self._views:
                 view = TerminalView() if interactive else QPlainTextEdit()

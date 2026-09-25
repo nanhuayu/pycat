@@ -15,7 +15,7 @@ from pycat.gui.dialogs.content_preview import show_content
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
 from pycat.gui.widgets.capsule import CapsuleLabel
-
+from pycat.models.contracts.content import ContentRef
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,7 @@ class WorkflowCapsuleRow(QFrame):
         file_path: str = "",
         work_dir: str = "",
         path_resolver: PathResolver | None = None,
+        content_ref: ContentRef | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -118,6 +119,7 @@ class WorkflowCapsuleRow(QFrame):
         self._path = str(file_path or "").strip()
         self._work_dir = str(work_dir or "").strip()
         self._path_resolver = path_resolver or _local_path
+        self.content_ref = content_ref
         self._interactive = True
         self.setObjectName("tool_capsule_row")
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
@@ -194,6 +196,9 @@ class WorkflowCapsuleRow(QFrame):
         return self._path_resolver(self._path, self._work_dir)
 
     def open_file(self) -> None:
+        if self.content_ref is not None:
+            show_content(self, ref=self.content_ref, evidence=True)
+            return
         if not self._path:
             return
         try:
@@ -230,7 +235,8 @@ def create_artifact_capsule(
     payload: object = None,
 ) -> WorkflowCapsuleRow:
     """Create the canonical clickable artifact row."""
-    path = str(_value(artifact, "content_path") or _value(artifact, "path") or "").strip()
+    content_ref = artifact if isinstance(artifact, ContentRef) else None
+    path = str(content_ref.locator if content_ref else _value(artifact, "content_path") or _value(artifact, "path") or "").strip()
     status = str(_value(artifact, "status") or "completed").strip() or "completed"
     visual_status = {
         "failed": "failed",
@@ -247,6 +253,7 @@ def create_artifact_capsule(
         file_path=path,
         work_dir=work_dir,
         path_resolver=_artifact_path,
+        content_ref=content_ref,
     )
     row.set_content(
         icon=Icons.get_muted(Icons.FILE_LINES),

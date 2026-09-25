@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
+from weakref import ref
 
+from PyQt6 import sip
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QColor, QIcon, QPalette
-from PyQt6.QtWidgets import QApplication, QMenu, QToolButton, QWidget
+from PyQt6.QtWidgets import QApplication, QMenu, QPushButton, QToolButton, QWidget
 
 from pycat.models.contracts.config import DEFAULT_ACCENT
 
@@ -113,6 +115,28 @@ def configure_icon_button(button: QToolButton, icon: QIcon, label: str) -> None:
     button.setFixedSize(COMPACT_ICON_BUTTON_SIZE, COMPACT_ICON_BUTTON_SIZE)
     button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
+
+def configure_menu_button(button: QPushButton | QToolButton, menu: QMenu, icon: QIcon, label: str) -> None:
+    """Text menus use one trailing chevron; compact icon menus need no second glyph."""
+    if isinstance(button, QToolButton):
+        configure_icon_button(button, icon, label)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+    else:
+        button.setText(label)
+        button.setIcon(icon)
+        button.setIconSize(QSize(16, 16))
+        button.setToolTip(label)
+        button.setAccessibleName(label)
+        button.setProperty("menuCommand", True)
+        button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    button.setMenu(prepare_context_menu(menu, button))
+    owner_ref = ref(button)
+    def refresh_menu():
+        owner = owner_ref()
+        if owner is not None and not sip.isdeleted(owner) and owner.menu() is not None:
+            prepare_context_menu(owner.menu(), owner)
+    menu.aboutToShow.connect(refresh_menu)
+
 UI_RADIUS: dict[str, int] = {
     "xs": 3,
     "sm": 4,
@@ -191,13 +215,13 @@ def theme_colors(theme: object, accent: object = DEFAULT_ACCENT) -> dict[str, st
             "selected_meta": primary,
             "selected_border": _blend(border, primary, 0.32),
             "text_selection": primary,
-            "text_selection_text": "#ffffff",
+            "text_selection_text": colors["window"] if dark else "#ffffff",
             "disabled": _blend(surface, colors["muted"], 0.72),
             "danger_bg": _blend(surface, error, 0.17 if dark else 0.07),
             "danger_border": _blend(border, error, 0.34),
             "danger_hover": _blend(surface, error, 0.25 if dark else 0.13),
             "warning": "#d6a94a" if dark else "#b7791f",
-            "on_primary": "#ffffff",
+            "on_primary": colors["window"] if dark else "#ffffff",
             "markdown_code_bg": colors["surface_alt"],
             "markdown_code_text": colors["text"],
             "markdown_quote": primary,
@@ -284,6 +308,8 @@ def palette_for_theme(theme: object, accent: object = DEFAULT_ACCENT) -> QPalett
         QPalette.ColorRole.Base: colors["surface"],
         QPalette.ColorRole.AlternateBase: colors["surface_alt"],
         QPalette.ColorRole.Text: colors["text"],
+        QPalette.ColorRole.Link: colors["primary"],
+        QPalette.ColorRole.LinkVisited: colors["primary"],
         QPalette.ColorRole.Button: colors["surface"],
         QPalette.ColorRole.ButtonText: colors["text"],
         QPalette.ColorRole.Highlight: colors["text_selection"],

@@ -4,8 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
+from pycat.models.contracts.delegation import TaskAccess
 from pycat.models.contracts.tooling import FilesystemScope, ToolPermissionConfig, ToolSelectionPolicy
 from pycat.models.conversation import Message
 
@@ -269,18 +270,6 @@ class RunEvent:
         return ""
 
 
-class TurnState(str, Enum):
-    TURN_START = "turn_start"
-    PRE_TURN_HOOKS = "pre_turn_hooks"
-    CONDENSING = "condensing"
-    LLM_CALL = "llm_call"
-    ASSISTANT_RECEIVED = "assistant_received"
-    TOOL_EXECUTION = "tool_execution"
-    TURN_COMPLETE = "turn_complete"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
 class TurnOutcomeKind(str, Enum):
     CONTINUE = "continue"
     COMPLETE = "complete"
@@ -296,7 +285,6 @@ class TurnContext:
     incomplete_responses: int = 0
     runtime_messages: list[Message] = field(default_factory=list)
     memory_snapshot: str = ""
-    state: TurnState = TurnState.TURN_START
 
 
 @dataclass
@@ -352,6 +340,7 @@ class RunPolicy:
     tool_selection: ToolSelectionPolicy = field(default_factory=ToolSelectionPolicy.all)
     tool_permissions: ToolPermissionConfig = field(default_factory=ToolPermissionConfig)
     filesystem_scope: FilesystemScope = field(default_factory=FilesystemScope)
+    task_access: TaskAccess | None = None
 
     model: Optional[str] = None
     temperature: Optional[float] = None

@@ -19,14 +19,15 @@ from pycat.core.context.history import (
     build_turn_blocks,
     count_user_turn_blocks,
     is_real_user_message,
+    project_history,
     turn_fingerprint,
 )
 from pycat.core.llm.token_budget import estimate_conversation_tokens
 from pycat.core.state.operations import archive_trace_through, remember_archive
 from pycat.core.state.work_trace import compact_work_route, work_trace_refs
 from pycat.models.contracts.content import FileChange
-from pycat.models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 from pycat.models.contracts.session_state import SessionState
+from pycat.models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 from pycat.models.provider import Provider
 
 
@@ -607,9 +608,14 @@ class ContextMaintenance:
                 error=fallback_reason or result.error or "summary_unavailable",
             )
             fallback_reason = result.error
-        replaceable_tokens = estimate_tokens(str(state.summary or "")) + estimate_conversation_tokens(candidates)
-        if estimate_tokens(result.summary) >= max(1, replaceable_tokens):
+        replaceable_tokens = estimate_tokens(str(state.summary or "")) + estimate_conversation_tokens(
+            project_history(conversation, messages=candidates)
+        )
+        summary_tokens = estimate_tokens(result.summary)
+        savings_metrics = {"replaceable_tokens": replaceable_tokens, "summary_tokens": summary_tokens}
+        if summary_tokens >= max(1, replaceable_tokens):
             return 0, False, {
+                **savings_metrics,
                 "input_chars": source.chars,
                 "output_chars": len(result.summary),
                 "compression_calls": int(result.calls or calls or 0),
@@ -638,7 +644,7 @@ class ContextMaintenance:
                 summary=result.summary,
                 source=(
                     f"capability__{result.capability_id or 'compress'}"
-                    if result.status == "complete"
+                    if result.status in {"complete", "degraded"}
                     else "runtime_deterministic"
                 ),
                 model=result.model,
@@ -671,6 +677,7 @@ class ContextMaintenance:
         except Exception:
             pass
         return len(candidates), True, {
+            **savings_metrics,
             "input_chars": source.chars,
             "output_chars": len(updated.summary),
             "compression_calls": int(result.calls or calls or 0),
@@ -714,11 +721,11 @@ class ContextMaintenance:
             return CompressionResult(status="fallback", error=str(exc)), 1, "compressor_error"
         summary = str(getattr(result, "summary", "") or "").strip()
         if not summary:
-            return CompressionResult(status="fallback", error=getattr(result, "error", "summary_empty")), 1, str(
+            return CompressionResult(status="fallback", error=getattr(result, "error", "summary_empty")), int(result.calls or 1), str(
                 getattr(result, "error", "summary_empty") or "summary_empty"
             )
         if estimate_tokens(summary) >= max(1, source.token_estimate):
-            return CompressionResult(status="fallback", error="summary_no_savings"), 1, "summary_no_savings"
+            return CompressionResult(status="fallback", error="summary_no_savings"), int(result.calls or 1), "summary_no_savings"
         return result, int(result.calls or 1), ""
 
     def _messages_to_archive(
@@ -776,16 +783,6 @@ class ContextMaintenance:
                 break
             result.append(list(block))
         return result
-
-    @staticmethod
-    def _filter_block(block: list[Message], excluded: set[str]) -> list[Message]:
-        return [
-            message
-            for message in block
-            if message.role != "system"
-            and str(getattr(message, "id", "") or "") not in excluded
-            and not message.archived_content_id
-        ]
 
     @staticmethod
     def _has_incomplete_tool_call(message: Message) -> bool:
@@ -1234,10 +1231,6 @@ class ContextMaintenance:
             and is_real_user_message(block[0])
             and not block[0].archived_content_id
         ]
-
-    @staticmethod
-    def _sanitize_state_summary(text: str) -> str:
-        return re.sub(r"\s+", " ", str(text or "")).strip()[:HISTORY_FALLBACK_PROJECTION_CHARS]
 
     @staticmethod
     def _latest_seq(conversation: Conversation) -> int:

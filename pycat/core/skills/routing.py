@@ -1,9 +1,10 @@
 """Skill invocation routing and execution availability."""
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from pycat.core.tools.mcp.naming import build_mcp_tool_name, tool_names_match
+from pycat.models.coercion import as_bool
 from pycat.models.contracts.skill import Skill, SkillExecutionCheck, SkillInvocationSpec
 from pycat.models.contracts.tooling import ToolSelectionPolicy, normalize_tool_category
 
@@ -87,11 +88,8 @@ def resolve_skill_invocation_spec(
         mode=mode,
         executor=executor,
         execution_mode=execution_mode,
-        user_invocable=coerce_bool(metadata.get("user-invocable"), default=True),
-        disable_model_invocation=coerce_bool(
-            metadata.get("disable-model-invocation"),
-            default=False,
-        ),
+        user_invocable=as_bool(metadata.get("user-invocable"), True),
+        disable_model_invocation=as_bool(metadata.get("disable-model-invocation")),
         tool_selection=tool_selection,
         declared_tools=tuple(extract_declared_tool_names(raw_tools, executor=executor)),
         preferred_cli=preferred_cli,
@@ -260,26 +258,6 @@ def first_non_empty(*values: Any) -> Any:
             continue
         return value
     return ""
-
-
-def coerce_bool(value: Any, *, default: bool) -> bool:
-    coerced = coerce_optional_bool(value)
-    if coerced is None:
-        return bool(default)
-    return coerced
-
-
-def coerce_optional_bool(value: Any) -> Optional[bool]:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    lowered = str(value).strip().lower()
-    if lowered in {"true", "yes", "1", "on"}:
-        return True
-    if lowered in {"false", "no", "0", "off"}:
-        return False
-    return None
 
 
 def coerce_list(value: Any) -> List[str]:

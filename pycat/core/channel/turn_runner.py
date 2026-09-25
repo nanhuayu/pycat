@@ -13,8 +13,6 @@ from pycat.core.llm.model_selection import select_default_provider_model
 from pycat.core.tools.base import ApprovalDecision, ToolApprovalRequest
 from pycat.models.contracts.agent import RunEvent, RunEventKind, RunPolicy
 from pycat.models.contracts.channel import ChannelConfig
-from pycat.models.conversation import Conversation, Message
-from pycat.models.provider import Provider
 from pycat.models.contracts.tooling import (
     TOOL_CATEGORIES,
     FilesystemScope,
@@ -22,6 +20,8 @@ from pycat.models.contracts.tooling import (
     ToolPolicy,
     permission_config_for_approval,
 )
+from pycat.models.conversation import Conversation, Message
+from pycat.models.provider import Provider
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,6 @@ from typing import Any, Callable
 from pycat.core.llm.token_budget import estimate_tokens
 from pycat.models.conversation import Message
 
-
 DegradeFn = Callable[["ContextItem", int], "ContextItem | None"]
 
 
@@ -82,10 +81,6 @@ class ContextPack:
     degraded: list[ContextItem] = field(default_factory=list)
     token_estimate: int = 0
     diagnostics: dict[str, Any] = field(default_factory=dict)
-
-    def to_messages(self) -> list[Message]:
-        return [item.to_message() for item in self.items]
-
 
 class ContextPacker:
     """Small deterministic priority packer for provider context."""

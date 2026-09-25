@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from pycat.models.contracts.mcp import McpServerConfig
+from pycat.models.contracts.mode import ModeConfig
 from pycat.models.contracts.tooling import (
     FilesystemScopeMode,
     ToolApprovalMode,
     ToolSelectionPolicy,
 )
-from pycat.models.contracts.mcp import McpServerConfig
-from pycat.models.contracts.mode import ModeConfig
 from pycat.models.provider import Provider
 from pycat.models.search_config import SearchConfig
 

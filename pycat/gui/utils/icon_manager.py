@@ -7,11 +7,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
-from PyQt6.QtCore import QByteArray, QRectF, Qt
-from PyQt6.QtGui import QIcon, QPainter, QPixmap
+from PyQt6.QtCore import QT_VERSION, QByteArray, QRectF, QSize, Qt
+from PyQt6.QtGui import QIcon, QIconEngine, QPainter, QPixmap
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QApplication
 
@@ -99,20 +99,11 @@ _ICON_BODIES: dict[str, str] = {
     "angles-down": _stroke_line(7, 7.5, 12, 12.5) + _stroke_line(12, 12.5, 17, 7.5)
     + _stroke_line(7, 12.5, 12, 17.5) + _stroke_line(12, 17.5, 17, 12.5),
     "arrows-rotate": _stroke_path("M20 12a8 8 0 1 0-2.34 5.66") + _stroke_path("M20 5v7h-7"),
-    "stop": _stroke_circle(12, 12, 7.6, 2.8),
-    "stop-filled": _fill_circle(12, 12, 7.1),
+    "stop": _fill_rect(5, 5, 14, 14, 1.4),
     "play": _fill_path("M8 6l10 6-10 6z"),
     "pause": _fill_rect(7.5, 5.8, 2.7, 12.4, 1.0) + _fill_rect(13.8, 5.8, 2.7, 12.4, 1.0),
-    "gear": _fill_circle(12, 3.8, 1.55)
-    + _fill_circle(12, 20.2, 1.55)
-    + _fill_circle(3.8, 12, 1.55)
-    + _fill_circle(20.2, 12, 1.55)
-    + _fill_circle(6.2, 6.2, 1.45)
-    + _fill_circle(17.8, 6.2, 1.45)
-    + _fill_circle(6.2, 17.8, 1.45)
-    + _fill_circle(17.8, 17.8, 1.45)
-    + _stroke_circle(12, 12, 4.45, 2.25)
-    + _fill_circle(12, 12, 1.25),
+    "gear": _stroke_path("M10 3h4l.5 2.6 1.7 1 2.5-.9 2 3.4-2 1.7v2.4l2 1.7-2 3.4-2.5-.9-1.7 1-.5 2.6h-4l-.5-2.6-1.7-1-2.5.9-2-3.4 2-1.7v-2.4l-2-1.7 2-3.4 2.5.9 1.7-1z", 2.0)
+    + _stroke_circle(12, 12, 3.2, 2.0),
     "sliders": _stroke_line(5, 7, 19, 7)
     + _stroke_circle(9, 7, 1.8)
     + _stroke_line(5, 12, 19, 12)
@@ -122,6 +113,8 @@ _ICON_BODIES: dict[str, str] = {
     "wrench": _stroke_path("M5 18.8l8.7-8.7", 2.55)
     + _stroke_path("M14.2 4.6a4.8 4.8 0 0 1 5.2 6.4l-2.9-2.9-3.2 3.2 2.9 2.9a4.8 4.8 0 0 1-6.4-5.2", 2.4)
     + _stroke_circle(5, 18.8, 1.25, 2.2),
+    "toolbox": _stroke_rect(3, 8, 18, 12, 2, 2.0)
+    + _stroke_path("M8 8V5h8v3M3 13h18M10 12v3h4v-3", 2.0),
     "panel-left": _stroke_rect(4, 4, 16, 16, 2) + _stroke_line(9, 4, 9, 20),
     "panel-right": _stroke_rect(4, 4, 16, 16, 2) + _stroke_line(15, 4, 15, 20),
     "panel": _stroke_rect(4, 5, 16, 14, 2) + _stroke_line(4, 10, 20, 10),
@@ -136,6 +129,9 @@ _ICON_BODIES: dict[str, str] = {
     + _stroke_line(8, 9, 16, 9) + _stroke_line(8, 12, 16, 12) + _stroke_line(8, 15, 13, 15),
     "fit-image": _stroke_path("M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5") + _stroke_rect(7, 7, 10, 10, 1),
     "circle-info": _stroke_circle(12, 12, 8) + _stroke_line(12, 10.5, 12, 16) + _fill_rect(11.2, 6.5, 1.6, 1.6, 0.8),
+    "question": _stroke_circle(12, 12, 8, 2.0)
+    + _stroke_path("M9.3 9a2.7 2.7 0 0 1 5.4 0c0 2-2.7 2-2.7 4", 2.0)
+    + _fill_circle(12, 16.5, 1.0),
     "circle-check": _stroke_circle(12, 12, 8) + _stroke_line(8, 12.5, 11, 15.5) + _stroke_line(11, 15.5, 16.5, 9.5),
     "circle-xmark": _stroke_circle(12, 12, 8) + _stroke_line(9, 9, 15, 15) + _stroke_line(15, 9, 9, 15),
     "check": _stroke_line(5.5, 12.5, 10, 17) + _stroke_line(10, 17, 18.5, 8.5),
@@ -149,6 +145,7 @@ _ICON_BODIES: dict[str, str] = {
     + _stroke_line(11, 7.9, 16, 7.9, 1.8)
     + _stroke_line(11, 16.1, 16, 16.1, 1.8),
     "paperclip": _stroke_path("M8 12l6-6a4 4 0 1 1 6 6l-7 7a5 5 0 1 1-7-7l7-7"),
+    "link": _stroke_path("M10 7l2-2a4.2 4.2 0 0 1 6 6l-2 2M14 17l-2 2a4.2 4.2 0 0 1-6-6l2-2M8.5 15.5l7-7", 2.0),
     "lightbulb": _stroke_path("M7.5 10.1a4.5 4.5 0 1 1 9 0c0 1.7-.85 2.75-1.9 3.8-.58.58-.9 1.18-.98 2.05h-3.24c-.08-.87-.4-1.47-.98-2.05-1.05-1.05-1.9-2.1-1.9-3.8z", 2.25)
     + _stroke_line(9.4, 18, 14.6, 18, 2.25)
     + _stroke_line(10.2, 21, 13.8, 21, 2.25),
@@ -174,8 +171,15 @@ _ICON_BODIES: dict[str, str] = {
     + _stroke_path("M15 7.4a2.6 2.6 0 0 1 0 5", 1.9)
     + _stroke_path("M15.2 15a4.7 4.7 0 0 1 4.1 4", 1.9),
     "terminal": _stroke_rect(3, 5, 18, 14, 2) + _stroke_line(7, 10, 10, 12) + _stroke_line(10, 12, 7, 14) + _stroke_line(12.5, 14.5, 17, 14.5),
+    "keyboard": _stroke_rect(2, 5, 20, 14, 2, 1.8)
+    + "".join(_fill_rect(x, y, 1.6, 1.6, 0.3) for y in (8, 11.5) for x in (5, 9, 13, 17))
+    + _stroke_line(7, 16, 17, 16, 1.8),
+    "code": _stroke_path("M7 7l-5 5 5 5M17 7l5 5-5 5M14 4l-4 16", 2.0),
     "book-open": _stroke_path("M4 6.5A2.5 2.5 0 0 1 6.5 4H11v16H6.5A2.5 2.5 0 0 0 4 22z")
     + _stroke_path("M20 6.5A2.5 2.5 0 0 0 17.5 4H13v16h4.5A2.5 2.5 0 0 1 20 22z"),
+    "library": _stroke_rect(3, 4, 4, 16, 0.8, 2.0)
+    + _stroke_rect(8, 4, 4, 16, 0.8, 2.0)
+    + _stroke_path("M14 5l4-1 4 15-4 1z", 2.0),
     "wand-magic-sparkles": _stroke_line(5, 19, 14, 10)
     + _stroke_line(14, 10, 17, 13)
     + _stroke_line(16, 4, 16, 7)
@@ -208,24 +212,18 @@ _ICON_BODIES: dict[str, str] = {
     "camera": _stroke_rect(4, 7.5, 16, 11, 2, 2.0)
     + _stroke_path("M8.5 7.5 10 5.5h4l1.5 2", 2.0)
     + _stroke_circle(12, 13, 3.0, 2.0),
-    "microchip": _stroke_circle(12, 12, 3.2, 2.25)
-    + _fill_circle(12, 12, 1.25)
-    + _stroke_line(12, 3.8, 12, 8.8, 2.15)
-    + _stroke_line(12, 15.2, 12, 20.2, 2.15)
-    + _stroke_line(3.8, 12, 8.8, 12, 2.15)
-    + _stroke_line(15.2, 12, 20.2, 12, 2.15)
-    + _fill_circle(12, 3.8, 1.55)
-    + _fill_circle(12, 20.2, 1.55)
-    + _fill_circle(3.8, 12, 1.55)
-    + _fill_circle(20.2, 12, 1.55),
+    "microchip": _stroke_rect(6, 6, 12, 12, 2, 2.0)
+    + _stroke_rect(9, 9, 6, 6, 0.6, 1.6)
+    + "".join(_stroke_path(f"M{p} 3v3M{p} 18v3M3 {p}h3M18 {p}h3", 1.8) for p in (9, 15)),
+    "volume-high": _stroke_path("M3 9h4l5-4v14l-5-4H3zM16 9a5 5 0 0 1 0 6M19 6a9 9 0 0 1 0 12", 2.0),
 }
 
 _ICON_ALIASES: dict[str, str] = {
     "folder-open": "folder",
     "clone": "copy",
+    "stop-filled": "stop",
     "file-import": "download",
     "file-export": "upload",
-    "screwdriver-wrench": "wrench",
     "message": "comments",
     "file-text": "file-lines",
     "panel-left-close": "panel-left",
@@ -234,11 +232,7 @@ _ICON_ALIASES: dict[str, str] = {
     "sidebar-right": "panel-right",
     "open-external": "external-link",
     "hourglass-half": "clock",
-    "code": "terminal",
-    "keyboard": "terminal",
     "book": "book-open",
-    "question": "circle-info",
-    "link": "paperclip",
     "plug-circle-bolt": "server",
     "server-rack": "server",
 }
@@ -303,22 +297,70 @@ def _render_pixmap(icon_name: str, size: int, color_name: str) -> QPixmap:
     return pixmap
 
 
-def _build_icon(icon_name: str, *, color_name: str, base_size: int) -> QIcon:
-    icon = QIcon()
-    sizes = {
-        16,
-        18,
-        20,
-        24,
-        max(16, base_size),
-        max(18, int(base_size * 1.25)),
-        max(24, int(base_size * 1.5)),
-    }
-    if base_size >= 24:
-        sizes.add(32)
-    for size in sorted(sizes):
-        icon.addPixmap(_render_pixmap(icon_name, size, color_name))
-    return icon
+class _SemanticColor(str):
+    """A usable color string that retains its theme role for icon rendering."""
+
+    def __new__(cls, value: str, role: str):
+        color = super().__new__(cls, value)
+        color.role = role
+        return color
+
+
+@lru_cache(maxsize=32)
+def _icon_colors(theme: str, accent: str) -> dict[str, str]:
+    return theme_tokens(theme, accent).colors
+
+
+def _current_icon_colors() -> dict[str, str]:
+    app = QApplication.instance()
+    return _icon_colors(str(app.property("theme") or "light") if app else "light",
+                        str(app.property("accent") or "") if app else "")
+
+
+class _SvgIconEngine(QIconEngine):
+    """Render the same icon against the current palette without rebuilding widgets."""
+
+    def __init__(self, name: str, color: str, base_size: int):
+        super().__init__()
+        self.name = name
+        self.color = color
+        self.base_size = base_size
+
+    def clone(self):
+        return _SvgIconEngine(self.name, self.color, self.base_size)
+
+    def isNull(self):
+        return False
+
+    def iconName(self):
+        return self.name
+
+    def actualSize(self, size, mode, state):
+        side = min(size.width(), size.height())
+        return QSize(side, side)
+
+    def availableSizes(self, mode, state):
+        return [QSize(side, side) for side in sorted({16, 18, 20, 24, self.base_size})]
+
+    def pixmap(self, size, mode, state):
+        if size.isEmpty():
+            return QPixmap()
+        colors = _current_icon_colors()
+        color = colors["disabled"] if mode == QIcon.Mode.Disabled else (
+            colors[self.color.role] if isinstance(self.color, _SemanticColor) else self.color)
+        return QPixmap(_render_pixmap(self.name, min(size.width(), size.height()), str(color)))
+
+    def scaledPixmap(self, size, mode, state, scale):
+        # QIcon passed physical sizes before Qt 6.8, logical sizes thereafter.
+        pixels = size * scale if QT_VERSION >= 0x060800 else size
+        result = self.pixmap(pixels, mode, state)
+        result.setDevicePixelRatio(scale)
+        return result
+
+    def paint(self, painter, rect, mode, state):
+        scale = painter.device().devicePixelRatioF()
+        result = self.pixmap(rect.size() * scale, mode, state)
+        painter.drawPixmap(rect, result)
 
 
 class _ThemeColor:
@@ -326,9 +368,7 @@ class _ThemeColor:
         self.name = name
 
     def __get__(self, instance, owner) -> str:
-        app = QApplication.instance()
-        return theme_tokens(str(app.property("theme") or "light") if app else "light",
-                            str(app.property("accent") or "") if app else "").color(self.name).upper()
+        return _SemanticColor(_current_icon_colors()[self.name].upper(), self.name)
 
 
 class Icons:
@@ -375,7 +415,7 @@ class Icons:
 
     # === 设置 / 配置 ===
     SETTINGS = "gear"
-    TOOLS = "screwdriver-wrench"
+    TOOLS = "toolbox"
     WRENCH = "wrench"
     SLIDERS = "sliders"
     CHART_BARS = "chart-bars"
@@ -425,7 +465,7 @@ class Icons:
     # === 记忆 / 文档 ===
     BOOK = "book"
     BOOK_OPEN = "book-open"
-    BOOKS = "book-open"
+    BOOKS = "library"
     MEMORY = "brain"
     DOCUMENT = "file-lines"
 
@@ -452,7 +492,7 @@ class Icons:
     INFO = "circle-info"
     QUESTION = "question"
     LINK = "link"
-    GITHUB = "link"  # 用 link 替代（品牌图标不在 Free Solid 字体中）
+    GITHUB = "link"  # Repository link; third-party brand marks are not part of this set.
     WAND = "wand-magic-sparkles"
 
     # === 设置页专用 ===
@@ -506,26 +546,10 @@ class Icons:
         """
         if not icon_name:
             return QIcon()
-        color_val = color or cls.current_primary_color()
-        base_size = max(16, int(round(20 * scale_factor)))
+        color_val = color or cls.COLOR_PRIMARY
         resolved = _resolve_icon_name(icon_name)
-        if resolved in _ICON_BODIES:
-            return _build_icon(icon_name, color_name=color_val, base_size=base_size)
-        return _build_icon(Icons.CIRCLE_INFO, color_name=color_val, base_size=base_size)
-
-    @classmethod
-    def current_primary_color(cls) -> str:
-        app = QApplication.instance()
-        if app is None:
-            return cls.COLOR_PRIMARY
-        theme = str(app.property("theme") or "light")
-        accent = str(app.property("accent") or "")
-        return theme_tokens(theme, accent).color("primary").upper()
-
-    @classmethod
-    def get_colored(cls, icon_name: str, color: str, *, scale_factor: float = 1.0) -> QIcon:
-        """获取指定颜色的 QIcon。"""
-        return cls.get(icon_name, color=color, scale_factor=scale_factor)
+        return QIcon(_SvgIconEngine(resolved if resolved in _ICON_BODIES else Icons.CIRCLE_INFO,
+                                   color_val, max(16, int(round(20 * scale_factor)))))
 
     @classmethod
     def get_success(cls, icon_name: str, *, scale_factor: float = 1.0) -> QIcon:

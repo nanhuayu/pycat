@@ -6,10 +6,10 @@ import logging
 from typing import Any, Optional
 
 from pycat.core.agent.events.trace import trace_for_tool_call
-from pycat.core.state.operations import record_work_step, remember_archive, state_checkpoint
+from pycat.core.content.archive_store import SessionArchiveStore
+from pycat.core.state.operations import record_work_step, remember_archive
 from pycat.core.tools.base import ToolResult
 from pycat.core.tools.tool_call_archive import ToolCallArchiveService, ToolResultViewService
-from pycat.core.content.archive_store import SessionArchiveStore
 from pycat.models.conversation import Conversation, Message
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ class ToolResultRecorder:
             seq_id=int(conversation.current_seq_id() or 0),
             images=tool_images,
             is_error=bool(isinstance(result, ToolResult) and result.is_error),
-            error_metadata=(
+            result_metadata=(
                 dict(getattr(result, "metadata", {}) or {})
                 if isinstance(result, ToolResult)
                 else {}
@@ -240,7 +240,7 @@ class ToolResultRecorder:
                 is_error=bool(metadata.get("is_error")),
             )
             conversation.set_state(state)
-            state_snapshot = state_checkpoint(state)
+            state_snapshot = state.checkpoint()
         except Exception as exc:
             logger.debug("Failed to snapshot state for tool result: %s", exc)
 

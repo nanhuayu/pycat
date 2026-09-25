@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pycat.models.contracts.mode import ModeConfig
 
-
 _PRIMARY_MODE_SLUGS = ("chat", "agent", "plan", "review")
 _REQUIRED_MODE_SLUGS = (*_PRIMARY_MODE_SLUGS, "channel")
 
@@ -62,12 +61,12 @@ DEFAULT_MODES: list[ModeConfig] = [
         name="Explore",
         purpose="只读探索代码库，定位文件、符号、模式和风险。",
         prompt=(
-            "Explore the workspace without editing. Return concrete paths, symbols, evidence, risks, and open questions."
+            "Explore without editing workspace source files. Record substantial findings in a session Artifact. "
+            "Return concrete paths, symbols, evidence, risks, and open questions."
         ),
         allowed_tool_categories=("read", "web", "state", "mcp"),
         profile_kind="subagent",
         completion_policy="explicit",
-        max_turns=60,
         source="builtin",
     ),
     ModeConfig(
@@ -81,18 +80,16 @@ DEFAULT_MODES: list[ModeConfig] = [
         allowed_tool_categories=("read", "web", "state"),
         profile_kind="subagent",
         completion_policy="explicit",
-        max_turns=80,
         source="builtin",
     ),
     ModeConfig(
         slug="read_analyze",
         name="Read Analyze",
         purpose="多文件、长文或多归档内容的只读综合分析。",
-        prompt="Compare the supplied material, preserve provenance, and return a concise structured synthesis.",
+        prompt="Compare the supplied material and preserve provenance. For substantial analysis, maintain a complete session Artifact and return a concise conclusion with its references.",
         allowed_tool_categories=("read", "state", "capability"),
         profile_kind="subagent",
         completion_policy="explicit",
-        max_turns=80,
         shared_context_policy="selected_artifacts",
         source="builtin",
     ),
@@ -106,7 +103,6 @@ DEFAULT_MODES: list[ModeConfig] = [
         allowed_tool_categories=("read", "web", "state", "delegate", "capability", "mcp"),
         profile_kind="both",
         completion_policy="explicit",
-        max_turns=60,
         shared_context_policy="selected_artifacts",
         source="builtin",
     ),

@@ -88,10 +88,6 @@ class BackgroundJob(QRunnable):
         if notify_now:
             self._notify_discarded()
 
-    def _may_emit(self) -> bool:
-        with self._state_lock:
-            return not self._abandoned and not self._cancel_event.is_set()
-
     def _finish(self, result: Any) -> None:
         with self._state_lock:
             discarded = self._abandoned or self._cancel_event.is_set()

@@ -4,18 +4,13 @@ Owns the unified selection and permission boundary around ToolManager calls.
 """
 from __future__ import annotations
 
-import json
 import asyncio
 import inspect
+import json
 import logging
 from dataclasses import replace
 from typing import Any, Callable, Optional
 
-from pycat.models.conversation import Conversation, Message
-from pycat.models.provider import Provider
-from pycat.models.session_paths import normalize_work_dir
-
-from pycat.core.state.operations import state_checkpoint
 from pycat.core.tools.base import (
     ApprovalDecision,
     PermissionContext,
@@ -24,9 +19,13 @@ from pycat.core.tools.base import (
     ToolResult,
     ToolRuntimeContext,
 )
-from pycat.models.contracts.tooling import normalize_risk_level, normalize_tool_category
 from pycat.core.tools.manager import ToolManager
 from pycat.models.contracts.agent import RunPolicy
+from pycat.models.contracts.session_state import SessionState
+from pycat.models.contracts.tooling import normalize_risk_level, normalize_tool_category
+from pycat.models.conversation import Conversation, Message
+from pycat.models.provider import Provider
+from pycat.models.session_paths import normalize_work_dir
 
 logger = logging.getLogger(__name__)
 
@@ -373,7 +372,6 @@ class ToolExecutor:
 
             # Update conversation state
             try:
-                from pycat.models.contracts.session_state import SessionState
                 conversation.set_state(SessionState.from_dict(dict(synced)))
             except Exception:
                 try:
@@ -410,13 +408,10 @@ class ToolExecutor:
             msg: Message to attach snapshot to
         """
         try:
-            try:
-                msg.state_snapshot = state_checkpoint(conversation.get_state())
-            except Exception:
-                msg.state_snapshot = {
-                    "_snapshot_kind": "checkpoint",
-                    "state_version": 0,
-                    "last_updated_seq": 0,
-                }
+            msg.state_snapshot = conversation.get_state().checkpoint()
         except Exception:
-            msg.state_snapshot = None
+            msg.state_snapshot = {
+                "_snapshot_kind": "checkpoint",
+                "state_version": 0,
+                "last_updated_seq": 0,
+            }

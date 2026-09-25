@@ -18,6 +18,14 @@ from pycat.models.conversation import Message
 from pycat.models.provider import Provider
 
 
+class ImageRequestError(ValueError):
+    """An image failure with a stable receipt for GUI and tool callers."""
+
+    def __init__(self, message: str, **metadata):
+        super().__init__(message)
+        self.metadata = metadata
+
+
 async def with_cancellation(awaitable, cancel_event=None):
     """Cancel and drain the request when its owning run or Qt job is cancelled."""
     task = asyncio.ensure_future(awaitable)
@@ -77,6 +85,9 @@ async def request_image(
     endpoint = image_api.endpoint(provider.api_base, edit=bool(rasters))
     headers = await headers_resolver(provider, model) if headers_resolver else provider.get_headers(model)
     headers = {key: value for key, value in headers.items() if key.lower() not in {"content-type", "content-length", "openai-beta"}}
+    receipt = {"model": model, "provider": provider.name, "image_protocol": protocol,
+               "image_operation": "edit" if rasters else "generate", "image_options": options.to_dict(),
+               "input_image_count": len(rasters), "has_mask": mask is not None}
 
     async def send():
         transport = transport_factory() if transport_factory else None
@@ -90,7 +101,11 @@ async def request_image(
                         detail = str(error.get("message", "")) if isinstance(error, dict) else str(error)
                     except (ValueError, AttributeError):
                         detail = "服务未返回有效错误信息"
-                    raise ValueError(f"图片接口 HTTP {response.status_code}: {detail[:800]}")
+                    status = response.status_code
+                    code = "image_rate_limited" if status == 429 else "image_service_unavailable" if status >= 500 else "image_request_invalid"
+                    raise ImageRequestError(f"图片接口 HTTP {status}: {detail[:800]}", **receipt,
+                                            error_code=code, retryable=status in {408, 429} or status >= 500,
+                                            status_code=status, request_id=request_id)
         result = json.loads(payload)
         if not isinstance(result, dict):
             raise ValueError("图片接口返回了无效 JSON 结构。")
@@ -101,7 +116,7 @@ async def request_image(
         items = image_response_items(result, protocol)
         if not isinstance(items, list) or not items or len(items) > options.n:
             raise ValueError("图片接口没有返回有效图片。")
-        output, errors = [], []
+        output, errors, outputs = [], [], []
         for item in items:
             encoded = item.get("b64_json") if isinstance(item, dict) else None
             if isinstance(item, dict) and item.get("error"):
@@ -114,9 +129,10 @@ async def request_image(
             else:
                 raise ValueError("图片接口应返回 b64_json 图片内容。")
             output.append(raster.data_url)
+            outputs.append({"width": raster.width, "height": raster.height, "mime": raster.mime})
         if not output:
             raise ValueError("图片生成失败：" + "; ".join(errors))
-        content = f"已{'编辑' if rasters else '生成'} {len(output)} 张图片。"
+        content = f"已{'编辑' if rasters else '生成'} {len(output)} 张图片（{provider.name} | {model}）。"
         if errors:
             content += " 部分图片失败：" + "; ".join(errors)
         return Message(
@@ -124,16 +140,23 @@ async def request_image(
             content=content,
             images=output,
             metadata={
-                "model": model,
+                **receipt,
                 "usage": result.get("usage") or {},
-                "image_protocol": protocol,
+                "image_outputs": outputs,
                 "image_errors": errors,
                 "request_id": result.get("request_id") or request_id,
-                "image_operation": "edit" if rasters else "generate",
             },
         )
 
-    return await with_cancellation(asyncio.wait_for(send(), timeout), cancel_event)
+    try:
+        return await with_cancellation(asyncio.wait_for(send(), timeout), cancel_event)
+    except ImageRequestError:
+        raise
+    except (httpx.TransportError, TimeoutError) as exc:
+        raise ImageRequestError(f"图像服务连接中断或超时：{exc}。未收到结果，服务端生成状态未知。", **receipt,
+                                error_code="image_transport_error", retryable=True, outcome_unknown=True) from exc
+    except ValueError as exc:
+        raise ImageRequestError(str(exc), **receipt, error_code="image_response_invalid", retryable=False) from exc
 
 
 async def _read_bounded(response: httpx.Response, limit: int) -> bytes:

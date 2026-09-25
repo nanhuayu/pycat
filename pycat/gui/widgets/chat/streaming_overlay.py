@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -23,12 +22,12 @@ from PyQt6.QtWidgets import (
 if TYPE_CHECKING:
     from PyQt6.QtWidgets import QScrollArea
 
-from pycat.gui.widgets.markdown_view import MarkdownView
-from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.display_text import message_time
-from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
-from pycat.gui.widgets.message_widget import MESSAGE_BADGE_HEIGHT, MESSAGE_HEADER_HEIGHT
+from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.widgets.capsule import SingleLineLabel
+from pycat.gui.widgets.markdown_view import MarkdownView
+from pycat.gui.widgets.message_widget import MESSAGE_BADGE_HEIGHT, MESSAGE_HEADER_HEIGHT
+from pycat.gui.widgets.tool_call_view import ThinkingSection
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +61,7 @@ class StreamingOverlay(QObject):
         self._header: QWidget | None = None
         self._status_label: QLabel | None = None
         self._content_label: Optional[MarkdownView] = None
-        self._thinking_label: Optional[MarkdownView] = None
-        self._thinking_btn: Optional[QPushButton] = None
-        self._thinking_expanded: bool = False
+        self._thinking_section: ThinkingSection | None = None
 
         # Text buffers
         self._text: str = ""
@@ -109,10 +106,9 @@ class StreamingOverlay(QObject):
         layout.setSpacing(6)
 
         # Match the completed assistant message header.
-        self._status_label = SingleLineLabel('正在生成…')
-        self._status_label.setObjectName('streaming_status')
+        self._status_label = SingleLineLabel(self.tr('正在生成…'))
+        self._status_label.setObjectName('run_status_hint')
         self._status_label.setContentsMargins(0, 8, 0, 8)
-        layout.addWidget(self._status_label)
         self._header = QWidget()
         header = QHBoxLayout(self._header)
         header.setContentsMargins(0, 0, 0, 0)
@@ -139,24 +135,16 @@ class StreamingOverlay(QObject):
         layout.addWidget(self._header)
 
         # Thinking panel (collapsible, shown above content)
-        self._thinking_btn = QPushButton("思考过程 >")
-        self._thinking_btn.setObjectName("thinking_toggle")
-        self._thinking_btn.setFixedHeight(COMPACT_CONTROL_HEIGHT)
-        self._thinking_btn.setVisible(False)
-        self._thinking_btn.clicked.connect(self._toggle_thinking)
-        layout.addWidget(self._thinking_btn)
-
-        self._thinking_label = MarkdownView("")
-        self._thinking_label.setObjectName("thinking_content")
-        self._thinking_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self._thinking_label.setVisible(False)
-        layout.addWidget(self._thinking_label)
+        self._thinking_section = ThinkingSection('')
+        self._thinking_section.setVisible(False)
+        layout.addWidget(self._thinking_section)
 
         # Main content area
         self._content_label = MarkdownView("")
         self._content_label.setObjectName("message_content")
         self._content_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self._content_label)
+        layout.addWidget(self._status_label)
 
         # Reset buffers
         self._text = ""
@@ -165,8 +153,6 @@ class StreamingOverlay(QObject):
         self._displayed_text = ""
         self._pending_thinking_text = ""
         self._displayed_thinking_text = ""
-        self._thinking_expanded = False
-        self._sync_thinking_expanded(False)
         self._sync_content_visibility()
 
         self._container = container
@@ -200,9 +186,7 @@ class StreamingOverlay(QObject):
         self._content_label = None
         self._header = None
         self._status_label = None
-        self._thinking_label = None
-        self._thinking_btn = None
-        self._thinking_expanded = False
+        self._thinking_section = None
         self._text = ""
         self._thinking_text = ""
         self._pending_text = ""
@@ -214,15 +198,12 @@ class StreamingOverlay(QObject):
     # Content updates
     # ------------------------------------------------------------------
 
-    def set_waiting_hint(self, title: str, detail: str = '') -> None:
+    def set_status_hint(self, title: str, detail: str = '') -> None:
+        """Display the prepared hint; translated text must never select a state."""
         if self._status_label is None:
             return
         label = ' '.join(str(title or '').split())[:80]
-        if label in ('', '生成中', '开始执行', '工具完成'):
-            label = '正在生成…'
-        elif label not in ('已完成', '出错', '已停止', '已取消'):
-            label = label.rstrip('…') + '…'
-        self._status_label.setText(label)
+        self._status_label.setText(label or self.tr('正在生成…'))
         self._status_label.setToolTip(detail)
 
     def append_content(self, token: str) -> None:
@@ -234,18 +215,12 @@ class StreamingOverlay(QObject):
 
     def append_thinking(self, text: str) -> None:
         """Append thinking content (shown in collapsible panel)."""
-        if not self._thinking_label or not text:
+        if self._thinking_section is None or not text:
             return
 
-        first_thinking = not self._thinking_text
         self._thinking_text += str(text)
         self._pending_thinking_text = self._thinking_text
         self._schedule_render()
-
-        # Auto-expand on first thinking token
-        if first_thinking and not self._thinking_expanded:
-            self._sync_thinking_expanded(True)
-            self._sync_content_visibility()
 
     def restore(self, visible_text: str = "", thinking_text: str = "") -> None:
         """Restore streaming state from cached buffers (conversation switch)."""
@@ -260,14 +235,9 @@ class StreamingOverlay(QObject):
         self._thinking_text = str(thinking_text or "")
         self._pending_thinking_text = self._thinking_text
         self._displayed_thinking_text = self._thinking_text
-        if self._thinking_label and self._thinking_btn:
-            if self._thinking_text:
-                self._thinking_label.set_markdown(self._thinking_text)
-                self._thinking_btn.setVisible(True)
-                self._sync_thinking_expanded(True)
-            else:
-                self._thinking_btn.setVisible(False)
-                self._sync_thinking_expanded(False)
+        if self._thinking_section is not None:
+            self._thinking_section.set_content(self._thinking_text)
+            self._thinking_section.set_expanded(bool(self._thinking_text))
 
         self._sync_content_visibility()
         self._scroll_timer.start(10)
@@ -286,11 +256,14 @@ class StreamingOverlay(QObject):
             self._content_label.set_markdown(self._displayed_text)
             changed = True
         if (
-            self._thinking_label is not None
+            self._thinking_section is not None
             and self._pending_thinking_text != self._displayed_thinking_text
         ):
+            first_thinking = not self._displayed_thinking_text
             self._displayed_thinking_text = self._pending_thinking_text
-            self._thinking_label.set_markdown(self._displayed_thinking_text)
+            self._thinking_section.set_content(self._displayed_thinking_text)
+            if first_thinking:
+                self._thinking_section.set_expanded(True)
             changed = True
         if changed:
             self._sync_content_visibility()
@@ -308,42 +281,23 @@ class StreamingOverlay(QObject):
         has_thinking = bool(self._displayed_thinking_text.strip())
         if self._header is not None:
             self._header.setVisible(has_text or has_thinking)
-        if self._status_label is not None:
-            self._status_label.setVisible(not has_text and not has_thinking)
         if self._content_label is not None:
             self._content_label.setVisible(has_text)
-        if self._thinking_btn is not None:
-            self._thinking_btn.setVisible(has_thinking)
-        if self._thinking_label is not None:
-            self._thinking_label.setVisible(has_thinking and self._thinking_expanded)
+        if self._thinking_section is not None:
+            self._thinking_section.setVisible(has_thinking)
 
     def _update_geometry_and_scroll(self) -> None:
         if self._content_label is not None:
             self._content_label.refit_height()
             self._content_label.updateGeometry()
-        if self._thinking_label is not None:
-            self._thinking_label.refit_height()
-            self._thinking_label.updateGeometry()
+        if self._thinking_section is not None and self._thinking_section.is_expanded:
+            content = self._thinking_section.content_widget
+            if content is not None:
+                content.refit_height()
+                content.updateGeometry()
         if self._container is not None:
             self._container.updateGeometry()
         self._scroll_to_bottom_if_allowed()
-
-    def _toggle_thinking(self) -> None:
-        if not self._thinking_label or not self._thinking_btn:
-            return
-        self._sync_thinking_expanded(not self._thinking_expanded)
-
-    def _sync_thinking_expanded(self, expanded: bool) -> None:
-        self._thinking_expanded = bool(expanded)
-        if self._thinking_label is not None:
-            self._thinking_label.setVisible(self._thinking_expanded)
-        if self._thinking_btn is None:
-            return
-        self._thinking_btn.setProperty("expanded", self._thinking_expanded)
-        self._thinking_btn.setText("思考过程 >")
-        self._thinking_btn.style().unpolish(self._thinking_btn)
-        self._thinking_btn.style().polish(self._thinking_btn)
-        self._thinking_btn.setFixedHeight(COMPACT_CONTROL_HEIGHT)
 
     def _scroll_to_bottom_if_allowed(self) -> None:
         if self._should_auto_scroll is not None and not self._should_auto_scroll():

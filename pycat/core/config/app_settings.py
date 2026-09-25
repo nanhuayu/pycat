@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from pycat.core.config.io import (
-    load_settings_dict,
     load_app_config,
+    load_settings_dict,
     set_cached_settings_dict,
 )
 

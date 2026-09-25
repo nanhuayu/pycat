@@ -10,6 +10,13 @@ import logging
 from typing import Any, Callable, Dict, List, Optional
 
 from pycat.core.commands.dispatcher import dispatch_command
+from pycat.core.commands.mentions import (
+    MentionCandidate,
+    MentionKind,
+    MentionQuery,
+    MentionResolver,
+    extract_mention_query,
+)
 from pycat.core.commands.parser import (
     extract_command_query,
     find_command_invocation,
@@ -21,18 +28,12 @@ from pycat.core.commands.types import (
     CommandPresentation,
     CommandResult,
     PromptInvocation,
-    ShellInvocation,
     SlashCommand,
 )
-from pycat.core.commands.mentions import (
-    MentionCandidate,
-    MentionKind,
-    MentionQuery,
-    MentionResolver,
-    extract_mention_query,
+from pycat.core.commands.types import (
+    ShellInvocation as ShellInvocation,
 )
-from pycat.core.skills import SkillsManager
-from pycat.core.skills import resolve_skill_invocation_spec
+from pycat.core.skills import SkillsManager, resolve_skill_invocation_spec
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +88,6 @@ class CommandRegistry:
             if limit > 0 and len(hints) >= limit:
                 break
         return hints
-
-    def build_input_placeholder(self) -> str:
-        slash_hints = "，".join(self.get_placeholder_hints(limit=4))
-        command_hint = f"{slash_hints}，" if slash_hints else ""
-        return f"输入消息... ({command_hint}@文件或 Agent，/skill-name)"
-
-    def get_menu_presentation(self, name: str) -> Optional[CommandPresentation]:
-        cmd = self.get(name)
-        return getattr(cmd, "presentation", None) if cmd else None
 
     def is_command(self, text: str, context: Optional[Dict[str, Any]] = None) -> bool:
         invocation = find_command_invocation(text)
@@ -430,6 +422,9 @@ class CommandRegistry:
             lambda args, ctx: h.mode_prompt("review", args), CommandPresentation(usage="/review [request]", takes_argument=True)))
         self.register(SlashCommand('agents', 'Inspect profiles or explicitly run a delegated agent', h.cmd_agents,
             CommandPresentation(usage='/agents [run PROFILE GOAL]', takes_argument=True)))
+        self.register(SlashCommand('background', '将明确任务交给独立会话，在后台执行',
+            lambda args, ctx: CommandResult(CommandAction.BACKGROUND, args.strip()),
+            CommandPresentation(usage='/background [--read-only] 任务简报', takes_argument=True)))
         for name, description in (
             ("config", "Edit application configuration"), ("status", "Show session and runtime status"),
             ("permissions", "Inspect or change tool and filesystem access"), ("mcp", "Manage MCP servers"),

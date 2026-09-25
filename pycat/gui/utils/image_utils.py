@@ -15,11 +15,10 @@ import logging
 import os
 from typing import List, Optional, Tuple
 
-from PyQt6.QtCore import QByteArray, QBuffer, QIODevice
-from PyQt6.QtGui import QImage, QPixmap, QGuiApplication
+from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
+from PyQt6.QtGui import QGuiApplication, QImage, QPixmap
 
 # Re-export for convenience (actual implementation lives in core attachments)
-from pycat.core.content.attachments import encode_image_file_to_data_url
 
 
 logger = logging.getLogger(__name__)

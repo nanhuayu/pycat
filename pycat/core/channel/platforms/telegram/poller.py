@@ -12,7 +12,6 @@ from pycat.core.channel.platforms.telegram.delivery import TelegramDelivery
 from pycat.core.channel.platforms.telegram.router import normalize_telegram_update
 from pycat.models.contracts.channel import ChannelConfig
 
-
 logger = logging.getLogger(__name__)
 
 

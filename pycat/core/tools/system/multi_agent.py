@@ -1,11 +1,61 @@
 """Delegated-agent tool backed by workspace Mode profiles."""
 from __future__ import annotations
 
+import json
 from typing import Any, Dict
 
+from pycat.core.capabilities.validation import parse_and_validate_output
 from pycat.core.modes.manager import ModeManager
 from pycat.core.tools.base import BaseTool, ToolContext, ToolControlAction, ToolResult
 from pycat.models.contracts.tooling import ToolSelectionPolicy
+
+
+class AgentTaskTool(BaseTool):
+    """Narrow injected application port; no runtime or repository ownership."""
+    def __init__(self, operation=None):
+        self.operation = operation
+
+    @property
+    def name(self):
+        return 'agent__task'
+
+    @property
+    def display_name(self):
+        return '独立任务'
+
+    @property
+    def description(self):
+        return ('Submit an explicitly independent task to a new conversation; immediately returns a task reference. '
+                'Use agent__run for a short child whose answer is needed in this run. Only one delegation level is allowed. '
+                'Provide a self-contained brief and delivery requirements; history is not copied. '
+                'Results do not automatically resume this conversation. Query status only when needed; do not busy-poll.')
+
+    @property
+    def category(self):
+        return 'delegate'
+
+    @property
+    def risk(self):
+        return 'medium'
+
+    @property
+    def input_schema(self):
+        return {'type': 'object', 'properties': {
+            'action': {'type': 'string', 'enum': ['submit', 'status', 'cancel']},
+            'brief': {'type': 'string', 'description': 'Self-contained goal, constraints, relevant context and acceptance evidence.'},
+            'read_only': {'type': 'boolean', 'description': 'Allow read/web tools and task-local todo/artifacts; deny shared memory/wiki writes and other actions.'},
+            'task_id': {'type': 'string', 'description': 'Returned target conversation ID; omit for status of all own tasks.'}},
+            'required': ['action'], 'additionalProperties': False}
+
+    async def execute(self, arguments, context):
+        if self.operation is None:
+            return ToolResult('Independent tasks require an application host.', is_error=True)
+        result = await self.operation(arguments, context)
+        if isinstance(result, list):
+            result = {'tasks': result[:20], 'total': len(result), 'truncated': len(result) > 20}
+        if isinstance(result, dict) and len(result.get('result', '')) > 4000:
+            result = {**result, 'result': result['result'][:4000], 'result_truncated': True}
+        return ToolResult(json.dumps(result, ensure_ascii=False))
 
 
 class AgentRunTool(BaseTool):
@@ -140,7 +190,6 @@ class AgentCompleteTool(BaseTool):
         policy = getattr(getattr(context, "runtime", None), "run_policy", None)
         schema = getattr(policy, "completion_schema", None)
         if schema:
-            from pycat.core.capabilities.validation import parse_and_validate_output
 
             _, error = parse_and_validate_output(result, schema)
             if error:

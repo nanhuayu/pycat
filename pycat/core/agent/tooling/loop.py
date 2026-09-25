@@ -7,17 +7,16 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from pycat.models.conversation import Conversation, Message
-from pycat.models.provider import Provider
-
-from pycat.core.agent.run.control_messages import REPETITION_WARNING
-from pycat.core.agent.run.control import RunControl, effective_run_policy
 from pycat.core.agent.events.conversation import emit_conversation_patch
 from pycat.core.agent.events.emitter import EventEmitter
+from pycat.core.agent.run.control import RunControl, effective_run_policy
+from pycat.core.agent.run.control_messages import REPETITION_WARNING
 from pycat.core.agent.tooling.repetition import ToolRepetitionDetector
-from pycat.models.contracts.agent import RunPolicy, RunEventKind, TurnState, TurnContext, TurnOutcome, TurnOutcomeKind
-from pycat.core.tools.base import ToolResult
 from pycat.core.observability.debug_trace import DebugTraceContext
+from pycat.core.tools.base import ToolResult
+from pycat.models.contracts.agent import RunEventKind, RunPolicy, TurnContext, TurnOutcome, TurnOutcomeKind
+from pycat.models.conversation import Conversation, Message
+from pycat.models.provider import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,6 @@ class ToolCallCoordinator:
         total_tools = len(assistant_msg.tool_calls or [])
         for tool_index, tool_call in enumerate(assistant_msg.tool_calls or []):
             if cancel_event and cancel_event.is_set():
-                turn_context.state = TurnState.CANCELLED
                 return TurnOutcome(kind=TurnOutcomeKind.CANCELLED, context=turn_context, final_message=assistant_msg)
 
             tool_name, args, tool_call_id = self.tool_executor.parse_tool_call(tool_call)
@@ -104,7 +102,6 @@ class ToolCallCoordinator:
                 )
                 turn_context.runtime_messages = [Message(role="user", content=REPETITION_WARNING)]
                 repetition_detector.reset()
-                turn_context.state = TurnState.TURN_COMPLETE
                 return TurnOutcome(kind=TurnOutcomeKind.CONTINUE, context=turn_context, final_message=assistant_msg)
 
             allowed = self.tool_executor.is_tool_allowed(tool_name, tool_policy)
@@ -178,7 +175,6 @@ class ToolCallCoordinator:
                 policy=tool_policy,
                 context=context,
             )
-            result_text = self.tool_result_to_string(tool_result)
             tool_is_error = bool(getattr(tool_result, "is_error", False))
             control_action = getattr(tool_result, "control_action", None)
             if (
@@ -190,7 +186,6 @@ class ToolCallCoordinator:
                     "agent__complete must be the final tool call in an assistant message.",
                     is_error=True,
                 )
-                result_text = self.tool_result_to_string(tool_result)
                 tool_is_error = True
                 control_action = None
 
@@ -287,7 +282,6 @@ class ToolCallCoordinator:
                 assistant_msg.metadata["completion"] = True
                 assistant_msg.metadata["completion_policy"] = "explicit"
                 self.tool_executor.attach_state_snapshot(conversation, assistant_msg)
-                turn_context.state = TurnState.TURN_COMPLETE
                 turn_context.runtime_messages = []
                 return TurnOutcome(
                     kind=TurnOutcomeKind.COMPLETE,
@@ -295,7 +289,6 @@ class ToolCallCoordinator:
                     final_message=assistant_msg,
                 )
 
-        turn_context.state = TurnState.TURN_COMPLETE
         turn_context.runtime_messages = []
         return TurnOutcome(kind=TurnOutcomeKind.CONTINUE, context=turn_context, final_message=assistant_msg)
 

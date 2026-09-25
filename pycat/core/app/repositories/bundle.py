@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from pycat.core.config import get_global_data_dir
 from pycat.core.app.repositories.conversation import ConversationRepository
 from pycat.core.app.repositories.mcp_server import McpServerRepository
 from pycat.core.app.repositories.provider import ProviderRepository
 from pycat.core.app.repositories.search_config import SearchConfigRepository
 from pycat.core.app.repositories.settings import SettingsRepository
+from pycat.core.config import get_global_data_dir
 
 
 @dataclass(frozen=True)

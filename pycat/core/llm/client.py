@@ -5,25 +5,23 @@ Delegates response parsing to ``pycat.core.llm.response_handler``.
 
 from __future__ import annotations
 
-import logging
-import time
 import asyncio
-from datetime import datetime
-from typing import Any, Optional, Callable
+import logging
 import threading
+import time
+from datetime import datetime
+from typing import Any, Callable, Optional
 
 import httpx
 
-from pycat.models.provider import Provider
-from pycat.models.conversation import Message
-
-from pycat.core.llm.thinking_parser import ThinkingStreamParser
-from pycat.core.llm.reasoning import normalize_reasoning_codec
 from pycat.core.llm.images import request_image
-from pycat.models.contracts.capability import ImageGenerationOptions
+from pycat.core.llm.reasoning import normalize_reasoning_codec
 from pycat.core.llm.response_handler import parse_non_stream_response, parse_stream_response
+from pycat.core.llm.thinking_parser import ThinkingStreamParser
 from pycat.core.observability.debug_trace import DebugTraceContext, ensure_debug_trace
-
+from pycat.models.contracts.capability import ImageGenerationOptions
+from pycat.models.conversation import Message
+from pycat.models.provider import Provider
 
 logger = logging.getLogger(__name__)
 

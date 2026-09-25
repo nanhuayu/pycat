@@ -1,7 +1,8 @@
 """Brave Search API provider."""
 
+from typing import Any, Dict, List, Optional
+
 import httpx
-from typing import List, Dict, Any, Optional
 
 from pycat.core.app.services.search_providers.base import BaseSearchProvider, SearchResult
 

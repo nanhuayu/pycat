@@ -353,29 +353,6 @@ def _recover_assistant_as_user(
     )
 
 
-def _tool_call_has_result(tool_call: Any) -> bool:
-    if not isinstance(tool_call, dict):
-        return False
-    if tool_call.get("result") is not None:
-        return True
-    if tool_call.get("result_summary"):
-        return True
-    return bool(tool_call.get("result_images"))
-
-
-def _filter_tool_calls_without_result(msg: Message) -> Message | None:
-    if not msg.tool_calls:
-        return msg
-    kept = [tc for tc in msg.tool_calls if _tool_call_has_result(tc)]
-    if not kept:
-        return _recover_assistant_as_user(msg)
-    if len(kept) == len(msg.tool_calls):
-        return msg
-    clone = Message.from_dict(msg.to_dict())
-    clone.tool_calls = kept
-    return clone
-
-
 def _sanitize_reasoning_history(
     messages: List[Message],
     provider: Provider,

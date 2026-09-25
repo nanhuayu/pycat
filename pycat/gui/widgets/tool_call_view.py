@@ -9,11 +9,10 @@ import os
 import re
 from typing import Any, Callable, Iterable, List
 
-from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtCore import QCoreApplication, QRect, QSize, Qt, QTimer
 from PyQt6.QtGui import QPainter, QTextOption
 from PyQt6.QtWidgets import (
     QFrame,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
@@ -25,19 +24,20 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
+from pycat.gui.view_models.message_tree import ToolInvocationView, build_message_tree_view_model
+from pycat.gui.view_models.tooling_labels import tool_name_label
+from pycat.gui.widgets.markdown_view import MarkdownView
+from pycat.gui.widgets.themed_line_edit import ThemedContextMenuMixin
+from pycat.gui.widgets.workflow_capsule import WorkflowCapsuleRow, create_artifact_capsule
+from pycat.models.contracts.content import ContentRef, FileChange
 from pycat.models.conversation import (
     normalize_subtask_run,
     normalize_tool_result,
     tool_call_kind,
     tool_call_name,
 )
-from pycat.models.contracts.content import FileChange
-from pycat.gui.view_models.message_tree import ToolInvocationView, build_message_tree_view_model
-from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
-from pycat.gui.widgets.markdown_view import MarkdownView
-from pycat.gui.widgets.themed_line_edit import ThemedContextMenuMixin
-from pycat.gui.widgets.workflow_capsule import WorkflowCapsuleRow, create_artifact_capsule
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +45,7 @@ EDIT_TOOL_NAMES = {"file__write", "file__edit", "file__patch", "file__delete"}
 
 
 def _tool_call_display_name(name: str) -> str:
-    text = str(name or 'unknown_tool')
-    if text == 'agent__run':
-        return 'run'
-    if text.startswith('capability__'):
-        return text.removeprefix('capability__')
-    return text
+    return tool_name_label(str(name or 'unknown_tool'))
 
 
 def _coerce_tool_arguments(tool_call: dict | None) -> dict[str, Any]:
@@ -71,18 +66,18 @@ def _coerce_tool_arguments(tool_call: dict | None) -> dict[str, Any]:
 def _file_name_for_display(path: str) -> str:
     normalized = str(path or "").replace("\\", "/").rstrip("/")
     if not normalized:
-        return "未命名文件"
+        return QCoreApplication.translate('ToolCallView', '未命名文件')
     return os.path.basename(normalized) or normalized
 
 
 def _file_change_action(name: str) -> tuple[str, str]:
     if name == "file__write":
-        return "write", "已写入"
+        return "write", QCoreApplication.translate('ToolCallView', '已写入')
     if name == "file__delete":
-        return "delete", "已删除"
+        return "delete", QCoreApplication.translate('ToolCallView', '已删除')
     if name == "file__patch":
-        return "patch", "已应用补丁"
-    return "edit", "已编辑"
+        return "patch", QCoreApplication.translate('ToolCallView', '已应用补丁')
+    return "edit", QCoreApplication.translate('ToolCallView', '已编辑')
 
 
 def _file_change_meta(name: str, args: dict[str, Any], result: dict[str, Any] | None) -> str:
@@ -96,32 +91,32 @@ def _file_change_meta(name: str, args: dict[str, Any], result: dict[str, Any] | 
     if name == "file__patch":
         hunk_count = len(re.findall(r"(?m)^@@\s", diff))
         if hunk_count:
-            parts.append(f"{hunk_count} 个 hunk")
+            parts.append(QCoreApplication.translate('ToolCallView', '{hunk_count} 个 hunk').format(hunk_count=hunk_count))
     elif name == "file__write":
         written_chars = len(str(args.get("content") or ""))
         if written_chars:
-            parts.append(f"{written_chars} 字符")
+            parts.append(QCoreApplication.translate('ToolCallView', '{written_chars} 字符').format(written_chars=written_chars))
     elif name == "file__delete":
         if args.get("recursive"):
-            parts.append("递归")
+            parts.append(QCoreApplication.translate('ToolCallView', '递归'))
     elif name == "file__edit":
         if "Regex match" in content:
-            parts.append("正则匹配")
+            parts.append(QCoreApplication.translate('ToolCallView', '正则匹配'))
         elif "Exact match" in content:
-            parts.append("精确匹配")
+            parts.append(QCoreApplication.translate('ToolCallView', '精确匹配'))
         elif diff:
-            parts.append("补丁模式")
+            parts.append(QCoreApplication.translate('ToolCallView', '补丁模式'))
         elif old_str or new_str:
-            parts.append("文本替换")
+            parts.append(QCoreApplication.translate('ToolCallView', '文本替换'))
     return " · ".join(parts)
 
 
 def _tool_call_kind_label(kind: str) -> str:
     return {
-        'subagent': '子 Agent',
-        'capability': '能力',
-        'tool': '工具',
-    }.get(kind, '工具')
+        'subagent': QCoreApplication.translate('ToolCallView', '子 Agent'),
+        'capability': QCoreApplication.translate('ToolCallView', '能力'),
+        'tool': QCoreApplication.translate('ToolCallView', '工具'),
+    }.get(kind, QCoreApplication.translate('ToolCallView', '工具'))
 
 
 def _plain_summary(text: Any, limit: int = 160) -> str:
@@ -130,24 +125,6 @@ def _plain_summary(text: Any, limit: int = 160) -> str:
     if len(value) > limit:
         return value[: max(0, limit - 1)].rstrip() + '…'
     return value
-
-
-def _subtask_status_label(status: str) -> str:
-    return {
-        'running': '运行中',
-        'completed': '已完成',
-        'cancelled': '已取消',
-        'failed': '失败',
-    }.get(str(status or '').lower(), str(status or '未知'))
-
-
-def _subtask_status_icon(status: str) -> str:
-    return {
-        'running': '◐',
-        'completed': '✓',
-        'cancelled': '○',
-        'failed': '✗',
-    }.get(str(status or '').lower(), '•')
 
 
 def _fit_text_browser_height(view: QTextBrowser, *, min_height: int = 18, max_height: int = 120) -> None:
@@ -218,7 +195,7 @@ class ToolDetailPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        args_label = QLabel("输入参数")
+        args_label = QLabel(QCoreApplication.translate('ToolCallView', '输入参数'))
         args_label.setObjectName("tool_detail_label")
         layout.addWidget(args_label)
 
@@ -226,7 +203,7 @@ class ToolDetailPanel(QWidget):
         self.args_view.setObjectName("tool_args_view")
         layout.addWidget(self.args_view)
 
-        self.result_label = QLabel("执行结果")
+        self.result_label = QLabel(QCoreApplication.translate('ToolCallView', '执行结果'))
         self.result_label.setObjectName("tool_detail_label")
         self.result_label.setVisible(False)
         layout.addWidget(self.result_label)
@@ -269,16 +246,32 @@ class ToolDetailPanel(QWidget):
             QTimer.singleShot(0, self.result_view.refit_height)
 
 
-class ElideButton(QPushButton):
-    """PushButton that paints text elided to its current width."""
+class DisclosureButton(QPushButton):
+    """Single-line, keyboard accessible disclosure with a reserved chevron."""
 
     def __init__(self, text: str = "", parent=None):
         super().__init__(text, parent)
         self._full_text = str(text or "")
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(COMPACT_CONTROL_HEIGHT)
+        self.setMinimumWidth(0)
+        self.setIconSize(QSize(18, 18))
+        self.set_expanded(False)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.setChecked(expanded)
+        if self.property('expanded') != expanded:
+            self.setProperty('expanded', expanded)
+            self.style().unpolish(self)
+            self.style().polish(self)
+        self.update()
 
     def setText(self, text: str) -> None:
         self._full_text = str(text or "")
         super().setText(self._full_text)
+        self.setAccessibleName(self._full_text)
         self.update()
 
     def fullText(self) -> str:
@@ -296,12 +289,16 @@ class ElideButton(QPushButton):
         opt = QStyleOptionButton()
         self.initStyleOption(opt)
         metrics = self.fontMetrics()
-        reserve = 10
+        reserve = 34
         if self.icon() and not self.icon().isNull():
             reserve += self.iconSize().width() + 4
         opt.text = metrics.elidedText(self._full_text, Qt.TextElideMode.ElideRight, max(12, self.width() - reserve))
         painter = QPainter(self)
         self.style().drawControl(QStyle.ControlElement.CE_PushButton, opt, painter, self)
+        arrow = Icons.CHEVRON_DOWN if self.isChecked() else Icons.CHEVRON_RIGHT
+        Icons.get_muted(arrow, scale_factor=1.0).paint(
+            painter, QRect(self.width() - 22, (self.height() - 14) // 2, 14, 14)
+        )
 
 
 class ThinkingSection(QWidget):
@@ -311,6 +308,7 @@ class ThinkingSection(QWidget):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         self.thinking_content = thinking_content
+        self._rendered_content = ''
         self.is_expanded = False
         self.content_widget: MarkdownView | None = None
         self._setup_ui()
@@ -320,27 +318,28 @@ class ThinkingSection(QWidget):
         layout.setContentsMargins(0, 1, 0, 1)
         layout.setSpacing(0)
 
-        self.toggle_btn = ElideButton()
+        self.toggle_btn = DisclosureButton()
         self.toggle_btn.setObjectName("thinking_toggle")
-        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-        self.toggle_btn.setFixedHeight(COMPACT_CONTROL_HEIGHT)
-        self.toggle_btn.setMinimumWidth(0)
         self.toggle_btn.setIcon(Icons.get_muted(Icons.THINKING, scale_factor=1.0))
-        self.toggle_btn.setIconSize(QSize(18, 18))
-        self.toggle_btn.setText("思考过程 >")
+        self.toggle_btn.setText(QCoreApplication.translate('ToolCallView', '思考过程'))
 
         self.toggle_btn.clicked.connect(self._toggle)
         layout.addWidget(self.toggle_btn)
 
     def _ensure_content_widget(self) -> MarkdownView:
         if self.content_widget is None:
-            self.content_widget = MarkdownView(self.thinking_content)
+            self.content_widget = MarkdownView('')
             self.content_widget.setObjectName("thinking_content")
             self.content_widget.document().setDocumentMargin(7)
             self.content_widget.set_height_adjustment(minimum_height=40, padding=4, maximum_height=180)
             self.layout().addWidget(self.content_widget)
         return self.content_widget
+
+    def set_content(self, content: str) -> None:
+        self.thinking_content = str(content or '')
+        if self.is_expanded and self._rendered_content != self.thinking_content:
+            self._ensure_content_widget().set_markdown(self.thinking_content)
+            self._rendered_content = self.thinking_content
 
     def _toggle(self):
         self.set_expanded(not self.is_expanded)
@@ -349,13 +348,10 @@ class ThinkingSection(QWidget):
         self.is_expanded = bool(expanded)
         if self.content_widget is not None:
             self.content_widget.setVisible(self.is_expanded)
-        self.toggle_btn.setProperty("expanded", self.is_expanded)
-        self.toggle_btn.style().unpolish(self.toggle_btn)
-        self.toggle_btn.style().polish(self.toggle_btn)
-        self.toggle_btn.setText("思考过程 >")
-        self.toggle_btn.setFixedHeight(COMPACT_CONTROL_HEIGHT)
+        self.toggle_btn.set_expanded(self.is_expanded)
         if self.is_expanded:
             content_widget = self._ensure_content_widget()
+            self.set_content(self.thinking_content)
             content_widget.setVisible(True)
             content_widget.refit_height()
             QTimer.singleShot(0, content_widget.refit_height)
@@ -435,16 +431,12 @@ class ToolCallItem(QWidget):
         result_payload = self.result_payload or normalize_tool_result('')
 
         # Header (Toggle button)
-        self.toggle_btn = ElideButton()
+        self.toggle_btn = DisclosureButton()
         self.toggle_btn.setObjectName("tool_call_header")
-        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-        self.toggle_btn.setFixedHeight(COMPACT_CONTROL_HEIGHT)
-        self.toggle_btn.setMinimumWidth(0)
         self.toggle_btn.setProperty("kind", kind)
+        self.toggle_btn.setProperty("status", "running")
         self.toggle_btn.setIcon(self._header_icon(kind, name))
-        self.toggle_btn.setIconSize(QSize(18, 18))
-        self.toggle_btn.setToolTip(f"{self._kind_label(kind)}调用：{name}")
+        self.toggle_btn.setToolTip(self._header_tooltip())
 
         # Initial state is "Running"
         self.toggle_btn.setText(self._running_title(name))
@@ -508,7 +500,6 @@ class ToolCallItem(QWidget):
             self.subtask_widget = SubtaskRunWidget(
                 self._subtask_trace,
                 work_dir=self.work_dir,
-                artifact_lookup=self.artifact_lookup,
                 embedded_message_factory=self._embedded_message_factory,
             )
             capsule_layout = self.capsule_layout
@@ -518,6 +509,12 @@ class ToolCallItem(QWidget):
         else:
             self.subtask_widget.set_trace(self._subtask_trace)
         return self.subtask_widget
+
+    def reveal_subtask(self):
+        widget = self._ensure_subtask_widget()
+        if widget is not None:
+            widget.set_expanded(True)
+        return widget
 
     def _sync_detail_aliases(self) -> None:
         if self.detail_panel is None:
@@ -535,10 +532,7 @@ class ToolCallItem(QWidget):
         if details_widget is not None:
             details_widget.setVisible(self.is_expanded)
         if self.toggle_btn is not None:
-            self.toggle_btn.setProperty("expanded", self.is_expanded)
-            self.toggle_btn.style().unpolish(self.toggle_btn)
-            self.toggle_btn.style().polish(self.toggle_btn)
-            self.toggle_btn.setFixedHeight(COMPACT_CONTROL_HEIGHT)
+            self.toggle_btn.set_expanded(self.is_expanded)
         if self.is_expanded:
             self._refit_details()
 
@@ -563,12 +557,53 @@ class ToolCallItem(QWidget):
             return Icons.get_muted(Icons.WAND, scale_factor=1.0)
         if name.startswith(("shell__", "python__")) or "terminal" in name or "command" in name:
             return Icons.get_muted(Icons.TERMINAL, scale_factor=1.0)
+        icon = {
+            'file__read': Icons.FILE_LINES, 'file__list': Icons.FOLDER,
+            'file__search': Icons.SEARCH, 'file__ocr': Icons.OCR,
+            'file__write': Icons.EDIT, 'file__edit': Icons.EDIT,
+            'file__patch': Icons.EDIT, 'file__delete': Icons.TRASH,
+            'file__deliver': Icons.FILE, 'web__search': Icons.SEARCH,
+            'web__fetch': Icons.GLOBE, 'state__artifact': Icons.DOCUMENT,
+            'state__memory': Icons.MEMORY, 'state__wiki': Icons.BOOK,
+            'state__todo': Icons.CHECK, 'user__ask': Icons.MESSAGE,
+            'agent__complete': Icons.CIRCLE_CHECK,
+            'archive__read': Icons.FILE_LINES, 'archive__list': Icons.FOLDER,
+        }.get(name)
+        if icon:
+            return Icons.get_muted(icon, scale_factor=1.0)
         return Icons.get_muted(Icons.WRENCH, scale_factor=1.0)
+
+    def _target(self, *, full: bool = False) -> str:
+        name = self._tool_name()
+        args = _coerce_tool_arguments(self.tool_call)
+        if name.startswith('file__') and name != 'file__search':
+            path = str(args.get('path') or '')
+            target = path if full or not path else _file_name_for_display(path)
+            if name == 'file__read' and (args.get('start_line') or args.get('end_line')):
+                start, end = args.get('start_line') or 1, args.get('end_line')
+                target += f' :{start}–{end}' if end else f' :{start}+'
+            return target.strip()
+        key = {
+            'file__search': 'query', 'web__search': 'query', 'web__fetch': 'url',
+            'shell__run': 'command', 'shell__read': 'process_id',
+            'shell__write': 'process_id', 'shell__kill': 'process_id',
+            'state__artifact': 'name', 'agent__run': 'agent_id',
+        }.get(name)
+        return str(args.get(key) or '') if key else ''
+
+    def _action_title(self, name: str) -> str:
+        target = _plain_summary(self._target(), 120)
+        return ' · '.join(part for part in (self._display_name(name), target) if part)
+
+    def _header_tooltip(self, detail: str = '') -> str:
+        parts = [QCoreApplication.translate('ToolCallView', '{value}调用：{name}').format(
+            value=self._kind_label(), name=self._tool_name()), self._target(full=True), detail]
+        return '\n'.join(part for part in parts if part)
 
     def _running_title(self, name: str) -> str:
         if name == 'user__ask':
-            return '等待你的选择 >'
-        return f'运行中 {self._display_name(name)} >'
+            return QCoreApplication.translate('ToolCallView', '等待你的选择')
+        return QCoreApplication.translate('ToolCallView', '运行中 · {value}').format(value=self._action_title(name))
 
     def set_running_detail(self, detail: str) -> None:
         if self.result_payload is not None or self.toggle_btn is None:
@@ -577,26 +612,19 @@ class ToolCallItem(QWidget):
         if not clean:
             self.toggle_btn.setText(self._running_title(self._tool_name()))
             return
-        self.toggle_btn.setText(f"{clean} · {self._display_name()} >")
-        self.toggle_btn.setToolTip(f"{self._kind_label()}调用：{self._tool_name()}\n{clean}")
-
-    def _completed_title(self, name: str) -> str:
-        if name == 'user__ask':
-            return '已完成 user__ask >'
-        return f'已运行 {self._display_name(name)} >'
+        self.toggle_btn.setText(f"{self._action_title(self._tool_name())} · {_plain_summary(clean, 80)}")
+        self.toggle_btn.setToolTip(self._header_tooltip(clean))
 
     def _completed_title_with_summary(self, name: str, summary: str = "") -> str:
-        title = self._completed_title(name)
-        clean = _plain_summary(summary, 48)
-        if clean:
-            return f"{title.removesuffix(' >')} · {clean} >"
-        return title
+        title = self._action_title(name)
+        clean = _plain_summary(summary, 48) if not self._target() else ''
+        return f'{title} · {clean}' if clean else title
 
     def _failed_title_with_summary(self, name: str, summary: str = "") -> str:
-        title = f'运行失败 {self._display_name(name)} >'
+        title = QCoreApplication.translate('ToolCallView', '运行失败 · {value}').format(value=self._action_title(name))
         clean = _plain_summary(summary, 48)
         if clean:
-            return f"{title.removesuffix(' >')} · {clean} >"
+            return f"{title} · {clean}"
         return title
 
     def _result_summary(self, result: Any, *, limit: int = 48) -> str:
@@ -645,10 +673,10 @@ class ToolCallItem(QWidget):
         if structured_change is not None:
             action = structured_change.action
             action_label = {
-                "write": "已写入",
-                "edit": "已编辑",
-                "patch": "已应用补丁",
-                "delete": "已删除",
+                "write": QCoreApplication.translate('ToolCallView', '已写入'),
+                "edit": QCoreApplication.translate('ToolCallView', '已编辑'),
+                "patch": QCoreApplication.translate('ToolCallView', '已应用补丁'),
+                "delete": QCoreApplication.translate('ToolCallView', '已删除'),
             }.get(action, action_label)
         row_status = "completed"
         if structured_change is not None and not structured_change.is_successful:
@@ -702,7 +730,7 @@ class ToolCallItem(QWidget):
             self.file_change_widget.set_work_dir(self.work_dir)
             self.file_change_widget.set_payload(path)
             try:
-                tooltip_parts.append(f"打开: {self.file_change_widget.resolved_path()}")
+                tooltip_parts.append(QCoreApplication.translate('ToolCallView', '打开: {value}').format(value=self.file_change_widget.resolved_path()))
             except Exception as exc:
                 logger.debug("Failed to resolve changed file path for tooltip: %s", exc)
         if meta_text:
@@ -719,7 +747,7 @@ class ToolCallItem(QWidget):
                     change = None
                 if change is not None and (change.before_digest or change.after_digest):
                     tooltip_parts.append(
-                        f"前: {change.before_digest or '-'}\n后: {change.after_digest or '-'}"
+                        QCoreApplication.translate('ToolCallView', '前: {value}\n后: {value_}').format(value=change.before_digest or '-', value_=change.after_digest or '-')
                     )
         self.file_change_widget.setToolTip("\n".join(part for part in tooltip_parts if part))
 
@@ -734,6 +762,11 @@ class ToolCallItem(QWidget):
         return fallback
 
     def _artifact_candidates(self) -> list[tuple[str, str, object]]:
+        result = self.result_payload or {}
+        if self._tool_name() == "state__artifact" and (
+            result.get("is_error") or (result.get("metadata") or {}).get("is_error")
+        ):
+            return []
         candidates: list[tuple[str, str, object]] = []
         seen: set[str] = set()
         args = _coerce_tool_arguments(self.tool_call)
@@ -743,11 +776,11 @@ class ToolCallItem(QWidget):
             name = str(args.get("name") or "").strip()
             if name and action in {"create", "upsert", "update", "append", "delete"}:
                 labels = {
-                    "create": "已创建",
-                    "upsert": "已保存",
-                    "update": "已更新",
-                    "append": "已追加",
-                    "delete": "已删除",
+                    "create": QCoreApplication.translate('ToolCallView', '已创建'),
+                    "upsert": QCoreApplication.translate('ToolCallView', '已保存'),
+                    "update": QCoreApplication.translate('ToolCallView', '已更新'),
+                    "append": QCoreApplication.translate('ToolCallView', '已追加'),
+                    "delete": QCoreApplication.translate('ToolCallView', '已删除'),
                 }
                 fallback = {
                     "name": name,
@@ -775,7 +808,7 @@ class ToolCallItem(QWidget):
                 name = str(item.get("name") or "").strip()
                 if not name or name in seen:
                     continue
-                candidates.append((name, f"已导入 {name}", self._lookup_artifact(name, item)))
+                candidates.append((name, QCoreApplication.translate('ToolCallView', '已导入 {name}').format(name=name), self._lookup_artifact(name, item)))
                 seen.add(name)
         return candidates
 
@@ -842,15 +875,18 @@ class ToolCallItem(QWidget):
             and (result.get('is_error') or result.get('error') or metadata.get('is_error'))
         )
         if self.toggle_btn is not None:
+            self.toggle_btn.setProperty('status', 'failed' if is_error else 'completed')
+            self.toggle_btn.style().unpolish(self.toggle_btn)
+            self.toggle_btn.style().polish(self.toggle_btn)
             self.toggle_btn.setText(
                 self._failed_title_with_summary(name, summary)
                 if is_error
                 else self._completed_title_with_summary(name, summary)
             )
             full_summary = self._full_result_summary(result)
-            tooltip_parts = [f"{self._kind_label()}调用：{name}"]
+            tooltip_parts = [self._header_tooltip()]
             if is_error:
-                tooltip_parts.append("状态：失败")
+                tooltip_parts.append(QCoreApplication.translate('ToolCallView', '状态：失败'))
             if full_summary:
                 tooltip_parts.append(full_summary)
             self.toggle_btn.setToolTip("\n".join(tooltip_parts))
@@ -990,13 +1026,11 @@ class SubtaskRunWidget(QWidget):
         parent=None,
         *,
         work_dir: str = "",
-        artifact_lookup: Callable[[str], object | None] | None = None,
         embedded_message_factory: Callable[..., object] | None = None,
     ):
         super().__init__(parent)
         self.trace = self._normalize_trace(trace)
         self.work_dir = str(work_dir or "")
-        self.artifact_lookup = artifact_lookup
         self._embedded_message_factory = embedded_message_factory
         self.is_expanded = False
         self.toggle_btn = None
@@ -1060,7 +1094,10 @@ class SubtaskRunWidget(QWidget):
                 widget.set_work_dir(self.work_dir)
 
     def _toggle(self):
-        self.is_expanded = not self.is_expanded
+        self.set_expanded(not self.is_expanded)
+
+    def set_expanded(self, expanded: bool):
+        self.is_expanded = bool(expanded)
         if self.content_widget is not None:
             self.content_widget.setVisible(self.is_expanded)
         if self.summary_row is not None:
@@ -1126,6 +1163,23 @@ class SubtaskRunWidget(QWidget):
                 return value
         return ""
 
+    def _child_artifact(self, name: str) -> object | None:
+        """Prefer the child receipt over a possibly unrelated parent artifact."""
+        for item in self._trace_metadata().get("produced_refs") or []:
+            if not isinstance(item, dict) or item.get("type") != "artifact":
+                continue
+            identifier = str(item.get("name") or item.get("id") or "").strip()
+            if identifier.lower() != str(name).strip().lower():
+                continue
+            return ContentRef(
+                id=identifier, name=f"{identifier}.md", kind="artifact", ref=f"artifact:{identifier}",
+                mime="text/markdown", size=int(item.get("chars") or 0), digest=str(item.get("digest") or ""),
+                locator=str(item.get("path") or ""), source="artifact", status=str(item.get("status") or "draft"),
+                workspace=str(item.get("workspace", self.work_dir) or ""),
+                conversation_id=str(item.get("source_session_id") or self._metadata_value("child_session_id") or ""),
+            )
+        return None
+
     def _trace_tool_count(self) -> int:
         value = self._metadata_value("tool_count")
         try:
@@ -1146,12 +1200,12 @@ class SubtaskRunWidget(QWidget):
         partial_text = str(partial or "").strip().lower()
         is_partial = normalized == "failed_partial" or partial is True or partial_text in {"1", "true", "yes"}
         if normalized == "running":
-            return "~", "运行中", "running"
+            return "~", QCoreApplication.translate('ToolCallView', '运行中'), "running"
         if is_partial:
-            return "!", "部分完成", "partial"
+            return "!", QCoreApplication.translate('ToolCallView', '部分完成'), "partial"
         if normalized in {"failed", "cancelled"}:
-            return "!", "失败", "failed"
-        return "+", "已完成", "completed"
+            return "!", QCoreApplication.translate('ToolCallView', '失败'), "failed"
+        return "+", QCoreApplication.translate('ToolCallView', '已完成'), "completed"
 
     def _refresh_header(self):
         status = str(self.trace.get('status') or 'completed').strip().lower()
@@ -1171,13 +1225,13 @@ class SubtaskRunWidget(QWidget):
 
         meta_parts: list[str] = []
         if child_session_id:
-            meta_parts.append(f"会话 {child_session_id[:8]}")
+            meta_parts.append(QCoreApplication.translate('ToolCallView', '会话 {value}').format(value=child_session_id[:8]))
         if effective_turns not in (None, "", []):
-            meta_parts.append(f"轮次 {effective_turns}")
+            meta_parts.append(QCoreApplication.translate('ToolCallView', '轮次 {effective_turns}').format(effective_turns=effective_turns))
         if tool_count > 0:
-            meta_parts.append(f"工具 {tool_count}")
+            meta_parts.append(QCoreApplication.translate('ToolCallView', '工具 {tool_count}').format(tool_count=tool_count))
         if messages:
-            meta_parts.append(f"消息 {len(messages)}")
+            meta_parts.append(QCoreApplication.translate('ToolCallView', '消息 {value}').format(value=len(messages)))
         if duration:
             meta_parts.append(duration)
         if self.summary_row is not None:
@@ -1188,7 +1242,7 @@ class SubtaskRunWidget(QWidget):
             )
 
         if self.summary_row is not None:
-            kind_label = "能力" if kind == "capability" else "子 Agent"
+            kind_label = QCoreApplication.translate('ToolCallView', '能力') if kind == "capability" else QCoreApplication.translate('ToolCallView', '子 Agent')
             full_summary = _plain_summary(
                 self.trace.get('final_message') or self.trace.get('error') or self.trace.get('goal'),
                 limit=600,
@@ -1201,7 +1255,7 @@ class SubtaskRunWidget(QWidget):
             if tool_count > 0:
                 tooltip_parts.append(f"tool_count: {tool_count}")
             if not messages:
-                tooltip_parts.append("详细消息未保存在此归档中")
+                tooltip_parts.append(QCoreApplication.translate('ToolCallView', '详细消息未保存在此归档中'))
             if full_summary:
                 tooltip_parts.append(full_summary)
             self.summary_row.setToolTip("\n".join(tooltip_parts))
@@ -1232,21 +1286,18 @@ class SubtaskRunWidget(QWidget):
         child_session_id = str(self._metadata_value("child_session_id", "session_id") or "").strip()
         parent_session_id = str(self._metadata_value("parent_session_id") or "").strip()
         effective_turns = self._metadata_value("effective_max_turns")
-        profile_turns = self._metadata_value("profile_max_turns")
         if child_session_id:
-            detail_lines.append(f"子会话：{child_session_id}")
+            detail_lines.append(QCoreApplication.translate('ToolCallView', '子会话：{child_session_id}').format(child_session_id=child_session_id))
         if parent_session_id:
-            detail_lines.append(f"父会话：{parent_session_id}")
+            detail_lines.append(QCoreApplication.translate('ToolCallView', '父会话：{parent_session_id}').format(parent_session_id=parent_session_id))
         budget_parts: list[str] = []
         if effective_turns not in (None, "", []):
-            budget_parts.append(f"生效轮次 {effective_turns}")
-        if profile_turns not in (None, "", []):
-            budget_parts.append(f"profile 配置 {profile_turns}")
+            budget_parts.append(QCoreApplication.translate('ToolCallView', '生效轮次 {effective_turns}').format(effective_turns=effective_turns))
         if budget_parts:
-            detail_lines.append("预算：" + "，".join(budget_parts))
+            detail_lines.append(QCoreApplication.translate('ToolCallView', '预算：') + "，".join(budget_parts))
         tool_count = self._trace_tool_count()
         if tool_count > 0:
-            detail_lines.append(f"工具调用：{tool_count}")
+            detail_lines.append(QCoreApplication.translate('ToolCallView', '工具调用：{tool_count}').format(tool_count=tool_count))
         if detail_lines:
             meta_label = QLabel("\n".join(detail_lines))
             meta_label.setWordWrap(True)
@@ -1255,13 +1306,13 @@ class SubtaskRunWidget(QWidget):
 
         goal = str(self.trace.get('goal') or '').strip()
         if goal:
-            goal_label = QLabel(f"目标：{_plain_summary(goal, 240)}")
+            goal_label = QLabel(QCoreApplication.translate('ToolCallView', '目标：{value}').format(value=_plain_summary(goal, 240)))
             goal_label.setWordWrap(True)
             goal_label.setProperty("muted", True)
             content_layout.addWidget(goal_label)
 
         if not messages:
-            empty_label = QLabel("此记录只保存了子 Agent 摘要，没有保存可展开的内部消息。")
+            empty_label = QLabel(QCoreApplication.translate('ToolCallView', '此记录只保存了子 Agent 摘要，没有保存可展开的内部消息。'))
             empty_label.setWordWrap(True)
             empty_label.setProperty("muted", True)
             content_layout.addWidget(empty_label)
@@ -1286,20 +1337,20 @@ class SubtaskRunWidget(QWidget):
                         factory(
                             child_message,
                             work_dir=self.work_dir,
-                            artifact_lookup=self.artifact_lookup,
+                            artifact_lookup=self._child_artifact,
                         )
                     )
                 except Exception as exc:
                     logger.debug("Failed to render subtask message: %s", exc)
             if len(render_messages) > limit:
-                self.show_more_btn = QPushButton(f"显示全部 {len(render_messages)} 条子任务消息（还有 {len(render_messages) - limit} 条）")
+                self.show_more_btn = QPushButton(QCoreApplication.translate('ToolCallView', '显示全部 {value} 条子任务消息（还有 {value_} 条）').format(value=len(render_messages), value_=len(render_messages) - limit))
                 self.show_more_btn.setProperty("secondary", True)
                 self.show_more_btn.clicked.connect(self._show_all_messages)
                 content_layout.addWidget(self.show_more_btn)
 
         error = str(self.trace.get('error') or '').strip()
         if error:
-            error_label = QLabel("错误:")
+            error_label = QLabel(QCoreApplication.translate('ToolCallView', '错误:'))
             error_label.setObjectName("message_error_label")
             content_layout.addWidget(error_label)
             error_view = MarkdownView(error)

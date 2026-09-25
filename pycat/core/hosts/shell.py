@@ -1,4 +1,4 @@
-"""Resolve local shell programs; configuration stays independent of the OS."""
+"""Local shell resolution shared by execution and environment descriptions."""
 from __future__ import annotations
 
 import os

@@ -1,8 +1,8 @@
 """Shared types for the command system."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from copy import deepcopy
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, Union
 
@@ -14,6 +14,7 @@ class CommandAction(str, Enum):
     CLEAR = "clear"               # Clear conversation / new conversation
     MODE_SWITCH = "mode_switch"   # Switch mode (data = slug)
     PROMPT_RUN = "prompt_run"     # Run a prompt in the normal runtime chain
+    BACKGROUND = "background"     # Durable handoff to an ordinary conversation
     EXPORT = "export"             # Export conversation (data = format)
     SHELL_RUN = "shell_run"       # Execute an explicit shell command
     MODEL_SWITCH = "model_switch"

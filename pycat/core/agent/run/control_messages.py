@@ -1,10 +1,10 @@
 """Short runtime recovery messages for the agent loop."""
 from __future__ import annotations
 
-
 REPETITION_WARNING = (
     "[WARNING] The same tool was called repeatedly with identical arguments. "
-    "Use different evidence or arguments, or return a normal final response when the task is complete."
+    "Use different evidence or arguments. When the task is complete, follow the current completion contract "
+    "(agent__complete in explicit mode)."
 )
 
 MAX_EXPLICIT_COMPLETION_RETRIES = 2

@@ -12,7 +12,6 @@ from pycat.core.channel.platforms.wechat.protocol import normalize_wechat_reply_
 from pycat.core.version import __version__ as PYCAT_VERSION
 from pycat.models.contracts.channel import ChannelConfig
 
-
 WECHAT_ILINK_LOGIN_BASE = "https://ilinkai.weixin.qq.com"
 WECHAT_ILINK_APP_ID = "bot"
 PYCAT_BOT_AGENT = f"PyCat/{PYCAT_VERSION}"
@@ -262,10 +261,6 @@ class WeChatChannelClient:
             return int(getattr(exc.response, "status_code", 0) or 0) in {401, 403}
         text = str(exc or "").strip().lower()
         return any(item in text for item in ("session expired", "login expired", "invalid token"))
-
-    @staticmethod
-    def is_transient_error(exc: Exception) -> bool:
-        return isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.TransportError))
 
     @staticmethod
     def coalesce_text(mapping: Mapping[str, Any], *keys: str, default: str = "") -> str:

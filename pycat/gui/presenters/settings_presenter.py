@@ -7,17 +7,17 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QObject, QThreadPool, QUrl, QTimer
+from PyQt6.QtCore import QCoreApplication, QObject, QThreadPool, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
+from pycat.core.agent.policy import RunPolicyBuilder
 from pycat.core.app.services.release import (
-    ReleaseCheckResult,
     STABLE_RELEASE_PAGE,
+    ReleaseCheckResult,
     update_check_due,
 )
 from pycat.core.version import __version__
-from pycat.core.agent.policy import RunPolicyBuilder
 from pycat.gui.about_content import PRODUCT_NAME, about_dialog_html
 from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.settings.model_profile_dialog import ModelProfileDialog
@@ -158,11 +158,6 @@ class SettingsPresenter:
                 model=current_model or None,
             )
 
-    def open_provider_settings(self) -> None:
-        host = self._window
-        provider_id = host.input_area.get_selected_provider_id()
-        self.open_settings(initial_page="models", selected_provider_id=provider_id)
-
     def edit_current_model(self) -> bool:
         """Edit the model selected by the Composer."""
 
@@ -265,11 +260,12 @@ class SettingsPresenter:
 
         dialog = SettingsDialog(
             list(snapshot.providers),
-            current_settings=host.app_settings,
+            current_settings=snapshot.app_settings,
             provider_service=host.services.provider_service,
             provider_catalog_service=host.services.provider_catalog_service,
             mode_catalog_service=getattr(host.services, "mode_catalog_service", None),
             mcp_servers=snapshot.mcp_servers,
+            modes=snapshot.modes,
             search_config=snapshot.search_config,
             mcp_server_provider=reload_mcp_servers,
             channel_service=host.services.channel_service,
@@ -288,26 +284,11 @@ class SettingsPresenter:
         capture = getattr(self._window, 'screenshot_controller', None)
         if capture is not None:
             dialog.capture_requested.connect(capture.start)
-            capture.failed.connect(dialog.automation_page.notice.setText)
-            dialog.shortcuts_page.capture_status.setText(capture.shortcut_status)
-            capture.shortcut_changed.connect(dialog.shortcuts_page.capture_status.setText)
-        else:
-            dialog.automation_page.preview_button.setEnabled(False)
+        dialog.page_created.connect(self._configure_settings_page)
+        for key, page in dialog.created_pages.items():
+            self._configure_settings_page(key, page)
         dialog.library_requested.connect(lambda: self._leave_settings_for_library(dialog))
         dialog.project_instructions_requested.connect(lambda: self._leave_settings_for_library(dialog, work_dir=work_dir))
-        about_page = getattr(dialog, "about_page", None)
-        if about_page is not None:
-            check_requested = getattr(about_page, "check_requested", None)
-            if check_requested is not None:
-                check_requested.connect(self.check_for_updates)
-            release_open_requested = getattr(about_page, "release_open_requested", None)
-            if release_open_requested is not None:
-                release_open_requested.connect(self.open_release_url)
-            release_ignore_requested = getattr(about_page, "release_ignore_requested", None)
-            if release_ignore_requested is not None:
-                release_ignore_requested.connect(self.ignore_release)
-            self.set_release_checking(self._release_job is not None)
-            self.apply_release_result(self._release_result)
         dialog.save_requested.connect(
             lambda update, dialog=dialog: self._start_settings_save(dialog, update)
         )
@@ -316,6 +297,23 @@ class SettingsPresenter:
         host.workspace_stack.setCurrentWidget(dialog)
         dialog.show()
         host.window_state_presenter.refresh_menu_action_states()
+
+    def _configure_settings_page(self, key: str, page) -> None:
+        """Connect a page when first created; never materialize hidden views."""
+        capture = getattr(self._window, "screenshot_controller", None)
+        if key == "automation":
+            page.preview_button.setEnabled(capture is not None)
+            if capture is not None:
+                capture.failed.connect(page.notice.setText)
+        elif key == "shortcuts" and capture is not None:
+            page.set_capture_status(capture.shortcut_status)
+            capture.shortcut_changed.connect(page.set_capture_status)
+        elif key == "about":
+            page.check_requested.connect(self.check_for_updates)
+            page.release_open_requested.connect(self.open_release_url)
+            page.release_ignore_requested.connect(self.ignore_release)
+            self.set_release_checking(self._release_job is not None)
+            self.apply_release_result(self._release_result)
 
     def allow_window_close(self) -> bool:
         """Retain settings drafts until the existing close/save transaction finishes."""
@@ -643,7 +641,7 @@ class SettingsPresenter:
     def show_about(self) -> None:
         QMessageBox.about(
             self._window,
-            f"关于 {PRODUCT_NAME}",
+            QCoreApplication.translate("AboutContent", "关于 {name}").format(name=PRODUCT_NAME),
             about_dialog_html(),
         )
 
@@ -746,14 +744,14 @@ class SettingsPresenter:
 
     def set_release_checking(self, checking: bool) -> None:
         dialog = self._settings_dialog
-        page = getattr(dialog, "about_page", None) if dialog is not None else None
+        page = dialog.created_pages.get("about") if dialog is not None else None
         setter = getattr(page, "set_release_checking", None)
         if callable(setter):
             setter(bool(checking))
 
     def apply_release_result(self, result, *, ignored_tag: str = "") -> None:
         dialog = self._settings_dialog
-        page = getattr(dialog, "about_page", None) if dialog is not None else None
+        page = dialog.created_pages.get("about") if dialog is not None else None
         setter = getattr(page, "set_release_result", None)
         if callable(setter):
             setter(result, ignored_tag=ignored_tag)

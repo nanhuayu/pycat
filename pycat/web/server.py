@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import hmac
 import json
-from pathlib import Path
 import secrets
 import tempfile
+from contextlib import asynccontextmanager
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.background import BackgroundTask
@@ -188,9 +188,10 @@ def create_app(*, services=None, data_dir=None, token: str, allowed_hosts=None):
 
     @app.get('/api/channels/login/{identity}/qr')
     async def qr(identity: str):
+        from io import BytesIO
+
         import qrcode
         from qrcode.image.svg import SvgPathImage
-        from io import BytesIO
         session = app.state.services.channel_service.client_login(identity)
         def render():
             stream = BytesIO()
@@ -289,6 +290,7 @@ def create_app(*, services=None, data_dir=None, token: str, allowed_hosts=None):
 def serve(args):
     import threading
     import webbrowser
+
     import uvicorn
     token = args.token or secrets.token_urlsafe(32)
     if args.host not in {'127.0.0.1', 'localhost', '::1'} and not args.token:

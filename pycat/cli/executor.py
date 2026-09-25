@@ -10,7 +10,7 @@ from pycat.core.app.container import AppContainer
 from pycat.core.content.references import latest_turn_deliveries
 from pycat.core.content.resolver import SessionContentResolver
 from pycat.core.tools.base import ApprovalDecision
-from pycat.models.contracts.agent import RunRequest, RunStatus, ApplicationError
+from pycat.models.contracts.agent import ApplicationError, RunRequest, RunStatus
 
 
 class CliExecutor:

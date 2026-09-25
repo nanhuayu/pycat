@@ -103,9 +103,9 @@ def _local_image(source: str, directory: str | Path | None) -> bytes | None:
 def _docx(tree, title: str) -> bytes:
     from docx import Document
     from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.opc.constants import RELATIONSHIP_TYPE
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    from docx.opc.constants import RELATIONSHIP_TYPE
     from docx.shared import Mm, Pt, RGBColor
 
     document = Document()

@@ -2,25 +2,29 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import Any, Callable
 
-from PyQt6.QtCore import QThreadPool, Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QCoreApplication, QSize, Qt, QThreadPool, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QFileDialog, QMenu, QMessageBox, QVBoxLayout, QWidget
 
+from pycat.core.content.references import content_identity
 from pycat.gui.dialogs.content_preview import show_content
+from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.runtime.content_navigation import (
     ContentNavigationError,
     ContentOpenTarget,
     ContentOpenUseCase,
     ContentTargetResolver,
 )
-from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.image_loader import read_image
 from pycat.gui.utils.theme import prepare_context_menu
-from pycat.gui.widgets.image_thumbnail import ImageThumbnail
 from pycat.gui.widgets.capsule import SingleLineLabel
+from pycat.gui.widgets.image_thumbnail import ImageThumbnail
 from pycat.gui.widgets.workflow_capsule import WorkflowCapsuleRow
 from pycat.models.contracts.content import ContentRef
+from pycat.models.workspace import workspace_identity
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,15 @@ class ContentRefWidget(QWidget):
         self._compact_image = compact_image
         self._allow_image_edit = allow_image_edit
         self._resolve_target = resolve_target
-        self._context_label = str(context_label or "内容")
+        # Resolve the stable row role before translating its display label.
+        self._context_kind = {
+            "输入": "input", "交付": "output", "成果": "artifact",
+        }.get(context_label, str(ref.kind or "content"))
+        self._context_label = {
+            "输入": QCoreApplication.translate('ContentRefWidget', '输入'),
+            "交付": QCoreApplication.translate('ContentRefWidget', '交付'),
+            "成果": QCoreApplication.translate('ContentRefWidget', '成果'),
+        }.get(context_label, str(context_label or QCoreApplication.translate('ContentRefWidget', '内容')))
         self.target: ContentOpenTarget | None = None
         self.error = ""
         self._content_widget: QWidget | None = None
@@ -76,7 +88,7 @@ class ContentRefWidget(QWidget):
             self.error = ""
         except Exception as exc:
             self.target = None
-            self.error = str(exc or "内容无法打开").strip() or "内容无法打开"
+            self.error = str(exc or QCoreApplication.translate('ContentRefWidget', '内容无法打开')).strip() or QCoreApplication.translate('ContentRefWidget', '内容无法打开')
         self.setProperty("state", "ready" if self.target is not None else "failed")
         if self.target is not None and self.target.is_image:
             self._render_image(self.target)
@@ -84,7 +96,8 @@ class ContentRefWidget(QWidget):
             self._render_file(self.target)
 
     def _render_image(self, target: ContentOpenTarget) -> None:
-        thumbnail = ImageThumbnail(str(target.path), self)
+        thumbnail = ImageThumbnail(str(target.path) if target.path else "", self,
+            load_image=partial(_read_thumbnail, target) if target.materialize else None)
         thumbnail.setToolTip(self._tooltip(target))
         thumbnail.clicked.connect(self.open_default)
         self._bind_context_menu(thumbnail)
@@ -98,21 +111,16 @@ class ContentRefWidget(QWidget):
         self.setToolTip(thumbnail.toolTip())
 
     def _render_file(self, target: ContentOpenTarget | None) -> None:
-        kind = {
-            "输入": "input",
-            "交付": "output",
-            "成果": "artifact",
-        }.get(self._context_label, str(getattr(self.ref, "kind", "") or "content"))
         row = WorkflowCapsuleRow(
-            kind=kind,
+            kind=self._context_kind,
             status="completed" if target is not None else "failed",
             payload=self.ref,
-            file_path=str(target.path) if target is not None else "",
+            file_path=str(target.path) if target is not None and target.path else "",
             parent=self,
         )
         row.set_content(
             icon=Icons.get_muted(Icons.FILE_LINES),
-            title=str(getattr(self.ref, "name", "") or "文件"),
+            title=str(getattr(self.ref, "name", "") or QCoreApplication.translate('ContentRefWidget', '文件')),
             meta=self._context_label if target is None else self._file_meta(target),
         )
         tooltip = self._tooltip(target)
@@ -136,13 +144,13 @@ class ContentRefWidget(QWidget):
     def create_context_menu(self) -> QMenu:
         menu = prepare_context_menu(QMenu(self), self)
         if self.target is not None and self.target.preview_kind:
-            menu.addAction("预览", self.preview)
+            menu.addAction(QCoreApplication.translate('ContentRefWidget', '预览'), self.preview)
         if self.target is not None and self.target.is_image and self._allow_image_edit:
-            menu.addAction("继续编辑图片", self.continue_edit)
-        menu.addAction("系统打开", self.open_system)
-        menu.addAction("复制", self.copy_to_clipboard)
-        menu.addAction("另存为", self.save_as)
-        menu.addAction("显示所在文件夹", self.reveal)
+            menu.addAction(QCoreApplication.translate('ContentRefWidget', '继续编辑图片'), self.continue_edit)
+        menu.addAction(QCoreApplication.translate('ContentRefWidget', '系统打开'), self.open_system)
+        menu.addAction(QCoreApplication.translate('ContentRefWidget', '复制'), self.copy_to_clipboard)
+        menu.addAction(QCoreApplication.translate('ContentRefWidget', '另存为'), self.save_as)
+        menu.addAction(QCoreApplication.translate('ContentRefWidget', '显示所在文件夹'), self.reveal)
         return menu
 
     def _current_target(self) -> ContentOpenTarget:
@@ -151,7 +159,7 @@ class ContentRefWidget(QWidget):
         except ContentNavigationError:
             raise
         except Exception as exc:
-            raise ContentNavigationError(str(exc or "内容无法打开")) from exc
+            raise ContentNavigationError(str(exc or QCoreApplication.translate('ContentRefWidget', '内容无法打开'))) from exc
         self.target = target
         self.error = ""
         return target
@@ -162,7 +170,7 @@ class ContentRefWidget(QWidget):
         except ContentNavigationError:
             raise
         except Exception as exc:
-            raise ContentNavigationError(str(exc or "内容无法打开")) from exc
+            raise ContentNavigationError(str(exc or QCoreApplication.translate('ContentRefWidget', '内容无法打开'))) from exc
 
     def open_default(self) -> None:
         self._start_resolved_action(self._open_default_target)
@@ -182,7 +190,7 @@ class ContentRefWidget(QWidget):
     def open_system(self) -> None:
         def open_target(target: ContentOpenTarget) -> None:
             if not ContentOpenUseCase.open_system(target):
-                raise ContentNavigationError("系统没有可用的打开方式")
+                raise ContentNavigationError(QCoreApplication.translate('ContentRefWidget', '系统没有可用的打开方式'))
 
         self._start_resolved_action(open_target)
 
@@ -196,9 +204,9 @@ class ContentRefWidget(QWidget):
         try:
             destination, _selected_filter = QFileDialog.getSaveFileName(
                 self,
-                "另存内容",
+                QCoreApplication.translate('ContentRefWidget', '另存内容'),
                 str(getattr(self.ref, "name", "") or "content"),
-                "所有文件 (*)",
+                QCoreApplication.translate('ContentRefWidget', '所有文件 (*)'),
             )
         except Exception as exc:
             self._show_error(exc)
@@ -213,7 +221,7 @@ class ContentRefWidget(QWidget):
     def reveal(self) -> None:
         def reveal_target(target: ContentOpenTarget) -> None:
             if not ContentOpenUseCase.reveal(target):
-                raise ContentNavigationError("无法显示所在文件夹")
+                raise ContentNavigationError(QCoreApplication.translate('ContentRefWidget', '无法显示所在文件夹'))
 
         self._start_resolved_action(reveal_target)
 
@@ -236,16 +244,18 @@ class ContentRefWidget(QWidget):
             self._show_error(exc)
             return
         except Exception as exc:
-            self._show_error(ContentNavigationError(str(exc or "内容无法打开")))
+            self._show_error(ContentNavigationError(str(exc or QCoreApplication.translate('ContentRefWidget', '内容无法打开'))))
             return
 
         def operation():
             if worker_action is None:
-                ContentOpenUseCase.verify_target(target)
+                ready = ContentOpenUseCase.prepare_target(target)
                 result = None
             else:
-                result = worker_action(target)
-            return target, result
+                # Copy/save verify the bytes they prepare themselves.
+                ready = target.materialize() if target.materialize is not None else target
+                result = worker_action(ready)
+            return ready, result
 
         cleanup_result = cleanup_worker_result
 
@@ -281,11 +291,11 @@ class ContentRefWidget(QWidget):
             self._show_error(error)
             return
         if not isinstance(result, tuple) or len(result) != 2:
-            self._show_error(ContentNavigationError("内容操作返回了无效结果"))
+            self._show_error(ContentNavigationError(QCoreApplication.translate('ContentRefWidget', '内容操作返回了无效结果')))
             return
         target, worker_result = result
         if not isinstance(target, ContentOpenTarget):
-            self._show_error(ContentNavigationError("内容操作目标无效"))
+            self._show_error(ContentNavigationError(QCoreApplication.translate('ContentRefWidget', '内容操作目标无效')))
             self._cleanup_worker_result(worker_result, cleanup_worker_result)
             return
         self.target = target
@@ -321,23 +331,33 @@ class ContentRefWidget(QWidget):
         except ContentNavigationError:
             raise
         except Exception as exc:
-            raise ContentNavigationError(str(exc or "内容无法打开")) from exc
+            raise ContentNavigationError(str(exc or QCoreApplication.translate('ContentRefWidget', '内容无法打开'))) from exc
         same_scope = (
             not target.conversation_id
             or not current.conversation_id
             or target.conversation_id == current.conversation_id
+        ) and (
+            workspace_identity(target.conversation_workspace) == workspace_identity(current.conversation_workspace)
         )
         same_ref = (
             str(target.ref.kind or "") == str(current.ref.kind or "")
             and str(target.ref.ref or "") == str(current.ref.ref or "")
         )
-        if not same_scope or not same_ref or target.path != current.path:
-            raise ContentNavigationError("会话已切换，已取消内容操作")
+        same_location = (
+            content_identity(target.ref) == content_identity(current.ref)
+            if current.materialize is not None else target.path == current.path
+        )
+        if not same_scope or not same_ref or not same_location:
+            raise ContentNavigationError(QCoreApplication.translate('ContentRefWidget', '会话已切换，已取消内容操作'))
 
     def _set_action_busy(self, busy: bool) -> None:
         self.setProperty("busy", bool(busy))
         if self._content_widget is None:
             return
+        if isinstance(self._content_widget, WorkflowCapsuleRow):
+            self._content_widget.set_content(icon=Icons.get_muted(Icons.FILE_LINES),
+                title=self.ref.name or QCoreApplication.translate('ContentRefWidget', '文件'),
+                meta=QCoreApplication.translate('ContentRefWidget', '正在加载…') if busy else self._file_meta(self.target) if self.target else self._context_label)
         self._content_widget.setEnabled(not busy)
         if busy:
             self._content_widget.setCursor(Qt.CursorShape.WaitCursor)
@@ -345,39 +365,43 @@ class ContentRefWidget(QWidget):
             self._content_widget.unsetCursor()
 
     def _show_error(self, error: Exception) -> None:
-        detail = str(error or self.error or "内容无法打开").strip() or "内容无法打开"
+        detail = str(error or self.error or QCoreApplication.translate('ContentRefWidget', '内容无法打开')).strip() or QCoreApplication.translate('ContentRefWidget', '内容无法打开')
         self.error = detail
         logger.debug("Content action failed for %s: %s", self.ref.ref, detail)
-        QMessageBox.warning(self, "无法打开内容", detail)
+        QMessageBox.warning(self, QCoreApplication.translate('ContentRefWidget', '无法打开内容'), detail)
 
     def _tooltip(self, target: ContentOpenTarget | None) -> str:
         lines = [
-            str(getattr(self.ref, "name", "") or "内容"),
+            str(getattr(self.ref, "name", "") or QCoreApplication.translate('ContentRefWidget', '内容')),
             str(getattr(self.ref, "ref", "") or ""),
         ]
         if target is not None:
             size = self._target_size(target)
             if size is None:
-                lines.append(f"{target.mime} · 内容当前不可用")
+                lines.append(QCoreApplication.translate('ContentRefWidget', '{mime} · 内容当前不可用').format(mime=target.mime))
             else:
                 lines.append(f"{target.mime} · {self._format_file_size(size)}")
             lines.append(
-                "点击预览"
+                QCoreApplication.translate('ContentRefWidget', '点击预览')
                 if target.preview_kind in {"image", "text", "pdf"}
-                else "点击打开"
+                else QCoreApplication.translate('ContentRefWidget', '点击打开')
             )
+            if target.materialize is not None:
+                lines.append(QCoreApplication.translate('ContentRefWidget', '远程文件 · 打开时下载'))
         else:
-            lines.append(self.error or "内容不可用")
+            lines.append(self.error or QCoreApplication.translate('ContentRefWidget', '内容不可用'))
         return "\n".join(line for line in lines if line)
 
     def _file_meta(self, target: ContentOpenTarget) -> str:
         size = self._target_size(target)
         if size is None:
-            return f"{self._context_label} · 内容当前不可用"
+            return QCoreApplication.translate('ContentRefWidget', '{_context_label} · 内容当前不可用').format(_context_label=self._context_label)
         return f"{self._context_label} · {self._format_file_size(size)}"
 
     @staticmethod
     def _target_size(target: ContentOpenTarget) -> int | None:
+        if target.path is None:
+            return int(target.ref.size or 0)
         try:
             return int(target.path.stat().st_size)
         except OSError:
@@ -391,3 +415,8 @@ class ContentRefWidget(QWidget):
         if value < 1024 * 1024:
             return f"{value / 1024:.1f} KB"
         return f"{value / (1024 * 1024):.1f} MB"
+
+
+def _read_thumbnail(target):
+    ready = ContentOpenUseCase.prepare_target(target)
+    return read_image(str(ready.path), max_size=QSize(80, 80))

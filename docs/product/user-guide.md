@@ -82,6 +82,9 @@ Shared attachment limits are 25 MiB per file, eight files per batch and 64 MiB t
 
 | Situation | First check |
 | --- | --- |
+| Switch between Chinese and English | Choose a language in Settings → General → Appearance, save and restart PyCat. English is a preview; changing the UI language does not rewrite user content. |
+| Memory capacity is full | Project memory and user preferences each allow 8,000 characters. Keep concise facts and preferences in Memory and detailed project knowledge in Wiki. An over-capacity save leaves existing content intact. |
+| An import or remote download reports an overlong path | Use shorter project and data directory paths. Deeply nested Windows paths can still exceed system limits. |
 | A model does not reply | Service availability, credentials, model access and the displayed error. |
 | A file or result cannot be opened | The selected project and conversation, file existence, changes to the file and permission scope. |
 | Image generation fails | The image model, credits, requested dimensions and reference-image requirements. |

@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from io import BytesIO
 import re
 import secrets
 import time
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
@@ -17,10 +17,10 @@ from PIL import Image, UnidentifiedImageError
 
 from pycat.core.channel.platforms.wechat.client import WeChatChannelClient, ilink_headers
 from pycat.core.content.session_content import MAX_INPUT_FILE_BYTES
+from pycat.models.filenames import safe_filename
 
 CDN_BASE = 'https://novac2c.cdn.weixin.qq.com/c2c'
 MAX_FILE_BYTES = MAX_INPUT_FILE_BYTES
-MAX_MEDIA_ITEMS = 8
 
 
 def _cdn_url(value: str) -> str:
@@ -59,11 +59,6 @@ def _crypt(raw: bytes, key: bytes, *, encrypt: bool) -> bytes:
     return unpadder.update(padded) + unpadder.finalize()
 
 
-def _safe_name(value: str) -> str:
-    name = str(value or 'attachment.bin').replace('\\', '/').rsplit('/', 1)[-1]
-    return re.sub(r'[\x00-\x1f<>:"|?*]', '_', name).strip(' .')[:120] or 'attachment.bin'
-
-
 class WeChatMediaClient:
     def __init__(self, *, transport=None):
         self._transport = transport
@@ -82,7 +77,7 @@ class WeChatMediaClient:
             raise ValueError('微信附件大小格式无效。') from None
         if declared_size < 0 or declared_size > MAX_FILE_BYTES:
             raise ValueError('微信附件超过大小上限（25 MiB）。')
-        name = _safe_name(body.get('file_name') or ('image.png' if kind == 2 else 'attachment.bin'))
+        name = safe_filename(body.get('file_name') or ('image.png' if kind == 2 else ''), 'attachment.bin', limit=120)
         parameter = str(media.get('encrypt_query_param') or '')
         url = str(media.get('full_url') or body.get('url') or '')
         if not url:
@@ -175,5 +170,5 @@ class WeChatMediaClient:
         return {'type': 4, 'file_item': {
             'media': {'encrypt_query_param': reference, 'aes_key': base64.b64encode(key.hex().encode()).decode(),
                       'encrypt_type': 1},
-            'file_name': _safe_name(name or path.name), 'len': str(len(raw)),
+            'file_name': safe_filename(name or path.name, 'attachment.bin', limit=120), 'len': str(len(raw)),
         }}

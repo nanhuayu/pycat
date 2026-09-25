@@ -6,7 +6,6 @@ from typing import Tuple
 
 from pycat.core.tools.naming import ToolName, sanitize_tool_segment
 
-
 MCP_TOOL_PREFIX = "mcp"
 MCP_TOOL_SEPARATOR = "__"
 MCP_TOOL_PUBLIC_PREFIX = f"{MCP_TOOL_PREFIX}{MCP_TOOL_SEPARATOR}"

@@ -12,7 +12,6 @@ from pycat.core.channel.http_server import start_http_server
 from pycat.core.channel.platforms.feishu.router import normalize_feishu_webhook_payload
 from pycat.models.contracts.channel import ChannelConfig
 
-
 logger = logging.getLogger(__name__)
 
 

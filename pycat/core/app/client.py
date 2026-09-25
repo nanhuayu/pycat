@@ -1,5 +1,4 @@
 """In-process client port. Views consume projections and explicit application actions."""
-from pycat.core.app.serialization import json_value
 import uuid
 
 

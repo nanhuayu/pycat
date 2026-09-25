@@ -139,7 +139,9 @@ class ManageArtifactTool(BaseTool):
                 return ToolResult(f"Artifact '{name}' not found.", is_error=True)
             return ToolResult(ArtifactService.read_content_file(artifact, work_dir=work_dir, data_dir=context.data_dir))
         if action == "delete":
-            if not ArtifactService.delete_artifact(state, name=name, work_dir=work_dir, data_dir=context.data_dir):
+            if not ArtifactService.delete_artifact(
+                state, name=name, conversation_id=conversation_id, work_dir=work_dir, data_dir=context.data_dir,
+            ):
                 return ToolResult(f"Artifact '{name}' not found.", is_error=True)
             state.last_updated_seq = seq
             ArtifactService.sync_context_state(context.state, state)

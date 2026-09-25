@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
 
+
 class QuestionForm(QFrame):
     """Own option construction, defaults, validation and answer serialization."""
 

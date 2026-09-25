@@ -5,7 +5,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-
 _FEISHU_MENTION_RE = re.compile(r"@_user_\d+")
 
 

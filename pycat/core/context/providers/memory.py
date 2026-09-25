@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pycat.core.context.providers.base import MessageProviderMixin, ProviderContext, context_item
-from pycat.core.memory.service import memory_enabled
 
 
 class MemoryProvider(MessageProviderMixin):

@@ -1,10 +1,26 @@
 """Compact object presentation shared by chat and Inspector item views."""
 from PyQt6.QtCore import QEvent, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt
 from PyQt6.QtGui import QColor, QContextMenuEvent, QPainter, QPalette
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QListWidget, QMenu, QSizePolicy, QStyledItemDelegate, QStyle, QStyleOptionViewItem
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMenu,
+    QSizePolicy,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+)
 
-from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT, prepare_context_menu, resolve_accent, resolve_theme, theme_tokens
 from pycat.gui.utils.display_text import single_line
+from pycat.gui.utils.theme import (
+    COMPACT_CONTROL_HEIGHT,
+    prepare_context_menu,
+    resolve_accent,
+    resolve_theme,
+    theme_tokens,
+)
 
 
 def capsule_height(metrics, lines=1):
@@ -181,6 +197,7 @@ class CapsuleList(QListWidget):
         self.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.setWordWrap(False)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.populate_menu = None
 
     def contextMenuEvent(self, event):
         keyboard = event.reason() == QContextMenuEvent.Reason.Keyboard
@@ -190,7 +207,10 @@ class CapsuleList(QListWidget):
         self.setCurrentItem(item)
         index = QPersistentModelIndex(self.indexFromItem(item))
         menu = prepare_context_menu(QMenu(self), self)
-        menu.addAction("查看", lambda: self.itemActivated.emit(self.itemFromIndex(QModelIndex(index))) if index.isValid() else None)
+        if self.populate_menu:
+            self.populate_menu(menu, item)
+        else:
+            menu.addAction("查看", lambda: self.itemActivated.emit(self.itemFromIndex(QModelIndex(index))) if index.isValid() else None)
         menu.aboutToHide.connect(menu.deleteLater)
         position = self.visualItemRect(item).center() if keyboard else event.pos()
         menu.exec(self.viewport().mapToGlobal(position))

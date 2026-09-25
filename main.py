@@ -1,6 +1,6 @@
 """Developer entrypoint; installed users can run pycat-gui."""
 from pycat.gui.application import main
-from pycat.core.tools.system.python_worker import PYTHON_EXEC_WORKER_ARG, run_python_exec_worker
+from pycat.core.hosts.python_worker import PYTHON_EXEC_WORKER_ARG, run_python_exec_worker
 from pycat.core.hosts.askpass import ASKPASS_ARG, run_askpass
 from pycat.core.tools.pty_child import PTY_CHILD_ARG, run_pty_child
 import sys

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import hashlib
-import mimetypes
+import ntpath
 import os
 import posixpath
-import ntpath
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
+from pycat.core.content.mime import guess_mime
 from pycat.models.contracts.content import ContentRef, FileChange
 from pycat.models.contracts.session_state import SessionArtifact
 from pycat.models.conversation import Message, normalize_tool_result
@@ -119,7 +119,7 @@ def build_workspace_content_ref(
             raise ValueError(f"not a regular file: {path}")
         relative = files.absolute(metadata["path"]).relative_to(files.location.root).as_posix()
         return ContentRef(id=relative, name=files.absolute(path).name,
-            mime=mimetypes.guess_type(str(path))[0] or "application/octet-stream",
+            mime=guess_mime(str(path)),
             size=metadata["size"], digest=metadata["digest"], ref=f"workspace:{relative}",
             kind="workspace", source=source, status="ready", created_at=datetime.now().isoformat(), workspace=raw_root)
     root = Path(raw_root).expanduser().resolve()
@@ -146,7 +146,7 @@ def build_workspace_content_ref(
     return ContentRef(
         id=relative_ref,
         name=resolved.name,
-        mime=mimetypes.guess_type(resolved.name)[0] or "application/octet-stream",
+        mime=guess_mime(resolved.name),
         size=int(after.st_size),
         digest=digest.hexdigest(),
         ref=f"workspace:{relative_ref}",

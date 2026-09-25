@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping
 
+from pycat.models.coercion import as_bool
 from pycat.models.contracts.tooling import ToolSelectionPolicy
 
 
@@ -45,7 +46,7 @@ class ChannelConfig:
             id=_as_str(d.get("id"), "").strip(),
             name=name,
             type=channel_type,
-            enabled=_as_bool(d.get("enabled"), True),
+            enabled=as_bool(d.get("enabled"), True),
             tool_selection=(
                 ToolSelectionPolicy.from_dict(d.get("tool_selection"))
                 if isinstance(d.get("tool_selection"), Mapping)
@@ -80,22 +81,5 @@ def _as_str(value: Any, default: str = "") -> str:
         return default
     try:
         return str(value)
-    except Exception:
-        return default
-
-
-def _as_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        text = value.strip().lower()
-        if text in {"1", "true", "yes", "on"}:
-            return True
-        if text in {"0", "false", "no", "off"}:
-            return False
-    try:
-        return bool(value)
     except Exception:
         return default

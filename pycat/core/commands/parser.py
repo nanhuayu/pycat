@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
-
 COMMAND_PREFIXES = ("/",)
 _COMMAND_NAME_EXTRA_CHARS = {"-", "_", "."}
 
@@ -129,12 +128,6 @@ def parse_command_text(text: str) -> tuple[str, str, str]:
     if not invocation:
         return ("", "", str(text or "").strip())
     return (invocation.prefix, invocation.command, invocation.args.strip())
-
-
-def parse_slash_command(text: str) -> tuple[str, str]:
-    """Backward-compatible slash parser wrapper."""
-    _prefix, cmd_name, args = parse_command_text(text)
-    return (cmd_name, args)
 
 
 def is_slash_command(text: str) -> bool:
