@@ -1,3 +1,4 @@
+import {tr} from './i18n.js';
 import MarkdownIt from './vendor/markdown-it.js';
 export const $ = selector => document.querySelector(selector);
 export function node(tag, attributes = {}, ...children) {
@@ -24,11 +25,11 @@ export function modal(title, content, actions = [], eyebrow = '') {
 }
 export function closeModal() { $('#dialog').close(); }
 export function picker(title, items, choose) {
-  const input = node('input', {placeholder: '搜索…', class: 'picker-search', 'aria-label': '搜索'}), list = node('div', {class: 'picker-list'});
+  const input = node('input', {placeholder: tr("搜索…"), class: 'picker-search', 'aria-label': tr("搜索")}), list = node('div', {class: 'picker-list'});
   const render = () => {
     const filtered = items.filter(item => (item.label + ' ' + (item.detail || '')).toLowerCase().includes(input.value.toLowerCase()));
     list.replaceChildren(...filtered.map(item => button([node('span', {}, item.label), node('small', {}, item.detail || '')], () => choose(item), 'picker-row')));
-    if (!filtered.length) list.append(node('p', {class: 'empty-small'}, '没有匹配的项目'));
+    if (!filtered.length) list.append(node('p', {class: 'empty-small'}, tr("没有匹配的项目")));
   };
   input.addEventListener('input', render); render(); modal(title, [input, list]); input.focus();
 }
@@ -42,15 +43,15 @@ export function markdown(text) {
   const root = node('div', {class: 'markdown'});
   root.innerHTML = renderer.render(String(text || ''));
   for (const block of root.querySelectorAll('pre')) {
-    const copy = button('复制代码', async () => { await navigator.clipboard.writeText(block.querySelector('code')?.textContent || ''); toast('代码已复制'); }, 'code-copy');
+    const copy = button(tr("复制代码"), async () => { await navigator.clipboard.writeText(block.querySelector('code')?.textContent || ''); toast(tr("代码已复制")); }, 'code-copy');
     block.append(copy);
   }
   return root;
 }
 export function reader(title, value) {
-  modal(title, typeof value === 'string' ? markdown(value) : node('pre', {class: 'data-reader'}, JSON.stringify(value, null, 2)), [button('关闭', closeModal)]);
+  modal(title, typeof value === 'string' ? markdown(value) : node('pre', {class: 'data-reader'}, JSON.stringify(value, null, 2)), [button(tr("关闭"), closeModal)]);
 }
-export function form(title, fields, values, submit, {label = '保存', description = ''} = {}) {
+export function form(title, fields, values, submit, {label = tr("保存"), description = ''} = {}) {
   const body = node('form', {class: 'fields'}), controls = new Map(), error = node('p', {class: 'form-error', role: 'alert'});
   if (description) body.append(node('p', {class: 'muted'}, description));
   for (const field of fields) {
@@ -63,9 +64,9 @@ export function form(title, fields, values, submit, {label = '保存', descripti
     else input = node('input', {type: field.secret ? 'password' : type.startsWith('int') || type.startsWith('float') ? 'number' : 'text', autocomplete: 'off'});
     if (type === 'bool') input.checked = Boolean(value);
     else input.value = field.secret && value === '__secret__' ? '' : value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value, null, 2) : value;
-    if (field.secret && value === '__secret__') input.placeholder = '已保存；留空保留';
+    if (field.secret && value === '__secret__') input.placeholder = tr("已保存；留空保留");
     const row = node('label', {class: type === 'bool' ? 'field check-field' : 'field'}, node('span', {}, field.label || field.name), input);
-    if (field.secret) row.append(button('清除', () => { input.value = ''; input.dataset.clear = 'true'; input.placeholder = '保存后将清除'; }, 'text-button'));
+    if (field.secret) row.append(button(tr("清除"), () => { input.value = ''; input.dataset.clear = 'true'; input.placeholder = tr("保存后将清除"); }, 'text-button'));
     if (field.help) row.append(node('small', {}, field.help));
     body.append(row); controls.set(field.name, {input, field, original: value});
   }
@@ -79,15 +80,15 @@ export function form(title, fields, values, submit, {label = '保存', descripti
         else if (type === 'bool') data[name] = input.checked;
         else if (!text && !field.required && (field.default === null || field.default === undefined)) data[name] = null;
         else if (['dict', 'list'].includes(type)) data[name] = JSON.parse(text);
-        else if (type.startsWith('int') || type.startsWith('float')) { data[name] = Number(text); if (!Number.isFinite(data[name])) throw Error('请输入有效数字'); }
+        else if (type.startsWith('int') || type.startsWith('float')) { data[name] = Number(text); if (!Number.isFinite(data[name])) throw Error(tr("请输入有效数字")); }
         else data[name] = text;
-        if (field.required && data[name] === '') throw Error((field.label || name) + '不能为空');
+        if (field.required && data[name] === '') throw Error((field.label || name) + tr("不能为空"));
       }
       save.disabled = true; error.textContent = ''; await submit(data);
     } catch (failure) { error.textContent = failure.message; }
     finally { save.disabled = false; }
   }, 'primary');
   body.addEventListener('submit', event => { event.preventDefault(); save.click(); });
-  modal(title, body, [button('取消', closeModal), save]);
+  modal(title, body, [button(tr("取消"), closeModal), save]);
   return {body, controls};
 }

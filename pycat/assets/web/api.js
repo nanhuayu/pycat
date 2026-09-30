@@ -1,3 +1,4 @@
+import {tr} from './i18n.js';
 export class Api {
   constructor() {
     const fragment = new URLSearchParams(location.hash.slice(1));
@@ -11,7 +12,7 @@ export class Api {
     const response = await fetch('/api' + path, {method, headers, body: body === undefined ? undefined : raw ? body : JSON.stringify(body), signal, credentials: 'omit'});
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      const error = new Error(typeof data.detail === 'string' ? data.detail : data.error || `请求失败 (${response.status})`);
+      const error = new Error(typeof data.detail === 'string' ? data.detail : data.error || tr("请求失败 ({value0})", {value0: response.status}));
       error.status = response.status;
       throw error;
     }

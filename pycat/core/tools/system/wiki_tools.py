@@ -22,7 +22,7 @@ class ManageWikiTool(BaseTool):
 
     @property
     def description(self):
-        return "Search, read and curate workspace knowledge. Apply a synthesized conclusion with conditions and pinned ContentRef sources; read the current digest before editing."
+        return "Search, read and curate workspace knowledge. Apply a synthesized conclusion with pinned ContentRef sources; use kind=archive for tool results and history. Copy evidence from archive__read(view=reference); read the current page digest before editing."
 
     def assess_risk(self, arguments, context):
         return "medium" if arguments.get("action") in {"apply", "delete"} else "low"
@@ -35,7 +35,12 @@ class ManageWikiTool(BaseTool):
             "title": {"type": "string"}, "summary": {"type": "string", "description": "Optional description; defaults to the title."},
             "body": {"type": "string", "description": "Complete Markdown document; read before updating."}, "expected_digest": {"type": "string"},
             "sources": {"type": "array", "maxItems": 16, "items": {"type": "object", "properties": {
-                key: {"type": "string"} for key in ("id", "kind", "name", "digest", "workspace", "conversation_id", "locator", "ref")},
+                **{key: {"type": "string"} for key in ("id", "name", "locator", "ref")},
+                "kind": {"type": "string", "enum": ["archive", "artifact", "workspace", "input", "wiki", "tool_result", "tool_call", "history"],
+                         "description": "Content owner. Use archive for tool results/history; record-type aliases are normalized to archive."},
+                "digest": {"type": "string", "description": "Exact SHA-256 from the source reference; never invent one."},
+                "workspace": {"type": "string", "description": "Owning workspace from the source reference."},
+                "conversation_id": {"type": "string", "description": "Owning session ID; required for archive evidence, including parent-session archives."}},
                 "required": ["id", "kind", "digest", "workspace"], "additionalProperties": False}},
             "offset": {"type": "integer", "minimum": 0, "description": "Search row offset, or read body character offset."},
             "limit": {"type": "integer", "minimum": 1, "maximum": 20000, "description": "Read body character count (default 12000)."},

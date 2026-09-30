@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pycat.core.config import save_user_modes_dict
-from pycat.core.modes.defaults import get_required_mode_slugs
+from pycat.core.config.migrations import SCHEMA_VERSION
+from pycat.core.modes.defaults import get_default_modes, get_required_mode_slugs
 from pycat.core.modes.manager import ModeManager
 from pycat.models.contracts.mode import ModeConfig
 
@@ -23,7 +24,11 @@ class ModeCatalogService:
         slugs = {str(mode.slug or "").strip().lower() for mode in items}
         if not set(get_required_mode_slugs()).issubset(slugs):
             return False
-        return save_user_modes_dict({"modes": [self._to_dict(mode) for mode in items]}, data_dir=self.data_dir)
+        return save_user_modes_dict({"schema_version": SCHEMA_VERSION, "modes": [self._to_dict(mode) for mode in items]}, data_dir=self.data_dir)
+
+    @staticmethod
+    def default_prompt(slug: str) -> str | None:
+        return next((mode.prompt for mode in get_default_modes() if mode.slug == slug), None)
 
     @staticmethod
     def _to_dict(mode: ModeConfig) -> dict:
@@ -31,7 +36,7 @@ class ModeCatalogService:
             "slug": mode.slug,
             "name": mode.name,
             "purpose": mode.purpose,
-            "prompt": mode.prompt,
+            "prompt": "" if mode.prompt.strip() == ModeCatalogService.default_prompt(mode.slug) else mode.prompt,
             "allowed_tool_categories": list(mode.allowed_tool_categories or ()),
             "profile_kind": mode.profile_kind,
             "completion_policy": mode.completion_policy,

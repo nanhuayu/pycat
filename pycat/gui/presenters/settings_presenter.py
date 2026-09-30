@@ -133,7 +133,7 @@ class SettingsPresenter:
         next_providers = host.services.provider_catalog_service.snapshot(providers)
         if persist:
             if not host.services.provider_catalog_service.save(next_providers):
-                raise RuntimeError("无法保存服务商配置")
+                raise RuntimeError(QCoreApplication.translate('SettingsPresenter', '无法保存服务商配置'))
         host.providers = next_providers
         host.input_area.set_providers(
             host.providers,
@@ -194,7 +194,7 @@ class SettingsPresenter:
         )
         model_id = str(model_id or "").strip()
         if provider is None or not model_id:
-            QMessageBox.information(host, "无法编辑模型", "请先选择一个已配置的模型。")
+            QMessageBox.information(host, QCoreApplication.translate('SettingsPresenter', '无法编辑模型'), QCoreApplication.translate('SettingsPresenter', '请先选择一个已配置的模型。'))
             return False
 
         profile = provider.find_model_profile(model_id) or provider.effective_model_profile(model_id)
@@ -219,7 +219,7 @@ class SettingsPresenter:
                 persist=False,
             )
         except Exception as exc:
-            QMessageBox.warning(host, "模型保存失败", str(exc))
+            QMessageBox.warning(host, QCoreApplication.translate('SettingsPresenter', '模型保存失败'), str(exc))
             return False
         return True
 
@@ -252,7 +252,7 @@ class SettingsPresenter:
         evaluation_policy = RunPolicyBuilder.build(conversation=evaluation_conversation, app_settings=host.app_settings) if evaluation_conversation else None
         async def evaluate_candidate(candidate, suite, cancel_event):
             if evaluation_provider is None or evaluation_conversation is None:
-                raise ValueError("请先为会话选择可用的模型。")
+                raise ValueError(QCoreApplication.translate('SettingsPresenter', '请先为会话选择可用的模型。'))
             return await host.services.skill_service.evaluate_candidate(candidate["id"], work_dir=work_dir,
                 scope=candidate["scope"], suite=suite, runtime=host.services.agent_runtime, provider=evaluation_provider,
                 model=evaluation_conversation.model, parent_policy=evaluation_policy, app_settings=host.app_settings,
@@ -400,22 +400,22 @@ class SettingsPresenter:
         if error is not None:
             self._close_window_after_save = False
             dialog.apply_save_error(error)
-            QMessageBox.warning(dialog, "设置保存失败", str(error))
+            QMessageBox.warning(dialog, QCoreApplication.translate('SettingsPresenter', '设置保存失败'), str(error))
             return
         self._apply_settings_result(dialog, update, result)
 
-    _SETTINGS_DOMAIN_LABELS = {
-        "providers": "服务商",
-        "app_settings": "应用设置",
-        "mcp": "MCP",
-        "modes": "模式",
-        "search": "搜索",
-    }
-    _SETTINGS_STAGE_LABELS = {
-        "validate": "配置校验",
-        "runtime": "运行时刷新",
-        "channel": "Channel 协调",
-    }
+    @staticmethod
+    def _settings_labels() -> dict[str, str]:
+        return {
+            "providers": QCoreApplication.translate('SettingsPresenter', '服务商'),
+            "app_settings": QCoreApplication.translate('SettingsPresenter', '应用设置'),
+            "mcp": "MCP",
+            "modes": QCoreApplication.translate('SettingsPresenter', '模式'),
+            "search": QCoreApplication.translate('SettingsPresenter', '搜索'),
+            "validate": QCoreApplication.translate('SettingsPresenter', '配置校验'),
+            "runtime": QCoreApplication.translate('SettingsPresenter', '运行时刷新'),
+            "channel": QCoreApplication.translate('SettingsPresenter', 'Channel 协调'),
+        }
 
     def _apply_settings_dialog(self, dialog: SettingsDialog) -> None:
         """Synchronous compatibility entry used by focused tests and callers."""
@@ -502,7 +502,7 @@ class SettingsPresenter:
         if not result.ok:
             QMessageBox.warning(
                 dialog,
-                "设置未完全应用",
+                QCoreApplication.translate('SettingsPresenter', '设置未完全应用'),
                 self._format_settings_failure(result),
             )
         apply_result = getattr(dialog, "apply_save_result", None)
@@ -510,24 +510,20 @@ class SettingsPresenter:
             apply_result(result)
 
     def _format_settings_failure(self, result) -> str:
+        names = self._settings_labels()
+        separator = QCoreApplication.translate('SettingsPresenter', '、')
         lines: list[str] = []
         if result.saved_domains:
-            labels = [
-                self._SETTINGS_DOMAIN_LABELS.get(domain, domain)
-                for domain in result.saved_domains
-            ]
-            lines.append("已保存：" + "、".join(labels))
+            lines.append(QCoreApplication.translate('SettingsPresenter', '已保存：{domains}').format(
+                domains=separator.join(names.get(domain, domain) for domain in result.saved_domains)))
         if result.failed_domains:
-            labels = [
-                self._SETTINGS_DOMAIN_LABELS.get(domain, domain)
-                for domain in result.failed_domains
-            ]
-            lines.append("未保存：" + "、".join(labels))
+            lines.append(QCoreApplication.translate('SettingsPresenter', '未保存：{domains}').format(
+                domains=separator.join(names.get(domain, domain) for domain in result.failed_domains)))
         for stage, error in result.failed_stages:
-            label = self._SETTINGS_STAGE_LABELS.get(stage, stage)
-            detail = str(error or "未知错误").strip()
-            lines.append(f"{label}失败：{detail}")
-        return "\n".join(lines) or "设置更新失败。"
+            detail = str(error or QCoreApplication.translate('SettingsPresenter', '未知错误')).strip()
+            lines.append(QCoreApplication.translate('SettingsPresenter', '{label}失败：{detail}').format(
+                label=names.get(stage, stage), detail=detail))
+        return "\n".join(lines) or QCoreApplication.translate('SettingsPresenter', '设置更新失败。')
 
     def toggle_sidebar_panel(self, visible: bool) -> None:
         host = self._window
@@ -682,13 +678,13 @@ class SettingsPresenter:
             result = ReleaseCheckResult(
                 status="error",
                 current_version=__version__,
-                error=f"暂时无法检查更新：{error}",
+                error=QCoreApplication.translate('SettingsPresenter', '暂时无法检查更新：{error}').format(error=error),
             )
         if not isinstance(result, ReleaseCheckResult):
             result = ReleaseCheckResult(
                 status="error",
                 current_version=__version__,
-                error="更新检查返回了无效结果。",
+                error=QCoreApplication.translate('SettingsPresenter', '更新检查返回了无效结果。'),
             )
         self._release_result = result
         self.set_release_checking(False)
@@ -709,9 +705,9 @@ class SettingsPresenter:
         if button is not None:
             button.setVisible(available)
             if available and release is not None:
-                button.setToolTip(f"发现新版本 {release.tag_name}，点击打开 Release")
+                button.setToolTip(QCoreApplication.translate('SettingsPresenter', '发现新版本 {tag_name}，点击打开 Release').format(tag_name=release.tag_name))
             else:
-                button.setToolTip("检查 PyCat 稳定版本更新")
+                button.setToolTip(QCoreApplication.translate('SettingsPresenter', '检查 PyCat 稳定版本更新'))
         self.apply_release_result(result, ignored_tag=ignored_tag)
 
     def open_release_url(self, url: str = "") -> None:

@@ -12,7 +12,9 @@ from typing import Any, Callable, Iterable, List
 from PyQt6.QtCore import QCoreApplication, QRect, QSize, Qt, QTimer
 from PyQt6.QtGui import QPainter, QTextOption
 from PyQt6.QtWidgets import (
+    QApplication,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
@@ -20,12 +22,13 @@ from PyQt6.QtWidgets import (
     QStyleOptionButton,
     QTextBrowser,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
+from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT, configure_icon_button
 from pycat.gui.view_models.message_tree import ToolInvocationView, build_message_tree_view_model
 from pycat.gui.view_models.tooling_labels import tool_name_label
 from pycat.gui.widgets.markdown_view import MarkdownView
@@ -147,7 +150,8 @@ class CompactTextBrowser(ThemedContextMenuMixin, QTextBrowser):
         self._max_height = max_height
         self.setReadOnly(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
@@ -195,18 +199,24 @@ class ToolDetailPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        args_label = QLabel(QCoreApplication.translate('ToolCallView', '输入参数'))
-        args_label.setObjectName("tool_detail_label")
-        layout.addWidget(args_label)
+        args_header, _, self.args_copy_button = self._create_header(
+            QCoreApplication.translate('ToolCallView', '输入参数'),
+            QCoreApplication.translate('ToolCallView', '复制输入参数'),
+            lambda: self.args_view.toPlainText(),
+        )
+        layout.addWidget(args_header)
 
         self.args_view = CompactTextBrowser(self._format_arguments(), min_height=44, max_height=112)
         self.args_view.setObjectName("tool_args_view")
         layout.addWidget(self.args_view)
 
-        self.result_label = QLabel(QCoreApplication.translate('ToolCallView', '执行结果'))
-        self.result_label.setObjectName("tool_detail_label")
-        self.result_label.setVisible(False)
-        layout.addWidget(self.result_label)
+        self.result_header, self.result_label, self.result_copy_button = self._create_header(
+            QCoreApplication.translate('ToolCallView', '执行结果'),
+            QCoreApplication.translate('ToolCallView', '复制执行结果'),
+            lambda: str((self.result_payload or {}).get('content') or ''),
+        )
+        self.result_header.setVisible(False)
+        layout.addWidget(self.result_header)
 
         self.result_view = MarkdownView("")
         self.result_view.setObjectName("tool_result_view")
@@ -215,6 +225,22 @@ class ToolDetailPanel(QWidget):
         self.result_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.result_view.setVisible(False)
         layout.addWidget(self.result_view)
+
+    def _create_header(self, title: str, copy_label: str, copy_text: Callable[[], str]) -> tuple[QWidget, QLabel, QToolButton]:
+        header = QWidget(self)
+        row = QHBoxLayout(header)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+        label = QLabel(title, header)
+        label.setObjectName("tool_detail_label")
+        row.addWidget(label)
+        row.addStretch()
+        button = QToolButton(header)
+        button.setObjectName("tool_detail_copy_btn")
+        configure_icon_button(button, Icons.get_muted(Icons.COPY), copy_label)
+        button.clicked.connect(lambda: QApplication.clipboard().setText(copy_text()))
+        row.addWidget(button)
+        return header, label, button
 
     def _format_arguments(self) -> str:
         func = self.tool_call.get('function', {}) if isinstance(self.tool_call, dict) else {}
@@ -231,11 +257,12 @@ class ToolDetailPanel(QWidget):
 
     def set_result(self, result_payload: dict[str, Any]) -> None:
         self.result_payload = normalize_tool_result(result_payload)
-        if self.result_label is not None:
-            self.result_label.setVisible(True)
+        content = str(self.result_payload.get('content') or '')
+        self.result_header.setVisible(True)
+        self.result_copy_button.setEnabled(bool(content))
         if self.result_view is not None:
             self.result_view.setVisible(True)
-            self.result_view.set_markdown(str(self.result_payload.get('content') or ''))
+            self.result_view.set_markdown(content)
 
     def refit_height(self) -> None:
         if self.args_view is not None:
@@ -558,7 +585,7 @@ class ToolCallItem(QWidget):
         if name.startswith(("shell__", "python__")) or "terminal" in name or "command" in name:
             return Icons.get_muted(Icons.TERMINAL, scale_factor=1.0)
         icon = {
-            'file__read': Icons.FILE_LINES, 'file__list': Icons.FOLDER,
+            'file__read': Icons.FILE_LINES, 'file__view': Icons.IMAGE, 'file__list': Icons.FOLDER,
             'file__search': Icons.SEARCH, 'file__ocr': Icons.OCR,
             'file__write': Icons.EDIT, 'file__edit': Icons.EDIT,
             'file__patch': Icons.EDIT, 'file__delete': Icons.TRASH,
@@ -582,6 +609,15 @@ class ToolCallItem(QWidget):
             if name == 'file__read' and (args.get('start_line') or args.get('end_line')):
                 start, end = args.get('start_line') or 1, args.get('end_line')
                 target += f' :{start}–{end}' if end else f' :{start}+'
+            elif name in {'file__read', 'file__view', 'file__ocr'} and ('start_page' in args or 'page_count' in args):
+                try:
+                    start = int(args.get('start_page') or 1)
+                    count = int(args.get('page_count') or 1)
+                except (TypeError, ValueError):
+                    pass  # Streaming arguments may not contain a complete number yet.
+                else:
+                    pages = f'{start}–{start + count - 1}' if count > 1 else str(start)
+                    target += QCoreApplication.translate('ToolCallView', ' · 页 {pages}').format(pages=pages)
             return target.strip()
         key = {
             'file__search': 'query', 'web__search': 'query', 'web__fetch': 'url',

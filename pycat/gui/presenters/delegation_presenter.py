@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from PyQt6.QtCore import QObject, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThreadPool, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QInputDialog
 
 from pycat.gui.runtime.background_job import BackgroundJob
@@ -93,7 +93,7 @@ class DelegationPresenter(QObject):
             self.host.chat_view.reveal_subtask(task.conversation_id, task.message_id, task.tool_call_id)
 
     def prompt_task(self):
-        brief, accepted = QInputDialog.getMultiLineText(self.host, '新建独立任务', '任务目标、必要资料与交付要求')
+        brief, accepted = QInputDialog.getMultiLineText(self.host, QCoreApplication.translate('DelegationPresenter', '新建独立任务'), QCoreApplication.translate('DelegationPresenter', '任务目标、必要资料与交付要求'))
         if accepted and brief.strip():
             self.submit(brief.strip())
 
@@ -102,7 +102,7 @@ class DelegationPresenter(QObject):
         try:
             conv = host.conversation_presenter.ensure_current_conversation_shell()
             if not host.services.conv_service.exists(conv.id) and not host.services.conv_service.save(conv):
-                raise ValueError('无法保存来源会话。')
+                raise ValueError(QCoreApplication.translate('DelegationPresenter', '无法保存来源会话。'))
             if not host.chat_view.conversation_id:
                 host.chat_view.load_conversation(conv)
             previous = self._submissions.get(conv.id)
@@ -151,7 +151,7 @@ class DelegationPresenter(QObject):
         if not error and dispatch_id and self.host.chat_view.conversation_id == source_id:
             self.host.settings_presenter.toggle_inspector_panel(True)
             self.host.inspector_panel.tabs.setCurrentIndex(0)
-        self.host.chat_view.show_notice(error or '独立任务状态已更新',
+        self.host.chat_view.show_notice(error or QCoreApplication.translate('DelegationPresenter', '独立任务状态已更新'),
             tone='error' if error else 'success', conversation_id=source_id)
         self.refresh()
 

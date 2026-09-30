@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtWidgets import QApplication, QMessageBox, QPushButton
 
 from pycat.core.tools.base import ApprovalDecision, ToolApprovalRequest
@@ -79,28 +79,30 @@ class InteractionPresenter:
             parent = active_modal or self._host
             dialog = QMessageBox(parent)
             dialog.setObjectName("tool_approval_dialog")
-            title = "工具执行确认"
+            title = QCoreApplication.translate('InteractionPresenter', '工具执行确认')
             if request.requires_path_approval:
-                title = "工具与文件访问确认" if request.requires_tool_approval else "文件访问确认"
+                title = QCoreApplication.translate('InteractionPresenter', '工具与文件访问确认') if request.requires_tool_approval else QCoreApplication.translate('InteractionPresenter', '文件访问确认')
             dialog.setWindowTitle(title)
             dialog.setIcon(QMessageBox.Icon.Warning if request.risk == "high" else QMessageBox.Icon.Question)
-            dialog.setText(request.message or f"是否允许执行 {request.tool_name}？")
+            dialog.setText(request.message or QCoreApplication.translate('InteractionPresenter', '是否允许执行 {tool_name}？').format(tool_name=request.tool_name))
             conversation = self._host.current_conversation
-            details = f"会话：{conversation.title or '新会话'}\n{request.tool_name}  ·  {request.category}  ·  {request.risk}"
+            details = QCoreApplication.translate('InteractionPresenter', '会话：{title}').format(
+                title=conversation.title or QCoreApplication.translate('InteractionPresenter', '新会话'))
+            details += f"\n{request.tool_name}  ·  {request.category}  ·  {request.risk}"
             if request.requires_path_approval:
-                details += "\n授权仅在当前任务内有效，不会写入会话或全局设置。"
+                details += QCoreApplication.translate('InteractionPresenter', '\n授权仅在当前任务内有效，不会写入会话或全局设置。')
             dialog.setInformativeText(details)
             dialog.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             dialog.setDefaultButton(QMessageBox.StandardButton.No)
             dialog.setWindowModality(Qt.WindowModality.WindowModal)
-            dialog.button(QMessageBox.StandardButton.Yes).setText("允许本次")
+            dialog.button(QMessageBox.StandardButton.Yes).setText(QCoreApplication.translate('InteractionPresenter', '允许本次'))
             no_button = dialog.button(QMessageBox.StandardButton.No)
-            no_button.setText("禁止")
+            no_button.setText(QCoreApplication.translate('InteractionPresenter', '禁止'))
             dialog.setEscapeButton(no_button)
             run_button = None
             if request.requires_path_approval:
-                run_button = dialog.addButton("本次任务读取此文件夹", QMessageBox.ButtonRole.AcceptRole)
-            auto_button = dialog.addButton("本会话自动执行", QMessageBox.ButtonRole.AcceptRole)
+                run_button = dialog.addButton(QCoreApplication.translate('InteractionPresenter', '本次任务读取此文件夹'), QMessageBox.ButtonRole.AcceptRole)
+            auto_button = dialog.addButton(QCoreApplication.translate('InteractionPresenter', '本会话自动执行'), QMessageBox.ButtonRole.AcceptRole)
             view = _ApprovalView(interaction, dialog, auto_button, run_button)
             self._approval = view
             dialog.finished.connect(lambda result: self._finish_approval(view, result))

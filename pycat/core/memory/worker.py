@@ -185,19 +185,33 @@ class CurationWorker:
             if self.review is None:
                 raise ValueError("memory review is unavailable")
             pending = [job for job in valid if not job.get("plan")]
-            # Never send one conversation's evidence to another provider by batching.
+            # Keep provider, permission generation and causal turn boundaries intact.
             groups: dict[tuple, list] = {}
             for job in pending:
                 source = job["source"]
-                groups.setdefault((source.get("provider_id"), source.get("model")), []).append(job)
-            for group in groups.values():
+                groups.setdefault((source.get("provider_id"), source.get("model"), source.get("conversation_id"),
+                                   source.get("id"), source.get("digest"), source.get("generation")), []).append(job)
+            batches = [(group, None) for group in groups.values()]
+            while batches:
+                group, deadline = batches.pop(0)
+                # Splits share the original group's budget; unrelated turns
+                # retain their own chance to run (at most four groups per lease).
+                if deadline is None:
+                    deadline = time.monotonic() + 120
                 try:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("curation batch time budget exhausted")
                     provider = self._provider(group[0]["source"]) if self._provider else None
-                    plans = await asyncio.wait_for(self.review.extract(group, provider=provider), timeout=120)
+                    plans = await asyncio.wait_for(self.review.extract(group, provider=provider), timeout=remaining)
                     for job in group:
                         if ledger.save_plan(job, plans[job["id"]]):
                             job["plan"] = json.dumps(plans[job["id"]], ensure_ascii=False)
                 except Exception as exc:
+                    if len(group) > 1 and "output_limit" in str(exc).lower():
+                        middle = len(group) // 2
+                        batches[0:0] = [(group[:middle], deadline), (group[middle:], deadline)]
+                        continue
                     for job in group:
                         defer(job, exc)
             for job in valid:

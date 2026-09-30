@@ -358,7 +358,7 @@ class ConversationPresenter:
         if conversation_id in self._navigation_jobs:
             return
         if self.is_conversation_active(conversation_id):
-            self._show_notice(host, "会话正在运行或维护，请结束后再修改。", tone="warning")
+            self._show_notice(host, QCoreApplication.translate('ConversationPresenter', '会话正在运行或维护，请结束后再修改。'), tone="warning")
             return
         job = BackgroundJob(lambda: host.services.conv_service.update_navigation(conversation_id, **changes))
         self._navigation_jobs[conversation_id] = job
@@ -436,7 +436,7 @@ class ConversationPresenter:
             host.app_settings = next_settings
         else:
             host.sidebar.apply_navigation_settings(host.app_settings)
-            self._show_notice(host, "侧栏布局未保存，请重试。", tone="error")
+            self._show_notice(host, QCoreApplication.translate('ConversationPresenter', '侧栏布局未保存，请重试。'), tone="error")
 
     # ------------------------------------------------------------------
     # Import
@@ -454,9 +454,9 @@ class ConversationPresenter:
             )
             host.sidebar.select_conversation(conversation.id)
             self.select(conversation.id)
-            QMessageBox.information(host, "导入成功", f"已导入会话: {conversation.title}")
+            QMessageBox.information(host, QCoreApplication.translate('ConversationPresenter', '导入成功'), QCoreApplication.translate('ConversationPresenter', '已导入会话: {title}').format(title=conversation.title))
         else:
-            QMessageBox.warning(host, "导入失败", "无法导入会话，请检查 JSON 格式")
+            QMessageBox.warning(host, QCoreApplication.translate('ConversationPresenter', '导入失败'), QCoreApplication.translate('ConversationPresenter', '无法导入会话，请检查 JSON 格式'))
 
     # ------------------------------------------------------------------
     # Delete
@@ -473,7 +473,7 @@ class ConversationPresenter:
         if self.is_maintaining(conversation_id):
             self._show_notice(
                 host,
-                "该会话正在处理，请稍候",
+                QCoreApplication.translate('ConversationPresenter', '该会话正在处理，请稍候'),
                 tone="warning",
                 conversation_id=conversation_id,
             )
@@ -481,7 +481,7 @@ class ConversationPresenter:
         if self.is_conversation_active(conversation_id):
             self._show_notice(
                 host,
-                "请等待当前任务结束后再删除会话",
+                QCoreApplication.translate('ConversationPresenter', '请等待当前任务结束后再删除会话'),
                 tone="warning",
                 conversation_id=conversation_id,
             )
@@ -516,7 +516,7 @@ class ConversationPresenter:
         if error is not None:
             self._show_notice(
                 host,
-                f"删除会话失败：{error}",
+                QCoreApplication.translate('ConversationPresenter', '删除会话失败：{error}').format(error=error),
                 5000,
                 tone="error",
                 conversation_id=conversation_id,
@@ -528,7 +528,7 @@ class ConversationPresenter:
         if not bool(deleted):
             self._show_notice(
                 host,
-                "删除会话失败：会话不存在或无法删除",
+                QCoreApplication.translate('ConversationPresenter', '删除会话失败：会话不存在或无法删除'),
                 5000,
                 tone="error",
                 conversation_id=conversation_id,
@@ -557,7 +557,7 @@ class ConversationPresenter:
             host.window_state_presenter.sync_input_enabled()
         self._show_notice(
             host,
-            "会话已删除",
+            QCoreApplication.translate('ConversationPresenter', '会话已删除'),
             3000,
             tone="success",
             conversation_id=None if deleted_current else conversation_id,
@@ -730,7 +730,7 @@ class ConversationPresenter:
             self._restore_work_dir_display(host, previous)
             self._show_notice(
                 host,
-                "该会话正在处理，请稍候再切换工作区",
+                QCoreApplication.translate('ConversationPresenter', '该会话正在处理，请稍候再切换工作区'),
                 tone="warning",
                 conversation_id=conversation_id,
             )
@@ -739,7 +739,7 @@ class ConversationPresenter:
             self._restore_work_dir_display(host, previous)
             self._show_notice(
                 host,
-                "请等待当前任务结束后再切换工作区",
+                QCoreApplication.translate('ConversationPresenter', '请等待当前任务结束后再切换工作区'),
                 tone="warning",
                 conversation_id=conversation_id,
             )
@@ -784,7 +784,7 @@ class ConversationPresenter:
                 self._restore_work_dir_display(host, previous)
             self._show_notice(
                 host,
-                f"切换工作区失败：{error}",
+                QCoreApplication.translate('ConversationPresenter', '切换工作区失败：{error}').format(error=error),
                 5000,
                 tone="error",
                 conversation_id=conversation_id,
@@ -798,7 +798,9 @@ class ConversationPresenter:
                 self._restore_work_dir_display(host, previous)
             self._show_notice(
                 host,
-                f"切换工作区失败：{getattr(migration_result, 'error', '') or '无法迁移会话文件'}",
+                QCoreApplication.translate('ConversationPresenter', '切换工作区失败：{error}').format(
+                    error=getattr(migration_result, 'error', '')
+                    or QCoreApplication.translate('ConversationPresenter', '无法迁移会话文件')),
                 5000,
                 tone="error",
                 conversation_id=conversation_id,
@@ -811,7 +813,7 @@ class ConversationPresenter:
             if migrated is None:
                 self._show_notice(
                     host,
-                    "切换工作区失败：迁移后无法读取会话",
+                    QCoreApplication.translate('ConversationPresenter', '切换工作区失败：迁移后无法读取会话'),
                     5000,
                     tone="error",
                     conversation_id=conversation_id,
@@ -836,7 +838,7 @@ class ConversationPresenter:
         )
         self._show_notice(
             host,
-            "工作区已切换",
+            QCoreApplication.translate('ConversationPresenter', '工作区已切换'),
             3000,
             tone="success",
             conversation_id=conversation_id,
@@ -909,7 +911,7 @@ class ConversationPresenter:
                 return
             self._process_jobs.discard(job)
             if error and scope == getattr(self._host.current_conversation, "id", ""):
-                self._host.chat_view.show_notice(f"停止 Shell 失败：{error}", tone="error", conversation_id=scope)
+                self._host.chat_view.show_notice(QCoreApplication.translate('ConversationPresenter', '停止 Shell 失败：{error}').format(error=error), tone="error", conversation_id=scope)
             self.refresh_processes()
 
         job.signals.finished.connect(done)
@@ -1060,10 +1062,8 @@ class ConversationPresenter:
         if next_approval == "allow" and previous_approval != "allow" and confirm_allow:
             answer = QMessageBox.warning(
                 host,
-                "确认自动执行工具",
-                "自动执行会让本会话中当前可见的工具不再逐次确认。Shell 和 Python"
-                " 获准执行后可访问当前系统用户可访问的文件、网络和进程。\n\n"
-                "仅对完全可信的任务启用。是否继续？",
+                QCoreApplication.translate('ConversationPresenter', '确认自动执行工具'),
+                QCoreApplication.translate('ConversationPresenter', '自动执行会让本会话中当前可见的工具不再逐次确认。Shell 和 Python 获准执行后可访问当前系统用户可访问的文件、网络和进程。\n\n仅对完全可信的任务启用。是否继续？'),
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel,
             )
@@ -1078,10 +1078,8 @@ class ConversationPresenter:
         ):
             answer = QMessageBox.warning(
                 host,
-                "确认所有本地路径访问",
-                "该设置允许 PyCat 内置文件工具访问工作区之外的本地路径。"
-                "它不会改变工具是否需要确认，也不会为 Shell 和 Python 提供操作系统级沙箱。\n\n"
-                "仅对完全可信的任务启用。是否继续？",
+                QCoreApplication.translate('ConversationPresenter', '确认所有本地路径访问'),
+                QCoreApplication.translate('ConversationPresenter', '该设置允许 PyCat 内置文件工具访问工作区之外的本地路径。它不会改变工具是否需要确认，也不会为 Shell 和 Python 提供操作系统级沙箱。\n\n仅对完全可信的任务启用。是否继续？'),
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel,
             )
@@ -1137,7 +1135,7 @@ class ConversationPresenter:
         conversation_id = str(conv.id or "")
         if self.is_compacting(conversation_id):
             host.chat_view.show_notice(
-                "该会话正在压缩",
+                QCoreApplication.translate('ConversationPresenter', '该会话正在压缩'),
                 tone="warning",
                 timeout_ms=3000,
                 conversation_id=conversation_id,
@@ -1145,7 +1143,7 @@ class ConversationPresenter:
             return
         if self.is_maintaining(conversation_id):
             host.chat_view.show_notice(
-                "该会话正在处理，请稍候",
+                QCoreApplication.translate('ConversationPresenter', '该会话正在处理，请稍候'),
                 tone="warning",
                 timeout_ms=3000,
                 conversation_id=conversation_id,
@@ -1153,7 +1151,7 @@ class ConversationPresenter:
             return
         if self.is_conversation_active(conversation_id):
             host.chat_view.show_notice(
-                "请等待当前任务结束后再压缩上下文",
+                QCoreApplication.translate('ConversationPresenter', '请等待当前任务结束后再压缩上下文'),
                 tone="warning",
                 timeout_ms=3000,
                 conversation_id=conversation_id,
@@ -1162,7 +1160,7 @@ class ConversationPresenter:
         provider = host.services.conv_service.find_provider(host.providers, conv.provider_id)
         if not provider:
             host.chat_view.show_notice(
-                "未找到对应的 Provider，无法压缩上下文",
+                QCoreApplication.translate('ConversationPresenter', '未找到对应的 Provider，无法压缩上下文'),
                 tone="error",
                 timeout_ms=5000,
                 conversation_id=conversation_id,
@@ -1207,7 +1205,7 @@ class ConversationPresenter:
         self._sync_compact_busy(conversation_id)
         if error is not None:
             host.chat_view.show_notice(
-                f"压缩失败：{error}",
+                QCoreApplication.translate('ConversationPresenter', '压缩失败：{error}').format(error=error),
                 tone="error",
                 timeout_ms=8000,
                 conversation_id=conversation_id,
@@ -1220,7 +1218,7 @@ class ConversationPresenter:
         persisted_exists = bool(exists(conversation_id)) if callable(exists) else True
         if not persisted_exists:
             host.chat_view.show_notice(
-                "会话已被删除，本次压缩结果已丢弃",
+                QCoreApplication.translate('ConversationPresenter', '会话已被删除，本次压缩结果已丢弃'),
                 tone="warning",
                 timeout_ms=5000,
                 conversation_id=conversation_id,
@@ -1229,7 +1227,7 @@ class ConversationPresenter:
         target = current if is_current else host.services.conv_service.load(conversation_id)
         if target is None:
             host.chat_view.show_notice(
-                "会话已被删除，本次压缩结果已丢弃",
+                QCoreApplication.translate('ConversationPresenter', '会话已被删除，本次压缩结果已丢弃'),
                 tone="warning",
                 timeout_ms=5000,
                 conversation_id=conversation_id,
@@ -1237,7 +1235,7 @@ class ConversationPresenter:
             return
         if self._conversation_fingerprint(target) != source_fingerprint:
             host.chat_view.show_notice(
-                "会话已发生变化，本次压缩结果未写回",
+                QCoreApplication.translate('ConversationPresenter', '会话已发生变化，本次压缩结果未写回'),
                 tone="warning",
                 timeout_ms=5000,
                 conversation_id=conversation_id,
@@ -1249,7 +1247,11 @@ class ConversationPresenter:
             host.message_presenter.on_conversation_patch(conversation_id, request_id, patch)
         host.chat_view.show_notice(
             self._compact_result_text(report),
-            tone="success" if int(getattr(report, "archived_messages", 0) or 0) > 0 else "info",
+            tone=(
+                "success" if int(getattr(report, "archived_messages", 0) or 0) > 0
+                else "warning" if getattr(report, "reason", "") == "compression_failed"
+                else "info"
+            ),
             timeout_ms=5000,
             conversation_id=conversation_id,
         )
@@ -1291,6 +1293,11 @@ class ConversationPresenter:
         if reason == "no_candidates":
             return QCoreApplication.translate('ConversationPresenter', '没有可进一步压缩的历史；最近一轮和未完成的工具调用会保留')
         metrics = dict(getattr(report, "metrics", {}) or {})
+        if reason == "compression_failed" and metrics.get("fallback_reason") != "summary_no_savings":
+            error = " ".join(str(metrics.get("compression_error") or metrics.get("fallback_reason") or "").split())
+            return QCoreApplication.translate('ConversationPresenter', '压缩模型调用失败，历史保持不变：{error}').format(
+                error=error[:200] or "summary_unavailable",
+            )
         if metrics.get("fallback_reason") or metrics.get("skip_reason"):
             return QCoreApplication.translate('ConversationPresenter', '压缩未产生有效节省，历史保持不变')
         return QCoreApplication.translate('ConversationPresenter', '没有可进一步压缩的历史；最近一轮和未完成的工具调用会保留')
@@ -1324,7 +1331,7 @@ class ConversationPresenter:
         host = self._host
         conversation = host.services.conv_service.load(str(conversation_id or ""))
         if conversation is None:
-            QMessageBox.warning(host, "导出失败", "未找到要导出的会话")
+            QMessageBox.warning(host, QCoreApplication.translate('ConversationPresenter', '导出失败'), QCoreApplication.translate('ConversationPresenter', '未找到要导出的会话'))
             return
         self._command_presenter.export_conversation(conversation, fmt)
 

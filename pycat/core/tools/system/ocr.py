@@ -1,14 +1,12 @@
 """Permission-aware file adapter for the shared OCR workflow."""
 from __future__ import annotations
 
-from pathlib import Path
+import asyncio
 from typing import Any
 
-from pycat.core.content.mime import guess_mime
 from pycat.core.content.ocr import OcrError, OcrService
-from pycat.core.content.resolver import ResolvedContent, SessionContentResolver
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.models.contracts.content import ContentRef
+from pycat.core.tools.system.file_source import resolve_file_source
 
 _RETRYABLE_ERRORS = {"source_changed", "inference_failed"}
 
@@ -87,7 +85,7 @@ class FileOcrTool(BaseTool):
             return self._error("invalid_argument", "页码从 1 开始，page_count 必须在 1 到 32 之间。")
 
         try:
-            source = self._resolve_source(path_text, context)
+            source = await asyncio.to_thread(resolve_file_source, path_text, context, archive_images=True)
         except PermissionError as exc:
             return self._error("source_denied", str(exc))
         except FileNotFoundError as exc:
@@ -113,66 +111,7 @@ class FileOcrTool(BaseTool):
             return self._error(exc.code, str(exc), source_ref=source.ref.ref)
         except Exception:
             return self._error("inference_failed", "OCR 执行失败。", source_ref=source.ref.ref)
-        return ToolResult(result.to_text(), metadata=result.metadata())
-
-
-    @staticmethod
-    def _resolve_source(path_text: str, context: ToolContext) -> ResolvedContent:
-        if path_text.startswith(("input:", "archive:")):
-            if context.conversation is None:
-                raise ValueError("input references require an active conversation.")
-            content_service = getattr(context, "content_service", None)
-            if content_service is None:
-                raise ValueError("input references require the session content service.")
-            return SessionContentResolver(content_service).resolve_content(
-                context.conversation,
-                path_text,
-            )
-
-        path = context.resolve_read_path(path_text.removeprefix("workspace:"))
-        if context.files:
-            ref = ContentRef(id=str(path), name=path.name, mime=guess_mime(path.name),
-                size=0, digest="", ref=f"workspace:{path}", kind="workspace", workspace=context.work_dir)
-            return SessionContentResolver(context.content_service).resolve_content(context.conversation, ref)
-        if not path.is_file():
-            raise FileNotFoundError(path_text)
-        raw_work_dir = str(context.work_dir or "").strip()
-        name = path.name
-        relative = ""
-        if raw_work_dir:
-            try:
-                relative = path.relative_to(
-                    Path(raw_work_dir).expanduser().resolve()
-                ).as_posix()
-            except ValueError:
-                relative = ""
-        if relative:
-            ref = ContentRef(
-                id=relative,
-                name=name,
-                mime=guess_mime(name),
-                size=int(path.stat().st_size),
-                digest="",
-                ref=f"workspace:{relative}",
-                kind="workspace",
-                source="workspace",
-            )
-        else:
-            local_id = str(path)
-            ref = ContentRef(
-                id=local_id,
-                name=name,
-                mime=guess_mime(name),
-                size=int(path.stat().st_size),
-                digest="",
-                ref=f"file:{path.as_posix()}",
-                kind="file",
-                source="local",
-            )
-        return ResolvedContent(
-            path=path,
-            ref=ref,
-        )
+        return ToolResult(result.to_text(), metadata={**result.metadata(), "auto_summary": False})
 
 
     @staticmethod

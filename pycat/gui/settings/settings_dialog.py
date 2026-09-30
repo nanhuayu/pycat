@@ -210,7 +210,7 @@ class SettingsDialog(QDialog):
 
     def _configure_automation(self, preset: str) -> None:
         self._select_page(self.page("mcp"))
-        self.page("mcp").show_market("agent-browser" if preset == "browser" else "cua-driver")
+        self.page("mcp").select_extension("agent-browser" if preset == "browser" else "cua-driver")
 
     def _setup_ui(self) -> None:
         self.setWindowTitle(QCoreApplication.translate('SettingsDialog', "设置"))
@@ -360,7 +360,7 @@ class SettingsDialog(QDialog):
             return page
         if key == "skills":
             return ResourcePage(kind="skill", work_dir=self.work_dir, skill_service=self._skill_service,
-                extension_service=self._extension_service, servers_provider=self._draft_mcp_servers,
+                extension_service=self._extension_service,
                 candidate_evaluator=self._candidate_evaluator)
         if key == "ocr":
             status = None
@@ -442,10 +442,6 @@ class SettingsDialog(QDialog):
     def _draft_providers(self):
         page = self._pages.get("models")
         return self.provider_catalog_service.snapshot(page.providers if page is not None else self.providers)
-
-    def _draft_mcp_servers(self):
-        page = self._pages.get("mcp")
-        return page.installed.collect_servers() if page is not None else self._mcp_servers
 
     def _rebase_new_page(self, key: str) -> None:
         if not self._baseline_fingerprints:
@@ -686,11 +682,12 @@ class SettingsDialog(QDialog):
 
         if active("mcp"):
             mcp_servers = self._collect_section(
-                QCoreApplication.translate('SettingsDialog', "MCP 配置无效"), self.page("mcp"), self.page("mcp").installed.collect_servers, show_errors)
+                QCoreApplication.translate('SettingsDialog', "MCP 配置无效"), self.page("mcp"), self.page("mcp").content.collect_servers, show_errors)
             if mcp_servers is _COLLECT_FAILED:
                 if show_errors:
-                    self.page("mcp").view_tabs.setCurrentIndex(0)
-                    self.page("mcp").installed.editor.browser.show_detail()
+                    editor = self.page("mcp").content.editor
+                    editor.detail_stack.setCurrentWidget(editor.local_detail)
+                    editor.browser.show_detail()
                 return False
             self._mcp_servers = tuple(mcp_servers)
 
@@ -955,7 +952,7 @@ class SettingsDialog(QDialog):
                 self._baseline_fingerprints[domain] = self._pending_fingerprints[domain]
 
         if "mcp" in saved_domains and "mcp" in self._pages:
-            self.page("mcp").installed.mark_saved()
+            self.page("mcp").content.mark_saved()
         self._dirty_hint = False
         self._refresh_dirty_state()
         failed_domains = tuple(getattr(result, "failed_domains", ()) or ())
@@ -1104,14 +1101,15 @@ class SettingsDialog(QDialog):
         }
 
     def _connect_dirty_tracking(self, page: QWidget) -> None:
+        if isinstance(page, ResourcePage):
+            # MCP owns explicit draft-change signals; browsing its catalog is read-only.
+            return
         def callback(*_args):
             self.mark_dirty()
 
-        root = page.installed if isinstance(page, ResourcePage) else page
-        widgets = root.findChildren(QWidget)
-        excluded = root.editor.search if isinstance(page, ResourcePage) else None
+        widgets = page.findChildren(QWidget)
         def controls(widget_type):
-            return (widget for widget in widgets if isinstance(widget, widget_type) and widget is not excluded)
+            return (widget for widget in widgets if isinstance(widget, widget_type))
         for widget in controls(QLineEdit):
             if widget.isReadOnly():
                 continue

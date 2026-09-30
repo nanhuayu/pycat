@@ -71,6 +71,8 @@ def entry_plan(frontend="all", ocr=True, compiler="auto", jobs=4, analyze=False,
         "--include-package-data=pycat:assets/templates/*",
         "--include-package-data=pycat:assets/web/*",
         "--include-package-data=pycat:assets/pycat.svg",
+        "--include-package-data=pycat:assets/translations/pycat_en.ts",
+        "--include-package-data=pycat:assets/terminal-logo.json",
         "--include-package-data=pycat.tui:*.tcss",
         "--include-package-data=textual",
     ]

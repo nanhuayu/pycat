@@ -39,6 +39,7 @@ def main():
     assert not any(name.startswith(("PyQt6", "numpy", "onnxruntime")) for name in sys.modules)
     for resource in (
         "assets/pycat.svg",
+        "assets/terminal-logo.json",
         "assets/styles/base.qss",
         "assets/translations/pycat_en.qm",
         "assets/translations/pycat_en.ts",
@@ -47,6 +48,7 @@ def main():
         "assets/default_models.json",
         "assets/web/index.html",
         "assets/web/app.js",
+        "assets/web/i18n.js",
         "assets/web/surfaces.css",
         "assets/web/vendor/markdown-it.js",
         "assets/web/vendor/markdown-it.LICENSE",
@@ -58,6 +60,10 @@ def main():
     assert not any(path.parts[0] in {"core", "gui", "cli", "models", "assets"}
                    for path in distribution.files), "Stale build files leaked into the wheel"
     with tempfile.TemporaryDirectory() as directory:
+        # Pin the presentation language for assertions about human diagnostics.
+        (Path(directory) / 'settings.json').write_text('{"language":"en"}', encoding='utf-8')
+        from pycat.core.i18n import Translator
+        assert Translator('en')('保存') == 'Save'
 
         async def prepare_and_run():
             async with PyCat(data_dir=directory, transport_factory=transport) as app:

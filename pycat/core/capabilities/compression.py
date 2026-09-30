@@ -288,7 +288,6 @@ class CapabilityCompressor:
             images=images,
             purpose=purpose,
         )
-        result.calls = 1
         if result.summary or result.status != "error":
             return result
         # One strict-contract retry: the first answer was structurally
@@ -307,7 +306,7 @@ class CapabilityCompressor:
             images=images,
             purpose=purpose,
         )
-        retried.calls = result.calls + 1
+        retried.calls += result.calls
         if retried.summary or retried.status != "error":
             return retried
         return result if result.summary else retried
@@ -343,7 +342,7 @@ class CapabilityCompressor:
             )
         except Exception as exc:
             logger.warning("Capability compression failed via %s: %s", capability.id, exc)
-            return CompressionResult(status="error", capability_id=capability.id, error=str(exc))
+            return CompressionResult(status="error", capability_id=capability.id, error=str(exc), calls=1)
 
         metadata = dict(getattr(response, "metadata", {}) or {})
         if metadata.get("runtime_error") or metadata.get("incomplete") or metadata.get("status") in {"failed", "cancelled", "interrupted"}:
@@ -359,6 +358,7 @@ class CapabilityCompressor:
             or ""
         )
         result.capability_id = capability.id
+        result.calls = int(metadata.get("capability_request_count") or 1)
         return result
 
     def _prompt_budget_tokens(

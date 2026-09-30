@@ -2,7 +2,7 @@
   <img src="pycat/assets/pycat.svg" width="96" height="96" alt="PyCat cat logo" />
   <h1>PyCat</h1>
   <p><strong>A Python-native agent workbench · One core, five interfaces, inspectable files</strong></p>
-  <p>Work on the desktop, automate with Python, and keep the process and results in your project.</p>
+  <p>Let AI do the work, and make each step inspectable. Python for simplicity, files for evidence, tools for composition.</p>
   <p>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&amp;logoColor=white" alt="Python 3.11+" /></a>
     <a href="https://www.riverbankcomputing.com/software/pyqt/"><img src="https://img.shields.io/badge/Desktop-PyQt6-41CD52?logo=qt&amp;logoColor=white" alt="PyQt6 native desktop" /></a>
@@ -18,10 +18,19 @@
 
 PyCat is for developers, automation builders and advanced users working on real projects. Its **Python SDK, GUI, TUI, WebUI and CLI** share agent execution capabilities. Start with a local or SSH workspace, analyze code, run commands, organize material, generate images and inspect what happened along the way.
 
-- **A Python core you can call directly:** embed the SDK in scripts, debug it and change its behavior in the same language as the native desktop.
-- **Multiple interfaces, shared capabilities:** desktop, terminal, browser and messaging adapters reuse execution, tools and permission rules.
-- **Sign in with an existing account:** connect ChatGPT / Codex or WorkBuddy / CodeBuddy, use an API key, or connect a local model service from the same workbench.
-- **Files you can inspect and reuse:** conversations, input snapshots, original tool results, run records and delivered files stay locally available for search, backup and further work.
+## Three design choices
+
+**Keep the implementation simple with Python, preserve the process in files, and compose functionality through tools.** These principles connect the interface, models and real project work.
+
+| Principle | How PyCat applies it | Practical value |
+| --- | --- | --- |
+| **Python-first simplicity** | The core, SDK and native desktop use Python; five interfaces share execution capabilities; UI and local OCR dependencies are optional | Embed the agent, inspect and debug it in a familiar language, and reduce duplicate implementations and cross-language maintenance |
+| **The process lives in files** | Conversations, inputs, original tool results, artifacts and run events are persisted; detailed diagnostics can save redacted requests and responses | Inspect with an editor, search with scripts, back up the evidence and continue working with your own tools |
+| **Functionality becomes tools** | Files, Shell, MCP and configured model capabilities enter a shared invocation flow; Capabilities can turn a selected model and prompt into a callable tool | Reuse capabilities across interfaces and add them to existing tasks without creating a separate execution system |
+
+A task such as “read these materials and produce an illustration” can combine file tools, a summarization capability and an image capability, delivering ordinary project files. **Python connects the pieces, tools perform the work, and files retain the evidence.**
+
+Connect **ChatGPT / Codex or WorkBuddy / CodeBuddy accounts**, an API key, or a local model service. Supported protocols, dependencies, data scope and operational boundaries are described below and in the [developer guide](docs/product/developers.md).
 
 ![PyCat brings project files, tasks and results together](media/pycat-hero.png)
 
@@ -29,7 +38,7 @@ PyCat is for developers, automation builders and advanced users working on real 
 
 ## Quick start
 
-**0.2.2** improves concurrent conversations, context compaction and durable memory, streamlines tool and run status displays, and adds an English desktop preview. See the [release notes and downloads](https://github.com/nanhuayu/pycat/releases/tag/v0.2.2).
+**0.2.3** shares Chinese and English settings across desktop, terminal and web, adds a terminal cat logo, simplifies Skills and MCP settings, and improves file reading, image viewing, research workflows and context maintenance. Published versions are listed in [release notes and downloads](https://github.com/nanhuayu/pycat/releases).
 
 **Use the desktop**
 

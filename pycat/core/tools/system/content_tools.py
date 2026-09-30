@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import re
+import json
 from typing import Any, Dict
 
 from pycat.core.content.archive_store import SessionArchiveStore, normalize_archive_kind
 from pycat.core.content.archive_view_service import ArchiveViewService
 from pycat.core.context.compression import MIN_LLM_COMPRESSION_CHARS
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
+from pycat.models.contracts.content import ContentRef
 
 ARCHIVE_CONTENT_CHARS = 8000
 
@@ -115,7 +116,7 @@ class ArchiveReadTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Read a fixed summary or an exact 8000-character chunk of archived session content."
+        return "Read an exact 8000-character chunk (default), an explicitly requested summary, or a pinned source reference for archived session content. Use view=reference for state__wiki sources."
 
     @property
     def category(self) -> str:
@@ -129,8 +130,8 @@ class ArchiveReadTool(BaseTool):
                 "content_id": {"type": "string", "description": "Identifier from archive__list or archive index."},
                 "view": {
                     "type": "string",
-                    "enum": ["summary", "content"],
-                    "description": "Derived summary or exact content chunk; default summary.",
+                    "enum": ["summary", "content", "reference"],
+                    "description": "Exact content (default), summary (may call a model), or verified ContentRef metadata without model calls.",
                 },
                 "offset": {"type": "integer", "description": "0-based character offset for view=content."},
             },
@@ -140,23 +141,34 @@ class ArchiveReadTool(BaseTool):
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         content_id = str(arguments.get("content_id") or "").strip()
-        view = str(arguments.get("view") or "summary").strip().lower()
+        view = str(arguments.get("view") or "content").strip().lower()
         if not content_id:
             return ToolResult("content_id is required.", is_error=True)
-        if view not in {"summary", "content"}:
-            return ToolResult("view must be summary or content.", is_error=True)
+        if view not in {"summary", "content", "reference"}:
+            return ToolResult("view must be summary, content or reference.", is_error=True)
         store, record, session_id = _find_record(context, content_id)
         if store is None or record is None:
             return ToolResult(f"Archived content not found: {content_id}", is_error=True)
 
+        if view == "reference":
+            try:
+                if not store.original_matches(record, store.read_original(record)):
+                    raise ValueError("archive original changed; the pinned version is unavailable")
+                return ToolResult(json.dumps({"id": record.id, "kind": "archive", "name": record.title,
+                    "digest": record.digest, "workspace": store.workspace, "conversation_id": store.session_id,
+                    "ref": f"archive:{record.id}"}, ensure_ascii=False))
+            except (OSError, ValueError) as exc:
+                return ToolResult(f"Archive reference error: {exc}", is_error=True)
+
         if view == "summary":
             try:
                 exact = store.read_original(record)
-                images = store.read_images(record)
+                image_refs = store.image_refs(record)
+                image_urls = store.external_image_urls(record)
             except Exception as exc:
                 return ToolResult(f"Archive read error: {exc}", is_error=True)
-            if len(exact) <= MIN_LLM_COMPRESSION_CHARS and not images:
-                return self._result_with_images(
+            if len(exact) <= MIN_LLM_COMPRESSION_CHARS and not image_refs and not image_urls:
+                return ToolResult(
                     f"[content:0-{len(exact)}]\ncontent_id={content_id}\nexact=true\nnext_offset=none\n{exact}"
                 )
             compression_tasks = getattr(getattr(context, "runtime", None), "compression_tasks", None)
@@ -169,10 +181,10 @@ class ArchiveReadTool(BaseTool):
                     return ToolResult(f"[summary]\ncontent_id={content_id}\n{refreshed.summary}")
                 end = min(len(exact), ARCHIVE_CONTENT_CHARS)
                 next_offset = end if end < len(exact) else None
-                return self._result_with_images(
+                return self._result_with_image_refs(
                     f"[content:0-{end}]\ncontent_id={content_id}\nexact=true\n"
                     f"next_offset={next_offset if next_offset is not None else 'none'}\n{exact[:end]}",
-                    images,
+                    image_refs, image_urls,
                 )
             service = ArchiveViewService(
                 work_dir=_archive_work_dir(context),
@@ -188,10 +200,10 @@ class ArchiveReadTool(BaseTool):
                 return ToolResult(f"[summary]\ncontent_id={content_id}\n{result.text}")
             end = min(len(exact), ARCHIVE_CONTENT_CHARS)
             next_offset = end if end < len(exact) else None
-            return self._result_with_images(
+            return self._result_with_image_refs(
                 f"[content:0-{end}]\ncontent_id={content_id}\nexact=true\n"
                 f"next_offset={next_offset if next_offset is not None else 'none'}\n{exact[:end]}",
-                images,
+                image_refs, image_urls,
             )
 
         try:
@@ -206,21 +218,15 @@ class ArchiveReadTool(BaseTool):
             f"[content:{offset}-{end}]\ncontent_id={content_id}\nexact=true\n"
             f"next_offset={next_offset if next_offset is not None else 'none'}\n{text[offset:end]}"
         )
-        return self._result_with_images(rendered, store.read_images(record) if offset == 0 else [])
+        return self._result_with_image_refs(rendered, store.image_refs(record), store.external_image_urls(record))
 
     @staticmethod
-    def _result_with_images(text: str, images: list[str] | None = None) -> ToolResult:
-        if not images:
-            return ToolResult(text)
-        blocks: list[dict[str, Any]] = [{"type": "text", "text": text}]
-        for image in images:
-            value = str(image or "").strip()
-            if not value:
-                continue
-            match = re.match(r"^data:([^;,]+);base64,", value, flags=re.IGNORECASE)
-            mime_type = str(match.group(1) if match else "image/png")
-            blocks.append({"type": "image", "mimeType": mime_type, "data": value})
-        return ToolResult(blocks)
+    def _result_with_image_refs(text: str, refs: list[ContentRef], urls: list[str]) -> ToolResult:
+        if refs:
+            text += '\n\nImages (use file__view to inspect):\n' + '\n'.join(ref.ref for ref in refs)
+        if urls:
+            text += '\n\nExternal image URLs (not snapshotted; file__view requires a local file):\n' + '\n'.join(urls)
+        return ToolResult(text)
 
     @staticmethod
     def _compressor(context: ToolContext):

@@ -137,6 +137,16 @@ class ModesPage(QWidget):
         self.prompt_edit = ThemedTextEdit()
         self.prompt_edit.setAcceptRichText(False)
         self.prompt_edit.setMinimumHeight(130)
+        self.prompt_edit.setAccessibleName(QCoreApplication.translate('ModesPage', '指令'))
+        self.prompt_edit.textChanged.connect(self._sync_prompt_source)
+        prompt_actions = SettingsActionBar()
+        self.prompt_source_label = QLabel()
+        prompt_actions.layout().addWidget(self.prompt_source_label)
+        prompt_actions.add_stretch()
+        self.prompt_restore_btn = prompt_actions.add_icon_action(
+            QCoreApplication.translate('ModesPage', '恢复内置指令'),
+            Icons.get(Icons.REFRESH), self._restore_prompt,
+        )
 
         form.addRow(QCoreApplication.translate('ModesPage', '标识'), self.slug_edit)
         form.addRow(QCoreApplication.translate('ModesPage', '名称'), self.name_edit)
@@ -147,7 +157,8 @@ class ModesPage(QWidget):
         self.shared_context_label = QLabel(QCoreApplication.translate('ModesPage', '共享上下文'))
         form.addRow(self.model_target_label, self.model_target_combo)
         form.addRow(self.shared_context_label, self.shared_context_combo)
-        form.addRow(QCoreApplication.translate('ModesPage', '指令'), self.prompt_edit)
+        form.addRow(prompt_actions)
+        form.addRow(self.prompt_edit)
         body.add_detail_widget(self.editor, scrollable=True)
         root.addWidget(body, 1)
 
@@ -259,6 +270,7 @@ class ModesPage(QWidget):
             index = self.shared_context_combo.findData(mode.shared_context_policy)
             self.shared_context_combo.setCurrentIndex(index if index >= 0 else 0)
             self.prompt_edit.setPlainText(mode.prompt or "")
+            self._sync_prompt_source()
             self.mode_delete_btn.setEnabled(mode.slug not in set(get_required_mode_slugs()))
             self._sync_model_enabled()
         finally:
@@ -266,6 +278,26 @@ class ModesPage(QWidget):
 
     def _current_mode(self) -> ModeConfig | None:
         return next((mode for mode in self._modes if mode.slug == self._current_slug), None)
+
+    def _sync_prompt_source(self) -> None:
+        mode = self._current_mode()
+        default = ModeCatalogService.default_prompt(mode.slug) if mode else None
+        prompt = self.prompt_edit.toPlainText().strip()
+        inherited = default is not None and (not prompt or prompt == default)
+        self.prompt_source_label.setText(
+            QCoreApplication.translate('ModesPage', '内置指令 · 随版本更新') if inherited
+            else QCoreApplication.translate('ModesPage', '自定义指令')
+        )
+        self.prompt_source_label.setToolTip(
+            "" if inherited else QCoreApplication.translate('ModesPage', '自定义指令会覆盖内置内容，请检查工具名称和完成策略。')
+        )
+        self.prompt_restore_btn.setEnabled(default is not None and not inherited)
+
+    def _restore_prompt(self) -> None:
+        mode = self._current_mode()
+        default = ModeCatalogService.default_prompt(mode.slug) if mode else None
+        if default is not None:
+            self.prompt_edit.setPlainText(default)
 
     def _save_current(self) -> None:
         if self._loading:

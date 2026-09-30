@@ -138,6 +138,16 @@ Files and structured results make external analysis practical. The SDK exposes r
 
 ## Extend a workflow
 
+### Make a model capability callable as a tool
+
+**Capabilities turn a specific model use into a tool.** In **Tools and capabilities → Capabilities**, select a model, configure the prompt, input/output and execution settings, and expose the capability as a model tool. A task can then call it when needed: for example, route summarization to a dedicated model or image generation to an image endpoint. Image capabilities also require the corresponding protocol in model settings; OCR has its own settings entry.
+
+This gives a model call an explicit purpose, input and result. A task can read files, invoke a summarization or image capability, and deliver the resulting files while sharing execution, permissions and records. Availability remains subject to the current mode and permissions.
+
+Reusable Python logic can be wrapped in a tool implementation and connected to the tool contract and registration flow. An arbitrary function does not become a tool simply by being present in the project. Existing external programs can use MCP or Shell; reusable task methods belong in Skills. Each extension has a distinct role, without requiring a separate application layer for every new capability.
+
+### Choose an extension point
+
 | What you want to change | Entry point |
 | --- | --- |
 | Reusable task methods | Skills; built-in find-skills and skill-creator guide discovery and authoring |
@@ -148,6 +158,8 @@ Files and structured results make external analysis practical. The SDK exposes r
 | Native desktop interactions | Extend the PyQt source and reuse existing application services |
 
 The Python + PyQt6 desktop uses native terminal and content-viewing widgets, without JS / WebEngine. The optional web workbench has a separate web UI. The desktop already integrates a tray icon, screenshots, clipboard, file previews and shell interaction. Qt and Python make further system integrations practical, but permissions, widget lifetime, background tasks and platform behavior still need validation. There is no general hot-loading interface for desktop UI plugins.
+
+Python-first simplicity means favoring direct implementation, shared boundaries and dependencies added for a specific need. Mature image, networking and UI libraries remain useful. Fewer lines alone do not establish maintainability: shared core behavior, consistent tool contracts and inspectable records are the constraints to preserve during iteration.
 
 ## Agent iteration and self-improvement experiments
 

@@ -61,6 +61,7 @@ def _build_multimodal_content(
     if not images or not vision_enabled:
         if images and not vision_enabled:
             logger.warning("Images omitted because the selected model does not support vision")
+            return f"{text_content or ''}\n[Images unavailable: the selected model does not support image input. Use a vision model or explicit OCR.]"
         return text_content
 
     content_list: list[dict[str, Any]] = []
@@ -520,7 +521,7 @@ def _anthropic_content_blocks(content: Any) -> list[dict[str, Any]]:
                         }
                     )
                 elif url:
-                    blocks.append({"type": "text", "text": f"[Image URL: {url}]"})
+                    blocks.append({"type": "image", "source": {"type": "url", "url": url}})
         return blocks or [{"type": "text", "text": ""}]
     return [{"type": "text", "text": str(content or "")}]
 
@@ -563,18 +564,17 @@ def _openai_messages_to_anthropic(api_messages: List[Dict[str, Any]]) -> tuple[s
             continue
 
         if role == "tool":
-            messages.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": str(msg.get("tool_call_id") or ""),
-                            "content": str(content or ""),
-                        }
-                    ],
-                }
-            )
+            result_block = {
+                "type": "tool_result",
+                "tool_use_id": str(msg.get("tool_call_id") or ""),
+                "content": _anthropic_content_blocks(content) if isinstance(content, list) else str(content or ""),
+            }
+            if messages and messages[-1]["role"] == "user" and all(
+                block.get("type") == "tool_result" for block in messages[-1]["content"]
+            ):
+                messages[-1]["content"].append(result_block)
+            else:
+                messages.append({"role": "user", "content": [result_block]})
             continue
 
         anthropic_role = "assistant" if role == "assistant" else "user"
@@ -653,7 +653,7 @@ def _responses_content_blocks(content: Any, *, role: str) -> Any:
         item_type = str(item.get("type") or "").strip()
         if item_type == "text":
             blocks.append({"type": "input_text", "text": str(item.get("text") or "")})
-        elif item_type == "image_url" and role == "user":
+        elif item_type == "image_url" and role in {"user", "tool"}:
             image_url = item.get("image_url") if isinstance(item.get("image_url"), dict) else {}
             url = str(image_url.get("url") or "").strip()
             if url:
@@ -707,7 +707,7 @@ def _openai_messages_to_responses_input(api_messages: List[Dict[str, Any]]) -> t
                     {
                         "type": "function_call_output",
                         "call_id": call_id,
-                        "output": _responses_text_from_content(content),
+                        "output": _responses_content_blocks(content, role="tool"),
                     }
                 )
             continue
@@ -759,6 +759,30 @@ def _openai_messages_to_responses_input(api_messages: List[Dict[str, Any]]) -> t
         )
 
     return "\n\n".join(part for part in instructions_parts if part.strip()).strip(), input_items
+
+
+def _project_tool_images_as_user(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Chat-style protocols require images on a user message, after the whole tool batch.
+
+    This is a wire projection only: never persist it as a real user turn.
+    """
+    projected: List[Dict[str, Any]] = []
+    images: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") != "tool" and images:
+            projected.append({"role": "user", "content": images})
+            images = []
+        content = message.get("content")
+        if message.get("role") == "tool" and isinstance(content, list):
+            parts = [part for part in content if isinstance(part, dict) and part.get("type") == "image_url"]
+            if parts:
+                images.append({"type": "text", "text": f"Images from tool result {message.get('tool_call_id', '')}:"})
+                images.extend(parts)
+                message = {**message, "content": _responses_text_from_content(content)}
+        projected.append(message)
+    if images:
+        projected.append({"role": "user", "content": images})
+    return projected
 
 
 def build_request_body(
@@ -864,7 +888,7 @@ def build_request_body(
     if provider.is_ollama_chat:
         body = {
             "model": wire_model,
-            "messages": _openai_messages_to_ollama(payload_messages),
+            "messages": _openai_messages_to_ollama(_project_tool_images_as_user(payload_messages)),
             "stream": stream_enabled,
         }
         options: dict[str, Any] = {}
@@ -889,7 +913,7 @@ def build_request_body(
         "model": wire_model,
         "messages": [
             {key: value for key, value in message.items() if key != _REASONING_ITEMS_KEY}
-            for message in payload_messages
+            for message in _project_tool_images_as_user(payload_messages)
         ],
         "stream": stream_enabled,
     }

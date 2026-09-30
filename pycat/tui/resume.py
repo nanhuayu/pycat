@@ -10,23 +10,24 @@ from textual.screen import Screen
 from textual.widgets import Button, Input, Label, OptionList
 from textual.widgets.option_list import Option
 
+from pycat.core.i18n import Translator
 from pycat.tui.composer import single_line
 from pycat.tui.panels import Form, Reader
 
 
-def relative_time(value):
+def relative_time(value, tr=Translator()):
     try:
         time = datetime.fromisoformat(value)
         seconds = max(0, (datetime.now(time.tzinfo) - time).total_seconds())
         if seconds < 60:
-            return '刚刚'
+            return tr('刚刚')
         if seconds < 3600:
-            return f'{int(seconds // 60)} 分钟前'
+            return tr('{value0} 分钟前', value0=int(seconds // 60))
         if seconds < 86400:
-            return f'{int(seconds // 3600)} 小时前'
-        return f'{int(seconds // 86400)} 天前' if seconds < 86400 * 30 else time.strftime('%Y-%m-%d')
+            return tr('{value0} 小时前', value0=int(seconds // 3600))
+        return tr('{value0} 天前', value0=int(seconds // 86400)) if seconds < 86400 * 30 else time.strftime('%Y-%m-%d')
     except (TypeError, ValueError):
-        return '时间未知'
+        return tr('时间未知')
 
 
 class ResumeScreen(Screen):
@@ -45,20 +46,20 @@ class ResumeScreen(Screen):
 
     def compose(self):
         with Horizontal(id='resume-heading'):
-            yield Label('恢复会话', classes='section-title')
-            yield Button('当前项目 · 切换全部', id='resume-scope')
-        yield Input(placeholder='搜索标题、项目或会话 ID', id='resume-search')
-        yield Label('最近更新      会话', id='resume-columns')
+            yield Label(self.app.tr('恢复会话'), classes='section-title')
+            yield Button(self.app.tr('当前项目 · 切换全部'), id='resume-scope')
+        yield Input(placeholder=self.app.tr('搜索标题、项目或会话 ID'), id='resume-search')
+        yield Label(self.app.tr('最近更新      会话'), id='resume-columns')
         yield OptionList(id='resume-list')
         yield Label('', id='resume-detail')
         yield Label('', id='resume-error')
         with Horizontal(id='resume-actions'):
-            yield Button('↑ 上一页', id='resume-previous')
-            yield Button('↓ 下一页', id='resume-next')
-            yield Button('F2 重命名', id='resume-rename')
-            yield Button('F3 详情', id='resume-details')
-            yield Button('Enter 继续', id='resume-choose')
-            yield Button('Esc 返回', id='resume-close')
+            yield Button(self.app.tr('↑ 上一页'), id='resume-previous')
+            yield Button(self.app.tr('↓ 下一页'), id='resume-next')
+            yield Button(self.app.tr('F2 重命名'), id='resume-rename')
+            yield Button(self.app.tr('F3 详情'), id='resume-details')
+            yield Button(self.app.tr('Enter 继续'), id='resume-choose')
+            yield Button(self.app.tr('Esc 返回'), id='resume-close')
 
     def on_mount(self):
         self.query_one('#resume-search', Input).focus()
@@ -88,7 +89,7 @@ class ResumeScreen(Screen):
             self.has_more = len(rows) > self.PAGE_SIZE
             self.rows = rows[:self.PAGE_SIZE]
             self.render_rows()
-            self.query_one('#resume-error', Label).update('' if rows else '没有匹配会话；可切换全部项目或修改搜索')
+            self.query_one('#resume-error', Label).update('' if rows else self.app.tr('没有匹配会话；可切换全部项目或修改搜索'))
         except Exception as exc:
             if self.is_mounted and generation == self._generation:
                 self.query_one('#resume-error', Label).update(Text(str(exc)))
@@ -103,12 +104,12 @@ class ResumeScreen(Screen):
         options = []
         for row in self.rows:
             title_width = max(1, width - (40 if wide else 14))
-            text = single_line(relative_time(row.get('updated_at')), 12)
+            text = single_line(relative_time(row.get('updated_at'), self.app.tr), 12)
             text.stylize('dim')
             text.append('  ')
-            text.append(single_line(('● ' if row.get('pinned') else '') + (row.get('title') or '未命名会话'), title_width))
+            text.append(single_line(('● ' if row.get('pinned') else '') + (row.get('title') or self.app.tr('未命名会话')), title_width))
             if wide:
-                project = str(row.get('work_dir') or '未选择项目').replace('\\', '/').rstrip('/').rsplit('/', 1)[-1]
+                project = str(row.get('work_dir') or self.app.tr('未选择项目')).replace('\\', '/').rstrip('/').rsplit('/', 1)[-1]
                 text.append('  ')
                 detail = single_line(project, 17)
                 detail.stylize('dim')
@@ -130,8 +131,7 @@ class ResumeScreen(Screen):
         row = self.current()
         self.selected = row['id'] if row else ''
         self.query_one('#resume-detail', Label).update(Text(
-            f"{row.get('title') or '未命名会话'}\n{row.get('work_dir') or '未选择项目'}\n"
-            f"{row['id']} · {row.get('message_count', 0)} 条消息 · 创建于 {row.get('created_at') or '未知'}"
+            self.app.tr('{value0}\n{value1}\n{value2} · {value3} 条消息 · 创建于 {value4}', value0=row.get('title') or self.app.tr('未命名会话'), value1=row.get('work_dir') or self.app.tr('未选择项目'), value2=row['id'], value3=row.get('message_count', 0), value4=row.get('created_at') or self.app.tr('未知'))
             if row else ''))
 
     def on_resize(self):
@@ -175,14 +175,14 @@ class ResumeScreen(Screen):
 
     def action_details(self):
         if not self._loading and (row := self.current()):
-            self.app.push_screen(Reader('会话详情', {
-                '标题': row.get('title') or '未命名会话', '项目': row.get('work_dir') or '未选择项目',
+            self.app.push_screen(Reader(self.app.tr('会话详情'), {
+                '标题': row.get('title') or self.app.tr('未命名会话'), '项目': row.get('work_dir') or self.app.tr('未选择项目'),
                 '会话 ID': row['id'], '消息数': row.get('message_count', 0),
                 '最近更新': row.get('updated_at'), '创建时间': row.get('created_at')}))
 
     async def rename(self, row):
-        values = await self.app.push_screen_wait(Form('重命名会话', [{'name': 'title', 'label': '名称', 'required': True}],
-                                                       {'title': row.get('title', '')}, submit='保存'))
+        values = await self.app.push_screen_wait(Form(self.app.tr('重命名会话'), [{'name': 'title', 'label': self.app.tr('名称'), 'required': True}],
+                                                       {'title': row.get('title', '')}, submit=self.app.tr('保存')))
         if values and values['title'].strip():
             try:
                 await self.client.operation('sessions.rename', {'session': row['id'], 'title': values['title'].strip()})
@@ -196,7 +196,7 @@ class ResumeScreen(Screen):
         if action == 'resume-scope':
             self.all_projects = not self.all_projects
             self.page_offset = 0
-            event.button.label = '全部项目 · 切换当前' if self.all_projects else '当前项目 · 切换全部'
+            event.button.label = self.app.tr('全部项目 · 切换当前') if self.all_projects else self.app.tr('当前项目 · 切换全部')
             self.reload()
         elif action == 'resume-choose':
             self.action_choose()

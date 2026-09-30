@@ -144,9 +144,14 @@ class ProviderService:
                 continue
             reasoning = item.get('reasoning') if isinstance(item.get('reasoning'), dict) else {}
             options = ['inherit']
-            effort = reasoning.get('effort')
-            if effort in REASONING_MODES and effort != 'inherit':
-                options.append(effort)
+            declared = reasoning.get('supportedEfforts')
+            efforts = list(declared) if isinstance(declared, list) else []
+            efforts.extend([reasoning.get('effort'), reasoning.get('defaultEffort')])
+            if reasoning.get('canDisableThinking') is True:
+                efforts.append('off')
+            for effort in efforts:
+                if effort in REASONING_MODES and effort not in options:
+                    options.append(effort)
             profile = ModelProfile(
                 model_id=item['id'].strip(), display_name=str(item.get('name') or item['id']),
                 # Conservative total budget: do not add maxOutputTokens to an input limit.

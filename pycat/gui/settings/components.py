@@ -25,7 +25,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from pycat.gui.utils.theme import configure_icon_button, resolve_accent, resolve_theme, theme_tokens
+from pycat.gui.utils.theme import (
+    COMPACT_CONTROL_HEIGHT,
+    configure_icon_button,
+    resolve_accent,
+    resolve_theme,
+    theme_tokens,
+)
+from pycat.gui.widgets.capsule import SingleLineLabel
 
 SETTINGS_NAV_WIDTH = 212
 RESOURCE_LIST_MINIMUM_WIDTH = 200
@@ -40,6 +47,8 @@ RESOURCE_STATE_ROLE = Qt.ItemDataRole.UserRole + 23
 RESOURCE_TRAILING_ICONS_ROLE = Qt.ItemDataRole.UserRole + 24
 RESOURCE_DESCRIPTION_ROLE = Qt.ItemDataRole.UserRole + 25
 RESOURCE_TOGGLE_ROLE = Qt.ItemDataRole.UserRole + 26
+RESOURCE_BADGE_ROLE = Qt.ItemDataRole.UserRole + 27
+RESOURCE_DETAIL_META_ROLE = Qt.ItemDataRole.UserRole + 28
 
 
 class SettingsActionBar(QWidget):
@@ -134,12 +143,17 @@ class SettingsListDetailLayout(QWidget):
         self.detail_layout.setSpacing(8)
         self.back_button = QPushButton(QCoreApplication.translate('SettingsComponents', "返回列表"))
         self.back_button.clicked.connect(self.show_list)
-        self.detail_title = QLabel()
+        self.detail_title = SingleLineLabel()
         self.detail_title.setObjectName("resource_detail_title")
+        self.detail_status = SingleLineLabel()
+        self.detail_status.setProperty("muted", True)
+        self.detail_status.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        self.detail_status.setMaximumWidth(200)
         back_row = QHBoxLayout()
         self.header_layout = back_row
         back_row.addWidget(self.back_button)
         back_row.addWidget(self.detail_title, 1)
+        back_row.addWidget(self.detail_status)
         self.detail_layout.addLayout(back_row)
         self.splitter.addWidget(self.list_panel)
         self.splitter.addWidget(self.detail_panel)
@@ -160,9 +174,11 @@ class SettingsListDetailLayout(QWidget):
                 widget.currentItem().data(RESOURCE_TOGGLE_ROLE) else None)
 
     def _click(self, item, toggle):
+        if not item.flags() & Qt.ItemFlag.ItemIsSelectable:
+            return
         point = self.list_widget.viewport().mapFromGlobal(QCursor.pos())
         rect = self.list_widget.visualItemRect(item)
-        if toggle and rect.width() >= 360 and item.data(RESOURCE_TOGGLE_ROLE) and rect.right() - 78 <= point.x() <= rect.right() - 30:
+        if toggle and not item.data(RESOURCE_BADGE_ROLE) and rect.width() >= 360 and item.data(RESOURCE_TOGGLE_ROLE) and rect.right() - 78 <= point.x() <= rect.right() - 30:
             toggle()
         else:
             self.show_detail()
@@ -187,6 +203,8 @@ class SettingsListDetailLayout(QWidget):
             return
         item = self.list_widget.currentItem()
         self.detail_title.setText(str(item.data(RESOURCE_TITLE_ROLE) or item.text()) if item else QCoreApplication.translate('SettingsComponents', "选择条目查看详情"))
+        self.detail_status.setText(str(item.data(RESOURCE_DETAIL_META_ROLE) or item.data(RESOURCE_BADGE_ROLE) or "") if item else "")
+        self.detail_status.setVisible(bool(self.detail_status.text()))
         self.detail_panel.setEnabled(item is not None)
         if item is None:
             self._detail_requested = False
@@ -246,6 +264,17 @@ class SettingsEmptyState(QWidget):
         layout.addStretch(1)
 
 
+def settings_dialog_layout(dialog, title: str) -> QVBoxLayout:
+    """Shared geometry for short settings forms; height follows their content."""
+    dialog.setWindowTitle(title)
+    dialog.setModal(True)
+    dialog.setMinimumWidth(520)
+    layout = QVBoxLayout(dialog)
+    layout.setContentsMargins(16, 16, 16, 16)
+    layout.setSpacing(12)
+    return layout
+
+
 def build_dialog_button_box(parent=None, *, accept_text=None,
                             accept_button=QDialogButtonBox.StandardButton.Save) -> QDialogButtonBox:
     buttons = QDialogButtonBox(
@@ -263,6 +292,8 @@ def build_dialog_button_box(parent=None, *, accept_text=None,
     for button in (save, cancel):
         button.setIcon(QIcon())
         button.setAccessibleName(button.text())
+        button.setFixedHeight(COMPACT_CONTROL_HEIGHT)
+        button.setMinimumWidth(72)
     # QDialogButtonBox polishes its standard buttons before properties are set.
     # Refresh the primary surface immediately, including on an already themed app.
     save.style().unpolish(save)
@@ -300,6 +331,11 @@ class SettingsStatusListItem(QListWidgetItem):
             self.setToolTip(tooltip)
 
 
+def set_resource_badge(item: QListWidgetItem, text: str) -> None:
+    item.setData(RESOURCE_BADGE_ROLE, text)
+    item.setData(Qt.ItemDataRole.AccessibleDescriptionRole, text)
+
+
 class SettingsResourceDelegate(QStyledItemDelegate):
     """Paint settings resources with one compact, theme-aware hierarchy."""
 
@@ -327,6 +363,7 @@ class SettingsResourceDelegate(QStyledItemDelegate):
         owner = self.parent() if isinstance(self.parent(), QWidget) else None
         tokens = theme_tokens(resolve_theme(owner), resolve_accent(owner))
         colors = tokens.colors
+        badge = str(index.data(RESOURCE_BADGE_ROLE) or "")
         if selected:
             background = QColor(colors["selected"])
             title_color = QColor(colors["selected_text"])
@@ -351,8 +388,8 @@ class SettingsResourceDelegate(QStyledItemDelegate):
         content = rect.adjusted(12, 8, -12, -8)
         icon_width = 24 if not icon.isNull() else 0
         trailing_width = len(trailing_icons) * 20
-        toggle = bool(index.data(RESOURCE_TOGGLE_ROLE)) and rect.width() >= 360
-        state_width = (52 if toggle else 18 if not enabled else 0) + trailing_width
+        toggle = bool(index.data(RESOURCE_TOGGLE_ROLE)) and not badge and rect.width() >= 360
+        state_width = (52 if toggle else 18 if not enabled and not badge else 0) + trailing_width
         text_left = content.left() + icon_width
         text_width = max(24, content.width() - icon_width - state_width)
         title_font = QFont(option.font)
@@ -362,8 +399,10 @@ class SettingsResourceDelegate(QStyledItemDelegate):
         subtitle_font.setPixelSize(tokens.font("caption"))
 
         title_height = 19
-        title_top = content.top() if subtitle else content.top() + max(0, (content.height() - title_height) // 2)
-        title_rect = QRect(text_left, title_top, text_width, title_height)
+        title_top = content.top() if subtitle or description else content.top() + max(0, (content.height() - title_height) // 2)
+        badge_width = min(QFontMetrics(subtitle_font).horizontalAdvance(badge), max(0, text_width - 48)) if badge else 0
+        title_width = text_width - badge_width - (8 if badge else 0)
+        title_rect = QRect(text_left, title_top, title_width, title_height)
         if icon_width:
             pixmap = icon.pixmap(18, 18)
             painter.drawPixmap(content.left(), content.center().y() - 9, pixmap)
@@ -374,6 +413,12 @@ class SettingsResourceDelegate(QStyledItemDelegate):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             QFontMetrics(title_font).elidedText(title, Qt.TextElideMode.ElideRight, title_rect.width()),
         )
+        if badge:
+            painter.setFont(subtitle_font)
+            painter.setPen(subtitle_color)
+            painter.drawText(QRect(text_left + text_width - badge_width, title_top, badge_width, title_height),
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                QFontMetrics(subtitle_font).elidedText(badge, Qt.TextElideMode.ElideRight, badge_width))
 
         if description:
             painter.setFont(subtitle_font)
@@ -403,7 +448,7 @@ class SettingsResourceDelegate(QStyledItemDelegate):
             painter.drawRoundedRect(switch, 9, 9)
             painter.setBrush(QColor(colors["surface"]))
             painter.drawEllipse(switch.left() + (17 if enabled else 3), switch.top() + 3, 12, 12)
-        elif not enabled:
+        elif not enabled and not badge:
             center_x = content.right() - 5
             center_y = content.center().y()
             painter.setPen(QPen(QColor(colors["muted"]), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))

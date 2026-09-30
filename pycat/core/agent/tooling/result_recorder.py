@@ -90,7 +90,8 @@ class ToolResultRecorder:
             result=result,
             tool_args=tool_args,
         )
-        if handle.archive is not None and compression_tasks is not None:
+        if (handle.archive is not None and compression_tasks is not None
+                and handle.archive.metadata.get("auto_summary") is not False):
             content_id = str(handle.archive.id or "")
             if len(result_text) > ToolResultViewService.SHORT_LIMIT:
                 is_long = len(result_text) > ToolResultViewService.FULL_LIMIT

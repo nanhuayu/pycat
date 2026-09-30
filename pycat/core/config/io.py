@@ -42,6 +42,16 @@ def get_settings_path(*, data_dir: str | Path | None = None) -> Path:
     return _get_app_data_dir(data_dir=data_dir) / "settings.json"
 
 
+def read_language(*, data_dir: str | Path | None = None) -> str:
+    """Read the presentation preference for CLI help without creating/migrating data."""
+    directory = Path(data_dir) if data_dir is not None else (_GLOBAL_DATA_DIR_CACHE or Path.home() / '.pycat')
+    try:
+        settings = json.loads((directory / 'settings.json').read_text(encoding='utf-8'))
+        return 'en' if isinstance(settings, dict) and settings.get('language') == 'en' else 'zh_CN'
+    except (OSError, ValueError):
+        return 'zh_CN'
+
+
 def get_user_modes_json_path(*, data_dir: str | Path | None = None) -> Path:
     """User-level modes config path.
 

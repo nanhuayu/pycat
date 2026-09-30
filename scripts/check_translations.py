@@ -1,4 +1,4 @@
-"""Extract, validate and compile the native Qt application catalog.
+"""Extract, validate and compile the shared Qt, terminal and browser UI catalog.
 
 Requires the GUI extra for pylupdate and QTranslator. Compilation uses Qt's
 lrelease (or pyside6-lrelease), supplied explicitly or found on PATH.
@@ -6,6 +6,8 @@ lrelease (or pyside6-lrelease), supplied explicitly or found on PATH.
 from __future__ import annotations
 
 import argparse
+import ast
+import json
 import re
 import shutil
 import subprocess
@@ -13,11 +15,48 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
+from html.parser import HTMLParser
 from pathlib import Path
 from string import Formatter
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "pycat/assets/translations/pycat_en.ts"
+
+
+def shared_sources() -> dict[str, set[str]]:
+    """Explicit call sites only: never extract model text or third-party payloads."""
+    found = {}
+    def add(source, path):
+        if source:
+            found.setdefault(source, set()).add(path.relative_to(ROOT).as_posix())
+    for directory in ('pycat/tui', 'pycat/cli'):
+        for path in (ROOT / directory).glob('*.py'):
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+                if isinstance(node, ast.Call) and (isinstance(node.func, ast.Name) and node.func.id == 'tr'
+                    or isinstance(node.func, ast.Attribute) and node.func.attr == 'tr'):
+                    if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                        add(node.args[0].value, path)
+                if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'BINDINGS' for target in node.targets):
+                    for binding in getattr(node.value, 'elts', []):
+                        parts = binding.elts if isinstance(binding, ast.Tuple) else binding.args if isinstance(binding, ast.Call) else []
+                        if len(parts) > 2 and isinstance(parts[2], ast.Constant):
+                            add(parts[2].value, path)
+    path = ROOT / 'pycat/core/app/services/workbench.py'
+    for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'operation':
+            add(ast.literal_eval(node.args[1]), path)
+    for path in (ROOT / 'pycat/assets/web').glob('*.js'):
+        # JS UI messages use JSON string literals so Python and JS decode alike.
+        for match in re.finditer(r'''\btr\(("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')''', path.read_text(encoding='utf-8')):
+            add(json.loads(match[1]) if match[1].startswith('"') else ast.literal_eval(match[1]), path)
+    path = ROOT / 'pycat/assets/web/index.html'
+    class Markers(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            for name, value in attrs:
+                if name == 'data-i18n' or name.startswith('data-i18n-'):
+                    add(value, path)
+    Markers().feed(path.read_text(encoding='utf-8'))
+    return found
 
 
 def messages(path: Path) -> list[tuple[tuple[str, str, str], str, str]]:
@@ -61,8 +100,22 @@ def validate(path: Path) -> list[str]:
 
 
 def extract(destination: Path) -> None:
+    shared = {key[1]: (target, state) for key, target, state in messages(destination)
+              if key[0] == 'Workbench'} if destination.exists() else {}
     subprocess.run([sys.executable, "-m", "PyQt6.lupdate.pylupdate", str(ROOT / "pycat/gui"),
                     "--ts", str(destination), "--no-obsolete", "--no-summary"], cwd=ROOT, check=True)
+    tree = ET.parse(destination)
+    context = ET.SubElement(tree.getroot(), 'context')
+    ET.SubElement(context, 'name').text = 'Workbench'
+    for source, paths in sorted(shared_sources().items()):
+        message = ET.SubElement(context, 'message')
+        for path in sorted(paths):
+            ET.SubElement(message, 'location', filename='../../../' + path)
+        ET.SubElement(message, 'source').text = source
+        target, state = shared.get(source, ('', 'unfinished'))
+        ET.SubElement(message, 'translation', **({'type': state} if state else {})).text = target
+    ET.indent(tree, space='    ')
+    tree.write(destination, encoding='utf-8', xml_declaration=True)
 
 
 def main(argv=None) -> int:

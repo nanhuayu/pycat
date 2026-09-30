@@ -37,6 +37,7 @@ from pycat.core.tools.system.artifact_tools import ManageArtifactTool
 from pycat.core.tools.system.ask_questions import AskQuestionsTool
 from pycat.core.tools.system.content_tools import ArchiveListTool, ArchiveReadTool
 from pycat.core.tools.system.file_ops import DeleteFileTool, EditFileTool, WriteToFileTool
+from pycat.core.tools.system.file_view import ViewFileTool
 
 # System Tools
 from pycat.core.tools.system.filesystem import DeliverFilesTool, GrepTool, LsTool, ReadFileTool
@@ -199,7 +200,7 @@ class ToolManager:
 
     def _register_default_system_tools(self):
         tools = [
-            LsTool(), ReadFileTool(), self._ocr_tool, GrepTool(), DeliverFilesTool(), FetchUrlTool(),
+            LsTool(), ReadFileTool(), ViewFileTool(), self._ocr_tool, GrepTool(), DeliverFilesTool(), FetchUrlTool(),
             PythonExecTool(),
             WriteToFileTool(), EditFileTool(), DeleteFileTool(),
             ExecuteCommandTool(),

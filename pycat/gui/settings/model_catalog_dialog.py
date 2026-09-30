@@ -10,10 +10,9 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QToolButton,
-    QVBoxLayout,
 )
 
-from pycat.gui.settings.components import build_dialog_button_box
+from pycat.gui.settings.components import build_dialog_button_box, settings_dialog_layout
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
 from pycat.models.model_profile import BUNDLED_MODEL_TAG, ModelProfile
@@ -38,14 +37,11 @@ class ModelCatalogDialog(QDialog):
         self._rebuild_list()
 
     def _setup_ui(self) -> None:
-        self.setWindowTitle(QCoreApplication.translate('ModelCatalogDialog', '{name} 模型目录').format(name=self._provider.name))
+        root = settings_dialog_layout(self, QCoreApplication.translate('ModelCatalogDialog', '{name} 模型目录').format(name=self._provider.name))
         self.setObjectName("model_catalog_dialog")
         self.setMinimumSize(560, 500)
         self.resize(640, 580)
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(14, 14, 14, 14)
-        root.setSpacing(8)
 
         search_row = QHBoxLayout()
         search_row.setSpacing(6)

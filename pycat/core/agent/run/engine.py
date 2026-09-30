@@ -958,7 +958,8 @@ class AgentRunEngine:
                 if chars <= ToolResultViewService.SHORT_LIMIT:
                     continue
                 record = store.read_record(content_id)
-                if record is not None and not record.summary and not record.metadata.get("summary_skipped"):
+                if (record is not None and not record.summary and not record.metadata.get("summary_skipped")
+                        and record.metadata.get("auto_summary") is not False):
                     compression_tasks.submit(content_id, priority="background")
 
     @staticmethod

@@ -88,6 +88,20 @@ class WikiService:
                 "digest": hashlib.sha256(raw).hexdigest()}
 
     @staticmethod
+    def _normalize_source(source: dict) -> dict:
+        """Archive record types describe evidence, not its ContentRef owner."""
+        source = dict(source)
+        if source.get("kind") in {"tool_result", "tool_call", "history"}:
+            identifier = str(source.get("id") or "")
+            ref = str(source.get("ref") or "")
+            if ref and ref not in {identifier, f"archive:{identifier}", f"{source['kind']}:{identifier}"}:
+                raise ValueError("archive source id and ref disagree; copy the reference from archive__read")
+            source.update(kind="archive", ref=f"archive:{identifier}")
+        if source.get("kind") == "archive" and not source.get("conversation_id"):
+            raise ValueError("archive evidence requires its owning conversation_id")
+        return source
+
+    @staticmethod
     def _source_metadata(source: dict) -> dict:
         if source.get("resource") and not source.get("kind"):
             return dict(source)
@@ -270,6 +284,7 @@ class WikiService:
             sources = payload.get("sources")
             if not isinstance(sources, list) or not 1 <= len(sources) <= 16 or any(not isinstance(ref, dict) for ref in sources):
                 raise ValueError("provide 1–16 versioned source references")
+            sources = [self._normalize_source(ref) for ref in sources]
             slug = re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")[:64].rstrip("-")
             page_id = str(payload.get("id") or slug or "note-" + hashlib.sha256(title.encode()).hexdigest()[:12])
             path = self.path_for(work_dir, page_id)

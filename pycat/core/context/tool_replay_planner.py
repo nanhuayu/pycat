@@ -255,12 +255,13 @@ class ToolReplayPlanner:
         metadata["tool_result_replay_view"] = cls._exact_or_inline(metadata)
         metadata["tool_result_replay_reason"] = reason
 
-    @staticmethod
-    def _is_recoverable(candidate: _ReplayCandidate) -> bool:
+    def _is_recoverable(self, candidate: _ReplayCandidate) -> bool:
         metadata = candidate.metadata
         if not bool(metadata.get("archive_available")):
             return False
         if candidate.image_count:
+            if self.visible_tool_names is not None and 'file__view' not in self.visible_tool_names:
+                return False
             if int(metadata.get("archive_image_count") or 0) < candidate.image_count:
                 return False
             if not bool(metadata.get("archive_images_restorable")):
@@ -292,7 +293,8 @@ class ToolReplayPlanner:
         if content_id:
             lines.append(
                 f'Use archive__read(content_id="{content_id}", view="summary") for the full summary, '
-                f'or archive__read(content_id="{content_id}", view="content", offset=0) for exact content and images.'
+                f'or archive__read(content_id="{content_id}", view="content", offset=0) for exact text and image refs; '
+                'use file__view for those images.'
             )
         return "\n".join(lines)
 
@@ -359,7 +361,11 @@ class ToolReplayPlanner:
         fresh["archive_size"] = int(record.size or 0)
         fresh["archive_updated_seq"] = int(record.updated_seq or record.created_seq or 0)
         fresh["archive_image_count"] = image_count
-        fresh["archive_images_restorable"] = store.images_are_restorable(record, expected_count=image_count)
+        # file__view restores pinned binary sidecars, not external URLs that may expire.
+        fresh["archive_images_restorable"] = (
+            len(store.image_refs(record)) >= image_count
+            and store.images_are_restorable(record, expected_count=image_count)
+        )
         if record.source:
             fresh.setdefault("name", record.source)
         if record.summary:

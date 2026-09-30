@@ -218,6 +218,11 @@ class SessionArchiveStore:
                 workspace=self.workspace, conversation_id=self.session_id, created_at=record.created_at))
         return refs
 
+    def external_image_urls(self, record: ArchivedContentRecord) -> list[str]:
+        """Return recorded URLs without fetching them or loading binary sidecars."""
+        return [str(item['url']).strip() for item in self._image_metadata(record)
+                if item.get('kind') == 'url' and str(item.get('url') or '').strip()]
+
     def resolve_image(self, record: ArchivedContentRecord, index: int, *, verify_digest: bool = True) -> tuple[Path, ContentRef]:
         identifier = f"{record.id}/images/{index}"
         ref = next((item for item in self.image_refs(record) if item.id == identifier), None)

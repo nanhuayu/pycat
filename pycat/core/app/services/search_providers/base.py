@@ -5,6 +5,15 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 
+class SearchError(RuntimeError):
+    """Provider failure that retains its meaning at the tool boundary."""
+
+    def __init__(self, message: str, *, code: str = "search_failed", retryable: bool = False):
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+
+
 @dataclass
 class SearchResult:
     """Normalized search result across all providers."""
@@ -43,7 +52,9 @@ class BaseSearchProvider(ABC):
         Returns (is_valid, error_message).
         """
         try:
-            await self.search("test", max_results=1)
+            results = await self.search("test", max_results=1)
+            if not results:
+                return False, f"{self.display_name} returned no usable results; the connection could not be verified."
             return True, None
         except Exception as e:
             return False, str(e)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QLibraryInfo, QTranslator
 
-from pycat.models.contracts.config import AppConfig
+from pycat.core.i18n import normalize_language
 
 logger = logging.getLogger(__name__)
 TRANSLATIONS = Path(__file__).resolve().parents[1] / "assets" / "translations"
@@ -18,7 +18,7 @@ TRANSLATIONS = Path(__file__).resolve().parents[1] / "assets" / "translations"
 
 def install_language(app, language: str) -> str:
     """Return the actual UI language; retain translators for the app lifetime."""
-    selected = AppConfig.from_dict({"language": language}).language
+    selected = normalize_language(language)
     translators = []
     if selected == "en":
         translator = QTranslator(app)

@@ -9,6 +9,7 @@ from pycat.cli.output import CliOutput
 from pycat.core.app.container import AppContainer
 from pycat.core.content.references import latest_turn_deliveries
 from pycat.core.content.resolver import SessionContentResolver
+from pycat.core.i18n import Translator
 from pycat.core.tools.base import ApprovalDecision
 from pycat.models.contracts.agent import ApplicationError, RunRequest, RunStatus
 
@@ -24,6 +25,7 @@ class CliExecutor:
 
     async def run_once(self, request: RunRequest, output: CliOutput | None = None) -> int:
         out = output or CliOutput()
+        out.tr = Translator(self.services.settings_update_service.load().get('language', 'zh_CN'))
         if request.work_dir is None and not request.conversation_id:
             request = replace(request, work_dir=os.getcwd())
         handle = None
@@ -101,7 +103,7 @@ class CliExecutor:
                 out.write_json(payload)
             else:
                 out.note(f"[approval] {request.message or request.tool_name}")
-            answer = await out.read_line_async("Allow? [y/N/r]: " if request.requires_path_approval else "Allow? [y/N]: ")
+            answer = await out.read_line_async(out.tr('允许？[y/N/r]：') if request.requires_path_approval else out.tr('允许？[y/N]：'))
             answer = str(answer or "").strip().lower()
             approved = answer in {"y", "yes"} or request.requires_path_approval and answer in {"r", "run"}
             return ApprovalDecision(approved=approved,
@@ -113,18 +115,18 @@ class CliExecutor:
         async def ask(question):
             if out.stream_json:
                 out.write_json({"version": 1, "type": "question_request", "question": question})
-            out.note(str(question.get("text") or "Question"))
+            out.note(str(question.get("text") or out.tr('问题')))
             options = question.get("options") or []
             for index, option in enumerate(options, 1):
                 out.note(f"{index}. {option.get('label', '')}: {option.get('description', '')}")
-            answer = await out.read_line_async("Answer (numbers separated by commas, or text; Enter skips): ")
+            answer = await out.read_line_async(out.tr('回答（逗号分隔的编号或文字；回车跳过）：'))
             if not answer:
                 return {"selected": [], "freeText": None, "skipped": True, "reason": "interaction_unavailable" if answer is None else "user_skipped"}
             values = [part.strip() for part in answer.split(",")]
             if all(value.isdigit() and 1 <= int(value) <= len(options) for value in values):
                 selected = [options[int(value) - 1]["label"] for value in values]
                 if not question.get("multiple") and len(selected) > 1:
-                    raise ValueError("This question permits one selection.")
+                    raise ValueError(out.tr('本题只能选择一项'))
                 return {"selected": selected, "freeText": None, "skipped": False}
             return {"selected": [], "freeText": answer, "skipped": False}
         return ask

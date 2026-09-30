@@ -2,7 +2,7 @@
   <img src="pycat/assets/pycat.svg" width="96" height="96" alt="PyCat 猫形标志" />
   <h1>PyCat</h1>
   <p><strong>Python 原生 Agent 工作台 · 一个内核，五种入口，文件中的透明过程</strong></p>
-  <p>用桌面完成工作，用 Python 接入自动化，让过程与成果留在自己的项目里。</p>
+  <p>让 AI 做事，让每一步可见。用 Python 做减法，用文件留过程，用工具连能力。</p>
   <p>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&amp;logoColor=white" alt="Python 3.11+" /></a>
     <a href="https://www.riverbankcomputing.com/software/pyqt/"><img src="https://img.shields.io/badge/Desktop-PyQt6-41CD52?logo=qt&amp;logoColor=white" alt="PyQt6 原生桌面" /></a>
@@ -18,10 +18,19 @@
 
 PyCat 面向开发者、自动化实践者和处理真实项目的进阶用户。它把 **Python SDK、GUI、TUI、WebUI、CLI** 连接到同一套 Agent 执行能力：从本地或 SSH 项目出发，分析代码、运行命令、整理资料、生成图片，并检查每一步发生了什么。
 
-- **Python 核心，直接调用**：应用核心、SDK 与原生桌面以 Python 实现，便于嵌入脚本、调试和修改。
-- **多种入口，共享能力**：桌面操作、终端任务、浏览器访问和消息机器人复用执行、工具与权限规则。
-- **已有账号，直接登录**：支持 ChatGPT / Codex 与 WorkBuddy / CodeBuddy 账号接入，也可使用 API Key 或本地模型服务，在同一工作台选择适合任务的模型。
-- **文件保存，可检查可接续**：会话、输入快照、工具原文、运行记录和交付文件保存在本地，便于检索、备份、追溯和继续加工。
+## 三个设计选择
+
+**代码以 Python 求简，过程以文件留存，功能以工具组合。** 这三条原则决定 PyCat 怎样连接界面、模型与真实工作。
+
+| 设计哲学 | 在 PyCat 中怎样落实 | 带来的价值 |
+| --- | --- | --- |
+| **一切代码都 Python 极简** | 核心、SDK 与原生桌面采用 Python；五种入口复用执行能力；界面与本地 OCR 等依赖按需安装 | 直接嵌入程序，在熟悉的语言中阅读、调试和修改，减少重复实现与跨语言维护 |
+| **一切过程都是文件** | 会话与输入、工具调用原文、Artifact 成果和运行事件落盘；详细诊断按需保存脱敏请求与响应 | 用编辑器检查，用脚本检索，用自己的工具备份和继续加工 |
+| **一切功能都是工具** | 文件、Shell、MCP 与模型能力进入统一调用流程；Capabilities 将指定模型与提示词组合成可调用工具 | 同一能力跨入口复用，新功能可以加入已有任务，而不必再建一套执行系统 |
+
+例如，一次“读取资料并生成配图”的任务，可以组合文件工具、摘要能力与图像能力，最终把结果交付为项目中的普通文件。**Python 负责连接，工具负责执行，文件留下依据。**
+
+支持 **ChatGPT / Codex 与 WorkBuddy / CodeBuddy 账号登录**，也能连接 API Key 或本地模型服务。具体协议、依赖、数据范围与运行边界见下方介绍及[开发者使用指南](docs/product/developers_zh.md)。
 
 ![PyCat：将项目文件、任务与成果放在一起的工作伙伴](media/pycat-hero.png)
 
@@ -29,7 +38,7 @@ PyCat 面向开发者、自动化实践者和处理真实项目的进阶用户�
 
 ## 快速开始
 
-**0.2.2** 完善多会话并行、上下文压缩与记忆保存，统一工具和运行状态展示，并加入桌面英文预览。查看[版本说明与下载](https://github.com/nanhuayu/pycat/releases/tag/v0.2.2)。
+**0.2.3** 统一桌面、终端与网页的中英文设置，增加终端猫形图标，简化技能与 MCP 设置，并改进文件读取、图像查看、研究方法和上下文维护。已公开版本见[版本说明与下载](https://github.com/nanhuayu/pycat/releases)。
 
 **直接使用桌面版**
 

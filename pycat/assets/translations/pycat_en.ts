@@ -1856,6 +1856,99 @@ Current: {model_ref}</translation>
         </message>
     </context>
     <context>
+        <name>ConversationCommandPresenter</name>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="72" />
+            <source>导出会话</source>
+            <translation>Export conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="88" />
+            <source>导出失败：{error}</source>
+            <translation>Export failed: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="88" />
+            <source>已导出到 {result}</source>
+            <translation>Exported to {result}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="169" />
+            <source>未命名会话</source>
+            <translation>Untitled conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="171" />
+            <source>继续会话</source>
+            <translation>Continue conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="171" />
+            <source>会话</source>
+            <translation>Conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="183" />
+            <source>已复制最近的回复</source>
+            <translation>Copied the latest reply</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="190" />
+            <source>无法保存会话。</source>
+            <translation>Could not save the conversation.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="196" />
+            <source>重命名</source>
+            <translation>Rename</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="196" />
+            <source>会话名称</source>
+            <translation>Conversation name</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="204" />
+            <source>选择模型</source>
+            <translation>Choose model</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="204" />
+            <source>选择模式</source>
+            <translation>Choose mode</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="204" />
+            <source>选择</source>
+            <translation>Choose</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="218" />
+            <source>打开设置中的 {name} 页面以继续。</source>
+            <translation>Open the {name} page in Settings to continue.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="224" />
+            <source>Shell 命令为空。</source>
+            <translation>The shell command is empty.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="232" />
+            <source>无法创建会话来执行 Shell 命令。</source>
+            <translation>Could not create a conversation to run the shell command.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="241" />
+            <source>无法保存会话，Shell 未执行。</source>
+            <translation>Could not save the conversation. The shell command was not run.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_command_presenter.py" line="271" />
+            <source>Shell 执行失败：{error}</source>
+            <translation>Shell command failed: {error}</translation>
+        </message>
+    </context>
+    <context>
         <name>ConversationPresenter</name>
         <message>
             <location filename="../../gui/presenters/conversation_presenter.py" line="1283" />
@@ -1887,6 +1980,167 @@ Current: {model_ref}</translation>
             <location filename="../../gui/presenters/conversation_presenter.py" line="1295" />
             <source>压缩未产生有效节省，历史保持不变</source>
             <translation>Compaction did not save space; history is unchanged</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1298" />
+            <source>压缩模型调用失败，历史保持不变：{error}</source>
+            <translation>Compaction model call failed; history is unchanged: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="361" />
+            <source>会话正在运行或维护，请结束后再修改。</source>
+            <translation>The conversation is running or undergoing maintenance. Wait for it to finish before making changes.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="439" />
+            <source>侧栏布局未保存，请重试。</source>
+            <translation>The sidebar layout was not saved. Please try again.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="457" />
+            <source>导入成功</source>
+            <translation>Import complete</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="457" />
+            <source>已导入会话: {title}</source>
+            <translation>Imported conversation: {title}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="459" />
+            <source>导入失败</source>
+            <translation>Import failed</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="459" />
+            <source>无法导入会话，请检查 JSON 格式</source>
+            <translation>Could not import the conversation. Check the JSON format.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1146" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="476" />
+            <source>该会话正在处理，请稍候</source>
+            <translation>This conversation is busy. Please wait.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="484" />
+            <source>请等待当前任务结束后再删除会话</source>
+            <translation>Wait for the current task to finish before deleting the conversation.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="519" />
+            <source>删除会话失败：{error}</source>
+            <translation>Could not delete the conversation: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="531" />
+            <source>删除会话失败：会话不存在或无法删除</source>
+            <translation>Could not delete the conversation. It no longer exists or cannot be deleted.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="560" />
+            <source>会话已删除</source>
+            <translation>Conversation deleted</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="733" />
+            <source>该会话正在处理，请稍候再切换工作区</source>
+            <translation>This conversation is busy. Wait before switching workspaces.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="742" />
+            <source>请等待当前任务结束后再切换工作区</source>
+            <translation>Wait for the current task to finish before switching workspaces.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="801" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="787" />
+            <source>切换工作区失败：{error}</source>
+            <translation>Could not switch workspaces: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="803" />
+            <source>无法迁移会话文件</source>
+            <translation>Could not migrate conversation files</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="816" />
+            <source>切换工作区失败：迁移后无法读取会话</source>
+            <translation>Could not switch workspaces: the conversation could not be read after migration.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="841" />
+            <source>工作区已切换</source>
+            <translation>Workspace switched</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="914" />
+            <source>停止 Shell 失败：{error}</source>
+            <translation>Could not stop the shell: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1065" />
+            <source>确认自动执行工具</source>
+            <translation>Confirm automatic tool execution</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1066" />
+            <source>自动执行会让本会话中当前可见的工具不再逐次确认。Shell 和 Python 获准执行后可访问当前系统用户可访问的文件、网络和进程。
+
+仅对完全可信的任务启用。是否继续？</source>
+            <translation>Automatic execution lets tools currently available in this conversation run without confirmation each time. Once approved, Shell and Python can access files, networks and processes available to the current system user.
+
+Enable this only for tasks you fully trust. Continue?</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1081" />
+            <source>确认所有本地路径访问</source>
+            <translation>Confirm access to all local paths</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1082" />
+            <source>该设置允许 PyCat 内置文件工具访问工作区之外的本地路径。它不会改变工具是否需要确认，也不会为 Shell 和 Python 提供操作系统级沙箱。
+
+仅对完全可信的任务启用。是否继续？</source>
+            <translation>This setting lets PyCat built-in file tools access local paths outside the workspace. It does not change tool confirmation requirements or provide an operating system sandbox for Shell and Python.
+
+Enable this only for tasks you fully trust. Continue?</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1154" />
+            <source>请等待当前任务结束后再压缩上下文</source>
+            <translation>Wait for the current task to finish before compacting context.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1163" />
+            <source>未找到对应的 Provider，无法压缩上下文</source>
+            <translation>Could not compact context: the model provider was not found.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1208" />
+            <source>压缩失败：{error}</source>
+            <translation>Compaction failed: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1230" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1221" />
+            <source>会话已被删除，本次压缩结果已丢弃</source>
+            <translation>The conversation was deleted. This compaction result has been discarded.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1238" />
+            <source>会话已发生变化，本次压缩结果未写回</source>
+            <translation>The conversation changed. This compaction result was not applied.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1334" />
+            <source>导出失败</source>
+            <translation>Export failed</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1334" />
+            <source>未找到要导出的会话</source>
+            <translation>The conversation to export was not found.</translation>
         </message>
     </context>
     <context>
@@ -2710,6 +2964,29 @@ Duration: {duration}</translation>
         </message>
     </context>
     <context>
+        <name>DelegationPresenter</name>
+        <message>
+            <location filename="../../gui/presenters/delegation_presenter.py" line="96" />
+            <source>新建独立任务</source>
+            <translation>New independent task</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/delegation_presenter.py" line="96" />
+            <source>任务目标、必要资料与交付要求</source>
+            <translation>Task goal, required materials and deliverables</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/delegation_presenter.py" line="105" />
+            <source>无法保存来源会话。</source>
+            <translation>Could not save the source conversation.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/delegation_presenter.py" line="154" />
+            <source>独立任务状态已更新</source>
+            <translation>Independent task status updated</translation>
+        </message>
+    </context>
+    <context>
         <name>DeliveryGroup</name>
         <message>
             <location filename="../../gui/widgets/delivery_group.py" line="21" />
@@ -2735,361 +3012,14 @@ Duration: {duration}</translation>
     <context>
         <name>DialogButtons</name>
         <message>
-            <location filename="../../gui/settings/components.py" line="257" />
+            <location filename="../../gui/settings/components.py" line="286" />
             <source>保存</source>
             <translation>Save</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="260" />
+            <location filename="../../gui/settings/components.py" line="289" />
             <source>取消</source>
             <translation>Cancel</translation>
-        </message>
-    </context>
-    <context>
-        <name>DiscoveryPanel</name>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="62" />
-            <source>发现 MCP</source>
-            <translation>Discover MCP</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="62" />
-            <source>发现技能</source>
-            <translation>Discover skills</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="62" />
-            <source>搜索公开目录，核对来源并按需安装。</source>
-            <translation>Search public catalogs, review sources and install what you need.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="67" />
-            <source>搜索 MCP</source>
-            <translation>Search MCP</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="67" />
-            <source>搜索技能</source>
-            <translation>Search skills</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="68" />
-            <source>市场搜索词</source>
-            <translation>Market search</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="73" />
-            <source>搜索市场</source>
-            <translation>Search market</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="75" />
-            <source>推荐</source>
-            <translation>Recommended</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="84" />
-            <source>下一页</source>
-            <translation>Next page</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="88" />
-            <source>从 GitHub 添加</source>
-            <translation>Add from GitHub</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="96" />
-            <source>扩展详情</source>
-            <translation>Extension details</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="249" />
-            <location filename="../../gui/resources/discovery.py" line="98" />
-            <source>展开说明</source>
-            <translation>Show description</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="102" />
-            <source>MCP 接入方式</source>
-            <translation>MCP connection method</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="287" />
-            <location filename="../../gui/resources/discovery.py" line="112" />
-            <source>检查更新</source>
-            <translation>Check for updates</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="292" />
-            <location filename="../../gui/resources/discovery.py" line="114" />
-            <source>安装</source>
-            <translation>Install</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="122" />
-            <source>搜索市场或检查版本时才会联网。</source>
-            <translation>Network access is used only when searching the market or checking versions.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="127" />
-            <source>取消</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="147" />
-            <source>MCP 草稿尚未完成：</source>
-            <translation>MCP draft is incomplete: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="220" />
-            <source>找到 {value} 项。目录登记不代表 PyCat 已验证该程序；请核对来源与依赖。</source>
-            <translation>Found {value} items. Catalog entries are not verified by PyCat. Review their sources and dependencies.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="222" />
-            <source>正在搜索公开市场…</source>
-            <translation>Searching public catalogs…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="235" />
-            <source>随 PyCat 更新。可在已安装页停用，或复制后编辑。</source>
-            <translation>Updated with PyCat. Disable it on the Installed tab, or copy it to edit.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="236" />
-            <source>由 PyCat 管理。检查更新后选择安装版本。</source>
-            <translation>Managed by PyCat. Check for updates, then choose a version to install.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="237" />
-            <source>外部管理，请通过原安装方式更新。</source>
-            <translation>Externally managed. Update it using its original installation method.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="238" />
-            <source>打开目录，选择需要的资源。</source>
-            <translation>Open the catalog and choose a resource.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="239" />
-            <source>添加后先填写凭据并测试，再启用。</source>
-            <translation>Add it, enter credentials and test the connection before enabling it.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="239" />
-            <source>准备安装时核对仓库与固定提交。</source>
-            <translation>Review the repository and pinned commit before installing.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="249" />
-            <source>收起说明</source>
-            <translation>Hide description</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="254" />
-            <source>来源：</source>
-            <translation>Source: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="256" />
-            <source>状态：</source>
-            <translation>Status: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="256" />
-            <source>当前版本：</source>
-            <translation>Current version: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="256" />
-            <source>未记录</source>
-            <translation>Not recorded</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="258" />
-            <source>本机浏览器：</source>
-            <translation>Local browser: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="258" />
-            <source>未找到；需先安装 Chrome / Edge / Chromium，或在 MCP 环境变量中指定程序。</source>
-            <translation>Not found. Install Chrome, Edge or Chromium, or specify its executable in the MCP environment variables.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="260" />
-            <source>此平台没有匹配的原生发布文件。</source>
-            <translation>No native release is available for this platform.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="262" />
-            <source>可安装版本：</source>
-            <translation>Available version: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="266" />
-            <source>市场版本：</source>
-            <translation>Market version: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="275" />
-            <source>该条目需要自定义安装步骤，请查看来源后在已安装页手动添加配置。</source>
-            <translation>This entry requires custom installation. Review its source, then add the configuration on the Installed tab.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="456" />
-            <location filename="../../gui/resources/discovery.py" line="287" />
-            <source>准备安装</source>
-            <translation>Prepare installation</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="291" />
-            <source>当前平台没有可用的发布文件</source>
-            <translation>No release is available for this platform</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="292" />
-            <source>已添加</source>
-            <translation>Added</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="292" />
-            <source>添加配置</source>
-            <translation>Add configuration</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="292" />
-            <source>更新</source>
-            <translation>Update</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="306" />
-            <source>技能来源已不存在，请刷新列表。</source>
-            <translation>The skill source no longer exists. Refresh the list.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="308" />
-            <source>无法打开技能目录。</source>
-            <translation>Could not open the skill directory.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="310" />
-            <source>无法定位技能来源：{exc}</source>
-            <translation>Could not locate the skill source: {exc}</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="324" />
-            <source>操作已取消。</source>
-            <translation>Operation cancelled.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="366" />
-            <source>已请求取消。正在执行的下载将停止，原有配置保持不变。</source>
-            <translation>Cancellation requested. Downloads will stop and existing configuration will be kept.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="385" />
-            <source>已是最新版本。</source>
-            <translation>Already up to date.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="385" />
-            <source>版本已确认，点击安装或更新以继续。</source>
-            <translation>Version confirmed. Select Install or Update to continue.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="391" />
-            <source>正在检查官方来源…</source>
-            <translation>Checking the official source…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="399" />
-            <source>已存在同名 MCP，请在已安装页查看或修改名称。</source>
-            <translation>An MCP with this name already exists. Review it or change its name on the Installed tab.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="405" />
-            <source>已加入停用草稿；在已安装页填写凭据、测试连接并启用，保存设置后生效。</source>
-            <translation>Added as a disabled draft. Enter credentials, test and enable it on the Installed tab, then save settings to apply.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="415" />
-            <source>已存在名为 browser 的 MCP，请先重命名该服务。</source>
-            <translation>An MCP named browser already exists. Rename that service first.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="422" />
-            <source>驱动已验证，MCP 配置已加入草稿。保存设置后生效。</source>
-            <translation>Driver verified and MCP configuration added to the draft. Save settings to apply.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="424" />
-            <source>正在下载、校验并测试浏览器 MCP…</source>
-            <translation>Downloading, verifying and testing the browser MCP…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="433" />
-            <source>技能已安装并生效，来源和提交已记录。</source>
-            <translation>Skill installed and active. Its source and commit have been recorded.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="436" />
-            <source>正在下载并验证技能…</source>
-            <translation>Downloading and verifying the skill…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="445" />
-            <source>从 GitHub 添加技能</source>
-            <translation>Add skill from GitHub</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="451" />
-            <source>用户技能</source>
-            <translation>User skills</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="453" />
-            <source>当前项目</source>
-            <translation>Current project</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="454" />
-            <source>仓库</source>
-            <translation>Repository</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="454" />
-            <source>技能目录</source>
-            <translation>Skill directory</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="454" />
-            <source>分支 / 标签 / 提交</source>
-            <translation>Branch / tag / commit</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="454" />
-            <source>安装到</source>
-            <translation>Install to</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="472" />
-            <source>已固定提交，请核对来源后点击安装。</source>
-            <translation>Commit pinned. Review the source, then select Install.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="474" />
-            <source>正在检查技能来源…</source>
-            <translation>Checking skill source…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="107" />
-            <source>打开来源网站</source>
-            <translation>Open source website</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="110" />
-            <source>打开目录</source>
-            <translation>Open folder</translation>
         </message>
     </context>
     <context>
@@ -3145,6 +3075,7 @@ Duration: {duration}</translation>
             <translation>Find the original GitHub repository and skill directory, then install a pinned commit and check for updates here.</translation>
         </message>
         <message>
+            <location filename="../../gui/view_models/extension_labels.py" line="79" />
             <location filename="../../gui/view_models/extension_labels.py" line="30" />
             <source>未安装</source>
             <translation>Not installed</translation>
@@ -3175,6 +3106,7 @@ Duration: {duration}</translation>
             <translation>Enabled</translation>
         </message>
         <message>
+            <location filename="../../gui/view_models/extension_labels.py" line="77" />
             <location filename="../../gui/view_models/extension_labels.py" line="36" />
             <source>已停用</source>
             <translation>Disabled</translation>
@@ -3190,6 +3122,7 @@ Duration: {duration}</translation>
             <translation>Pending installation</translation>
         </message>
         <message>
+            <location filename="../../gui/view_models/extension_labels.py" line="78" />
             <location filename="../../gui/view_models/extension_labels.py" line="39" />
             <source>已安装</source>
             <translation>Installed</translation>
@@ -3223,6 +3156,26 @@ Duration: {duration}</translation>
             <location filename="../../gui/view_models/extension_labels.py" line="48" />
             <source>已配置的 MCP。请通过原安装方式更新程序；远程服务由服务端更新。工具列表可在 MCP 页重新探测。</source>
             <translation>Configured MCP. Update it using its original installation method; remote services are updated by their hosts. Refresh the tool list in MCP settings.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/extension_labels.py" line="72" />
+            <source>目录</source>
+            <translation>Directory</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/extension_labels.py" line="74" />
+            <source>待保存</source>
+            <translation>Unsaved</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/extension_labels.py" line="78" />
+            <source>已添加</source>
+            <translation>Added</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/extension_labels.py" line="79" />
+            <source>未添加</source>
+            <translation>Not added</translation>
         </message>
     </context>
     <context>
@@ -3582,6 +3535,66 @@ Duration: {duration}</translation>
         </message>
     </context>
     <context>
+        <name>InteractionPresenter</name>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="82" />
+            <source>工具执行确认</source>
+            <translation>Confirm tool execution</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="84" />
+            <source>工具与文件访问确认</source>
+            <translation>Confirm tool and file access</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="84" />
+            <source>文件访问确认</source>
+            <translation>Confirm file access</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="87" />
+            <source>是否允许执行 {tool_name}？</source>
+            <translation>Allow {tool_name} to run?</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="89" />
+            <source>会话：{title}</source>
+            <translation>Conversation: {title}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="90" />
+            <source>新会话</source>
+            <translation>New conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="93" />
+            <source>
+授权仅在当前任务内有效，不会写入会话或全局设置。</source>
+            <translation>
+Permission applies only to the current task and is not saved in conversation or global settings.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="98" />
+            <source>允许本次</source>
+            <translation>Allow once</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="100" />
+            <source>禁止</source>
+            <translation>Deny</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="104" />
+            <source>本次任务读取此文件夹</source>
+            <translation>Read this folder for this task</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/interaction_presenter.py" line="105" />
+            <source>本会话自动执行</source>
+            <translation>Run automatically in this conversation</translation>
+        </message>
+    </context>
+    <context>
         <name>KnowledgePresenter</name>
         <message>
             <location filename="../../gui/presenters/knowledge_presenter.py" line="66" />
@@ -3846,324 +3859,302 @@ Duration: {duration}</translation>
     <context>
         <name>McpEditor</name>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="51" />
+            <location filename="../../gui/resources/mcp_editor.py" line="63" />
             <source>本地进程 (stdio)</source>
             <translation>Local process (stdio)</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="52" />
+            <location filename="../../gui/resources/mcp_editor.py" line="64" />
             <source>流式 HTTP (streamable_http)</source>
             <translation>Streamable HTTP (streamable_http)</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="53" />
+            <location filename="../../gui/resources/mcp_editor.py" line="65" />
             <source>SSE (遗留)</source>
             <translation>SSE (legacy)</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="64" />
+            <location filename="../../gui/resources/mcp_editor.py" line="76" />
             <source>参数 JSON 无效：{exc}</source>
             <translation>Invalid arguments JSON: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="66" />
+            <location filename="../../gui/resources/mcp_editor.py" line="78" />
             <source>参数 JSON 必须是字符串数组</source>
             <translation>Arguments JSON must be an array of strings</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="71" />
+            <location filename="../../gui/resources/mcp_editor.py" line="83" />
             <source>参数格式无效：{exc}</source>
             <translation>Invalid argument format: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="87" />
+            <location filename="../../gui/resources/mcp_editor.py" line="99" />
             <source>{field_label}必须是合法的 JSON 对象，例如 {{"KEY": "VALUE"}}：{exc}</source>
             <translation>{field_label} must be a valid JSON object, such as {{"KEY": "VALUE"}}: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="89" />
+            <location filename="../../gui/resources/mcp_editor.py" line="101" />
             <source>{field_label}必须是 JSON 对象，例如 {{"KEY": "VALUE"}}</source>
             <translation>{field_label} must be a JSON object, such as {{"KEY": "VALUE"}}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="92" />
+            <location filename="../../gui/resources/mcp_editor.py" line="104" />
             <source>{field_label}的键和值都必须是字符串</source>
             <translation>Keys and values in {field_label} must be strings</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="107" />
+            <location filename="../../gui/resources/mcp_editor.py" line="119" />
             <source>添加 MCP 服务</source>
             <translation>Add MCP server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="127" />
+            <location filename="../../gui/resources/mcp_editor.py" line="134" />
             <source>服务名称，例如 filesystem</source>
             <translation>Server name, e.g. filesystem</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="135" />
+            <location filename="../../gui/resources/mcp_editor.py" line="142" />
             <source>启动命令，例如 npx 或 python</source>
             <translation>Startup command, e.g. npx or python</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="137" />
+            <location filename="../../gui/resources/mcp_editor.py" line="144" />
             <source>参数，例如 ["-y", "pkg"]</source>
             <translation>Arguments, e.g. ["-y", "pkg"]</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="326" />
-            <location filename="../../gui/resources/mcp_editor.py" line="141" />
+            <location filename="../../gui/resources/mcp_editor.py" line="368" />
+            <location filename="../../gui/resources/mcp_editor.py" line="148" />
             <source>名称</source>
             <translation>Name</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="327" />
-            <location filename="../../gui/resources/mcp_editor.py" line="142" />
+            <location filename="../../gui/resources/mcp_editor.py" line="369" />
+            <location filename="../../gui/resources/mcp_editor.py" line="149" />
             <source>传输方式</source>
             <translation>Transport</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="320" />
-            <location filename="../../gui/resources/mcp_editor.py" line="143" />
+            <location filename="../../gui/resources/mcp_editor.py" line="362" />
+            <location filename="../../gui/resources/mcp_editor.py" line="150" />
             <source>命令</source>
             <translation>Command</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="321" />
-            <location filename="../../gui/resources/mcp_editor.py" line="145" />
+            <location filename="../../gui/resources/mcp_editor.py" line="363" />
+            <location filename="../../gui/resources/mcp_editor.py" line="152" />
             <source>参数</source>
             <translation>Arguments</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="324" />
-            <location filename="../../gui/resources/mcp_editor.py" line="147" />
+            <location filename="../../gui/resources/mcp_editor.py" line="366" />
+            <location filename="../../gui/resources/mcp_editor.py" line="154" />
             <source>服务 URL</source>
             <translation>Server URL</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="249" />
-            <location filename="../../gui/resources/mcp_editor.py" line="156" />
+            <location filename="../../gui/resources/mcp_editor.py" line="260" />
+            <location filename="../../gui/resources/mcp_editor.py" line="163" />
             <source>添加</source>
             <translation>Add</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="693" />
-            <location filename="../../gui/resources/mcp_editor.py" line="602" />
-            <location filename="../../gui/resources/mcp_editor.py" line="208" />
+            <location filename="../../gui/resources/mcp_editor.py" line="882" />
+            <location filename="../../gui/resources/mcp_editor.py" line="791" />
+            <location filename="../../gui/resources/mcp_editor.py" line="215" />
             <source>MCP 服务名称重复：{name}</source>
             <translation>Duplicate MCP server name: {name}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="242" />
-            <location filename="../../gui/resources/mcp_editor.py" line="241" />
-            <source>搜索已安装 MCP</source>
-            <translation>Search installed MCP servers</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="247" />
+            <location filename="../../gui/resources/mcp_editor.py" line="258" />
             <source>手动配置</source>
             <translation>Configure manually</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="613" />
-            <location filename="../../gui/resources/mcp_editor.py" line="567" />
-            <location filename="../../gui/resources/mcp_editor.py" line="248" />
+            <location filename="../../gui/resources/mcp_editor.py" line="802" />
+            <location filename="../../gui/resources/mcp_editor.py" line="756" />
+            <location filename="../../gui/resources/mcp_editor.py" line="259" />
             <source>导入 mcp.json</source>
             <translation>Import mcp.json</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="639" />
-            <location filename="../../gui/resources/mcp_editor.py" line="627" />
-            <location filename="../../gui/resources/mcp_editor.py" line="623" />
-            <location filename="../../gui/resources/mcp_editor.py" line="254" />
+            <location filename="../../gui/resources/mcp_editor.py" line="828" />
+            <location filename="../../gui/resources/mcp_editor.py" line="816" />
+            <location filename="../../gui/resources/mcp_editor.py" line="812" />
+            <location filename="../../gui/resources/mcp_editor.py" line="265" />
             <source>导出 mcp.json</source>
             <translation>Export mcp.json</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="255" />
+            <location filename="../../gui/resources/mcp_editor.py" line="266" />
             <source>重新读取</source>
             <translation>Reload</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="256" />
+            <location filename="../../gui/resources/mcp_editor.py" line="267" />
             <source>更多 MCP 操作</source>
             <translation>More MCP actions</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="731" />
-            <location filename="../../gui/resources/mcp_editor.py" line="721" />
-            <location filename="../../gui/resources/mcp_editor.py" line="261" />
+            <location filename="../../gui/resources/mcp_editor.py" line="920" />
+            <location filename="../../gui/resources/mcp_editor.py" line="297" />
             <source>停用</source>
             <translation>Disable</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="663" />
-            <location filename="../../gui/resources/mcp_editor.py" line="264" />
+            <location filename="../../gui/resources/mcp_editor.py" line="852" />
+            <location filename="../../gui/resources/mcp_editor.py" line="301" />
             <source>删除 MCP 服务</source>
             <translation>Delete MCP server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="538" />
-            <location filename="../../gui/resources/mcp_editor.py" line="502" />
-            <location filename="../../gui/resources/mcp_editor.py" line="270" />
+            <location filename="../../gui/resources/mcp_editor.py" line="730" />
+            <location filename="../../gui/resources/mcp_editor.py" line="693" />
+            <location filename="../../gui/resources/mcp_editor.py" line="307" />
             <source>测试</source>
             <translation>Test</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="271" />
+            <location filename="../../gui/resources/mcp_editor.py" line="308" />
             <source>测试 MCP 连接</source>
             <translation>Test MCP connection</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="488" />
-            <location filename="../../gui/resources/mcp_editor.py" line="272" />
+            <location filename="../../gui/resources/mcp_editor.py" line="679" />
+            <location filename="../../gui/resources/mcp_editor.py" line="309" />
             <source>测试中…</source>
             <translation>Testing…</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="273" />
+            <location filename="../../gui/resources/mcp_editor.py" line="310" />
             <source>用当前草稿测试连接和读取工具目录</source>
             <translation>Test the current draft connection and fetch its tools</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="307" />
+            <location filename="../../gui/resources/mcp_editor.py" line="349" />
             <source>JSON 数组或空格分隔参数，例如 ["-y", "pkg"]</source>
             <translation>JSON array or space-separated arguments, e.g. ["-y", "pkg"]</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="309" />
+            <location filename="../../gui/resources/mcp_editor.py" line="351" />
             <source>工作目录（可选，留空继承当前目录）</source>
             <translation>Optional; leave blank to use the current directory</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="312" />
+            <location filename="../../gui/resources/mcp_editor.py" line="354" />
             <source>JSON 对象，默认 {}，例如 {"API_KEY": "value"}</source>
             <translation>JSON object, default {}, e.g. {"API_KEY": "value"}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="318" />
+            <location filename="../../gui/resources/mcp_editor.py" line="360" />
             <source>JSON 对象，默认 {}，例如 {"Authorization": "Bearer xxx"}</source>
             <translation>JSON object, default {}, e.g. {"Authorization": "Bearer xxx"}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="322" />
+            <location filename="../../gui/resources/mcp_editor.py" line="364" />
             <source>工作目录</source>
             <translation>Working directory</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="450" />
-            <location filename="../../gui/resources/mcp_editor.py" line="323" />
+            <location filename="../../gui/resources/mcp_editor.py" line="641" />
+            <location filename="../../gui/resources/mcp_editor.py" line="365" />
             <source>环境变量</source>
             <translation>Environment variables</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="451" />
-            <location filename="../../gui/resources/mcp_editor.py" line="325" />
+            <location filename="../../gui/resources/mcp_editor.py" line="642" />
+            <location filename="../../gui/resources/mcp_editor.py" line="367" />
             <source>请求头</source>
             <translation>Headers</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="354" />
+            <location filename="../../gui/resources/mcp_editor.py" line="443" />
             <source>未命名服务</source>
             <translation>Unnamed server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="356" />
-            <source>{transport} · {value}</source>
-            <translation>{transport} · {value}</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="356" />
-            <source>已启用</source>
-            <translation>Enabled</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="356" />
-            <source>已停用</source>
-            <translation>Disabled</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="653" />
-            <location filename="../../gui/resources/mcp_editor.py" line="619" />
-            <location filename="../../gui/resources/mcp_editor.py" line="584" />
-            <location filename="../../gui/resources/mcp_editor.py" line="556" />
-            <location filename="../../gui/resources/mcp_editor.py" line="548" />
+            <location filename="../../gui/resources/mcp_editor.py" line="842" />
+            <location filename="../../gui/resources/mcp_editor.py" line="808" />
+            <location filename="../../gui/resources/mcp_editor.py" line="773" />
+            <location filename="../../gui/resources/mcp_editor.py" line="748" />
+            <location filename="../../gui/resources/mcp_editor.py" line="740" />
+            <location filename="../../gui/resources/mcp_editor.py" line="672" />
             <location filename="../../gui/resources/mcp_editor.py" line="481" />
-            <location filename="../../gui/resources/mcp_editor.py" line="390" />
             <source>MCP 配置无效</source>
             <translation>Invalid MCP configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="519" />
-            <location filename="../../gui/resources/mcp_editor.py" line="473" />
+            <location filename="../../gui/resources/mcp_editor.py" line="711" />
+            <location filename="../../gui/resources/mcp_editor.py" line="664" />
             <source>测试连接</source>
             <translation>Test connection</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="473" />
+            <location filename="../../gui/resources/mcp_editor.py" line="664" />
             <source>当前环境未提供 MCP 运行时，无法测试连接。</source>
             <translation>The MCP runtime is unavailable in this environment. Connection testing is not supported.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="512" />
+            <location filename="../../gui/resources/mcp_editor.py" line="703" />
             <source>连接测试未返回结果</source>
             <translation>The connection test returned no result</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="520" />
+            <location filename="../../gui/resources/mcp_editor.py" line="712" />
             <source>连接成功，发现 {value} 个工具。</source>
             <translation>Connected. Tools discovered: {value}.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="529" />
-            <location filename="../../gui/resources/mcp_editor.py" line="523" />
+            <location filename="../../gui/resources/mcp_editor.py" line="721" />
+            <location filename="../../gui/resources/mcp_editor.py" line="715" />
             <source>未知错误</source>
             <translation>Unknown error</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="528" />
+            <location filename="../../gui/resources/mcp_editor.py" line="720" />
             <source>MCP 连接失败</source>
             <translation>MCP connection failed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="627" />
-            <location filename="../../gui/resources/mcp_editor.py" line="567" />
+            <location filename="../../gui/resources/mcp_editor.py" line="816" />
+            <location filename="../../gui/resources/mcp_editor.py" line="756" />
             <source>MCP 配置 (*.json);;所有文件 (*)</source>
             <translation>MCP configuration (*.json);;All files (*)</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="579" />
-            <location filename="../../gui/resources/mcp_editor.py" line="575" />
+            <location filename="../../gui/resources/mcp_editor.py" line="768" />
+            <location filename="../../gui/resources/mcp_editor.py" line="764" />
             <source>导入失败</source>
             <translation>Import failed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="575" />
+            <location filename="../../gui/resources/mcp_editor.py" line="764" />
             <source>无法读取文件：{exc}</source>
             <translation>Could not read the file: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="579" />
+            <location filename="../../gui/resources/mcp_editor.py" line="768" />
             <source>文件必须是 {"mcpServers": {...}} 格式。</source>
             <translation>The file must use the {"mcpServers": {...}} format.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="591" />
+            <location filename="../../gui/resources/mcp_editor.py" line="780" />
             <source>服务名称必须是字符串</source>
             <translation>Server names must be strings</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="594" />
+            <location filename="../../gui/resources/mcp_editor.py" line="783" />
             <source>{name}：条目不是对象</source>
             <translation>{name}: the entry is not an object</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="610" />
+            <location filename="../../gui/resources/mcp_editor.py" line="799" />
             <source>导入 {value} 个服务。</source>
             <translation>Servers imported: {value}.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="612" />
+            <location filename="../../gui/resources/mcp_editor.py" line="801" />
             <source>
 以下条目被跳过：
 </source>
@@ -4172,17 +4163,17 @@ Skipped entries:
 </translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="623" />
+            <location filename="../../gui/resources/mcp_editor.py" line="812" />
             <source>没有已启用的 MCP 服务可导出。</source>
             <translation>No enabled MCP servers to export.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="635" />
+            <location filename="../../gui/resources/mcp_editor.py" line="824" />
             <source>导出失败</source>
             <translation>Export failed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="640" />
+            <location filename="../../gui/resources/mcp_editor.py" line="829" />
             <source>已导出 {value} 个服务到：
 {path}
 
@@ -4193,66 +4184,102 @@ Skipped entries:
 The export includes credentials from request headers. Keep this file secure.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="663" />
+            <location filename="../../gui/resources/mcp_editor.py" line="852" />
             <source>确定删除“{name}”吗？</source>
             <translation>Delete “{name}”?</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="675" />
+            <location filename="../../gui/resources/mcp_editor.py" line="864" />
             <source>放弃 MCP 更改</source>
             <translation>Discard MCP changes</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="676" />
+            <location filename="../../gui/resources/mcp_editor.py" line="865" />
             <source>重新读取会放弃尚未保存的 MCP 更改，是否继续？</source>
             <translation>Reloading will discard unsaved MCP changes. Continue?</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="720" />
+            <location filename="../../gui/resources/mcp_editor.py" line="910" />
             <source>停用 MCP 服务</source>
             <translation>Disable MCP server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="720" />
+            <location filename="../../gui/resources/mcp_editor.py" line="910" />
             <source>启用 MCP 服务</source>
             <translation>Enable MCP server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="731" />
-            <location filename="../../gui/resources/mcp_editor.py" line="721" />
+            <location filename="../../gui/resources/mcp_editor.py" line="920" />
             <source>启用</source>
             <translation>Enable</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="731" />
+            <location filename="../../gui/resources/mcp_editor.py" line="920" />
             <source>状态：{value}</source>
             <translation>Status: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="732" />
+            <location filename="../../gui/resources/mcp_editor.py" line="921" />
             <source>传输：{transport}</source>
             <translation>Transport: {transport}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="737" />
+            <location filename="../../gui/resources/mcp_editor.py" line="926" />
             <source>请求头：{value}</source>
             <translation>Headers: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="739" />
+            <location filename="../../gui/resources/mcp_editor.py" line="928" />
             <source>命令：{value}</source>
             <translation>Command: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="740" />
+            <location filename="../../gui/resources/mcp_editor.py" line="929" />
             <source>参数：{value}</source>
             <translation>Arguments: {value}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="254" />
+            <location filename="../../gui/resources/mcp_editor.py" line="253" />
+            <source>搜索 MCP</source>
+            <translation>Search MCP</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="280" />
+            <source>未找到匹配 MCP</source>
+            <translation>No matching MCP servers</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="280" />
+            <source>按回车搜索市场，或通过“添加”配置服务。</source>
+            <translation>Press Enter to search the market, or use Add to configure a server.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="585" />
+            <location filename="../../gui/resources/mcp_editor.py" line="292" />
+            <source>版本与更新</source>
+            <translation>Version and updates</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="314" />
+            <source>修改后保存生效。可先测试连接，再启用。</source>
+            <translation>Save changes to apply. Test the connection before enabling it.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="404" />
+            <source>输入筛选 MCP；回车搜索市场。新增配置在保存后生效。</source>
+            <translation>Type to filter MCP servers; press Enter to search the market. Save to apply new configurations.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="585" />
+            <source>返回配置</source>
+            <translation>Back to configuration</translation>
         </message>
     </context>
     <context>
         <name>McpPage</name>
         <message>
-            <location filename="../../gui/resources/mcp_page.py" line="31" />
+            <location filename="../../gui/resources/mcp_page.py" line="33" />
             <source>加载和管理外部 MCP Server。工具权限由“权限”页统一控制。</source>
             <translation>Manage external MCP servers. Configure tool access on the Permissions page.</translation>
         </message>
@@ -4582,67 +4609,67 @@ The export includes credentials from request headers. Keep this file secure.</tr
             <translation>{name} model catalog</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="53" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="50" />
             <source>搜索模型 ID 或名称</source>
             <translation>Search model ID or name</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="59" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="56" />
             <source>重新获取远端模型</source>
             <translation>Refresh remote models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="76" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="73" />
             <source>应用选择</source>
             <translation>Apply selection</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="86" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="83" />
             <source>正在获取远端模型...</source>
             <translation>Fetching remote models...</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="100" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="97" />
             <source>未找到远端模型</source>
             <translation>No remote models found</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="104" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="101" />
             <source>获取失败：{value}</source>
             <translation>Could not fetch models: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="104" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="101" />
             <source>未知错误</source>
             <translation>Unknown error</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="134" />
             <source>远端与本地</source>
             <translation>Remote and local</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="134" />
             <source>远端模型</source>
             <translation>Remote models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="134" />
             <source>本地模型</source>
             <translation>Local models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="140" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
             <source>上下文 {context_window:,}</source>
             <translation>Context {context_window:,}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="142" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="139" />
             <source>推理 {reasoning_codec}</source>
             <translation>Reasoning {reasoning_codec}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="170" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="167" />
             <source>已选 {selected} / {total}</source>
             <translation>Selected {selected} / {total}</translation>
         </message>
@@ -4685,246 +4712,246 @@ The export includes credentials from request headers. Keep this file secure.</tr
             <translation>Edit model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="133" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="130" />
             <source>基本</source>
             <translation>Basic</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="133" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="130" />
             <source>高级</source>
             <translation>Advanced</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="152" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="149" />
             <source>模型</source>
             <translation>Models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="153" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="150" />
             <source>模型 ID</source>
             <translation>Model ID</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="153" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="150" />
             <source>实际发送给接口的完整 ID</source>
             <translation>Full model ID sent to the API</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="156" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="153" />
             <source>显示名称</source>
             <translation>Display name</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="156" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="153" />
             <source>可选</source>
             <translation>Optional</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="158" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="155" />
             <source>聊天与视觉理解</source>
             <translation>Chat and vision</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="159" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="156" />
             <source>图像生成与编辑</source>
             <translation>Image generation and editing</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="161" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="158" />
             <source>模型用途</source>
             <translation>Model purpose</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="166" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="163" />
             <source>接口与认证由所属服务连接统一管理；尺寸、质量和数量在图像能力中设置。</source>
             <translation>API and authentication use the provider connection. Set image size, quality and count in the image capability.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="171" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="168" />
             <source>能力</source>
             <translation>Capabilities</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="176" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="173" />
             <source>工具调用</source>
             <translation>Tool calling</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="227" />
-            <location filename="../../gui/settings/model_profile_dialog.py" line="177" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="224" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="174" />
             <source>推理</source>
             <translation>Reasoning</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="178" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="175" />
             <source>图片输入</source>
             <translation>Image input</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="179" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="176" />
             <source>音频输入</source>
             <translation>Audio input</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="180" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="177" />
             <source>用于模型能力档案；当前输入框尚不发送音频附件。</source>
             <translation>Records model capabilities. The composer does not yet send audio attachments.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="189" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="186" />
             <source>支持</source>
             <translation>Supports</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="192" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="189" />
             <source>生成</source>
             <translation>Generation</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="204" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="201" />
             <source>总窗口</source>
             <translation>Context window</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="205" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="202" />
             <source>模型总上下文窗口，输入与输出共享。</source>
             <translation>Total context window, shared by input and output.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="210" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="207" />
             <source>最大输出</source>
             <translation>Max output</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="211" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="208" />
             <source>模型档案声明的单次输出上限，不会提高默认请求预算。请在会话设置中调整“本次输出上限”；服务端可能另有限制。</source>
             <translation>The model profile's output ceiling does not increase the default request budget. Set Request output limit in Conversation settings; the server may apply further limits.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="232" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="229" />
             <source>默认推理</source>
             <translation>Default reasoning</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="237" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="234" />
             <source>推理协议</source>
             <translation>Reasoning protocol</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="268" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="265" />
             <source>附加请求</source>
             <translation>Additional request settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="271" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="268" />
             <source>仅附加到当前模型；普通同名字段覆盖 Provider 请求头，认证和传输保留头会被忽略。</source>
             <translation>Applies to this model only. Ordinary headers override matching provider headers; reserved authentication and transport headers are ignored.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="534" />
-            <location filename="../../gui/settings/model_profile_dialog.py" line="273" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="531" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="270" />
             <source>自定义请求头</source>
             <translation>Custom headers</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="276" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="273" />
             <source>在 envelope 与推理协议之后做一次顶层覆盖；用于未内置的 Provider 私有字段。</source>
             <translation>Overrides top-level fields after the request and reasoning protocol are built. Use for provider-specific fields.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="535" />
-            <location filename="../../gui/settings/model_profile_dialog.py" line="281" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="532" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="278" />
             <source>请求字段</source>
             <translation>Request fields</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="306" />
-            <location filename="../../gui/settings/model_profile_dialog.py" line="295" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="303" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="292" />
             <source>未设置</source>
             <translation>Not set</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="399" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="396" />
             <source>接口默认</source>
             <translation>API default</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="400" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="397" />
             <source>关闭</source>
             <translation>Off</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="401" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="398" />
             <source>开启</source>
             <translation>On</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="402" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="399" />
             <source>自动</source>
             <translation>Auto</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="412" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="409" />
             <source>未发送显式推理字段（接口默认）。</source>
             <translation>No explicit reasoning fields are sent (API default).</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="414" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="411" />
             <source>可用模式：{value}</source>
             <translation>Available modes: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="444" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="441" />
             <source>{label} JSON 无效：{exc}</source>
             <translation>Invalid {label} JSON: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="446" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="443" />
             <source>{label}必须是 JSON 对象</source>
             <translation>{label} must be a JSON object</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="451" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="448" />
             <source>仅填写所选图像协议支持的附加参数；不能覆盖模型、提示词、输入图片与图像参数。Qwen 原生参数放在 parameters 对象中。</source>
             <translation>Use additional parameters supported by the selected image protocol. Model, prompt, input images and image settings cannot be overridden. Put native Qwen parameters in the parameters object.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="460" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="457" />
             <source>JSON 尚未完成。</source>
             <translation>JSON is incomplete.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="463" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="460" />
             <source>请求字段必须是 JSON 对象。</source>
             <translation>Request fields must be a JSON object.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="472" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="469" />
             <source>发送时忽略结构字段：</source>
             <translation>Structural fields ignored when sending: </translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="474" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="471" />
             <source>作为输出预算输入并在发送前校准：</source>
             <translation>Output budget inputs adjusted before sending: </translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="476" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="473" />
             <source>将覆盖生成/推理字段：</source>
             <translation>Overrides generation/reasoning fields: </translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="481" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="478" />
             <source>模型 ID 无效</source>
             <translation>Invalid model ID</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="481" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="478" />
             <source>请输入模型 ID。</source>
             <translation>Enter a model ID.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_profile_dialog.py" line="487" />
+            <location filename="../../gui/settings/model_profile_dialog.py" line="484" />
             <source>模型参数无效</source>
             <translation>Invalid model settings</translation>
         </message>
@@ -5271,6 +5298,22 @@ Type: {kind_label}</translation>
             <source>确定删除“{name}”吗？</source>
             <translation>Delete “{name}”?</translation>
         </message>
+        <message>
+            <source>恢复内置指令</source>
+            <translation>Restore built-in instructions</translation>
+        </message>
+        <message>
+            <source>内置指令 · 随版本更新</source>
+            <translation>Built-in instructions · Updated with PyCat</translation>
+        </message>
+        <message>
+            <source>自定义指令</source>
+            <translation>Custom instructions</translation>
+        </message>
+        <message>
+            <source>自定义指令会覆盖内置内容，请检查工具名称和完成策略。</source>
+            <translation>Custom instructions override the built-in content. Check tool names and the completion policy.</translation>
+        </message>
     </context>
     <context>
         <name>OcrPage</name>
@@ -5482,6 +5525,51 @@ Type: {kind_label}</translation>
             <location filename="../../gui/settings/pages/permissions_page.py" line="211" />
             <source>继承（{value}）</source>
             <translation>Inherit ({value})</translation>
+        </message>
+    </context>
+    <context>
+        <name>PromptOptimizationPresenter</name>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="73" />
+            <source>提示词优化失败</source>
+            <translation>Prompt optimization failed</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="73" />
+            <source>未知错误</source>
+            <translation>Unknown error</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="105" />
+            <source>提示</source>
+            <translation>Notice</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="105" />
+            <source>当前会话正在生成中，请先停止或等待完成。</source>
+            <translation>This conversation is generating a response. Stop it or wait for it to finish.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="130" />
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="121" />
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="117" />
+            <source>错误</source>
+            <translation>Error</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="117" />
+            <source>请先在设置中配置服务商</source>
+            <translation>Configure a provider in Settings first.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="121" />
+            <source>请选择一个模型</source>
+            <translation>Choose a model first.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/prompt_optimization_presenter.py" line="130" />
+            <source>提示词优化能力已停用。</source>
+            <translation>Prompt optimization is disabled.</translation>
         </message>
     </context>
     <context>
@@ -5813,24 +5901,6 @@ Max output: {value__}</translation>
         </message>
     </context>
     <context>
-        <name>ResourcePage</name>
-        <message>
-            <location filename="../../gui/resources/page.py" line="26" />
-            <source>已安装</source>
-            <translation>Installed</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/page.py" line="26" />
-            <source>发现</source>
-            <translation>Discover</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/page.py" line="52" />
-            <source>版本与更新</source>
-            <translation>Version and updates</translation>
-        </message>
-    </context>
-    <context>
         <name>RuntimeStatus</name>
         <message>
             <location filename="../../gui/view_models/runtime_status.py" line="70" />
@@ -6157,22 +6227,22 @@ Max output: {value__}</translation>
     <context>
         <name>SettingsComponents</name>
         <message>
-            <location filename="../../gui/settings/components.py" line="135" />
+            <location filename="../../gui/settings/components.py" line="144" />
             <source>返回列表</source>
             <translation>Back to list</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="189" />
+            <location filename="../../gui/settings/components.py" line="205" />
             <source>选择条目查看详情</source>
             <translation>Select an item to view details</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="236" />
+            <location filename="../../gui/settings/components.py" line="254" />
             <source>暂无内容</source>
             <translation>No content yet</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="291" />
+            <location filename="../../gui/settings/components.py" line="322" />
             <source>未命名</source>
             <translation>Untitled</translation>
         </message>
@@ -6185,7 +6255,7 @@ Max output: {value__}</translation>
             <translation>General</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="483" />
+            <location filename="../../gui/settings/settings_dialog.py" line="478" />
             <location filename="../../gui/settings/settings_dialog.py" line="100" />
             <source>模型</source>
             <translation>Models</translation>
@@ -6201,15 +6271,15 @@ Max output: {value__}</translation>
             <translation>Tools</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="494" />
-            <location filename="../../gui/settings/settings_dialog.py" line="426" />
-            <location filename="../../gui/settings/settings_dialog.py" line="423" />
+            <location filename="../../gui/settings/settings_dialog.py" line="489" />
+            <location filename="../../gui/settings/settings_dialog.py" line="425" />
+            <location filename="../../gui/settings/settings_dialog.py" line="422" />
             <location filename="../../gui/settings/settings_dialog.py" line="103" />
             <source>记忆与资料</source>
             <translation>Memory &amp; sources</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="495" />
+            <location filename="../../gui/settings/settings_dialog.py" line="490" />
             <location filename="../../gui/settings/settings_dialog.py" line="104" />
             <source>消息通道</source>
             <translation>Channels</translation>
@@ -6230,13 +6300,13 @@ Max output: {value__}</translation>
             <translation>Application settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="484" />
+            <location filename="../../gui/settings/settings_dialog.py" line="479" />
             <location filename="../../gui/settings/settings_dialog.py" line="125" />
             <source>模式</source>
             <translation>Modes</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="491" />
+            <location filename="../../gui/settings/settings_dialog.py" line="486" />
             <location filename="../../gui/settings/settings_dialog.py" line="126" />
             <source>搜索</source>
             <translation>Search</translation>
@@ -6247,7 +6317,7 @@ Max output: {value__}</translation>
             <translation>Invalid configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="428" />
+            <location filename="../../gui/settings/settings_dialog.py" line="427" />
             <location filename="../../gui/settings/settings_dialog.py" line="216" />
             <source>设置</source>
             <translation>Settings</translation>
@@ -6274,267 +6344,390 @@ Max output: {value__}</translation>
             <translation>Save changes</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="395" />
+            <location filename="../../gui/settings/settings_dialog.py" line="394" />
             <source>查看项目 AGENTS.md</source>
             <translation>View project AGENTS.md</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="397" />
+            <location filename="../../gui/settings/settings_dialog.py" line="396" />
             <source>当前未选择项目</source>
             <translation>No project selected</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="423" />
+            <location filename="../../gui/settings/settings_dialog.py" line="422" />
             <source>查看来源、管理记忆和阅读资料。</source>
             <translation>View sources, manage memory and read materials.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="424" />
+            <location filename="../../gui/settings/settings_dialog.py" line="423" />
             <source>资料与上下文</source>
             <translation>Sources &amp; context</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="426" />
+            <location filename="../../gui/settings/settings_dialog.py" line="425" />
             <source>阅读文件、审核项目记忆与用户偏好。</source>
             <translation>Read files and review project memory and user preferences.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="426" />
+            <location filename="../../gui/settings/settings_dialog.py" line="425" />
             <source>打开</source>
             <translation>Open</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="487" />
-            <location filename="../../gui/settings/settings_dialog.py" line="427" />
+            <location filename="../../gui/settings/settings_dialog.py" line="482" />
+            <location filename="../../gui/settings/settings_dialog.py" line="426" />
             <source>指令与来源</source>
             <translation>Instructions &amp; sources</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="427" />
+            <location filename="../../gui/settings/settings_dialog.py" line="426" />
             <source>管理全局指令和项目 AGENTS.md。</source>
             <translation>Manage global instructions and the project's AGENTS.md.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="427" />
+            <location filename="../../gui/settings/settings_dialog.py" line="426" />
             <source>查看</source>
             <translation>View</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="428" />
+            <location filename="../../gui/settings/settings_dialog.py" line="427" />
             <source>压缩策略</source>
             <translation>Compaction policy</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="428" />
+            <location filename="../../gui/settings/settings_dialog.py" line="427" />
             <source>分别设置工具内容压缩与上下文压缩。</source>
             <translation>Configure tool content and context compaction separately.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="481" />
+            <location filename="../../gui/settings/settings_dialog.py" line="476" />
             <source>外观</source>
             <translation>Appearance</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="482" />
+            <location filename="../../gui/settings/settings_dialog.py" line="477" />
             <source>快捷键</source>
             <translation>Shortcuts</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="485" />
+            <location filename="../../gui/settings/settings_dialog.py" line="480" />
             <source>权限</source>
             <translation>Permissions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="486" />
+            <location filename="../../gui/settings/settings_dialog.py" line="481" />
             <source>策略</source>
             <translation>Policies</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="488" />
+            <location filename="../../gui/settings/settings_dialog.py" line="483" />
             <source>技能</source>
             <translation>Skills</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="490" />
+            <location filename="../../gui/settings/settings_dialog.py" line="485" />
             <source>模型能力</source>
             <translation>Model capabilities</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="492" />
+            <location filename="../../gui/settings/settings_dialog.py" line="487" />
             <source>电脑与浏览器</source>
             <translation>Computer &amp; browser</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="496" />
+            <location filename="../../gui/settings/settings_dialog.py" line="491" />
             <source>网络与诊断</source>
             <translation>Network &amp; diagnostics</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="497" />
+            <location filename="../../gui/settings/settings_dialog.py" line="492" />
             <source>终端</source>
             <translation>Terminal</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="498" />
+            <location filename="../../gui/settings/settings_dialog.py" line="493" />
             <source>关于</source>
             <translation>About</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="540" />
+            <location filename="../../gui/settings/settings_dialog.py" line="535" />
             <source>没有匹配的设置
 试试页面名称或关键词</source>
             <translation>No matching settings
 Try a page name or keyword</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="659" />
+            <location filename="../../gui/settings/settings_dialog.py" line="654" />
             <source>模式配置无效</source>
             <translation>Invalid mode configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="668" />
+            <location filename="../../gui/settings/settings_dialog.py" line="663" />
             <source>服务商配置无效</source>
             <translation>Invalid provider configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="676" />
+            <location filename="../../gui/settings/settings_dialog.py" line="671" />
             <source>默认模型无效</source>
             <translation>Invalid default model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="690" />
+            <location filename="../../gui/settings/settings_dialog.py" line="685" />
             <source>MCP 配置无效</source>
             <translation>Invalid MCP configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="700" />
+            <location filename="../../gui/settings/settings_dialog.py" line="696" />
             <source>搜索配置无效</source>
             <translation>Invalid search configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="708" />
+            <location filename="../../gui/settings/settings_dialog.py" line="704" />
             <source>通用配置无效</source>
             <translation>Invalid general settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="715" />
+            <location filename="../../gui/settings/settings_dialog.py" line="711" />
             <source>快捷键配置无效</source>
             <translation>Invalid shortcuts</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="722" />
+            <location filename="../../gui/settings/settings_dialog.py" line="718" />
             <source>权限配置无效</source>
             <translation>Invalid permission configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="730" />
+            <location filename="../../gui/settings/settings_dialog.py" line="726" />
             <source>重试策略无效</source>
             <translation>Invalid retry policy</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="737" />
+            <location filename="../../gui/settings/settings_dialog.py" line="733" />
             <source>Agent 策略无效</source>
             <translation>Invalid agent policy</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="744" />
+            <location filename="../../gui/settings/settings_dialog.py" line="740" />
             <source>压缩阈值无效</source>
             <translation>Invalid compaction threshold</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="755" />
+            <location filename="../../gui/settings/settings_dialog.py" line="748" />
             <source>指令配置无效</source>
             <translation>Invalid instructions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="763" />
+            <location filename="../../gui/settings/settings_dialog.py" line="756" />
             <source>能力配置无效</source>
             <translation>Invalid capability configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="789" />
+            <location filename="../../gui/settings/settings_dialog.py" line="782" />
             <source>频道配置无效</source>
             <translation>Invalid channel configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="793" />
+            <location filename="../../gui/settings/settings_dialog.py" line="786" />
             <source>终端配置无效</source>
             <translation>Invalid terminal configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="801" />
+            <location filename="../../gui/settings/settings_dialog.py" line="794" />
             <source>OCR 配置无效</source>
             <translation>Invalid OCR configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="807" />
+            <location filename="../../gui/settings/settings_dialog.py" line="800" />
             <source>OCR 模型配置无效</source>
             <translation>Invalid OCR model configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="873" />
+            <location filename="../../gui/settings/settings_dialog.py" line="866" />
             <source>未保存的设置</source>
             <translation>Unsaved settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="874" />
+            <location filename="../../gui/settings/settings_dialog.py" line="867" />
             <source>设置中有未保存的更改。</source>
             <translation>You have unsaved settings changes.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="875" />
+            <location filename="../../gui/settings/settings_dialog.py" line="868" />
             <source>保存后关闭，或放弃这些配置草稿？</source>
             <translation>Save before closing, or discard these changes?</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="885" />
+            <location filename="../../gui/settings/settings_dialog.py" line="878" />
             <source>保存并关闭</source>
             <translation>Save and close</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="887" />
+            <location filename="../../gui/settings/settings_dialog.py" line="880" />
             <source>放弃更改</source>
             <translation>Discard changes</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="889" />
+            <location filename="../../gui/settings/settings_dialog.py" line="882" />
             <source>继续编辑</source>
             <translation>Keep editing</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="970" />
+            <location filename="../../gui/settings/settings_dialog.py" line="963" />
             <source>未保存：</source>
             <translation>Not saved: </translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="972" />
+            <location filename="../../gui/settings/settings_dialog.py" line="965" />
             <source>设置已保存，但运行时尚未完全应用。</source>
             <translation>Settings were saved, but could not be fully applied to the runtime.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="974" />
+            <location filename="../../gui/settings/settings_dialog.py" line="967" />
             <source>设置已保存。重启 PyCat 后切换界面语言。</source>
             <translation>Settings saved. Restart PyCat to change the interface language.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="976" />
+            <location filename="../../gui/settings/settings_dialog.py" line="969" />
             <source>设置已保存。</source>
             <translation>Settings saved.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="987" />
+            <location filename="../../gui/settings/settings_dialog.py" line="980" />
             <source>保存失败：{error}</source>
             <translation>Save failed: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="1032" />
+            <location filename="../../gui/settings/settings_dialog.py" line="1025" />
             <source>正在保存设置…</source>
             <translation>Saving settings…</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="1066" />
+            <location filename="../../gui/settings/settings_dialog.py" line="1059" />
             <source>有未保存的更改</source>
             <translation>Unsaved changes</translation>
+        </message>
+    </context>
+    <context>
+        <name>SettingsPresenter</name>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="136" />
+            <source>无法保存服务商配置</source>
+            <translation>Could not save provider settings</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="197" />
+            <source>无法编辑模型</source>
+            <translation>Could not edit the model</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="197" />
+            <source>请先选择一个已配置的模型。</source>
+            <translation>Choose a configured model first.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="222" />
+            <source>模型保存失败</source>
+            <translation>Could not save the model</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="255" />
+            <source>请先为会话选择可用的模型。</source>
+            <translation>Choose an available model for the conversation first.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="403" />
+            <source>设置保存失败</source>
+            <translation>Could not save settings</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="410" />
+            <source>服务商</source>
+            <translation>Providers</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="411" />
+            <source>应用设置</source>
+            <translation>Application settings</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="413" />
+            <source>模式</source>
+            <translation>Modes</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="414" />
+            <source>搜索</source>
+            <translation>Search</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="415" />
+            <source>配置校验</source>
+            <translation>Configuration validation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="416" />
+            <source>运行时刷新</source>
+            <translation>Runtime refresh</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="417" />
+            <source>Channel 协调</source>
+            <translation>Channel coordination</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="505" />
+            <source>设置未完全应用</source>
+            <translation>Settings partially applied</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="514" />
+            <source>、</source>
+            <translation>, </translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="517" />
+            <source>已保存：{domains}</source>
+            <translation>Saved: {domains}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="520" />
+            <source>未保存：{domains}</source>
+            <translation>Not saved: {domains}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="523" />
+            <source>未知错误</source>
+            <translation>Unknown error</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="524" />
+            <source>{label}失败：{detail}</source>
+            <translation>{label} failed: {detail}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="526" />
+            <source>设置更新失败。</source>
+            <translation>Could not update settings.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="681" />
+            <source>暂时无法检查更新：{error}</source>
+            <translation>Could not check for updates right now: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="687" />
+            <source>更新检查返回了无效结果。</source>
+            <translation>The update check returned an invalid result.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="708" />
+            <source>发现新版本 {tag_name}，点击打开 Release</source>
+            <translation>New version {tag_name} available. Click to view the release.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/settings_presenter.py" line="710" />
+            <source>检查 PyCat 稳定版本更新</source>
+            <translation>Check for stable PyCat updates</translation>
         </message>
     </context>
     <context>
@@ -7081,179 +7274,108 @@ Status: {status}</translation>
     <context>
         <name>SkillsPage</name>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="201" />
-            <location filename="../../gui/resources/skills_page.py" line="104" />
-            <source>创建技能</source>
-            <translation>Create skill</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="113" />
-            <source>例如 review-code</source>
-            <translation>e.g. review-code</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="115" />
-            <source>一句话说明用途</source>
-            <translation>Describe its purpose in one sentence</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="700" />
-            <location filename="../../gui/resources/skills_page.py" line="684" />
-            <location filename="../../gui/resources/skills_page.py" line="153" />
-            <location filename="../../gui/resources/skills_page.py" line="117" />
+            <location filename="../../gui/resources/skills_page.py" line="741" />
+            <location filename="../../gui/resources/skills_page.py" line="725" />
             <source>全局</source>
             <translation>Global</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="155" />
-            <location filename="../../gui/resources/skills_page.py" line="119" />
-            <source>当前工作区</source>
-            <translation>Current workspace</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="120" />
-            <source>名称</source>
-            <translation>Name</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="121" />
-            <source>说明</source>
-            <translation>Description</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="156" />
-            <location filename="../../gui/resources/skills_page.py" line="122" />
-            <source>范围</source>
-            <translation>Scope</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="124" />
-            <source>创建</source>
-            <translation>Create</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="596" />
-            <location filename="../../gui/resources/skills_page.py" line="553" />
-            <location filename="../../gui/resources/skills_page.py" line="546" />
-            <location filename="../../gui/resources/skills_page.py" line="537" />
-            <location filename="../../gui/resources/skills_page.py" line="142" />
+            <location filename="../../gui/resources/skills_page.py" line="637" />
+            <location filename="../../gui/resources/skills_page.py" line="601" />
             <source>导入技能</source>
             <translation>Import skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="148" />
-            <source>导入“{source_name}”到哪个范围？</source>
-            <translation>Where should “{source_name}” be imported?</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="454" />
-            <location filename="../../gui/resources/skills_page.py" line="158" />
+            <location filename="../../gui/resources/skills_page.py" line="524" />
             <source>导入</source>
             <translation>Import</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="188" />
+            <location filename="../../gui/resources/skills_page.py" line="126" />
             <source>技能</source>
             <translation>Skills</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="188" />
+            <location filename="../../gui/resources/skills_page.py" line="126" />
             <source>加载、管理全局与项目技能。停用的技能不会进入运行时列表。</source>
             <translation>Load and manage global and project skills. Disabled skills are excluded from the runtime list.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="274" />
-            <location filename="../../gui/resources/skills_page.py" line="196" />
-            <location filename="../../gui/resources/skills_page.py" line="195" />
-            <source>搜索已安装技能</source>
-            <translation>Search installed skills</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="202" />
-            <source>导入 SKILL.md / ZIP</source>
-            <translation>Import SKILL.md / ZIP</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="203" />
+            <location filename="../../gui/resources/skills_page.py" line="140" />
             <source>添加</source>
             <translation>Add</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="208" />
+            <location filename="../../gui/resources/skills_page.py" line="146" />
             <source>重新扫描</source>
             <translation>Rescan</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="209" />
-            <source>查看技能</source>
-            <translation>View skills</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="372" />
-            <location filename="../../gui/resources/skills_page.py" line="210" />
+            <location filename="../../gui/resources/skills_page.py" line="445" />
+            <location filename="../../gui/resources/skills_page.py" line="147" />
             <source>候选方法</source>
             <translation>Candidate methods</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="211" />
+            <location filename="../../gui/resources/skills_page.py" line="150" />
             <source>更多技能操作</source>
             <translation>More skill actions</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="479" />
-            <location filename="../../gui/resources/skills_page.py" line="215" />
+            <location filename="../../gui/resources/skills_page.py" line="549" />
+            <location filename="../../gui/resources/skills_page.py" line="178" />
             <source>编辑技能</source>
             <translation>Edit skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="484" />
-            <location filename="../../gui/resources/skills_page.py" line="216" />
+            <location filename="../../gui/resources/skills_page.py" line="554" />
+            <location filename="../../gui/resources/skills_page.py" line="179" />
             <source>停用技能</source>
             <translation>Disable skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="625" />
-            <location filename="../../gui/resources/skills_page.py" line="218" />
+            <location filename="../../gui/resources/skills_page.py" line="666" />
+            <location filename="../../gui/resources/skills_page.py" line="182" />
             <source>删除技能</source>
             <translation>Delete skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="253" />
+            <location filename="../../gui/resources/skills_page.py" line="217" />
             <source>选择技能查看内容</source>
             <translation>Select a skill to view its content</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="256" />
+            <location filename="../../gui/resources/skills_page.py" line="220" />
             <source>对照试验</source>
             <translation>Compare</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="259" />
+            <location filename="../../gui/resources/skills_page.py" line="223" />
             <source>发布</source>
             <translation>Publish</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="262" />
+            <location filename="../../gui/resources/skills_page.py" line="226" />
             <source>回滚</source>
             <translation>Roll back</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="274" />
+            <location filename="../../gui/resources/skills_page.py" line="243" />
             <source>搜索候选方法</source>
             <translation>Search candidate methods</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="297" />
+            <location filename="../../gui/resources/skills_page.py" line="271" />
             <source>待试验的方法</source>
             <translation>Method awaiting comparison</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="303" />
+            <location filename="../../gui/resources/skills_page.py" line="277" />
             <source>暂无候选方法。自动整理提出的方法会先保留在这里，通过对照试验后再发布。</source>
             <translation>No candidate methods yet. Methods proposed by automatic curation appear here for comparison before publication.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="318" />
+            <location filename="../../gui/resources/skills_page.py" line="292" />
             <source>已发现 {value} 个技能
 全局目录：{value_}
 项目目录：{value__}</source>
@@ -7262,19 +7384,17 @@ Global directory: {value_}
 Project directory: {value__}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="389" />
-            <location filename="../../gui/resources/skills_page.py" line="322" />
+            <location filename="../../gui/resources/skills_page.py" line="301" />
             <source>已启用</source>
             <translation>Enabled</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="389" />
-            <location filename="../../gui/resources/skills_page.py" line="322" />
+            <location filename="../../gui/resources/skills_page.py" line="301" />
             <source>已停用</source>
             <translation>Disabled</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="328" />
+            <location filename="../../gui/resources/skills_page.py" line="307" />
             <source>状态：{status}
 来源：{source}
 说明：{value}</source>
@@ -7283,198 +7403,216 @@ Source: {source}
 Description: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="331" />
+            <location filename="../../gui/resources/skills_page.py" line="310" />
             <source>暂无说明</source>
             <translation>No description</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="336" />
+            <location filename="../../gui/resources/skills_page.py" line="323" />
             <source>暂无技能</source>
             <translation>No skills yet</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="337" />
+            <location filename="../../gui/resources/skills_page.py" line="325" />
             <source>可以添加一个全局技能，或把目录型 SKILL.md 放入项目 .pycat/skills。</source>
             <translation>Create a global skill, or place a skill directory containing SKILL.md in the project's .pycat/skills directory.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="368" />
+            <location filename="../../gui/resources/skills_page.py" line="441" />
             <source>待试验</source>
             <translation>Awaiting comparison</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="368" />
+            <location filename="../../gui/resources/skills_page.py" line="441" />
             <source>试验通过</source>
             <translation>Comparison passed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="368" />
+            <location filename="../../gui/resources/skills_page.py" line="441" />
             <source>试验未通过</source>
             <translation>Comparison failed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="368" />
+            <location filename="../../gui/resources/skills_page.py" line="441" />
             <source>已发布</source>
             <translation>Published</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="368" />
+            <location filename="../../gui/resources/skills_page.py" line="441" />
             <source>已回滚</source>
             <translation>Rolled back</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="369" />
+            <location filename="../../gui/resources/skills_page.py" line="442" />
             <source>发布中断，可继续发布</source>
             <translation>Publication interrupted; ready to resume</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="369" />
+            <location filename="../../gui/resources/skills_page.py" line="442" />
             <source>回退中断，可继续回退</source>
             <translation>Rollback interrupted; ready to resume</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="369" />
+            <location filename="../../gui/resources/skills_page.py" line="442" />
             <source>存储不可读</source>
             <translation>Storage is unreadable</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="372" />
+            <location filename="../../gui/resources/skills_page.py" line="445" />
             <source>原方法</source>
             <translation>Original method</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="374" />
+            <location filename="../../gui/resources/skills_page.py" line="447" />
             <source>存储不可读：{exc}</source>
             <translation>Storage is unreadable: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="392" />
+            <location filename="../../gui/resources/skills_page.py" line="461" />
             <source>文件：{source}</source>
             <translation>File: {source}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="454" />
+            <location filename="../../gui/resources/skills_page.py" line="524" />
             <source>用户</source>
             <translation>User</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="456" />
+            <location filename="../../gui/resources/skills_page.py" line="526" />
             <source>创建者: {creator_label}</source>
             <translation>Created by: {creator_label}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="458" />
+            <location filename="../../gui/resources/skills_page.py" line="528" />
             <source>加载 {loads} 次</source>
             <translation>Loads: {loads}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="461" />
+            <location filename="../../gui/resources/skills_page.py" line="531" />
             <source>最近使用 {value}</source>
             <translation>Last used: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="479" />
+            <location filename="../../gui/resources/skills_page.py" line="549" />
             <source>复制为用户技能后编辑</source>
             <translation>Copy to user skills and edit</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="484" />
+            <location filename="../../gui/resources/skills_page.py" line="554" />
             <source>启用技能</source>
             <translation>Enable skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="495" />
+            <location filename="../../gui/resources/skills_page.py" line="565" />
             <source>复制技能失败</source>
             <translation>Could not copy skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="518" />
+            <location filename="../../gui/resources/skills_page.py" line="593" />
             <source>创建技能失败</source>
             <translation>Could not create skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="527" />
-            <source>选择技能文件</source>
-            <translation>Choose skill file</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="529" />
-            <source>技能文件 (*.md *.zip);;所有文件 (*)</source>
-            <translation>Skill files (*.md *.zip);;All files (*)</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="537" />
+            <location filename="../../gui/resources/skills_page.py" line="601" />
             <source>一次只能导入一个技能文件或压缩包。</source>
             <translation>Import one skill file or archive at a time.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="546" />
-            <source>导入来源不存在。</source>
-            <translation>The import source does not exist.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="554" />
-            <source>只支持 .md 技能文件、包含 SKILL.md 的目录或 .zip 压缩包。</source>
-            <translation>Choose a .md skill file, a directory containing SKILL.md or a .zip archive.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="576" />
+            <location filename="../../gui/resources/skills_page.py" line="617" />
             <source>技能已存在</source>
             <translation>Skill already exists</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="577" />
+            <location filename="../../gui/resources/skills_page.py" line="618" />
             <source>同名技能已存在，是否覆盖？</source>
             <translation>A skill with this name already exists. Replace it?</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="594" />
-            <location filename="../../gui/resources/skills_page.py" line="591" />
+            <location filename="../../gui/resources/skills_page.py" line="635" />
+            <location filename="../../gui/resources/skills_page.py" line="632" />
             <source>导入技能失败</source>
             <translation>Could not import skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="596" />
+            <location filename="../../gui/resources/skills_page.py" line="637" />
             <source>已导入技能：
 {skill_file}</source>
             <translation>Skill imported:
 {skill_file}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="612" />
+            <location filename="../../gui/resources/skills_page.py" line="653" />
             <source>技能状态更新失败</source>
             <translation>Could not update skill status</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="626" />
+            <location filename="../../gui/resources/skills_page.py" line="667" />
             <source>确定删除技能 "{name}" 吗？
 {root}</source>
             <translation>Delete skill "{name}"?
 {root}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="632" />
+            <location filename="../../gui/resources/skills_page.py" line="673" />
             <source>删除技能失败</source>
             <translation>Could not delete skill</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="696" />
-            <location filename="../../gui/resources/skills_page.py" line="682" />
+            <location filename="../../gui/resources/skills_page.py" line="737" />
+            <location filename="../../gui/resources/skills_page.py" line="723" />
             <source>项目</source>
             <translation>Projects</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="703" />
-            <location filename="../../gui/resources/skills_page.py" line="702" />
-            <location filename="../../gui/resources/skills_page.py" line="691" />
-            <location filename="../../gui/resources/skills_page.py" line="686" />
+            <location filename="../../gui/resources/skills_page.py" line="744" />
+            <location filename="../../gui/resources/skills_page.py" line="743" />
+            <location filename="../../gui/resources/skills_page.py" line="732" />
+            <location filename="../../gui/resources/skills_page.py" line="727" />
             <source>外部</source>
             <translation>External</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="688" />
+            <location filename="../../gui/resources/skills_page.py" line="729" />
             <source>内置</source>
             <translation>Bundled</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="243" />
+            <location filename="../../gui/resources/skills_page.py" line="134" />
+            <location filename="../../gui/resources/skills_page.py" line="133" />
+            <source>搜索技能</source>
+            <translation>Search skills</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="136" />
+            <source>返回技能</source>
+            <translation>Back to skills</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="400" />
+            <location filename="../../gui/resources/skills_page.py" line="155" />
+            <source>版本与更新</source>
+            <translation>Version and updates</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="323" />
+            <source>未找到匹配技能</source>
+            <translation>No matching skills</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="324" />
+            <source>按回车搜索市场，或通过“添加”导入技能。</source>
+            <translation>Press Enter to search the market, or use Add to import a skill.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="358" />
+            <source>输入筛选已安装技能；回车搜索市场。也可拖入技能文件或目录。</source>
+            <translation>Type to filter installed skills; press Enter to search the market. You can also drop a skill file or folder.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="400" />
+            <source>返回技能内容</source>
+            <translation>Back to skill content</translation>
         </message>
     </context>
     <context>
@@ -7568,6 +7706,26 @@ Description: {value}</translation>
             <location filename="../../gui/presenters/streaming_message_presenter.py" line="591" />
             <source>上下文摘要已更新</source>
             <translation>Context summary updated</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/streaming_message_presenter.py" line="30" />
+            <source>模型调用失败：未知错误</source>
+            <translation>Model request failed: unknown error</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/streaming_message_presenter.py" line="35" />
+            <source>模型调用失败：{detail}</source>
+            <translation>Model request failed: {detail}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/streaming_message_presenter.py" line="36" />
+            <source>未知错误</source>
+            <translation>Unknown error</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/streaming_message_presenter.py" line="37" />
+            <source>错误: {text}</source>
+            <translation>Error: {text}</translation>
         </message>
     </context>
     <context>
@@ -7705,6 +7863,10 @@ Description: {value}</translation>
     <context>
         <name>ToolCallView</name>
         <message>
+            <source> · 页 {pages}</source>
+            <translation> · Pages {pages}</translation>
+        </message>
+        <message>
             <location filename="../../gui/widgets/tool_call_view.py" line="69" />
             <source>未命名文件</source>
             <translation>Untitled file</translation>
@@ -7793,9 +7955,19 @@ Description: {value}</translation>
             <translation>Input arguments</translation>
         </message>
         <message>
+            <location filename="../../gui/widgets/tool_call_view.py" line="204" />
+            <source>复制输入参数</source>
+            <translation>Copy input arguments</translation>
+        </message>
+        <message>
             <location filename="../../gui/widgets/tool_call_view.py" line="206" />
             <source>执行结果</source>
             <translation>Result</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/tool_call_view.py" line="215" />
+            <source>复制执行结果</source>
+            <translation>Copy result</translation>
         </message>
         <message>
             <location filename="../../gui/widgets/tool_call_view.py" line="324" />
@@ -8177,6 +8349,10 @@ Working directory: {value}</translation>
     </context>
     <context>
         <name>ToolingLabels</name>
+        <message>
+            <source>查看图像</source>
+            <translation>View image</translation>
+        </message>
         <message>
             <location filename="../../gui/view_models/tooling_labels.py" line="5" />
             <source>读取</source>
@@ -8738,6 +8914,5079 @@ Supports Windows and Linux with Python 3.11+. Passwords are not saved.</translat
             <location filename="../../gui/dialogs/workspace_picker.py" line="322" />
             <source>选择工作区文件夹</source>
             <translation>Choose workspace folder</translation>
+        </message>
+    </context>
+    <context>
+        <name>SkillAddDialog</name>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="27" />
+            <source>添加技能</source>
+            <translation>Add skill</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="31" />
+            <source>新建技能</source>
+            <translation>Create skill</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="31" />
+            <source>GitHub 仓库</source>
+            <translation>GitHub repository</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="32" />
+            <source>本地文件或目录</source>
+            <translation>Local file or folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="35" />
+            <source>来源</source>
+            <translation>Source</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="43" />
+            <source>例如 review-code</source>
+            <translation>e.g. review-code</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="45" />
+            <source>一句话说明用途</source>
+            <translation>Describe its purpose in one sentence</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="52" />
+            <source>选择或拖入 SKILL.md、ZIP 或技能目录</source>
+            <translation>Choose or drop SKILL.md, ZIP or a skill folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="58" />
+            <source>选择文件</source>
+            <translation>Choose file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="59" />
+            <source>选择目录</source>
+            <translation>Choose folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="65" />
+            <source>名称</source>
+            <translation>Name</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="65" />
+            <source>说明</source>
+            <translation>Description</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="66" />
+            <source>仓库</source>
+            <translation>Repository</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="66" />
+            <source>技能目录</source>
+            <translation>Skill directory</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="67" />
+            <source>分支 / 标签 / 提交</source>
+            <translation>Branch / tag / commit</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="68" />
+            <source>路径</source>
+            <translation>Path</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="81" />
+            <source>全局</source>
+            <translation>Global</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="83" />
+            <source>当前工作区</source>
+            <translation>Current workspace</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="84" />
+            <source>范围</source>
+            <translation>Scope</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="104" />
+            <location filename="../../gui/resources/skill_dialog.py" line="91" />
+            <source>创建</source>
+            <translation>Create</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="104" />
+            <source>准备安装</source>
+            <translation>Prepare installation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="104" />
+            <source>导入</source>
+            <translation>Import</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="129" />
+            <source>名称需为 3–64 个小写字母、数字或短横线，并以字母或数字开头。</source>
+            <translation>Use 3–64 lowercase letters, digits or hyphens, starting with a letter or digit.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="133" />
+            <source>请填写 GitHub 仓库，例如 owner/repo。</source>
+            <translation>Enter a GitHub repository, such as owner/repo.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="136" />
+            <source>请填写仓库内包含 SKILL.md 的技能目录。</source>
+            <translation>Enter the skill folder containing SKILL.md within the repository.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="141" />
+            <source>请选择存在的技能文件或目录。</source>
+            <translation>Choose an existing skill file or folder.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="144" />
+            <source>支持 Markdown 技能文件、ZIP 或包含 SKILL.md 的目录。</source>
+            <translation>Choose a Markdown skill file, ZIP, or a folder containing SKILL.md.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="155" />
+            <source>选择技能文件</source>
+            <translation>Choose skill file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="155" />
+            <source>技能文件 (*.md *.zip)</source>
+            <translation>Skill files (*.md *.zip)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="160" />
+            <source>选择技能目录</source>
+            <translation>Choose skill folder</translation>
+        </message>
+    </context>
+    <context>
+        <name>ExtensionDetails</name>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="40" />
+            <source>扩展详情</source>
+            <translation>Extension details</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="107" />
+            <location filename="../../gui/resources/extension_details.py" line="42" />
+            <source>展开说明</source>
+            <translation>Show description</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="46" />
+            <source>MCP 接入方式</source>
+            <translation>MCP connection method</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="51" />
+            <source>打开来源网站</source>
+            <translation>Open source website</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="54" />
+            <source>打开目录</source>
+            <translation>Open folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="143" />
+            <location filename="../../gui/resources/extension_details.py" line="56" />
+            <source>检查更新</source>
+            <translation>Check for updates</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <location filename="../../gui/resources/extension_details.py" line="58" />
+            <source>安装</source>
+            <translation>Install</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="68" />
+            <source>搜索市场或检查版本时才会联网。</source>
+            <translation>Network access is used only when searching the market or checking versions.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="73" />
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="93" />
+            <source>随 PyCat 更新。可在技能列表停用，或复制后编辑。</source>
+            <translation>Updated with PyCat. Disable it in the skills list, or copy it to edit.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="94" />
+            <source>由 PyCat 管理。检查更新后选择安装版本。</source>
+            <translation>Managed by PyCat. Check for updates, then choose a version to install.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="95" />
+            <source>外部管理，请通过原安装方式更新。</source>
+            <translation>Externally managed. Update it using its original installation method.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="96" />
+            <source>打开目录，选择需要的资源。</source>
+            <translation>Open the catalog and choose a resource.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="97" />
+            <source>添加后先填写凭据并测试，再启用。</source>
+            <translation>Add it, enter credentials and test the connection before enabling it.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="97" />
+            <source>准备安装时核对仓库与固定提交。</source>
+            <translation>Review the repository and pinned commit before installing.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="107" />
+            <source>收起说明</source>
+            <translation>Hide description</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="112" />
+            <source>来源：</source>
+            <translation>Source: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="114" />
+            <source>状态：</source>
+            <translation>Status: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="114" />
+            <source>当前版本：</source>
+            <translation>Current version: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="114" />
+            <source>未记录</source>
+            <translation>Not recorded</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="116" />
+            <source>本机浏览器：</source>
+            <translation>Local browser: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="116" />
+            <source>未找到；需先安装 Chrome / Edge / Chromium，或在 MCP 环境变量中指定程序。</source>
+            <translation>Not found. Install Chrome, Edge or Chromium, or specify its executable in the MCP environment variables.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="118" />
+            <source>此平台没有匹配的原生发布文件。</source>
+            <translation>No native release is available for this platform.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="120" />
+            <source>可安装版本：</source>
+            <translation>Available version: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="124" />
+            <source>市场版本：</source>
+            <translation>Market version: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="133" />
+            <source>该条目需要自定义安装步骤，请查看来源后通过“添加”手动配置。</source>
+            <translation>This entry needs custom installation. Review its source, then use Add to configure it manually.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="143" />
+            <source>准备安装</source>
+            <translation>Prepare installation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="147" />
+            <source>当前平台没有可用的发布文件</source>
+            <translation>No release is available for this platform</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <source>已添加</source>
+            <translation>Added</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <source>添加配置</source>
+            <translation>Add configuration</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <source>更新</source>
+            <translation>Update</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="162" />
+            <source>技能来源已不存在，请刷新列表。</source>
+            <translation>The skill source no longer exists. Refresh the list.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="164" />
+            <source>无法打开技能目录。</source>
+            <translation>Could not open the skill directory.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="166" />
+            <source>无法定位技能来源：{exc}</source>
+            <translation>Could not locate the skill source: {exc}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="180" />
+            <source>操作已取消。</source>
+            <translation>Operation cancelled.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="220" />
+            <source>已请求取消。正在执行的下载将停止，原有配置保持不变。</source>
+            <translation>Cancellation requested. Downloads will stop and existing configuration will be kept.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="229" />
+            <source>已是最新版本。</source>
+            <translation>Already up to date.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="229" />
+            <source>版本已确认，点击安装或更新以继续。</source>
+            <translation>Version confirmed. Select Install or Update to continue.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="235" />
+            <source>正在检查官方来源…</source>
+            <translation>Checking the official source…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="243" />
+            <source>已存在同名 MCP，请在列表中查看或修改名称。</source>
+            <translation>An MCP with this name already exists. Select it in the list to review or rename it.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="248" />
+            <source>已加入停用草稿；填写凭据、测试连接并启用，保存设置后生效。</source>
+            <translation>Added as a disabled draft. Enter credentials, test and enable it, then save settings to apply.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="258" />
+            <source>已存在名为 browser 的 MCP，请先重命名该服务。</source>
+            <translation>An MCP named browser already exists. Rename that service first.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="265" />
+            <source>驱动已验证，MCP 配置已加入草稿。保存设置后生效。</source>
+            <translation>Driver verified and MCP configuration added to the draft. Save settings to apply.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="267" />
+            <source>正在下载、校验并测试浏览器 MCP…</source>
+            <translation>Downloading, verifying and testing the browser MCP…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="274" />
+            <source>技能已安装并生效，来源和提交已记录。</source>
+            <translation>Skill installed and active. Its source and commit have been recorded.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="277" />
+            <source>正在下载并验证技能…</source>
+            <translation>Downloading and verifying the skill…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="294" />
+            <source>已固定提交，请核对来源后点击安装。</source>
+            <translation>Commit pinned. Review the source, then select Install.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="296" />
+            <source>正在检查技能来源…</source>
+            <translation>Checking skill source…</translation>
+        </message>
+    </context>
+    <context>
+        <name>ResourceDiscovery</name>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="25" />
+            <source>搜索市场（回车）</source>
+            <translation>Search market (Enter)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="27" />
+            <source>加载更多</source>
+            <translation>Load more</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="72" />
+            <source>输入至少两个字符后，按回车搜索市场。</source>
+            <translation>Enter at least two characters, then press Enter to search the market.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="90" />
+            <source>市场匹配 {count} 项。</source>
+            <translation>Market matches: {count}.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="93" />
+            <source>正在搜索市场…</source>
+            <translation>Searching the market…</translation>
+        </message>
+    </context>
+    <context>
+        <name>Workbench</name>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source> · 只读</source>
+            <translation> · Read only</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source> · 已停用</source>
+            <translation> · Disabled</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source> · 已启用</source>
+            <translation> · Enabled</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source> 上下文</source>
+            <translation> context</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source> 个工具</source>
+            <translation> tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source> 个服务，默认停用。保存后生效。</source>
+            <translation> services, disabled by default. Save to apply.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source> 个模型</source>
+            <translation> models</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source> 个配置域有未保存更改</source>
+            <translation> configuration sections have unsaved changes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source> 字符</source>
+            <translation> characters</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source> 次工具调用</source>
+            <translation> tool calls</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source> 项 · </source>
+            <translation> items · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source> 项。目录登记不代表 PyCat 已验证该程序，请核对来源与依赖。</source>
+            <translation> items. Catalog listings are not verified by PyCat; check the source and dependencies.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source> 项待归属记忆</source>
+            <translation> unassigned memories</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>! 命令行为</source>
+            <translation>! command behavior</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>/config · 模型、工具与能力、消息通道</source>
+            <translation>/config · Models, tools, capabilities and channels</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>@ 引用</source>
+            <translation>@ Reference</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>API 地址</source>
+            <translation>API URL</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>Agent 模式始终启用；Chat 模式可以关闭。</source>
+            <translation>Always enabled in Agent mode; optional in Chat mode.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>Enter 发送 / 引导；Ctrl+J 换行；粘贴不会自动发送。
+
+输入 `/` 选择命令，`@` 添加带类型的引用。候选开启时 ↑↓ 选择、Tab 补全、Enter 确认、Esc 收起。
+
+</source>
+            <translation>Enter sends or adds guidance; Ctrl+J inserts a newline. Pasting never sends automatically.
+
+Type `/` for commands or `@` for typed references. With suggestions open: ↑↓ selects, Tab completes, Enter confirms and Esc dismisses.
+
+</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>Enter 发送 · Ctrl+J 换行 · / 命令 · @ 引用 · F1 帮助</source>
+            <translation>Enter send · Ctrl+J newline · / commands · @ references · F1 help</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>Enter 引导 · Esc 停止 · F1 帮助</source>
+            <translation>Enter guide · Esc stop · F1 help</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>Enter 或 Ctrl Enter</source>
+            <translation>Enter or Ctrl Enter</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>Enter 继续</source>
+            <translation>Enter resume</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>Esc 返回</source>
+            <translation>Esc back</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>F2 选择模型</source>
+            <translation>F2 select model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>F2 重命名</source>
+            <translation>F2 rename</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>F3 详情</source>
+            <translation>F3 details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>GitHub 仓库（owner/repo）</source>
+            <translation>GitHub repository (owner/repo)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>MCP 工具</source>
+            <translation>MCP tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>MCP 接入方式</source>
+            <translation>MCP connection method</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>MCP 服务</source>
+            <translation>MCP services</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>MCP 配置保存后生效</source>
+            <translation>Save to apply MCP configuration</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>PyCat · 工作台</source>
+            <translation>PyCat · Workbench</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>PyCat 智能体工作台：终端、桌面和网页</source>
+            <translation>PyCat agent workbench — terminal, desktop and web</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>PyCat 管理来源。更新保留配置；技能有本地修改时会停止更新。</source>
+            <translation>Managed by PyCat. Updates preserve configuration and stop if a skill has local changes.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>Shell 程序</source>
+            <translation>Shell executable</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>WSL 发行版</source>
+            <translation>WSL distribution</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>agents run 需要 PROFILE 和 GOAL</source>
+            <translation>agents run requires PROFILE GOAL</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>config set 需要 KEY 和 VALUE</source>
+            <translation>config set requires KEY VALUE</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>exec 需要任务内容或 '-' 标准输入</source>
+            <translation>exec requires a prompt or '-' stdin input</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>provider|model 或无歧义的模型名称</source>
+            <translation>provider|model, or an unambiguous model name</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>{value0}
+{value1}
+{value2} · {value3} 条消息 · 创建于 {value4}</source>
+            <translation>{value0}
+{value1}
+{value2} · {value3} messages · Created {value4}</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>{value0} · {value1} · 权限 {value2}</source>
+            <translation>{value0} · {value1} · Permissions {value2}</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>{value0} 分钟前</source>
+            <translation>{value0} minutes ago</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>{value0} 天前</source>
+            <translation>{value0} days ago</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>{value0} 小时前</source>
+            <translation>{value0} hours ago</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>”？来源原文会保留。</source>
+            <translation>”? The original source will be kept.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/resources.js" />
+            <source>← 返回列表</source>
+            <translation>← Back to list</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>↑ 上一页</source>
+            <translation>↑ Previous page</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>↑ 加载更早消息</source>
+            <translation>↑ Load earlier messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>↑↓ 选择 · Tab 补全 · Enter 确认 · Esc 收起</source>
+            <translation>↑↓ select · Tab complete · Enter confirm · Esc dismiss</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>↓ 下一页</source>
+            <translation>↓ Next page</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>↓ 返回最新消息</source>
+            <translation>↓ Back to latest messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>三种决策：允许、询问、拒绝。会话可选预设，运行中的批准仍会单独请求。</source>
+            <translation>Three decisions: allow, ask or deny. Conversations can use presets; runtime approvals are still requested separately.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>上一条 / 下一条消息</source>
+            <translation>Previous / next message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>上一条消息</source>
+            <translation>Previous message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>上一条消息 · Alt ↑</source>
+            <translation>Previous message · Alt ↑</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>上一页</source>
+            <translation>Previous page</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>上下文估算 </source>
+            <translation>Estimated context </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>上下文压缩阈值（0–1）</source>
+            <translation>Context compaction threshold (0–1)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>上下文窗口（Token）</source>
+            <translation>Context window (tokens)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>上下文预算</source>
+            <translation>Context budget</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>下一条消息</source>
+            <translation>Next message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>下一条消息 · Alt ↓</source>
+            <translation>Next message · Alt ↓</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>下一页</source>
+            <translation>Next page</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>下载</source>
+            <translation>Download</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>不能为空</source>
+            <translation>Cannot be empty</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>两层压缩</source>
+            <translation>Two levels of compression</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>两者均可</source>
+            <translation>Both</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>严格限制未信任来源</source>
+            <translation>Restrict untrusted sources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>个人</source>
+            <translation>Personal</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>个人空间</source>
+            <translation>Personal space</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>个人空间 </source>
+            <translation>Personal space </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>主模型</source>
+            <translation>Primary model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>主模式</source>
+            <translation>Primary mode</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>主模式与子 Agent</source>
+            <translation>Main modes and subagents</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>主模式决定当前会话；子 Agent 由 /agents run 或工具显式执行。</source>
+            <translation>The main mode controls this conversation. Subagents run explicitly through /agents run or a tool.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>主题</source>
+            <translation>Theme</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>交给 Agent</source>
+            <translation>Send to Agent</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>仅内部</source>
+            <translation>Internal only</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>仅应用于当前会话。</source>
+            <translation>Applies only to this conversation.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>今天想完成什么？</source>
+            <translation>What would you like to do?</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>从 GitHub 安装 Skill</source>
+            <translation>Install skill from GitHub</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>从宿主目录导入</source>
+            <translation>Import from host directory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>从草稿移除</source>
+            <translation>Remove from draft</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>代理地址</source>
+            <translation>Proxy URL</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>代码已复制</source>
+            <translation>Code copied</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>以下设置用于 Qt 桌面窗口。</source>
+            <translation>These settings apply to the Qt desktop window.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/composer.py" />
+            <source>任务</source>
+            <translation>Tasks</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>任务 · </source>
+            <translation>Tasks · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>会话</source>
+            <translation>Conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>会话内容</source>
+            <translation>Conversation content</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>会话列表</source>
+            <translation>Conversations</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>会话及其消息将被删除。此操作无法撤销。</source>
+            <translation>This conversation and its messages will be deleted. This cannot be undone.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>会话指令</source>
+            <translation>Conversation instructions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>会话摘要</source>
+            <translation>Conversation summary</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>会话操作</source>
+            <translation>Conversation actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>会话操作：{action}</source>
+            <translation>Conversation action: {action}</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>会话数据</source>
+            <translation>Conversation data</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>会话状态</source>
+            <translation>Conversation state</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>会话记忆开关位于会话设置。容量和自动整理策略位于“运行与权限 → 策略”。</source>
+            <translation>Enable memory in conversation settings. Capacity and automatic curation are under Run &amp; permissions → Policies.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>会话设置</source>
+            <translation>Conversation settings</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>会话详情</source>
+            <translation>Conversation details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>传输方式</source>
+            <translation>Transport</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>你</source>
+            <translation>You</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>使用 PyCat 助手提示</source>
+            <translation>Use PyCat assistant instructions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>使用 pycat serve 输出的访问链接或令牌。</source>
+            <translation>Use the access link or token printed by pycat serve.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>使用微信扫描二维码</source>
+            <translation>Scan the QR code with WeChat</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>使用方式</source>
+            <translation>Usage</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>保存</source>
+            <translation>Save</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>保存后将清除</source>
+            <translation>Will be cleared on save</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>保存后应用于工作台；会话中的独立设置优先。</source>
+            <translation>Applies to the workbench after saving; conversation overrides take precedence.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>保存失败；草稿已保留</source>
+            <translation>Save failed; draft preserved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>保存并返回</source>
+            <translation>Save and return</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>保存技能</source>
+            <translation>Save skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>保存技能资源</source>
+            <translation>Save skill resource</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>保存更改</source>
+            <translation>Save changes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>保存设置后移除此连接。</source>
+            <translation>Save settings to remove this connection.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>保存设置更改？</source>
+            <translation>Save settings changes?</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>保存设置草稿</source>
+            <translation>Save settings draft</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>保存配置</source>
+            <translation>Save configuration</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>保存项目知识</source>
+            <translation>Save project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>保存频道</source>
+            <translation>Save channel</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>信任来源</source>
+            <translation>Trusted source</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>修改前</source>
+            <translation>Before changes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>修改已保存的桌面绑定。</source>
+            <translation>Edit saved desktop key bindings.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>修改文件</source>
+            <translation>Edit files</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>修改消息</source>
+            <translation>Edit message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>停止</source>
+            <translation>Stop</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>停止 </source>
+            <translation>Stop </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>停止进程</source>
+            <translation>Stop process</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>停用</source>
+            <translation>Disable</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/resources.js" />
+            <source>停用 </source>
+            <translation>Disable </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>允许</source>
+            <translation>Allow</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>允许一次</source>
+            <translation>Allow once</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>允许工具</source>
+            <translation>Allowed tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>允许本次</source>
+            <translation>Allow once</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>允许本轮读取</source>
+            <translation>Allow reads for this run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>允许来源</source>
+            <translation>Allowed origins</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>允许的工具类别</source>
+            <translation>Allowed tool categories</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/executor.py" />
+            <source>允许？[y/N/r]：</source>
+            <translation>Allow? [y/N/r]: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/executor.py" />
+            <source>允许？[y/N]：</source>
+            <translation>Allow? [y/N]: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>全局追加指令</source>
+            <translation>Global additional instructions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>全部</source>
+            <translation>All</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>全部项目 · 切换当前</source>
+            <translation>All projects · Switch to current</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>公开市场条目。添加 MCP 为停用草稿；技能安装前会核对 GitHub 目录和固定提交。</source>
+            <translation>Public catalog entry. MCP is added as a disabled draft; skill installation verifies the GitHub directory and pins the commit.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>共享上下文</source>
+            <translation>Shared context</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>关于</source>
+            <translation>About</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>关于 PyCat</source>
+            <translation>About PyCat</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>关闭</source>
+            <translation>Off</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>关闭窗口后留在托盘</source>
+            <translation>Keep in tray when closed</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>关闭窗口或停止运行</source>
+            <translation>Close dialog or stop run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>内置</source>
+            <translation>Bundled</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>内置技能</source>
+            <translation>Built-in skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>内置能力不能修改标识</source>
+            <translation>Built-in capability IDs cannot be changed</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>准备安装</source>
+            <translation>Prepare installation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>准备市场技能安装</source>
+            <translation>Prepare catalog skill installation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>凭据与接入</source>
+            <translation>Credentials and access</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>分支 / 标签 / 提交</source>
+            <translation>Branch / tag / commit</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>分析项目 </source>
+            <translation>Analyze project </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>分配 </source>
+            <translation>Assign </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>分配待归属记忆</source>
+            <translation>Assign unassigned memories</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>切换会话侧栏</source>
+            <translation>Toggle conversation sidebar</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>切换工作区</source>
+            <translation>Switch workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>切换深浅主题</source>
+            <translation>Toggle light/dark theme</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>切换辅助栏</source>
+            <translation>Toggle inspector</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>列出或选择模型</source>
+            <translation>List or select a model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>刚刚</source>
+            <translation>Just now</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>创建技能</source>
+            <translation>Create skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>创建独立会话</source>
+            <translation>Create separate conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>创建频道草稿</source>
+            <translation>Create channel draft</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>删除</source>
+            <translation>Delete</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>删除“</source>
+            <translation>Delete “</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>删除会话</source>
+            <translation>Delete conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>删除技能</source>
+            <translation>Delete skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>删除服务商</source>
+            <translation>Delete provider</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>删除此资源</source>
+            <translation>Delete this resource</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>删除此轮及之后的消息？</source>
+            <translation>Delete this turn and all following messages?</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>删除此轮及后续消息</source>
+            <translation>Delete this turn and following messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>删除消息</source>
+            <translation>Delete message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>删除用户维护的“</source>
+            <translation>Delete the user-managed “</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>删除知识</source>
+            <translation>Delete knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>删除项目知识</source>
+            <translation>Delete project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>删除频道</source>
+            <translation>Delete channel</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>制定计划 </source>
+            <translation>Make a plan </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>刷新</source>
+            <translation>Refresh</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>刷新扫码状态</source>
+            <translation>Refresh QR status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>刷新登录状态</source>
+            <translation>Refresh sign-in status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>前台等待（秒）</source>
+            <translation>Foreground wait (seconds)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>加载更多</source>
+            <translation>Load more</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>加载更早的消息</source>
+            <translation>Load earlier messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>包含其它工作区的会话</source>
+            <translation>Include sessions from other workspaces</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>包含日期</source>
+            <translation>Include dates</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>包含环境信息</source>
+            <translation>Include environment information</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>单个工具覆盖</source>
+            <translation>Individual tool overrides</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>单轮转换</source>
+            <translation>Single model call</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>压缩上下文</source>
+            <translation>Compact context</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>压缩已读工具内容</source>
+            <translation>Compress previously read tool content</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>压缩阈值</source>
+            <translation>Compression threshold</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>原文</source>
+            <translation>Original</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>参与上下文的消息</source>
+            <translation>Messages included in context</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>参数与结果</source>
+            <translation>Arguments and results</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>参数（每行一项）</source>
+            <translation>Arguments (one per line)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>发布</source>
+            <translation>Publish</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>发布或回滚技能</source>
+            <translation>Publish or roll back skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>发现模型</source>
+            <translation>Discover models</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>发送 / 引导</source>
+            <translation>Send / guide</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>发送引导</source>
+            <translation>Send guidance</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>发送消息</source>
+            <translation>Send message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/config.js" />
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>取消登录</source>
+            <translation>Cancel sign-in</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>取消编辑</source>
+            <translation>Cancel editing</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>取消置顶</source>
+            <translation>Unpin</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>受限 Agent 循环</source>
+            <translation>Bounded agent loop</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>变更即时作用于后续工具调用。正在执行的调用不会被重新执行。</source>
+            <translation>Changes apply to subsequent tool calls. Calls already running are not restarted.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>只共享索引</source>
+            <translation>Share index only</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>只读会话</source>
+            <translation>Read-only conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>可安装版本：</source>
+            <translation>Available version: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>可用工具</source>
+            <translation>Available tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>可用工具类别</source>
+            <translation>Available tool categories</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>可用搜索引擎</source>
+            <translation>Available search providers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>可用更新 · </source>
+            <translation>Update available · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>可用输入预算</source>
+            <translation>Available input budget</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>可用频道类型</source>
+            <translation>Available channel types</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>可选推理值（每行一项）</source>
+            <translation>Allowed reasoning values (one per line)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>可选模型</source>
+            <translation>Available models</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>右侧辅助栏</source>
+            <translation>Inspector</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>同步模型</source>
+            <translation>Sync models</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>名称</source>
+            <translation>Name</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>名称不能为空</source>
+            <translation>Name cannot be empty</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>后台进程</source>
+            <translation>Background processes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>启动 API 和网页服务</source>
+            <translation>Start the API and WebUI host</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>启动参数（每行一项）</source>
+            <translation>Startup arguments (one per line)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>启动程序</source>
+            <translation>Executable</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>启用</source>
+            <translation>Enable</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/resources.js" />
+            <source>启用 </source>
+            <translation>Enable </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>启用 OCR</source>
+            <translation>Enable OCR</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>启用或停用技能</source>
+            <translation>Enable or disable skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>启用服务商</source>
+            <translation>Enable provider</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>启用网络搜索</source>
+            <translation>Enable web search</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>启用记忆</source>
+            <translation>Enable memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/tui/composer.py" />
+            <source>命令</source>
+            <translation>Command</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>命令 </source>
+            <translation>Commands </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>命令在应用宿主执行，仍经过当前权限规则。</source>
+            <translation>Commands run on the application host under the current permission rules.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>回滚</source>
+            <translation>Roll back</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/executor.py" />
+            <source>回答（逗号分隔的编号或文字；回车跳过）：</source>
+            <translation>Answer (comma-separated numbers or text; Enter skips): </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>图片</source>
+            <translation>Images</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>在会话、终端和浏览器中继续同一项工作。</source>
+            <translation>Continue the same work in conversations, terminal and browser.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>在此新建会话</source>
+            <translation>New conversation here</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>在浏览器完成授权后，本页会更新连接状态。</source>
+            <translation>Connection status updates after authorization in the browser.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>在资料阅读器中选择图片或 PDF，识别结果可阅读或复制。</source>
+            <translation>Select an image or PDF in the materials reader. Recognized text can be read or copied.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>基本信息</source>
+            <translation>Basic information</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>基础重试间隔（秒）</source>
+            <translation>Base retry delay (seconds)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>备注</source>
+            <translation>Notes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>复制</source>
+            <translation>Copy</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>复制为可编辑技能</source>
+            <translation>Copy as editable skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>复制为用户技能</source>
+            <translation>Copy to user skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>复制代码</source>
+            <translation>Copy code</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>复制完整路径</source>
+            <translation>Copy full path</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>复制调用参数</source>
+            <translation>Copy call arguments</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>复测工具</source>
+            <translation>Retest tool</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>外观</source>
+            <translation>Appearance</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>外部</source>
+            <translation>External</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>外部技能</source>
+            <translation>External skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>外部管理。请在原来源更新程序或重新导入技能；刷新工具列表不会升级程序。</source>
+            <translation>Managed externally. Update at the original source or import the skill again; refreshing tools does not upgrade the program.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>失败</source>
+            <translation>Failed</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>失败重试次数</source>
+            <translation>Retry count</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>如需验证，请填写验证码</source>
+            <translation>Enter a verification code if requested</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>委派 Agent</source>
+            <translation>Delegate agent</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>子 Agent</source>
+            <translation>Subagent</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>子 Agent 和能力可继承主模型、辅助模型或指定模型。</source>
+            <translation>Subagents and capabilities can inherit the main model, use the auxiliary model or select a specific model.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>子 Agent 策略</source>
+            <translation>Subagent policy</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>字母、数字与连字符，例如 my-provider</source>
+            <translation>Letters, numbers and hyphens, e.g. my-provider</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>安装</source>
+            <translation>Install</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>安装到</source>
+            <translation>Install to</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>安装或更新技能</source>
+            <translation>Install or update skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>安装或更新浏览器驱动</source>
+            <translation>Install or update browser drivers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>安装终端界面：pip install "pycat[tui]"</source>
+            <translation>Install the terminal interface with: pip install "pycat[tui]"</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>安装网页界面：pip install "pycat[web]"</source>
+            <translation>Install the web interface with: pip install "pycat[web]"</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>完成</source>
+            <translation>Done</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>完成方式</source>
+            <translation>Completion method</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>完整工具结果</source>
+            <translation>Full tool result</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>完整文件访问</source>
+            <translation>Full file access</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>完整消息</source>
+            <translation>Full message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>宿主上的技能目录 / ZIP / SKILL.md</source>
+            <translation>Skill directory / ZIP / SKILL.md on host</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>导入</source>
+            <translation>Import</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>导入 </source>
+            <translation>Import </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>导入 MCP 草稿</source>
+            <translation>Import MCP drafts</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>导入 mcp.json</source>
+            <translation>Import mcp.json</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>导入会话</source>
+            <translation>Import conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>导入技能</source>
+            <translation>Import skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>导入文件</source>
+            <translation>Import file</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>导出</source>
+            <translation>Export</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>导出 mcp.json</source>
+            <translation>Export mcp.json</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>导出会话</source>
+            <translation>Export conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>导出当前会话</source>
+            <translation>Export current conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>导出格式</source>
+            <translation>Export format</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>尚未保存的配置将恢复为上次读取的状态。</source>
+            <translation>Unsaved configuration will revert to the last loaded state.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>尚未添加消息通道。选择平台后填写连接信息。</source>
+            <translation>No channels yet. Select a platform and enter connection details.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>尚未连接账号</source>
+            <translation>No account connected</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>尚未配置</source>
+            <translation>Not configured</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>工作区</source>
+            <translation>Workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>工作目录</source>
+            <translation>Working directory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>工具</source>
+            <translation>Tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>工具 · </source>
+            <translation>Tools · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>工具与文件权限</source>
+            <translation>Tool and file permissions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>工具与能力</source>
+            <translation>Tools and capabilities</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>工具与频道</source>
+            <translation>Tools and channels</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>工具内容压缩应早于上下文压缩；关闭开关会保留阈值。</source>
+            <translation>Tool content should be compressed before context compaction. Disabling either keeps its threshold.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>工具压缩阈值必须低于上下文压缩阈值</source>
+            <translation>Tool compression threshold must be below context compaction threshold</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>工具压缩阈值（0–1）</source>
+            <translation>Tool compression threshold (0–1)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>工具批准</source>
+            <translation>Tool approval</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>工具结果</source>
+            <translation>Tool results</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>工具规则</source>
+            <translation>Tool rules</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>工具调用</source>
+            <translation>Tool calling</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>工具需要批准</source>
+            <translation>Tool approval required</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>已保存，留空保留</source>
+            <translation>Saved; leave blank to keep</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>已保存；留空保留</source>
+            <translation>Saved; leave blank to keep</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>已停用</source>
+            <translation>Disabled</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已加入停用草稿；在已安装页填写凭据、测试连接并启用，保存设置后生效。</source>
+            <translation>Added as a disabled draft. Enter credentials, test and enable it in Installed, then save settings.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>已发布技能</source>
+            <translation>Published skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>已启用</source>
+            <translation>Enabled</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>已回滚</source>
+            <translation>Rolled back</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已固定提交，请核对来源后点击安装。</source>
+            <translation>Commit pinned. Review the source, then select Install.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>已复制</source>
+            <translation>Copied</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>已复制路径</source>
+            <translation>Path copied</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已存在同名 MCP，请在已安装页查看或修改名称。</source>
+            <translation>An MCP service with this name already exists. View it or change the name in Installed.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已存在名为 browser 的 MCP，请先重命名该服务。</source>
+            <translation>An MCP named browser already exists. Rename that service first.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已安装</source>
+            <translation>Installed</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>已导入 </source>
+            <translation>Imported </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>已导出启用的服务，包含其环境变量和请求头</source>
+            <translation>Exported enabled services, including their environment variables and headers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>已拒绝</source>
+            <translation>Denied</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>已是当前稳定版本</source>
+            <translation>Already on the current stable version</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已是最新版本。</source>
+            <translation>Already up to date.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已添加</source>
+            <translation>Added</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>已连接 · </source>
+            <translation>Connected · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>已连接 · {version}</source>
+            <translation>Connected · {version}</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>已连接，发现 </source>
+            <translation>Connected; discovered </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>已配置</source>
+            <translation>Configured</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>市场</source>
+            <translation>Marketplace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>市场搜索词</source>
+            <translation>Marketplace search</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>市场版本：</source>
+            <translation>Market version: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>帮助</source>
+            <translation>Help</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>应用于新请求；项目规则、会话指令和记忆保留独立来源。</source>
+            <translation>Applies to new requests. Project rules, conversation instructions and memory keep separate sources.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>应用到草稿</source>
+            <translation>Apply to draft</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>应用状态</source>
+            <translation>Application status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>应用配置</source>
+            <translation>Application configuration</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>开始账号登录</source>
+            <translation>Start account sign-in</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>引导已提交</source>
+            <translation>Guidance submitted</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>引用</source>
+            <translation>References</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>强调色</source>
+            <translation>Accent color</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>归档</source>
+            <translation>Archive</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>当前会话</source>
+            <translation>Current conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>当前会话估算 · </source>
+            <translation>Current conversation estimate · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>当前会话还没有资料</source>
+            <translation>No materials in this conversation yet</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>当前工作区</source>
+            <translation>Current workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>当前版本：</source>
+            <translation>Current version: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>当前状态</source>
+            <translation>Current state</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>当前状态 · v</source>
+            <translation>Current state · v</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>当前状态与历史调用记录分别保存。选择左侧项目查看。</source>
+            <translation>Current state and historical calls are stored separately. Select an item on the left.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>当前输入</source>
+            <translation>Current input</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>当前运行已保留，可以关闭此页面。</source>
+            <translation>The current run is preserved. You can close this page.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>当前项目</source>
+            <translation>Current project</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>当前项目 · 切换全部</source>
+            <translation>Current project · Switch to all</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>待处理</source>
+            <translation>Pending</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>待安装</source>
+            <translation>Pending installation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>待审核</source>
+            <translation>Awaiting review</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>待审核技能</source>
+            <translation>Skills awaiting review</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>微信已连接，可启用频道接收消息</source>
+            <translation>WeChat connected. Enable the channel to receive messages.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>微信扫码登录</source>
+            <translation>WeChat QR sign-in</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>微信登录二维码</source>
+            <translation>WeChat sign-in QR code</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>忘记</source>
+            <translation>Forget</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>忘记这条记忆？</source>
+            <translation>Forget this memory?</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>快捷键</source>
+            <translation>Shortcuts</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>思考中 · </source>
+            <translation>Thinking · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>思考强度</source>
+            <translation>Reasoning effort</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>思考过程</source>
+            <translation>Reasoning</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>恢复会话</source>
+            <translation>Resume conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>恢复类别规则</source>
+            <translation>Reset to category rule</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>成果</source>
+            <translation>Artifacts</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>成果 · </source>
+            <translation>Outputs · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>成果与资料</source>
+            <translation>Outputs and materials</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>所有操作</source>
+            <translation>All actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>所有更改已保存</source>
+            <translation>All changes saved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>所有界面共用此设置。网页刷新、终端和桌面重新打开后生效。</source>
+            <translation>Shared by all interfaces. Refresh the webpage or reopen the terminal and desktop to apply.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>所有管理操作</source>
+            <translation>All management actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>打开发行页面</source>
+            <translation>Open release page</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>打开登录页面</source>
+            <translation>Open sign-in page</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>打开资料</source>
+            <translation>Open material</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>打开资料与记忆</source>
+            <translation>Open materials and memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>执行</source>
+            <translation>Execute</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>执行一个任务；'-' 从标准输入读取</source>
+            <translation>Execute one prompt; '-' reads stdin</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>执行中</source>
+            <translation>Running</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>执行任务后退出</source>
+            <translation>Execute a prompt and exit</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>执行方式</source>
+            <translation>Execution</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>执行终端命令</source>
+            <translation>Run terminal command</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>扩展目录与安装状态</source>
+            <translation>Extension catalog and installation status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>扫码登录</source>
+            <translation>QR sign-in</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>批准工具操作</source>
+            <translation>Approve tool action</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>找到 </source>
+            <translation>Found </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>技能</source>
+            <translation>Skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>技能 Skills</source>
+            <translation>Skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>技能内路径</source>
+            <translation>Path within skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>技能变更 · </source>
+            <translation>Skill changes · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>技能变更详情</source>
+            <translation>Skill change details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>技能已保存</source>
+            <translation>Skill saved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>技能已安装并生效，来源和提交已记录。</source>
+            <translation>Skill installed and active. Its source and commit have been recorded.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>技能已导入</source>
+            <translation>Skill imported</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>技能操作即时生效</source>
+            <translation>Skill actions apply immediately</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>技能目录（skills/example-skill）</source>
+            <translation>Skill directory (skills/example-skill)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>技能详情</source>
+            <translation>Skill details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>技能资源</source>
+            <translation>Skill resources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>拒绝</source>
+            <translation>Deny</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>指令</source>
+            <translation>Instructions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>指令、生成参数、工具与频道</source>
+            <translation>Instructions, generation settings, tools and channels</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>指令与来源</source>
+            <translation>Instructions &amp; sources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>指令内容</source>
+            <translation>Instruction content</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>指定成果</source>
+            <translation>Specific outputs</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>指定模型</source>
+            <translation>Specific model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>换行</source>
+            <translation>Newline</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>授权登录</source>
+            <translation>Authorize sign-in</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>接口类型</source>
+            <translation>API type</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>推理参数协议</source>
+            <translation>Reasoning parameter protocol</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>推荐</source>
+            <translation>Recommended</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>描述任务… 输入 / 查看命令，@ 添加引用</source>
+            <translation>Describe a task… / for commands, @ for references</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>描述任务，添加资料，或继续上一次的思路。</source>
+            <translation>Describe a task, add materials or continue where you left off.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>描述任务，随时补充文件与引导。</source>
+            <translation>Describe a task; add files and guidance at any time.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>提交</source>
+            <translation>Submit</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>提示</source>
+            <translation>Notice</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>搜索</source>
+            <translation>Search</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>搜索 MCP</source>
+            <translation>Search MCP</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>搜索 MCP 或 Skills 市场</source>
+            <translation>Search MCP or Skills marketplace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>搜索 Skills</source>
+            <translation>Search skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>搜索…</source>
+            <translation>Search…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>搜索会话</source>
+            <translation>Search conversations</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>搜索命令或设置</source>
+            <translation>Search commands or settings</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>搜索工具</source>
+            <translation>Search tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>搜索工具、进程、SSH 等高级操作</source>
+            <translation>Search advanced actions for tools, processes, SSH and more</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>搜索已安装 MCP</source>
+            <translation>Search installed MCP</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>搜索市场</source>
+            <translation>Search marketplace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>搜索市场或检查更新时才会联网。</source>
+            <translation>Connects only when searching the marketplace or checking for updates.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>搜索引擎</source>
+            <translation>Search engine</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>搜索成果、知识与附件</source>
+            <translation>Search outputs, knowledge and attachments</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>搜索技能</source>
+            <translation>Search skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>搜索服务</source>
+            <translation>Search service</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>搜索标题、项目或会话 ID</source>
+            <translation>Search title, project or conversation ID</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>搜索模型</source>
+            <translation>Search models</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>搜索模型目录</source>
+            <translation>Search model catalog</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>搜索结果</source>
+            <translation>Search results</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>搜索设置</source>
+            <translation>Search settings</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>搜索资料</source>
+            <translation>Search materials</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>摘要</source>
+            <translation>Summary</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>操作</source>
+            <translation>Actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>操作不可用：</source>
+            <translation>Action unavailable: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>操作失败；草稿已保留</source>
+            <translation>Action failed; draft preserved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>操作已取消</source>
+            <translation>Action cancelled</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>操作结果</source>
+            <translation>Action result</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>支持工具</source>
+            <translation>Supports tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>支持推理</source>
+            <translation>Supports reasoning</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>放弃全部设置更改？</source>
+            <translation>Discard all settings changes?</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>放弃更改</source>
+            <translation>Discard changes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>整理为知识</source>
+            <translation>Curate as knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>整理为项目知识</source>
+            <translation>Curate as project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>整理待处理详情</source>
+            <translation>Pending curation details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/composer.py" />
+            <source>文件</source>
+            <translation>Files</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>文件与附件</source>
+            <translation>Files and attachments</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>文件范围</source>
+            <translation>File access</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>文字识别</source>
+            <translation>Text recognition</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>文本</source>
+            <translation>Text</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>文本回复</source>
+            <translation>Text response</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>新会话</source>
+            <translation>New conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>新会话使用默认对话模型；辅助模型用于压缩、整理等任务。</source>
+            <translation>New conversations use the default chat model. The auxiliary model handles compaction, curation and similar tasks.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>新建</source>
+            <translation>New</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>新建会话</source>
+            <translation>New conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>新建会话 · Ctrl N</source>
+            <translation>New conversation · Ctrl N</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>新建会话，开始工作</source>
+            <translation>Start a new conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>新建当前工作区会话</source>
+            <translation>New conversation in current workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>新建技能</source>
+            <translation>Create skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>新模型默认档案</source>
+            <translation>Defaults for new model profiles</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>新频道</source>
+            <translation>New channel</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>无法切换工作区</source>
+            <translation>Cannot switch workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>无法恢复会话</source>
+            <translation>Cannot resume conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>无法打开资料</source>
+            <translation>Cannot open material</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>时间未知</source>
+            <translation>Unknown time</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>显式完成</source>
+            <translation>Explicit completion</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>显示会话侧栏</source>
+            <translation>Show conversation sidebar</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>显示名称</source>
+            <translation>Display name</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>显示思考过程</source>
+            <translation>Show reasoning</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>显示版本</source>
+            <translation>Print version</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>显示辅助栏</source>
+            <translation>Show inspector</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>智能体配置</source>
+            <translation>Agent profiles</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>暂无</source>
+            <translation>None yet</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>暂无匹配的运行记录</source>
+            <translation>No matching run records</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>暂无压缩摘要</source>
+            <translation>No compaction summaries yet</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>暂无模型。连接服务后发现模型，或手动添加。</source>
+            <translation>No models yet. Connect a provider to discover models or add one manually.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>暂无进行中的任务</source>
+            <translation>No active tasks</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>更多</source>
+            <translation>More</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>更改尚未保存。可以保存后返回，或放弃本次草稿。</source>
+            <translation>Changes are unsaved. Save and return, or discard this draft.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>更新</source>
+            <translation>Update</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>更新任务</source>
+            <translation>Update tasks</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>替换此用户轮及后续消息</source>
+            <translation>Replace this user turn and its following messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>最多上下文消息</source>
+            <translation>Maximum context messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>最多轮数</source>
+            <translation>Maximum steps</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>最多运行轮数</source>
+            <translation>Maximum run steps</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>最大化 / 还原</source>
+            <translation>Maximize / restore</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>最大输出</source>
+            <translation>Max output</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>最大输出（Token）</source>
+            <translation>Maximum output (tokens)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>最近</source>
+            <translation>Recent</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>最近完成 · </source>
+            <translation>Recently completed · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>最近更新      会话</source>
+            <translation>Updated          Conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>服务</source>
+            <translation>Provider</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>服务 URL</source>
+            <translation>Server URL</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>服务名称已存在</source>
+            <translation>Provider name already exists</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>服务商</source>
+            <translation>Providers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>服务地址</source>
+            <translation>Service URL</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>未单独指定时使用所属类别的规则。</source>
+            <translation>Uses the category rule unless overridden.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>未命名会话</source>
+            <translation>Untitled conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>未完成 · </source>
+            <translation>Incomplete · </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>未找到；请先安装 Chrome / Edge / Chromium，或在 MCP 环境变量中指定程序。</source>
+            <translation>Not found. Install Chrome / Edge / Chromium or specify the executable in MCP environment variables.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>未知</source>
+            <translation>Unknown</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>未能发送</source>
+            <translation>Could not send</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>未记录</source>
+            <translation>Not recorded</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <location filename="../../../pycat/tui/resume.py" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>未选择项目</source>
+            <translation>No project selected</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>本地文件路径</source>
+            <translation>Local file path</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>本地目录或 SSH 工作区</source>
+            <translation>Local directory or SSH workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>本地进程</source>
+            <translation>Local process</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>本机浏览器：</source>
+            <translation>Local browser: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>本次运行可读</source>
+            <translation>Allow reads for this run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>本轮已结束，请重新发送。</source>
+            <translation>This run has ended. Please send again.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>本轮正在等待回复，可返回会话处理。</source>
+            <translation>This run is waiting for a reply. Return to the conversation to respond.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/executor.py" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>本题只能选择一项</source>
+            <translation>This question permits one selection.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>权限</source>
+            <translation>Permissions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>来源</source>
+            <translation>Source</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>来源信息</source>
+            <translation>Source information</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>来源名称与频道配置一致；留空允许来源表示继承默认值。每行一项。</source>
+            <translation>Source names match channel configuration. Leave allowed origins blank to inherit defaults. One per line.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>来源提示</source>
+            <translation>Source hint</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>来源片段</source>
+            <translation>Source excerpt</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>来源：</source>
+            <translation>Source: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>查找浏览器与桌面 MCP</source>
+            <translation>Find browser and desktop MCP</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/resources.js" />
+            <source>查看 </source>
+            <translation>View </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>查看上下文预算</source>
+            <translation>View context budget</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>查看在线目录，再按需配置 MCP 或安装技能。</source>
+            <translation>Browse the online catalog, then configure MCP or install skills as needed.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>查看当前状态</source>
+            <translation>View current state</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>查看所有会话</source>
+            <translation>View all conversations</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>查看本次运行</source>
+            <translation>Inspect run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>查看来源</source>
+            <translation>View source</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>查看状态数据</source>
+            <translation>View state data</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>查看记忆来源</source>
+            <translation>View memory sources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>查看运行检查中的完整调用记录。</source>
+            <translation>View the complete call history in Inspect run.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>查看项目资料</source>
+            <translation>View project materials</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>标识</source>
+            <translation>ID</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>标识已存在</source>
+            <translation>ID already exists</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>标题</source>
+            <translation>Title</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>校验 MCP 草稿</source>
+            <translation>Validate MCP draft</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>桌面应用</source>
+            <translation>Desktop application</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>桌面快捷键</source>
+            <translation>Desktop shortcuts</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>检查 GitHub 技能来源</source>
+            <translation>Check GitHub skill source</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>检查代码 </source>
+            <translation>Review code </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>检查完成</source>
+            <translation>Check complete</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>检查应用状态</source>
+            <translation>Check application status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>检查扩展更新</source>
+            <translation>Check extension updates</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>检查搜索连接</source>
+            <translation>Check search connection</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>检查更新</source>
+            <translation>Check for updates</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>检查连接</source>
+            <translation>Test connection</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>森林绿</source>
+            <translation>Forest green</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>模型</source>
+            <translation>Models</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>模型 ID</source>
+            <translation>Model ID</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>模型 ID 已存在</source>
+            <translation>Model ID already exists</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>模型上下文窗口</source>
+            <translation>Model context window</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>模型与服务</source>
+            <translation>Models and providers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>模型与服务商</source>
+            <translation>Models and providers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>模型与模式</source>
+            <translation>Models and modes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>模型工具</source>
+            <translation>Model tool</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>模型执行与失败重试使用同一套策略。</source>
+            <translation>Model execution and failure retries use the same policy.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>模型来源</source>
+            <translation>Model source</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>模型档案</source>
+            <translation>Model profile</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>模型能力</source>
+            <translation>Model capabilities</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>模型超时（秒）</source>
+            <translation>Model timeout (seconds)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>模型选择</source>
+            <translation>Model selection</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>模式</source>
+            <translation>Mode</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>模式与 Agent</source>
+            <translation>Modes and agents</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>模式与 Agent 配置</source>
+            <translation>Mode and agent configuration</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>正在下载、校验并安装…</source>
+            <translation>Downloading, verifying and installing…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>正在使用 </source>
+            <translation>Using </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>正在停止…</source>
+            <translation>Stopping…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>正在准备配置…</source>
+            <translation>Preparing configuration…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>正在处理</source>
+            <translation>Processing</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>正在搜索公开市场…</source>
+            <translation>Searching public marketplace…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>正在检查官方来源…</source>
+            <translation>Checking the official source…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>正在检查技能来源…</source>
+            <translation>Checking skill source…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>正在编辑消息 · 发送后替换此轮及后续消息</source>
+            <translation>Editing message · Sending replaces this turn and following messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>正在读取本地推荐…</source>
+            <translation>Loading local recommendations…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>正在运行</source>
+            <translation>Running</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>正在运行 · Esc 停止 · 输入文字补充引导</source>
+            <translation>Running · Esc stop · Type to add guidance</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>正在连接…</source>
+            <translation>Connecting…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>正文</source>
+            <translation>Body</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>此内容可在桌面或 Web 资料视图中打开；终端不将二进制文件解码为文本。</source>
+            <translation>Open this content in the desktop or Web materials view. The terminal does not decode binary files as text.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>此操作尚不可用</source>
+            <translation>This action is not available yet</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>此操作需要你的批准。</source>
+            <translation>This action requires your approval.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>此更改将在保存设置后生效。</source>
+            <translation>This change applies after saving settings.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>此条目需要自定义安装步骤，请查看来源后手动添加配置。</source>
+            <translation>This entry requires custom installation. Check the source and add its configuration manually.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>每批 PDF 页数</source>
+            <translation>PDF pages per batch</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>没有 MCP 服务。可以从市场添加或手动配置。</source>
+            <translation>No MCP services. Add one from the marketplace or configure it manually.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>没有匹配会话</source>
+            <translation>No matching conversations</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>没有匹配会话；可切换全部项目或修改搜索</source>
+            <translation>No matching conversations; switch to all projects or change the search</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>没有匹配的条目，请输入关键词搜索市场。</source>
+            <translation>No matching entries. Enter keywords to search the marketplace.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>没有匹配的项目</source>
+            <translation>No matching items</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>没有匹配结果</source>
+            <translation>No matching results</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>没有后台进程</source>
+            <translation>No background processes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>没有待审核的技能变更</source>
+            <translation>No skill changes awaiting review</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>没有收到操作结果，请检查安装状态后重试。</source>
+            <translation>No result received. Check installation status before retrying.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>流式响应</source>
+            <translation>Streaming response</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>浅色</source>
+            <translation>Light</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>测试 MCP</source>
+            <translation>Test MCP</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>测试连接</source>
+            <translation>Test connection</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>测试连接后可查看工具说明和参数。</source>
+            <translation>Test the connection to view tool descriptions and parameters.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>浏览器内截图可通过粘贴或上传加入当前输入。桌面截图快捷键由 Qt 应用提供。</source>
+            <translation>Paste or upload browser screenshots into the current input. Desktop capture shortcuts are provided by the Qt application.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>浏览器和桌面能力复用 MCP。在 MCP 的“发现”中查看来源并按需安装。</source>
+            <translation>Browser and desktop capabilities use MCP. Browse MCP discovery to review sources and install as needed.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>浏览远程目录</source>
+            <translation>Browse remote directory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>消息</source>
+            <translation>Message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>消息操作</source>
+            <translation>Message actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>消息输入</source>
+            <translation>Message input</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>消息连接</source>
+            <translation>Messaging connections</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>消息通道</source>
+            <translation>Channels</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>深色</source>
+            <translation>Dark</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>添加</source>
+            <translation>Add</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>添加 MCP 服务</source>
+            <translation>Add MCP server</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>添加任务</source>
+            <translation>Add task</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>添加到输入</source>
+            <translation>Add to input</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>添加引用</source>
+            <translation>Add reference</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>添加模型</source>
+            <translation>Add model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>添加模式 / Agent</source>
+            <translation>Add mode / agent</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>添加能力</source>
+            <translation>Add capability</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>添加规则</source>
+            <translation>Add rule</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>添加配置</source>
+            <translation>Add configuration</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>添加附件</source>
+            <translation>Add attachment</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>添加项目</source>
+            <translation>Add project</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>清除</source>
+            <translation>Clear</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>版本与更新</source>
+            <translation>Version and updates</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>版本已确认，点击安装或更新以继续。</source>
+            <translation>Version confirmed. Select Install or Update to continue.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>状态与资料</source>
+            <translation>State and materials</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>状态版本 </source>
+            <translation>State version </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>独立会话</source>
+            <translation>Separate conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>环境变量</source>
+            <translation>Environment variables</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>生成参数</source>
+            <translation>Generation parameters</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>生成参数与数据格式</source>
+            <translation>Generation parameters and data format</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>用户偏好</source>
+            <translation>User preferences</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>用户偏好字符数</source>
+            <translation>User preference character limit</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>用户技能</source>
+            <translation>User skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>用途</source>
+            <translation>Purpose</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>电脑与浏览器</source>
+            <translation>Computer &amp; browser</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>界面</source>
+            <translation>Interface</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>界面语言</source>
+            <translation>Interface language</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>留空表示继承。</source>
+            <translation>Leave blank to inherit.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>留空表示继承模型档案的默认值。</source>
+            <translation>Leave blank to inherit the model profile default.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>登录已取消</source>
+            <translation>Sign-in cancelled</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>登录账号</source>
+            <translation>Sign in</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>的操作</source>
+            <translation> actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/composer.py" />
+            <source>目录</source>
+            <translation>Directory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>确认删除此轮及后续消息</source>
+            <translation>Confirm deletion of this turn and following messages</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>禁用工具</source>
+            <translation>Disable tools</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>移除</source>
+            <translation>Remove</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>等待你的回复</source>
+            <translation>Waiting for your reply</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>等待回复</source>
+            <translation>Waiting for your reply</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>等待账号授权</source>
+            <translation>Waiting for account authorization</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>策略</source>
+            <translation>Policy</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>筛选调用 / 状态</source>
+            <translation>Filter calls / status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>筛选运行记录</source>
+            <translation>Filter run records</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>简洁提示</source>
+            <translation>Compact prompt</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>管理 </source>
+            <translation>Manage </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>管理技能、连接外部工具，或从市场发现新能力。</source>
+            <translation>Manage skills, connect external tools or discover capabilities in the marketplace.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>管理资源</source>
+            <translation>Manage resources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>类型</source>
+            <translation>Type</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>终端</source>
+            <translation>Terminal</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>终端与进程</source>
+            <translation>Terminal and processes</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>终端帮助</source>
+            <translation>Terminal help</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>绑定会话</source>
+            <translation>Linked conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>绑定频道会话</source>
+            <translation>Link channel conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>结果数量</source>
+            <translation>Number of results</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>结果未记录</source>
+            <translation>Result not recorded</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>继承环境变量</source>
+            <translation>Inherit environment variables</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>继承默认值</source>
+            <translation>Inherit defaults</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>继续</source>
+            <translation>Continue</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>继续会话</source>
+            <translation>Continue conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>继续会话或打开会话选择器</source>
+            <translation>Continue a session, or open the session picker</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>继续编辑</source>
+            <translation>Keep editing</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>维护可复用的记忆与项目知识。</source>
+            <translation>Maintain reusable memory and project knowledge.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>编辑</source>
+            <translation>Edit</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>编辑并重发</source>
+            <translation>Edit and resend</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>编辑技能</source>
+            <translation>Edit skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>编辑消息</source>
+            <translation>Edit message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>编辑知识</source>
+            <translation>Edit knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>编辑记忆</source>
+            <translation>Edit memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>编辑项目知识</source>
+            <translation>Edit project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>网络、诊断、终端与应用信息。</source>
+            <translation>Network, diagnostics, terminal and application information.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>网络与诊断</source>
+            <translation>Network &amp; diagnostics</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>置顶</source>
+            <translation>Pin</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>联网请求</source>
+            <translation>Network requests</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>能力</source>
+            <translation>Capabilities</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>能力可以进行单轮转换或受限 Agent 执行。</source>
+            <translation>Capabilities can make a single model call or run a bounded agent loop.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>能力标识已存在</source>
+            <translation>Capability ID already exists</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>自动压缩上下文</source>
+            <translation>Automatic context compaction</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>自动选择</source>
+            <translation>Automatic</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>自定义权限</source>
+            <translation>Custom permissions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>自定义规则</source>
+            <translation>Custom rules</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>范围</source>
+            <translation>Scope</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>蓝色</source>
+            <translation>Blue</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>薰衣草紫</source>
+            <translation>Lavender</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>补充说明</source>
+            <translation>Additional details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>补充说明（可选）</source>
+            <translation>Additional details (optional)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>补充说明，指导当前任务…</source>
+            <translation>Add guidance for the current task…</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/composer.py" />
+            <source>补全暂不可用</source>
+            <translation>Suggestions temporarily unavailable</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>覆盖已有技能</source>
+            <translation>Overwrite existing skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>解析 mcp.json 草稿</source>
+            <translation>Parse mcp.json draft</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>记录流式诊断</source>
+            <translation>Record streaming diagnostics</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>记忆</source>
+            <translation>Memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>记忆与知识</source>
+            <translation>Memory and knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>记忆与资料</source>
+            <translation>Memory &amp; sources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>记忆保存短事实和偏好；项目知识保留正文与来源；成果属于当前会话。</source>
+            <translation>Memory stores short facts and preferences; project knowledge keeps full text and sources; outputs belong to the conversation.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>记忆内容</source>
+            <translation>Memory content</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>记忆容量</source>
+            <translation>Memory capacity</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>记忆来源</source>
+            <translation>Memory sources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/config.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>设置</source>
+            <translation>Settings</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>设置导航</source>
+            <translation>Settings navigation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>设置工作方式、操作边界与上下文策略。</source>
+            <translation>Configure working modes, permissions and context policies.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>设置已保存</source>
+            <translation>Settings saved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>设置模型能力与工具运行方式。</source>
+            <translation>Configure model capabilities and tool behavior.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>设置选项</source>
+            <translation>Settings options</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>访问令牌</source>
+            <translation>Access token</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>访问令牌；默认为随机令牌</source>
+            <translation>Access token; defaults to a random token</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>评测</source>
+            <translation>Evaluate</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>评测技能候选</source>
+            <translation>Evaluate skill candidate</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>评测记录</source>
+            <translation>Evaluation records</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>识别文字</source>
+            <translation>Recognize text</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>识别附件文字</source>
+            <translation>Recognize attachment text</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>诊断</source>
+            <translation>Diagnostics</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>询问</source>
+            <translation>Ask</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>语言</source>
+            <translation>Language</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>说明</source>
+            <translation>Description</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>请先保存配置，再开始扫码登录</source>
+            <translation>Save the configuration before starting QR sign-in</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>请先开始或恢复一个会话</source>
+            <translation>Start or resume a conversation first</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>请先选择一个空闲会话</source>
+            <translation>Select an idle conversation first</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>请先选择项目工作区</source>
+            <translation>Select a project workspace first</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>请启用 JavaScript 以使用 PyCat 工作台。</source>
+            <translation>Enable JavaScript to use the PyCat workbench.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>请帮我分析这个项目的结构与关键流程</source>
+            <translation>Please analyze this project's structure and key workflows</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/api.js" />
+            <source>请求失败 ({value0})</source>
+            <translation>Request failed ({value0})</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>请求头</source>
+            <translation>Headers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>请输入有效值：{value0}</source>
+            <translation>Enter a valid value: {value0}</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <location filename="../../../pycat/assets/web/ui.js" />
+            <source>请输入有效数字</source>
+            <translation>Enter a valid number</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>请选择选项或填写补充说明</source>
+            <translation>Select an option or enter additional details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/fields.js" />
+            <source>读取与搜索</source>
+            <translation>Read and search</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>读取或修改此会话的配置</source>
+            <translation>Read or change this session instead of global configuration</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>读取或更新应用配置</source>
+            <translation>Read or update application configuration</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>调整界面与日常操作。</source>
+            <translation>Adjust appearance and everyday interactions.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>调整记忆容量</source>
+            <translation>Adjust memory capacity</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>调用参数</source>
+            <translation>Call arguments</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>调用工具</source>
+            <translation>Call tool</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>账号已连接</source>
+            <translation>Account connected</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>账号状态</source>
+            <translation>Account status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <location filename="../../../pycat/tui/composer.py" />
+            <source>资料</source>
+            <translation>Materials</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>资料与记忆</source>
+            <translation>Materials and memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>资料类型</source>
+            <translation>Material type</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>资源内容</source>
+            <translation>Resource content</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>资源已更新</source>
+            <translation>Resource updated</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>跟随会话模型</source>
+            <translation>Follow conversation model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>跟随系统</source>
+            <translation>System</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>跳转到输入区</source>
+            <translation>Skip to input</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>跳过</source>
+            <translation>Skip</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>辅助栏</source>
+            <translation>Inspector</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>辅助栏 · Ctrl Shift I</source>
+            <translation>Inspector · Ctrl Shift I</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>辅助模型</source>
+            <translation>Auxiliary model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>输入 Schema</source>
+            <translation>Input schema</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>输入尚未完成，请修正后保存</source>
+            <translation>Some values are incomplete. Correct them before saving.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>输入法组合输入期间不会触发发送快捷键。</source>
+            <translation>Send shortcuts are disabled during input method composition.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>输入类型</source>
+            <translation>Input types</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>输入补全</source>
+            <translation>Input suggestions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>输入选项编号（多选用逗号）或文字</source>
+            <translation>Enter option numbers (comma-separated) or text</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>输入附件</source>
+            <translation>Input attachments</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>输出 Schema</source>
+            <translation>Output schema</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>输出编码</source>
+            <translation>Output encoding</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>输出预留</source>
+            <translation>Reserved output</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>过程</source>
+            <translation>Process</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>过程与当前状态 · Ctrl J</source>
+            <translation>Run history and current state · Ctrl J</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>过程详情</source>
+            <translation>Run details</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>运行</source>
+            <translation>Run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>运行与权限</source>
+            <translation>Run &amp; permissions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>运行中</source>
+            <translation>Running</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>运行中请发送文字引导；附件可在下一轮发送</source>
+            <translation>Send text guidance while running; attachments can be sent next turn</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>运行中请发送文字引导；附件和消息修改可在本轮结束后提交。</source>
+            <translation>Send text guidance while running; submit attachments and message edits after this run ends.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/index.html" />
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>运行检查</source>
+            <translation>Inspect run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>运行模式</source>
+            <translation>Run mode</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>运行过程</source>
+            <translation>Run history</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>返回会话</source>
+            <translation>Back to conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>返回资料</source>
+            <translation>Back to materials</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>还没有匹配的资料。附件、项目知识和运行成果会显示在这里。</source>
+            <translation>No matching materials yet. Attachments, project knowledge and run outputs appear here.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>还没有技能。创建一项或从目录导入。</source>
+            <translation>No skills yet. Create one or import a directory.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>远程连接</source>
+            <translation>Remote connections</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>连接</source>
+            <translation>Connection</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>连接 SSH 工作区</source>
+            <translation>Connect SSH workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>连接中断，可刷新页面恢复</source>
+            <translation>Connection lost; refresh to reconnect</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>连接参数</source>
+            <translation>Connection parameters</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>连接外部消息平台与会话。</source>
+            <translation>Connect external messaging platforms and conversations.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>连接失败</source>
+            <translation>Connection failed</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>连接工作台</source>
+            <translation>Connect to workbench</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>连接微信</source>
+            <translation>Connect WeChat</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>连接成功</source>
+            <translation>Connected</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>连接正在运行的 PyCat 服务</source>
+            <translation>Attach to a running PyCat host</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>追加指令</source>
+            <translation>Additional instructions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>退出</source>
+            <translation>Quit</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>退出账号</source>
+            <translation>Sign out</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>退避倍数</source>
+            <translation>Backoff factor</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>选择一个会话后查看任务、资料与记忆</source>
+            <translation>Select a conversation to view tasks, materials and memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>选择一项调用查看输入、结果和复测入口</source>
+            <translation>Select a call to view its arguments, result and retry action</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>选择工具</source>
+            <translation>Select tool</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>选择搜索来源并检查连接。</source>
+            <translation>Select a search provider and test the connection.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>选择模型</source>
+            <translation>Choose model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>选择模型 </source>
+            <translation>Select model </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>选择模型需要 --session ID，或在启动任务时使用 --model</source>
+            <translation>model selection requires --session ID, or use --model when starting a run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>选择模式</source>
+            <translation>Choose mode</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>选择消息</source>
+            <translation>Select message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>选择默认模型，管理连接与模型档案。</source>
+            <translation>Select default models and manage connections and model profiles.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>逐次询问</source>
+            <translation>Ask every time</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>通用</source>
+            <translation>General</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>通用与运行设置</source>
+            <translation>General and run settings</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>部分设置未保存</source>
+            <translation>Some settings were not saved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>配置</source>
+            <translation>Configure</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>配置文件超过 1 MB</source>
+            <translation>Configuration file exceeds 1 MB</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>重命名</source>
+            <translation>Rename</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/resume.py" />
+            <source>重命名会话</source>
+            <translation>Rename conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/assets/web/config.js" />
+            <location filename="../../../pycat/tui/app.py" />
+            <source>重试</source>
+            <translation>Retries</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>重试整理</source>
+            <translation>Retry curation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>重试记忆整理</source>
+            <translation>Retry memory curation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>键盘操作</source>
+            <translation>Keyboard actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/executor.py" />
+            <source>问题</source>
+            <translation>Question</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>阅读 / 源码</source>
+            <translation>Read / source</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>阅读、下载、项目知识</source>
+            <translation>Read, download and project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>阅读完整内容（分页）</source>
+            <translation>Read full content (paged)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/transcript.py" />
+            <source>阅读完整消息（分页）</source>
+            <translation>Read full message (paged)</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>阅读资料</source>
+            <translation>Read material</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>阅读项目知识</source>
+            <translation>Read project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>附件</source>
+            <translation>Attachments</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/app.py" />
+            <source>附件 / 引用：</source>
+            <translation>Attachments / references: </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>附件已保留在原会话草稿</source>
+            <translation>Attachments kept in the original conversation draft</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>附加终端：pycat --endpoint &lt;服务地址&gt;</source>
+            <translation>Attach terminal: pycat --endpoint &lt;host-url&gt;</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>附加请求头</source>
+            <translation>Additional headers</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>附加请求字段</source>
+            <translation>Additional request fields</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>降低上限保留已有记忆，并允许精简内容。</source>
+            <translation>Lowering limits preserves existing memories and allows shortening them.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>随 PyCat 更新；可在 Skills 页停用或复制后编辑。</source>
+            <translation>Updated with PyCat. Disable it or copy it for editing on the Skills page.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/cli/main.py" />
+            <source>需要交互式终端。请使用 pycat exec PROMPT 或 pycat --help。</source>
+            <translation>An interactive terminal is required. Use pycat exec PROMPT or pycat --help.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/tui/panels.py" />
+            <source>需要你的回答</source>
+            <translation>Your answer is needed</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>需要你的选择</source>
+            <translation>Your selection is needed</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>音频</source>
+            <translation>Audio</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>项目</source>
+            <translation>Projects</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>项目 AGENTS.md</source>
+            <translation>Project AGENTS.md</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>项目与会话</source>
+            <translation>Projects and conversations</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>项目共享</source>
+            <translation>Shared with project</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>项目技能</source>
+            <translation>Project skills</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>项目操作</source>
+            <translation>Project actions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>项目文件</source>
+            <translation>Project files</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>项目树深度</source>
+            <translation>Project tree depth</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>项目目录或 SSH 工作区</source>
+            <translation>Project directory or SSH workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>项目知识</source>
+            <translation>Project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>项目知识已保存</source>
+            <translation>Project knowledge saved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>项目记忆</source>
+            <translation>Project memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>项目记忆字符数</source>
+            <translation>Project memory character limit</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>预览已截断。下载可获得完整内容。</source>
+            <translation>Preview truncated. Download for full content.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <location filename="../../../pycat/tui/composer.py" />
+            <source>频道</source>
+            <translation>Channel</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>频道与连接状态</source>
+            <translation>Channels and connection status</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>频道来源</source>
+            <translation>Channel source</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>频道类型</source>
+            <translation>Channel type</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>首条 / 最新消息</source>
+            <translation>First / latest message</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/discovery.js" />
+            <source>驱动已验证，MCP 配置已加入草稿。保存设置后生效。</source>
+            <translation>Driver verified and MCP configuration added to the draft. Save settings to apply.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>验证码</source>
+            <translation>Verification code</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>高级与数据</source>
+            <translation>Advanced and data</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>高级连接字段</source>
+            <translation>Advanced connection fields</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>高级连接选项</source>
+            <translation>Advanced connection options</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>默认</source>
+            <translation>Default</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>默认对话模型</source>
+            <translation>Default chat model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>默认推理值</source>
+            <translation>Default reasoning value</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>默认提醒</source>
+            <translation>Default reminder</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/app.js" />
+            <source>默认权限</source>
+            <translation>Default permissions</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/index.html" />
+            <source>默认权限 </source>
+            <translation>Default permissions </translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>默认模型</source>
+            <translation>Default model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>默认生成参数</source>
+            <translation>Default generation parameters</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>默认终端</source>
+            <translation>Default terminal</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/skills.js" />
+            <source>＋ 创建技能</source>
+            <translation>＋ Create skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>＋ 添加</source>
+            <translation>＋ Add</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>＋ 添加 MCP</source>
+            <translation>＋ Add MCP</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>＋ 添加服务商</source>
+            <translation>＋ Add provider</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>＋ 添加模型</source>
+            <translation>＋ Add model</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-resources.js" />
+            <source>＋ 添加能力</source>
+            <translation>＋ Add capability</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/channels.js" />
+            <source>＋ 添加频道</source>
+            <translation>＋ Add channel</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/views.js" />
+            <source>，下载后使用相应应用打开。</source>
+            <translation>; download and open with a suitable application.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/config.js" />
+            <source>；草稿已保留。</source>
+            <translation>; draft preserved.</translation>
         </message>
     </context>
 </TS>

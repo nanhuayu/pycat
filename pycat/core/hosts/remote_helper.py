@@ -262,9 +262,11 @@ class Helper:
         found = []
         pattern = r.get("glob", "")
         # Bounded literal fallback. Explicitly reports that ignore-file rules are not interpreted.
-        for candidate in self.walk(path, visible=True):
-            relative = candidate.relative_to(path).as_posix()
-            if any(part.startswith(".") for part in candidate.relative_to(path).parts):
+        base = path.parent if path.is_file() else path
+        candidates = [path] if path.is_file() else self.walk(path, visible=True)
+        for candidate in candidates:
+            relative = candidate.relative_to(base).as_posix()
+            if any(part.startswith(".") for part in candidate.relative_to(base).parts):
                 continue
             if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size > 2 * 1024 * 1024:
                 continue

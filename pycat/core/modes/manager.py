@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from pycat.core.config.io import load_project_config, load_user_modes_dict
-from pycat.core.config.migrations import migrate_category, migrate_mode_payload, migrate_modes_payload
+from pycat.core.config.migrations import SCHEMA_VERSION, migrate_category, migrate_mode_payload, migrate_modes_payload
 from pycat.core.modes.defaults import get_default_modes, get_primary_mode_slugs
 from pycat.models.contracts.mode import ModeConfig, normalize_mode_slug
 from pycat.models.contracts.model_target import ModelTarget
@@ -100,8 +100,8 @@ class ModeManager:
         if self.include_project:
             try:
                 project = load_project_config(self.work_dir)
-                for item in self._parse_modes({"modes": project.modes}, source="project"):
-                    modes[item.slug] = self._merge_with_builtin(item, builtin.get(item.slug))
+                for item in self._parse_modes({"schema_version": SCHEMA_VERSION, "modes": project.modes}, source="project"):
+                    modes[item.slug] = self._merge_with_builtin(item, modes.get(item.slug))
             except Exception as exc:
                 logger.debug("Failed to load project modes: %s", exc)
 

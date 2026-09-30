@@ -53,7 +53,7 @@ class TodoService:
         feedback: list[str] = []
         for op in ops:
             action = str(op.get("action") or "").strip().lower()
-            if action == "create":
+            if action in {"create", "add"}:
                 title = str(op.get("title") or "").strip()
                 if not title:
                     raise ValueError("title is required")
@@ -62,7 +62,8 @@ class TodoService:
                 existing = TodoService._find_active_by_title(state, title)
                 values = TodoService._fields(op)
                 if existing:
-                    existing.update(current_seq, **values)
+                    if action == "create":
+                        existing.update(current_seq, **values)
                     feedback.append(f"Reused todo [{existing.id}]")
                     continue
                 todo = TodoItem(

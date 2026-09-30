@@ -83,6 +83,8 @@ def _request_budget_view(value: Any) -> tuple[Any, int]:
             return {"type": "input_image"}, 1
         if item_type == "image" and isinstance(value.get("source"), dict):
             source = value.get("source") or {}
+            if str(source.get("type") or "").strip().lower() == "url" and source.get("url"):
+                return {"type": "image", "source": {"type": "url"}}, 1
             if str(source.get("type") or "").strip().lower() == "base64" and source.get("data"):
                 return {
                     "type": "image",

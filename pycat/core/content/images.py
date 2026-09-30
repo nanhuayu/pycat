@@ -7,11 +7,13 @@ import warnings
 from dataclasses import dataclass
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 MAX_IMAGE_PIXELS = 40_000_000
 MAX_INPUT_IMAGES = 16
+VIEW_IMAGE_MAX_SIDE = 2048
+MAX_VIEW_IMAGE_BYTES = 4 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,53 @@ class RasterImage:
     @property
     def data_url(self) -> str:
         return f"data:{self.mime};base64," + base64.b64encode(self.data).decode("ascii")
+
+
+def prepare_view_image(data: bytes, *, detail: str = 'auto') -> tuple[RasterImage, dict]:
+    """Create a bounded model view without changing source bytes or summarizing pixels."""
+    if detail not in {'auto', 'original'}:
+        raise ValueError('detail must be auto or original.')
+    if not data or len(data) > MAX_IMAGE_BYTES:
+        raise ValueError('Image is empty or larger than 25 MiB.')
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', Image.DecompressionBombWarning)
+            with Image.open(BytesIO(data)) as raw:
+                if raw.width * raw.height > MAX_IMAGE_PIXELS:
+                    raise ValueError('Image exceeds 40 million pixels; use a smaller source or crop.')
+                if getattr(raw, 'is_animated', False) or getattr(raw, 'n_frames', 1) != 1:
+                    raise ValueError('Use a single static image; animations and multi-frame images are not supported.')
+                original_width, original_height = raw.size
+                oriented = ImageOps.exif_transpose(raw)
+                oriented_size = oriented.size
+                if detail == 'auto':
+                    oriented.thumbnail((VIEW_IMAGE_MAX_SIDE, VIEW_IMAGE_MAX_SIDE), Image.Resampling.LANCZOS)
+                resized = oriented.size != oriented_size
+                # Reuse supported, already bounded bytes when no transformation is needed.
+                mime = {'PNG': 'image/png', 'JPEG': 'image/jpeg', 'WEBP': 'image/webp'}.get(raw.format or '')
+                if mime and not resized and raw.getexif().get(274, 1) == 1 and len(data) <= MAX_VIEW_IMAGE_BYTES:
+                    encoded = data
+                else:
+                    stream = BytesIO()
+                    if raw.format == 'JPEG':
+                        oriented.convert('RGB').save(stream, format='JPEG', quality=90)
+                        mime = 'image/jpeg'
+                    else:
+                        mode = 'RGBA' if 'A' in oriented.getbands() or 'transparency' in oriented.info else 'RGB'
+                        oriented.convert(mode).save(stream, format='PNG')
+                        mime = 'image/png'
+                    encoded = stream.getvalue()
+                if len(encoded) > MAX_VIEW_IMAGE_BYTES:
+                    raise ValueError('Image view exceeds 4 MiB; use a smaller source or crop. No further downscaling was applied.')
+                raster = RasterImage(encoded, mime, oriented.width, oriented.height,
+                                     'A' in oriented.getbands() or 'transparency' in oriented.info)
+                return raster, {
+                    'original_width': original_width, 'original_height': original_height,
+                    'width': raster.width, 'height': raster.height, 'resized': resized,
+                    'mime': mime, 'bytes': len(encoded),
+                }
+    except (OSError, SyntaxError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ValueError('Unsupported or damaged raster image; render SVG explicitly before viewing.') from exc
 
 
 def inspect_image(data: bytes) -> RasterImage:

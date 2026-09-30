@@ -11,7 +11,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog
 
 from pycat.core.content.export import CONVERSATION_FORMATS, document_format
@@ -69,7 +69,7 @@ class ConversationCommandPresenter:
         suffix, label = CONVERSATION_FORMATS[fmt]
         title = str(conversation.title or "").replace("/", "_").replace("\\", "_")
         default_name = safe_filename(title, "conversation")
-        path, _ = QFileDialog.getSaveFileName(host, "导出会话", f"{default_name}{suffix}", f"{label} (*{suffix})")
+        path, _ = QFileDialog.getSaveFileName(host, QCoreApplication.translate('ConversationCommandPresenter', '导出会话'), f"{default_name}{suffix}", f"{label} (*{suffix})")
         if not path:
             return
         destination = Path(path)
@@ -85,7 +85,7 @@ class ConversationCommandPresenter:
             return
         self._exports.discard(job)
         self._host.chat_view.show_notice(
-            f"导出失败：{error}" if error else f"已导出到 {result}",
+            QCoreApplication.translate('ConversationCommandPresenter', '导出失败：{error}').format(error=error) if error else QCoreApplication.translate('ConversationCommandPresenter', '已导出到 {result}').format(result=result),
             tone="error" if error else "success", timeout_ms=5000, conversation_id=conversation_id,
         )
 
@@ -166,8 +166,9 @@ class ConversationCommandPresenter:
         if name == 'resume':
             if not value:
                 rows = commands.sessions()
-                labels = [f"{row.get('title') or '未命名会话'} · {row['id']}" for row in rows]
-                selected, ok = QInputDialog.getItem(host, '继续会话', '会话', labels, editable=False)
+                untitled = QCoreApplication.translate('ConversationCommandPresenter', '未命名会话')
+                labels = [f"{row.get('title') or untitled} · {row['id']}" for row in rows]
+                selected, ok = QInputDialog.getItem(host, QCoreApplication.translate('ConversationCommandPresenter', '继续会话'), QCoreApplication.translate('ConversationCommandPresenter', '会话'), labels, editable=False)
                 if not ok or selected not in labels:
                     return
                 value = rows[labels.index(selected)]['id']
@@ -179,20 +180,20 @@ class ConversationCommandPresenter:
         if name == 'copy':
             content = next((item.content for item in reversed(conversation.messages if conversation else []) if item.role == 'assistant'), '')
             QApplication.clipboard().setText(content)
-            self._append_info_message('已复制最近的回复')
+            self._append_info_message(QCoreApplication.translate('ConversationCommandPresenter', '已复制最近的回复'))
             return
         if name in {'model', 'mode', 'rename', 'permissions'}:
             if conversation is None:
                 conversation = host.conversation_presenter.ensure_current_conversation_shell()
                 host.current_conversation = conversation
             if not host.services.conv_service.exists(conversation.id) and not host.services.conv_service.save(conversation):
-                raise ValueError('无法保存会话。')
+                raise ValueError(QCoreApplication.translate('ConversationCommandPresenter', '无法保存会话。'))
             if name == 'permissions':
                 host.conversation_presenter.open_settings()
                 return
             if name == 'rename':
                 if not value:
-                    value, ok = QInputDialog.getText(host, '重命名', '会话名称', text=conversation.title)
+                    value, ok = QInputDialog.getText(host, QCoreApplication.translate('ConversationCommandPresenter', '重命名'), QCoreApplication.translate('ConversationCommandPresenter', '会话名称'), text=conversation.title)
                     if not ok:
                         return
                 host.services.conv_service.update_navigation(conversation.id, title=value)
@@ -200,7 +201,7 @@ class ConversationCommandPresenter:
                 rows = host.services.workbench.models() if name == 'model' else [item for item in host.services.mode_catalog_service.list(conversation.work_dir) if item.is_primary_mode() and item.slug != 'channel']
                 labels = [row['ref'] for row in rows] if name == 'model' else [item.slug for item in rows]
                 if not value or value == 'list':
-                    value, ok = QInputDialog.getItem(host, '选择模型' if name == 'model' else '选择模式', '选择', labels, editable=False)
+                    value, ok = QInputDialog.getItem(host, QCoreApplication.translate('ConversationCommandPresenter', '选择模型') if name == 'model' else QCoreApplication.translate('ConversationCommandPresenter', '选择模式'), QCoreApplication.translate('ConversationCommandPresenter', '选择'), labels, editable=False)
                     if not ok:
                         return
                 commands.configure(conversation.id, **{name: value})
@@ -214,13 +215,13 @@ class ConversationCommandPresenter:
             import json
             self._append_info_message(json.dumps(detail, ensure_ascii=False, indent=2))
             return
-        self._append_info_message(f'打开设置中的 {name} 页面以继续。')
+        self._append_info_message(QCoreApplication.translate('ConversationCommandPresenter', '打开设置中的 {name} 页面以继续。').format(name=name))
 
     def _run_shell_command(self, payload) -> None:
         host = self._host
         command = str(getattr(payload, "command", "") or "").strip()
         if not command:
-            self._append_info_message("Shell 命令为空。")
+            self._append_info_message(QCoreApplication.translate('ConversationCommandPresenter', 'Shell 命令为空。'))
             return
 
         if not host.current_conversation:
@@ -228,7 +229,7 @@ class ConversationCommandPresenter:
                 host.current_conversation = host.conversation_presenter.ensure_current_conversation_shell()
             except Exception as exc:
                 logger.debug("Failed to create conversation for shell invocation: %s", exc)
-                self._append_info_message("无法创建会话来执行 Shell 命令。")
+                self._append_info_message(QCoreApplication.translate('ConversationCommandPresenter', '无法创建会话来执行 Shell 命令。'))
                 return
 
         conversation = host.current_conversation
@@ -237,7 +238,7 @@ class ConversationCommandPresenter:
 
         if not host.services.conv_service.exists(conversation.id):
             if not host.services.conv_service.save(conversation):
-                self._append_info_message("无法保存会话，Shell 未执行。")
+                self._append_info_message(QCoreApplication.translate('ConversationCommandPresenter', '无法保存会话，Shell 未执行。'))
                 return
 
         operation_id = uuid.uuid4().hex
@@ -267,7 +268,7 @@ class ConversationCommandPresenter:
         if current is None or current.id != conversation.id:
             return
         if error is not None:
-            host.chat_view.show_notice(f"Shell 执行失败：{error}", tone="error",
+            host.chat_view.show_notice(QCoreApplication.translate('ConversationCommandPresenter', 'Shell 执行失败：{error}').format(error=error), tone="error",
                 timeout_ms=8000, conversation_id=conversation.id)
             return
         known = {message.id for message in current.messages}

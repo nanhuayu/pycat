@@ -2,6 +2,7 @@
 *.json
 # This package seed is copied to ~/.pycat/default_models.json on first use.
 !pycat/assets/default_models.json
+!pycat/assets/terminal-logo.json
 # Bundled OCR assets require a versioned provenance and integrity manifest.
 !pycat/assets/ocr/ppocrv6-small/manifest.json
 !pycat/assets/tools/ripgrep/manifest.json
@@ -49,6 +50,7 @@ pip-wheel-metadata/
 *.spec
 release/
 /showcase/output/
+/showcase/output-*/
 /showcase/voice/*
 /showcase/recordings/*
 /showcase/music/*

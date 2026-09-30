@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Dict
 from urllib.parse import quote, urlparse, urlunparse
 
+from pycat.core.app.services.search_providers.base import SearchError
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
 
 
@@ -65,7 +66,11 @@ class WebSearchTool(BaseTool):
         query = str(arguments.get("query") or "").strip()
         if not query:
             return ToolResult("query is required.", is_error=True)
-        return ToolResult(await self.search_service.search(query))
+        try:
+            return ToolResult(await self.search_service.search(query))
+        except SearchError as exc:
+            return ToolResult(str(exc), is_error=True,
+                              metadata={"error_code": exc.code, "retryable": exc.retryable})
 
 
 class FetchUrlTool(BaseTool):

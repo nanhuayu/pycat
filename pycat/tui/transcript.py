@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import json
+import sys
 
+from rich.table import Table
 from rich.text import Text
 from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Button, Label, Markdown, Static
+
+from pycat.core.i18n import Translator
+from pycat.tui.brand import terminal_logo
 
 
 class OpenContent(Message):
@@ -57,19 +62,19 @@ class Fold(Vertical):
         if self.expanded and not body.children:
             await body.mount(Markdown(self.value[:32768]))
             if len(self.value) > 32768:
-                await body.mount(Button('阅读完整内容（分页）', classes='fold-full'))
+                await body.mount(Button(self.app.tr('阅读完整内容（分页）'), classes='fold-full'))
         body.display = self.expanded
         self.query_one('.fold-toggle', Button).label = Text(('▾ ' if self.expanded else '▸ ') + self.title)
         for preview in self.query('.fold-preview'):
             preview.display = not self.expanded
 
 
-def tool_title(call):
+def tool_title(call, tr=Translator()):
     function, result = call.get('function') or {}, call.get('result')
     metadata = (result or {}).get('metadata') or {}
     failed = bool((result or {}).get('is_error') or metadata.get('is_error'))
-    status = '失败' if failed else '取消' if metadata.get('subtask_status') == 'cancelled' else '完成' if result is not None else '结果未记录'
-    name = function.get('name') or call.get('name') or '工具'
+    status = tr('失败') if failed else tr('取消') if metadata.get('subtask_status') == 'cancelled' else tr('完成') if result is not None else tr('结果未记录')
+    name = function.get('name') or call.get('name') or tr('工具')
     detail = f" · exit {metadata['exit_code']}" if 'exit_code' in metadata else ''
     if 'duration_ms' in metadata:
         detail += f" · {metadata['duration_ms']} ms"
@@ -83,21 +88,21 @@ class MessageView(Vertical):
 
     @property
     def tool_titles(self):
-        return [tool_title(call) for call in self.record.get('tool_calls') or []]
+        return [tool_title(call, self.app.tr) for call in self.record.get('tool_calls') or []]
 
     def compose(self):
         message = self.record
         if message['role'] == 'user':
-            yield Label('你', classes='message-role')
+            yield Label(self.app.tr('你'), classes='message-role')
         if message.get('thinking'):
-            yield Fold('思考过程', message['thinking'], classes='thinking', key='thinking')
+            yield Fold(self.app.tr('思考过程'), message['thinking'], classes='thinking', key='thinking')
         text = str(message.get('content') or '')
         if message['role'] == 'tool':
-            yield Fold(str(message.get('name') or '工具结果'), text, preview='\n'.join(text[:300].splitlines()[:3]))
+            yield Fold(str(message.get('name') or self.app.tr('工具结果')), text, preview='\n'.join(text[:300].splitlines()[:3]))
         elif text:
             yield Markdown(text[:32768])
             if len(text) > 32768:
-                yield Button('阅读完整消息（分页）', classes='message-full')
+                yield Button(self.app.tr('阅读完整消息（分页）'), classes='message-full')
         refs = list(message.get('content_refs') or [])
         for call in message.get('tool_calls') or []:
             result, function = call.get('result') or {}, call.get('function') or {}
@@ -107,10 +112,10 @@ class MessageView(Vertical):
             arguments = function.get('arguments') or {}
             if not isinstance(arguments, str):
                 arguments = json.dumps(arguments, ensure_ascii=False, indent=2)
-            yield Fold(tool_title(call), '```json\n' + arguments + '\n```\n\n' + content,
+            yield Fold(tool_title(call, self.app.tr), '```json\n' + arguments + '\n```\n\n' + content,
                        preview='\n'.join(preview[:300].splitlines()[:3]), classes='tool-result', key=call.get('id', ''))
             if metadata.get('archive_ref'):
-                yield ContentButton({'ref': metadata['archive_ref'], 'name': '完整工具结果', 'mime': 'text/plain'})
+                yield ContentButton({'ref': metadata['archive_ref'], 'name': self.app.tr('完整工具结果'), 'mime': 'text/plain'})
             if not (result.get('is_error') or metadata.get('is_error')):
                 refs.extend(metadata.get('content_refs') or [])
         seen = set()
@@ -122,7 +127,7 @@ class MessageView(Vertical):
     def on_button_pressed(self, event):
         if event.button.has_class('message-full'):
             event.stop()
-            self.post_message(OpenText('完整消息', self.record['content']))
+            self.post_message(OpenText(self.app.tr('完整消息'), self.record['content']))
 
 
 class Transcript(VerticalScroll):
@@ -139,9 +144,9 @@ class Transcript(VerticalScroll):
 
     def compose(self):
         yield Static('', id='welcome')
-        yield Button('↑ 加载更早消息', id='history-older')
+        yield Button(self.app.tr('↑ 加载更早消息'), id='history-older')
         yield Vertical(id='messages')
-        yield Button('↓ 返回最新消息', id='history-newer')
+        yield Button(self.app.tr('↓ 返回最新消息'), id='history-newer')
         with Vertical(id='live-output'):
             yield Label('', id='live-thinking')
             yield Static('', id='live-tools')
@@ -153,10 +158,22 @@ class Transcript(VerticalScroll):
         self.set_interval(.05, self.app.flush_stream)
 
     def welcome(self, work_dir):
-        self.query_one('#welcome', Static).update(Text.assemble(
-            ('今天想完成什么？\n', 'bold'), (work_dir or '未选择项目', 'dim'),
-            '\n描述任务，随时补充文件与引导。\n\n',
-            ('/resume', 'bold'), ' 继续会话   ', ('/model', 'bold'), ' 选择模型   ', ('@', 'bold'), ' 添加引用'))
+        text = Text.assemble(
+            (self.app.tr('今天想完成什么？'), 'bold'), '\n', (work_dir or self.app.tr('未选择项目'), 'dim'), '\n',
+            self.app.tr('描述任务，随时补充文件与引导。'), '\n\n',
+            ('/resume', 'bold'), ' ', self.app.tr('继续会话'), '   ',
+            ('/model', 'bold'), ' ', self.app.tr('选择模型'), '   ', ('@', 'bold'), ' ', self.app.tr('添加引用'))
+        if self.app.size.width >= 88 and self.app.size.height >= 26:
+            layout = Table.grid(padding=(0, 3))
+            layout.add_column(width=24)
+            layout.add_column(ratio=1, vertical='middle')
+            layout.add_row(terminal_logo(encoding=getattr(sys.stdout, 'encoding', None) or 'utf-8'), text)
+            content = layout
+        else:
+            content = text
+        self.query_one('#welcome', Static).update(content)
+        self.query_one('#history-older', Button).label = self.app.tr('↑ 加载更早消息')
+        self.query_one('#history-newer', Button).label = self.app.tr('↓ 返回最新消息')
 
     async def sync(self, session, *, reset=False, follow=False):
         records = session.get('messages', []) if session else []
@@ -197,7 +214,7 @@ class Transcript(VerticalScroll):
             self.query_one('#stream').display = bool(text)
         if thinking != self._thinking:
             self._thinking = thinking
-            self.query_one('#live-thinking', Label).update(Text('思考中 · ' + ' '.join(thinking[-150:].split()) if thinking else ''))
+            self.query_one('#live-thinking', Label).update(Text(self.app.tr('思考中 · ') + ' '.join(thinking[-150:].split()) if thinking else ''))
             self.query_one('#live-thinking').display = bool(thinking)
         if tools != self._tools:
             self._tools = tools

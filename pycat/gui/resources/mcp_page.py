@@ -19,6 +19,8 @@ class McpPage(QWidget):
         *,
         reload_provider: Callable[[], Iterable[McpServerConfig]] | None = None,
         connection_tester: Callable[[McpServerConfig], dict] | None = None,
+        extension_service=None,
+        work_dir="",
         parent=None,
         show_header=True,
     ):
@@ -33,6 +35,8 @@ class McpPage(QWidget):
             servers=servers,
             reload_provider=reload_provider,
             connection_tester=connection_tester,
+            extension_service=extension_service,
+            work_dir=work_dir,
         )
         layout.addWidget(self.editor, 1)
 

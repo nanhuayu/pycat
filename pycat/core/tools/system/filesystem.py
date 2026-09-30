@@ -1,16 +1,17 @@
 import asyncio
 import json
+from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List
 
-from pycat.core.content.attachments import encode_image_file_to_data_url
 from pycat.core.content.mime import DEFAULT_MIME, guess_mime
 from pycat.core.content.office import extract_office_text, is_office_attachment
 from pycat.core.content.pdf import MAX_PDF_BYTES, extract_pdf_text_isolated
 from pycat.core.content.references import build_workspace_content_ref
-from pycat.core.content.resolver import SessionContentResolver
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
 from pycat.core.tools.system.file_search import search_files
+from pycat.core.tools.system.file_source import resolve_file_source
+from pycat.core.tools.system.text_read import MAX_TEXT_LINES, read_text_page, read_text_stream
 from pycat.models.contracts.channel import channel_file_delivery_enabled
 
 
@@ -90,7 +91,7 @@ class LsTool(BaseTool):
 
 
 class ReadFileTool(BaseTool):
-    MAX_LINES_PER_READ = 2000
+    MAX_LINES_PER_READ = MAX_TEXT_LINES
 
     @property
     def name(self) -> str:
@@ -103,9 +104,10 @@ class ReadFileTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Read an authorized file or current-session input snapshot. Text supports line ranges; "
+            "Read an authorized file or current-session input snapshot. Text pages return at most 2000 lines / 64000 characters; follow the continuation position. "
             "PDFs return native text, image counts and next_page in bounded page batches, without OCR. "
-            "Use file__ocr for text within images or scanned pages."
+            "Use file__view to see images/PDF pages, or file__ocr to transcribe images/scans. "
+            "Bounded reads are returned directly without automatic semantic summarization."
         )
 
     @property
@@ -121,8 +123,10 @@ class ReadFileTool(BaseTool):
                     "type": "string",
                     "description": "Authorized path on the workspace host or current-session input:<id> reference.",
                 },
-                "start_line": {"type": "integer", "description": "Optional 1-based start line."},
-                "end_line": {"type": "integer", "description": "Optional inclusive end line."},
+                "start_line": {"type": "integer", "minimum": 1, "description": "Optional 1-based start line."},
+                "end_line": {"type": "integer", "minimum": 1, "description": "Optional inclusive end line."},
+                "start_column": {"type": "integer", "minimum": 1,
+                                 "description": "Text only: 1-based character position within start_line; use the returned value to continue a long line."},
                 "start_page": {"type": "integer", "minimum": 1, "description": "PDF only: 1-based start page; default 1."},
                 "page_count": {"type": "integer", "minimum": 1, "maximum": 32,
                                "description": "PDF only: pages in this batch; default 5, maximum 32. Follow next_page."},
@@ -133,33 +137,15 @@ class ReadFileTool(BaseTool):
 
     def requested_read_path(self, arguments: Dict[str, Any]) -> str:
         path = str(arguments.get("path") or "").strip()
-        return "" if path.startswith("input:") else path
+        return "" if path.startswith("input:") else path.removeprefix("workspace:")
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         path_text = str(arguments.get("path") or "").strip()
         if not path_text:
             return ToolResult("path is required.", is_error=True)
         try:
-            content_name = ""
-            content_mime = ""
-            if path_text.startswith("input:"):
-                if context.conversation is None:
-                    return ToolResult("input references require an active conversation.", is_error=True)
-                content_service = getattr(context, "content_service", None)
-                if content_service is None:
-                    return ToolResult("input references require the session content service.", is_error=True)
-                resolved = SessionContentResolver(content_service).resolve_content(
-                    context.conversation,
-                    path_text,
-                )
-                file_path = resolved.path
-                content_name = resolved.name
-                content_mime = resolved.mime
-            else:
-                file_path = await asyncio.to_thread(context.resolve_read_path, path_text)
-                if context.files:
-                    file_path = await asyncio.to_thread(context.workspace_service.materialize, context.conversation,
-                        str(file_path), files=context.files, max_bytes=20 * 1024 * 1024)
+            source = await asyncio.to_thread(resolve_file_source, path_text, context, max_bytes=20 * 1024 * 1024)
+            file_path, content_name, content_mime = source.path, source.name, source.mime
         except Exception as exc:
             return ToolResult(str(exc), is_error=True)
         if not file_path.is_file():
@@ -171,15 +157,9 @@ class ReadFileTool(BaseTool):
             if not mime_type or mime_type.lower() == DEFAULT_MIME:
                 mime_type = guess_mime(content_name or file_path)
             if str(mime_type or "").startswith("image/"):
-                if size > 20 * 1024 * 1024:
-                    return ToolResult("Image file is larger than 20 MB.", is_error=True)
-                image_url = encode_image_file_to_data_url(str(file_path))
-                if not image_url:
-                    return ToolResult(f"Failed to encode image: {path_text}", is_error=True)
-                return ToolResult([
-                    {"type": "text", "text": f"Image: {path_text}\nMime-Type: {mime_type}\nSize: {size} bytes"},
-                    {"type": "image", "mimeType": mime_type or "image/png", "data": image_url},
-                ])
+                return ToolResult('Use file__view to inspect images, or file__ocr to extract their text.', is_error=True)
+
+            read_metadata = {'auto_summary': False, 'source_ref': path_text, 'source_digest': source.digest}
 
             if is_office_attachment(content_name or file_path.name, str(mime_type or "")):
                 if size > 10 * 1024 * 1024:
@@ -187,14 +167,8 @@ class ReadFileTool(BaseTool):
                         "Office file is larger than 10 MB; use a smaller source or the desktop application.",
                         is_error=True,
                     )
-                extracted = extract_office_text(
-                    file_path.read_bytes(),
-                    name=content_name or file_path.name,
-                    mime=str(mime_type),
-                    max_bytes=1024 * 1024,
-                )
-                suffix = "\n[truncated=true]" if extracted.truncated else ""
-                return ToolResult(extracted.text + suffix)
+                text, metadata = await asyncio.to_thread(self._read_office, file_path, content_name, str(mime_type), arguments)
+                return ToolResult(text, metadata={**metadata, **read_metadata})
 
             content_suffix = Path(content_name or file_path.name).suffix.lower()
             if str(mime_type or "").lower() == "application/pdf" or content_suffix == ".pdf":
@@ -208,28 +182,25 @@ class ReadFileTool(BaseTool):
                 extracted['source_ref'] = path_text
                 if not context.files:
                     extracted['local_path'] = str(file_path.resolve())
-                return ToolResult(json.dumps(extracted, ensure_ascii=False))
+                return ToolResult(json.dumps(extracted, ensure_ascii=False), metadata=read_metadata)
 
-            if size > 10 * 1024 * 1024:
-                return ToolResult("File is larger than 10 MB; use file__search or a smaller source.", is_error=True)
-            text = file_path.read_text(encoding="utf-8", errors="replace")
-            lines = text.splitlines(keepends=True)
-            total = len(lines)
-            if arguments.get("start_line") is not None or arguments.get("end_line") is not None:
-                start = max(1, int(arguments.get("start_line") or 1))
-                end = min(total, int(arguments.get("end_line") or total))
-                if start > end:
-                    return ToolResult(f"Invalid line range: {start}-{end}", is_error=True)
-                return ToolResult(f"Lines {start}-{end} of {total}:\n{''.join(lines[start - 1:end])}")
-            if total > self.MAX_LINES_PER_READ:
-                body = "".join(lines[: self.MAX_LINES_PER_READ])
-                return ToolResult(
-                    f"Lines 1-{self.MAX_LINES_PER_READ} of {total}:\n{body}\n\n"
-                    f"Continue with start_line={self.MAX_LINES_PER_READ + 1}."
-                )
-            return ToolResult(text)
+            text, metadata = await asyncio.to_thread(
+                read_text_page, file_path, start_line=arguments.get('start_line', 1),
+                end_line=arguments.get('end_line'), start_column=arguments.get('start_column', 1),
+            )
+            return ToolResult(text, metadata={**metadata, **read_metadata})
         except Exception as exc:
             return ToolResult(f"Read error: {exc}", is_error=True)
+
+    @staticmethod
+    def _read_office(path, name, mime, arguments):
+        extracted = extract_office_text(path, name=name, mime=mime, max_bytes=1024 * 1024)
+        with StringIO(extracted.text, newline=None) as stream:
+            text, metadata = read_text_stream(stream, start_line=arguments.get('start_line', 1),
+                end_line=arguments.get('end_line'), start_column=arguments.get('start_column', 1))
+        if extracted.truncated:
+            text += '\n[extraction_truncated=true] Office extraction reached 1 MiB; use a narrower source or a dedicated parser for the remainder.'
+        return text, {**metadata, 'extraction_truncated': extracted.truncated}
 
 
 class GrepTool(BaseTool):
@@ -243,7 +214,7 @@ class GrepTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Search authorized text files on the workspace host using ripgrep when available, otherwise bounded Python literal search. Regex requires rg on that host. Skips hidden, linked, binary and files over 2 MiB. Remote Python fallback reports ignore_files=false because ignore-file rules require remote rg. Narrow path/glob for large projects."
+        return "Search an authorized text file or directory using ripgrep when available, otherwise bounded Python literal search. Regex requires rg on that host. Directory search skips hidden, linked, binary and files over 2 MiB. Use file__read line ranges for larger files. Remote Python fallback reports ignore_files=false. Narrow path/glob for large projects."
 
     @property
     def category(self) -> str:
@@ -255,7 +226,7 @@ class GrepTool(BaseTool):
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Text or regular expression to find."},
-                "path": {"type": "string", "description": "Authorized directory; defaults to workspace or home."},
+                "path": {"type": "string", "description": "Authorized file or directory; defaults to workspace or home."},
                 "glob": {"type": "string", "description": "Optional include glob such as '**/*.py'."},
                 "regex": {"type": "boolean", "description": "Use ripgrep (Rust) regex syntax; requires rg installed. Default false."},
                 "limit": {"type": "integer", "description": "Maximum matches; default 50, max 500."},
@@ -276,8 +247,8 @@ class GrepTool(BaseTool):
             limit = max(1, min(int(arguments.get("limit") or 50), 500))
         except Exception as exc:
             return ToolResult(f"Invalid argument: {exc}", is_error=True)
-        if not context.file_is_dir(root):
-            return ToolResult(f"Not a directory: {root}", is_error=True)
+        if not context.file_is_dir(root) and not context.file_is_file(root):
+            return ToolResult(f"Not a file or directory: {root}", is_error=True)
 
         try:
             if context.files:

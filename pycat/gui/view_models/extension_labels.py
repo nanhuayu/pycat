@@ -64,3 +64,16 @@ def extension_text(row: dict, field: str) -> str:
             owned |= row.get("kind") == "skill" and row.get("management") == "market" and source == _MARKET_SKILL_DESCRIPTION
             owned |= row.get("kind") == "mcp" and str(row.get("id", "")).startswith("configured:") and source == _CONFIGURED_MCP_DESCRIPTION
     return QCoreApplication.translate("ExtensionLabels", source) if owned else source
+
+
+def resource_badge(*, kind: str, installed=False, enabled=True, pending=False, directory=False) -> str:
+    """Project availability, not recommendation rank or connection health."""
+    if directory:
+        return QCoreApplication.translate("ExtensionLabels", "目录")
+    if pending:
+        return QCoreApplication.translate("ExtensionLabels", "待保存")
+    if installed:
+        if not enabled:
+            return QCoreApplication.translate("ExtensionLabels", "已停用")
+        return QCoreApplication.translate("ExtensionLabels", "已添加") if kind == "mcp" else QCoreApplication.translate("ExtensionLabels", "已安装")
+    return QCoreApplication.translate("ExtensionLabels", "未添加") if kind == "mcp" else QCoreApplication.translate("ExtensionLabels", "未安装")

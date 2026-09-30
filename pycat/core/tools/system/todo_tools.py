@@ -47,7 +47,8 @@ class ManageTodoTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["set", "update", "clear", "list"]},
+                "action": {"type": "string", "enum": ["set", "add", "update", "clear", "list"],
+                           "description": "set replaces active items; add appends discoveries; update preserves other items."},
                 "items": {"type": "array", "items": item_schema},
             },
             "required": ["action"],
@@ -66,12 +67,14 @@ class ManageTodoTool(BaseTool):
             state.todos = []
             self._sync(context, state, current_seq)
             return ToolResult("Todo list cleared.")
-        if action == "set":
+        if action in {"set", "add"}:
             staged = SessionState.from_dict(state.to_dict())
-            staged.todos = []
+            if action == "set":
+                staged.todos = []
             if any(not isinstance(raw, dict) for raw in items):
-                return ToolResult("Every set item must be an object.", is_error=True)
-            feedback = TodoService.handle_ops(staged, [{"action": "create", **raw} for raw in items], current_seq)
+                return ToolResult(f"Every {action} item must be an object.", is_error=True)
+            operation = "create" if action == "set" else "add"
+            feedback = TodoService.handle_ops(staged, [{**raw, "action": operation} for raw in items], current_seq)
             if any(line.startswith("Rejected") for line in feedback):
                 return ToolResult("\n".join(feedback), is_error=True)
             self._sync(context, staged, current_seq)
@@ -81,7 +84,7 @@ class ManageTodoTool(BaseTool):
             for raw in items:
                 if not isinstance(raw, dict) or not str(raw.get("id") or "").strip():
                     return ToolResult("Every update item requires id.", is_error=True)
-                operations.append({"action": "update", **raw})
+                operations.append({**raw, "action": "update"})
             feedback = TodoService.handle_ops(state, operations, current_seq)
             if any(line.startswith("Rejected") for line in feedback):
                 return ToolResult("\n".join(feedback), is_error=True)

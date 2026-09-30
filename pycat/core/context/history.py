@@ -7,12 +7,49 @@ from typing import List
 
 from pycat.core.content.archive_store import SessionArchiveStore
 from pycat.core.context.sections import normalize_user_message
+from pycat.models.contracts.content import ArchivedContentRecord
 from pycat.models.conversation import Conversation, Message, normalize_tool_result
 
 CONTROL_MESSAGE_PREFIXES = (
     "[AUTO-CONTINUE]",
     "[WARNING]",
 )
+
+# Only summaries produced under the incremental coverage contract may be
+# semantic inputs. Old receipts/error-derived views remain recovery material.
+HISTORY_SUMMARY_CONTRACT = 1
+
+
+def reusable_history_summary(record: ArchivedContentRecord | None) -> bool:
+    view = record.views.get("summary") if record is not None else None
+    metadata = getattr(view, "metadata", {}) or {}
+    return bool(
+        record is not None and record.summary
+        and metadata.get("summary_contract") == HISTORY_SUMMARY_CONTRACT
+        and metadata.get("fallback") is False
+    )
+
+
+def read_turn_prefix(store: SessionArchiveStore, block: list[Message]) -> ArchivedContentRecord | None:
+    """Validate a partial turn against its current canonical coverage."""
+    if not block:
+        return None
+    ref = (block[0].metadata or {}).get("turn_prefix_ref")
+    if not isinstance(ref, dict):
+        return None
+    record = store.read_record(str(ref.get("content_id") or ""), kind="history")
+    if not reusable_history_summary(record) or record.metadata.get("scope") != "turn_prefix":
+        return None
+    end_seq = int(record.metadata.get("end_seq", 0) or 0)
+    prefix = [message for message in block if message.seq_id <= end_seq]
+    if (
+        len(prefix) < 2
+        or [message.id for message in prefix] != record.metadata.get("message_ids")
+        or turn_fingerprint(prefix) != record.metadata.get("fingerprint")
+        or ref.get("fingerprint") != record.metadata.get("fingerprint")
+    ):
+        return None
+    return record
 
 
 def is_control_message(message: Message) -> bool:
@@ -264,31 +301,41 @@ def project_history(conversation: Conversation, *, messages: list[Message] | Non
         fingerprint = turn_fingerprint(block) if valid else ""
         valid = valid and ref.get("fingerprint") == fingerprint
         if not valid:
+            prefix = read_turn_prefix(store, block)
+            if prefix is not None:
+                end_seq = int(prefix.metadata["end_seq"])
+                covered = [message for message in tail if message.seq_id <= end_seq]
+                if covered and all(message.archived_content_id == prefix.id for message in covered):
+                    projected.extend(get_effective_history([copy.deepcopy(user)]))
+                    projected.append(_history_summary_message(prefix))
+                    projected.extend(get_effective_history(copy.deepcopy(
+                        [message for message in tail if message.seq_id > end_seq]
+                    )))
+                    continue
             exact = copy.deepcopy(block)
+            prefix_ref = (user.metadata or {}).get("turn_prefix_ref") or {}
+            selected_ids = {content_id, str(prefix_ref.get("content_id") or "")}
             for message in exact:
-                if message is not exact[0] and str(message.archived_content_id or "") == content_id:
+                if message is not exact[0] and str(message.archived_content_id or "") in selected_ids:
                     message.archived_content_id = None
             projected.extend(get_effective_history(exact))
             continue
         projected.extend(get_effective_history([copy.deepcopy(user)]))
-        projected.append(
-            Message(
-                role="assistant",
-                content=record.summary,
-                metadata={
-                    "synthetic": True,
-                    "context_kind": "turn_capsule",
-                    "content_id": record.id,
-                    "fingerprint": fingerprint,
-                    "coverage": {
-                        "start_seq": int(metadata.get("start_seq", 0) or 0),
-                        "end_seq": int(metadata.get("end_seq", 0) or 0),
-                    },
-                    "trust": "mixed_provenance",
-                },
-            )
-        )
+        projected.append(_history_summary_message(record))
     return projected
+
+
+def _history_summary_message(record: ArchivedContentRecord) -> Message:
+    metadata = record.metadata
+    return Message(
+        role="assistant", content=record.summary,
+        metadata={
+            "synthetic": True, "context_kind": metadata["scope"],
+            "content_id": record.id, "fingerprint": metadata.get("fingerprint", ""),
+            "coverage": {"start_seq": metadata.get("start_seq", 0), "end_seq": metadata.get("end_seq", 0)},
+            "trust": "mixed_provenance",
+        },
+    )
 
 
 def get_effective_history(messages: List[Message]) -> List[Message]:

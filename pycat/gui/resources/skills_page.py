@@ -1,4 +1,4 @@
-"""Installed skills and candidate-method management."""
+"""Unified skill catalog, local editing and candidate-method management."""
 from __future__ import annotations
 
 import difflib
@@ -8,10 +8,7 @@ from pathlib import Path
 from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QComboBox,
     QDialog,
-    QFileDialog,
-    QFormLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -19,6 +16,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -28,19 +26,25 @@ from pycat.core.app.services.skill import SkillService
 from pycat.core.config import get_global_subdir
 from pycat.core.skills.usage import SkillUsageStore
 from pycat.gui.dialogs.skill_evaluation_dialog import SkillEvaluationDialog
+from pycat.gui.resources.discovery import ResourceDiscovery
+from pycat.gui.resources.extension_details import ExtensionDetails
+from pycat.gui.resources.skill_dialog import SkillAddDialog
 from pycat.gui.settings.components import (
     RESOURCE_DESCRIPTION_ROLE,
+    RESOURCE_DETAIL_META_ROLE,
+    RESOURCE_SUBTITLE_ROLE,
+    RESOURCE_TITLE_ROLE,
     RESOURCE_TOGGLE_ROLE,
     SettingsActionBar,
     SettingsListDetailLayout,
     SettingsStatusListItem,
-    build_dialog_button_box,
     configure_settings_resource_list,
+    set_resource_badge,
 )
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.icon_manager import Icons
-from pycat.gui.utils.settings_controls import SettingsFormLayout
-from pycat.gui.utils.theme import configure_menu_button
+from pycat.gui.utils.theme import configure_icon_button, configure_menu_button
+from pycat.gui.view_models.extension_labels import extension_text, resource_badge
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from pycat.models.session_paths import resolve_project_data_root
 
@@ -96,81 +100,15 @@ class SkillDropListWidget(QListWidget):
         self._handle_drag_event(event, drop=True)
 
 
-class SkillCreateDialog(QDialog):
-    """Collect a local skill draft; no directory is created before confirmation."""
-
-    def __init__(self, *, has_project: bool, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(QCoreApplication.translate('SkillsPage', '创建技能'))
-        self.setModal(True)
-        self.setMinimumWidth(420)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-        form = SettingsFormLayout()
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        self.name_edit = ThemedLineEdit()
-        self.name_edit.setPlaceholderText(QCoreApplication.translate('SkillsPage', '例如 review-code'))
-        self.description_edit = ThemedLineEdit()
-        self.description_edit.setPlaceholderText(QCoreApplication.translate('SkillsPage', '一句话说明用途'))
-        self.scope_combo = QComboBox()
-        self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '全局'), "global")
-        if has_project:
-            self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '当前工作区'), "project")
-        form.addRow(QCoreApplication.translate('SkillsPage', '名称'), self.name_edit)
-        form.addRow(QCoreApplication.translate('SkillsPage', '说明'), self.description_edit)
-        form.addRow(QCoreApplication.translate('SkillsPage', '范围'), self.scope_combo)
-        layout.addLayout(form)
-        buttons = build_dialog_button_box(self, accept_text=QCoreApplication.translate('SkillsPage', '创建'))
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def values(self) -> tuple[str, str, str]:
-        return (
-            self.name_edit.text().strip(),
-            self.description_edit.text().strip(),
-            str(self.scope_combo.currentData() or "global"),
-        )
-
-
-class SkillImportDialog(QDialog):
-    """Confirm the target scope for one imported skill source."""
-
-    def __init__(self, source_name: str, *, has_project: bool, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(QCoreApplication.translate('SkillsPage', '导入技能'))
-        self.setModal(True)
-        self.setMinimumWidth(420)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-        label = QLabel(QCoreApplication.translate('SkillsPage', '导入“{source_name}”到哪个范围？').format(source_name=source_name))
-        label.setWordWrap(True)
-        layout.addWidget(label)
-        form = SettingsFormLayout()
-        self.scope_combo = QComboBox()
-        self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '全局'), "global")
-        if has_project:
-            self.scope_combo.addItem(QCoreApplication.translate('SkillsPage', '当前工作区'), "project")
-        form.addRow(QCoreApplication.translate('SkillsPage', '范围'), self.scope_combo)
-        layout.addLayout(form)
-        buttons = build_dialog_button_box(self, accept_text=QCoreApplication.translate('SkillsPage', '导入'))
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def scope(self) -> str:
-        return str(self.scope_combo.currentData() or "global")
-
-
 class SkillsPage(QWidget):
     page_title = "技能"
 
-    def __init__(self, work_dir: str = ".", parent=None, *, skill_service: SkillService | None = None, candidate_evaluator=None, show_header=True):
+    def __init__(self, work_dir: str = ".", parent=None, *, skill_service: SkillService | None = None, candidate_evaluator=None, extension_service=None, show_header=True):
         super().__init__(parent)
         self._work_dir = str(work_dir or "")
         self._service = skill_service or SkillService()
+        self._extensions = extension_service
+        self._pending_skill = None
         self._skills = []
         self._candidates = []
         self._selected_candidate = None
@@ -192,28 +130,54 @@ class SkillsPage(QWidget):
         self.list_body = body
         overview = QHBoxLayout()
         self.search = ThemedLineEdit()
-        self.search.setPlaceholderText(QCoreApplication.translate('SkillsPage', '搜索已安装技能'))
-        self.search.setAccessibleName(QCoreApplication.translate('SkillsPage', '搜索已安装技能'))
-        self.search.textChanged.connect(self._filter_list)
+        self.search.setPlaceholderText(QCoreApplication.translate('SkillsPage', '搜索技能'))
+        self.search.setAccessibleName(QCoreApplication.translate('SkillsPage', '搜索技能'))
         overview.addWidget(self.search, 1)
-        self.add_btn = QPushButton()
-        add_menu = QMenu(self.add_btn)
-        add_menu.addAction(QCoreApplication.translate('SkillsPage', '创建技能'), self._add_skill)
-        self.import_btn = add_menu.addAction(QCoreApplication.translate('SkillsPage', '导入 SKILL.md / ZIP'), self._import_skill_picker)
-        configure_menu_button(self.add_btn, add_menu, Icons.get(Icons.PLUS), QCoreApplication.translate('SkillsPage', '添加'))
+        self.back_to_skills_btn = QPushButton(self.tr("返回技能"))
+        self.back_to_skills_btn.clicked.connect(lambda: self._set_view("active"))
+        self.back_to_skills_btn.hide()
+        overview.addWidget(self.back_to_skills_btn)
+        self.add_btn = QPushButton(Icons.get(Icons.PLUS), QCoreApplication.translate('SkillsPage', '添加'))
+        self.add_btn.clicked.connect(self._add_skill)
         overview.addWidget(self.add_btn)
         more = QToolButton()
         more.setObjectName("resource_more_button")
         menu = QMenu(more)
         menu.addAction(QCoreApplication.translate('SkillsPage', '重新扫描'), self._refresh_list)
-        menu.addAction(QCoreApplication.translate('SkillsPage', '查看技能'), lambda: self._set_view("active"))
-        menu.addAction(QCoreApplication.translate('SkillsPage', '候选方法'), lambda: self._set_view("candidates"))
+        self.candidates_action = menu.addAction(QCoreApplication.translate('SkillsPage', '候选方法'))
+        self.candidates_action.setCheckable(True)
+        self.candidates_action.triggered.connect(lambda checked: self._set_view("candidates" if checked else "active"))
         configure_menu_button(more, menu, Icons.get_muted(Icons.MORE), QCoreApplication.translate('SkillsPage', '更多技能操作'))
         overview.addWidget(more)
         body.toolbar_layout.addLayout(overview)
-        toolbar = SettingsActionBar(spacing=4)
+        self.update_btn = QToolButton()
+        self.update_btn.setObjectName("resource_update_button")
+        configure_icon_button(self.update_btn, Icons.get_muted(Icons.CIRCLE_INFO), self.tr("版本与更新"))
+        self.update_btn.setCheckable(True)
+        self.update_btn.clicked.connect(self._show_update)
+        self.update_btn.toggled.connect(self._update_action_label)
+        self.detail_stack = QStackedWidget()
+        body.detail_layout.addWidget(self.detail_stack, 1)
+        self.local_detail = QWidget()
+        right = QVBoxLayout(self.local_detail)
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(8)
+        self.detail_stack.addWidget(self.local_detail)
+        self.extension_details = ExtensionDetails(kind="skill", service=self._extensions, work_dir=self._work_dir)
+        self.detail_stack.addWidget(self.extension_details)
+        self.extension_details.extension_prepared.connect(self._skill_prepared)
+        self.extension_details.skills_changed.connect(self._skills_changed)
+        self.extension_details.changed.connect(self._extension_changed)
+        self.discovery = ResourceDiscovery(kind="skill", service=self._extensions,
+            search=self.search, details=self.extension_details, work_dir=self._work_dir, parent=self)
+        self.search_button = self.discovery.search_button
+        overview.insertWidget(1, self.search_button)
+        self.discovery.changed.connect(self._query_changed)
+        self.extension_details.busy_changed.connect(self._set_busy)
+        toolbar = self.action_bar = SettingsActionBar(spacing=4)
         self.edit_btn = toolbar.add_icon_action(QCoreApplication.translate('SkillsPage', '编辑技能'), Icons.get(Icons.EDIT), self._open_skill_file)
         self.toggle_btn = toolbar.add_icon_action(QCoreApplication.translate('SkillsPage', '停用技能'), Icons.get(Icons.PAUSE), self._toggle_skill_enabled)
+        toolbar.add_widget(self.update_btn)
         self.delete_btn = toolbar.add_icon_action(
             QCoreApplication.translate('SkillsPage', '删除技能'),
             Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR),
@@ -221,7 +185,7 @@ class SkillsPage(QWidget):
             danger=True,
         )
         toolbar.add_stretch()
-        body.detail_layout.addWidget(toolbar)
+        body.detail_layout.insertWidget(1, toolbar)
         left = body.list_layout
         self.skill_list = configure_settings_resource_list(
             SkillDropListWidget(self._on_skill_sources_dropped)
@@ -229,7 +193,7 @@ class SkillsPage(QWidget):
         self.skill_list.currentItemChanged.connect(self._on_selection_changed)
         body.bind(self.skill_list, self._toggle_skill_enabled)
         left.addWidget(self.skill_list, 1)
-        right = body.detail_layout
+        left.addWidget(self.discovery.next_button)
 
         self.source_label = QLabel("")
         self.source_label.setWordWrap(True)
@@ -251,7 +215,7 @@ class SkillsPage(QWidget):
         self.preview.setFrameShape(ThemedTextEdit.Shape.NoFrame)
         self.preview.setReadOnly(True)
         self.preview.setPlaceholderText(QCoreApplication.translate('SkillsPage', '选择技能查看内容'))
-        right.addWidget(self.preview)
+        right.addWidget(self.preview, 1)
         candidate_actions = QHBoxLayout()
         self.evaluate_btn = QPushButton(QCoreApplication.translate('SkillsPage', '对照试验'))
         self.evaluate_btn.clicked.connect(self._evaluate_candidate)
@@ -266,26 +230,36 @@ class SkillsPage(QWidget):
             button.hide()
         right.addLayout(candidate_actions)
         layout.addWidget(body, 1)
+        layout.addWidget(self.extension_details.status_bar)
+        self._search_hint()
         self._sync_actions(None)
 
     def _set_view(self, view: str) -> None:
+        self.cancel_pending()
         self._view = view
+        self.discovery.enabled = view == "active"
+        self.candidates_action.setChecked(view == "candidates")
         self.search.clear()
-        label = QCoreApplication.translate('SkillsPage', '搜索候选方法') if view == "candidates" else QCoreApplication.translate('SkillsPage', '搜索已安装技能')
+        label = QCoreApplication.translate('SkillsPage', '搜索候选方法') if view == "candidates" else QCoreApplication.translate('SkillsPage', '搜索技能')
         self.search.setPlaceholderText(label)
         self.search.setAccessibleName(label)
         self.list_body.show_list()
         self._refresh_list()
 
     def _refresh_list(self) -> None:
+        for label in (self.source_label, self.provenance_label, self.description_label):
+            label.setVisible(True)
         self.preview.clear()
         self.source_label.setText("")
         self.provenance_label.setText("")
         self.description_label.setText("")
         self._selected_candidate = None
+        self.discovery.invalidate()
         candidates = self._view == "candidates"
-        for button in (self.add_btn, self.import_btn, self.edit_btn, self.toggle_btn, self.delete_btn):
+        self.extension_details.status_bar.setVisible(not candidates)
+        for button in (self.add_btn, self.search_button, self.edit_btn, self.toggle_btn, self.delete_btn):
             button.setVisible(not candidates)
+        self.back_to_skills_btn.setVisible(candidates)
         for button in (self.evaluate_btn, self.publish_btn, self.rollback_btn):
             button.setVisible(candidates)
         if candidates:
@@ -308,16 +282,21 @@ class SkillsPage(QWidget):
         self._render_list()
 
     def _render_list(self) -> None:
-        current_name = ""
         current = self.skill_list.currentItem()
-        if current is not None:
-            current_name = str(current.data(Qt.ItemDataRole.UserRole) or "")
+        selected = current.data(Qt.ItemDataRole.UserRole) if current else None
+        query = self.search.text().strip().casefold()
+        show_available = bool(query or self._pending_skill)
 
         self.skill_list.clear()
         self.skill_list.setToolTip(
             QCoreApplication.translate('SkillsPage', '已发现 {value} 个技能\n全局目录：{value_}\n项目目录：{value__}').format(value=len(self._skills), value_=get_global_subdir('skills'), value__=resolve_project_data_root(self._work_dir, data_dir=getattr(self._service, 'data_dir', None)) / 'skills')
         )
-        for skill in self._skills:
+        catalog = self.discovery.rows() if show_available else []
+        installed_hits = {row["id"] for row in catalog if row.get("installed") and self.discovery.matches(row, query)}
+        installed_hits.update(row.get("skill_name") for row in self.discovery.market_rows if row.get("installed"))
+        matches = [skill for skill in self._skills
+                   if skill.name in installed_hits or query in f"{skill.name} {skill.description}".casefold()]
+        for skill in matches:
             enabled = bool(getattr(skill, "enabled", True))
             status = QCoreApplication.translate('SkillsPage', '已启用') if enabled else QCoreApplication.translate('SkillsPage', '已停用')
             item = SettingsStatusListItem(skill.name)
@@ -330,32 +309,126 @@ class SkillsPage(QWidget):
             )
             item.setData(RESOURCE_DESCRIPTION_ROLE, skill.description or QCoreApplication.translate('SkillsPage', '暂无说明'))
             item.setData(RESOURCE_TOGGLE_ROLE, "skill" if not skill.read_only or skill.source_scope == "bundled" else "")
+            set_resource_badge(item, resource_badge(kind="skill", installed=True, enabled=enabled))
+            item.setData(RESOURCE_DETAIL_META_ROLE, f"{self._source_scope(skill)} · {status}")
             self.skill_list.addItem(item)
 
+        if show_available:
+            available = [row for row in catalog if not row.get("installed")]
+            if self._pending_skill:
+                available = [row for row in available if row["id"] != self._pending_skill["id"]]
+                available.insert(0, self._pending_skill)
+            self._append_extensions(available)
         if self.skill_list.count() == 0:
-            self.source_label.setText(QCoreApplication.translate('SkillsPage', '暂无技能'))
-            self.description_label.setText(QCoreApplication.translate('SkillsPage', '可以添加一个全局技能，或把目录型 SKILL.md 放入项目 .pycat/skills。'))
+            self.source_label.setText(self.tr("未找到匹配技能") if query else QCoreApplication.translate('SkillsPage', '暂无技能'))
+            self.description_label.setText(self.tr("按回车搜索市场，或通过“添加”导入技能。") if query else
+                QCoreApplication.translate('SkillsPage', '可以添加一个全局技能，或把目录型 SKILL.md 放入项目 .pycat/skills。'))
             self.preview.clear()
             self._sync_actions(None)
             return
 
-        restore_row = 0
-        if current_name:
-            for index in range(self.skill_list.count()):
-                if str(self.skill_list.item(index).data(Qt.ItemDataRole.UserRole) or "") == current_name:
-                    restore_row = index
-                    break
+        choices = [i for i in range(self.skill_list.count())
+                   if self.skill_list.item(i).data(Qt.ItemDataRole.UserRole) is not None]
+        restore_row = next((i for i in choices if self.skill_list.item(i).data(Qt.ItemDataRole.UserRole) == selected), choices[0])
         self.skill_list.setCurrentRow(restore_row)
-        self._filter_list()
 
-    def _filter_list(self):
-        query = self.search.text().casefold()
-        for index in range(self.skill_list.count()):
-            item = self.skill_list.item(index)
-            text = item.text() + " " + str(item.data(RESOURCE_DESCRIPTION_ROLE) or "")
-            item.setHidden(query not in text.casefold())
+    def _append_extensions(self, rows):
+        for row in rows:
+            item = QListWidgetItem(extension_text(row, "title"))
+            item.setData(Qt.ItemDataRole.UserRole, row)
+            for role, key in ((RESOURCE_TITLE_ROLE, "title"), (RESOURCE_DESCRIPTION_ROLE, "description"),
+                              (RESOURCE_SUBTITLE_ROLE, "source")):
+                item.setData(role, extension_text(row, key))
+            set_resource_badge(item, resource_badge(kind="skill", directory=row.get("management") == "directory"))
+            item.setToolTip(extension_text(row, "title") + "\n" + extension_text(row, "description"))
+            self.skill_list.addItem(item)
+
+    def _query_changed(self):
+        if self._view == "candidates":
+            query = self.search.text().casefold()
+            for i in range(self.skill_list.count()):
+                item = self.skill_list.item(i)
+                item.setHidden(query not in item.text().casefold())
+            return
+        if not self.extension_details._job:
+            self._search_hint()
+        self._render_list()
+
+    def _search_hint(self):
+        self.extension_details.status.setText(self.tr("输入筛选已安装技能；回车搜索市场。也可拖入技能文件或目录。"))
+
+    def _set_busy(self, busy):
+        self.add_btn.setEnabled(not busy)
+        self.skill_list.setEnabled(not busy or self.discovery.searching)
+        self.update_btn.setEnabled(self._extensions is not None and not busy)
+        if busy:
+            for button in (self.edit_btn, self.toggle_btn, self.delete_btn):
+                button.setEnabled(False)
+        else:
+            self._sync_actions(self._current_skill())
+
+    def _skill_prepared(self, row):
+        self._pending_skill = row
+        self._set_view("active")
+        self._render_list()
+        for i in range(self.skill_list.count()):
+            if self.skill_list.item(i).data(Qt.ItemDataRole.UserRole) == row:
+                self.skill_list.setCurrentRow(i)
+                self.list_body.show_detail()
+                break
+
+    def _extension_changed(self, row):
+        for stored in self.discovery.market_rows:
+            if stored["id"] == row["id"]:
+                stored.update(row)
+
+    def _skills_changed(self):
+        row = self.extension_details._selected()
+        self._pending_skill = None
+        self._refresh_list()
+        self._select_skill(row.get("skill_name") or row.get("id", ""))
+
+    def _show_update(self, checked=True):
+        skill = self._current_skill()
+        if not checked:
+            self.detail_stack.setCurrentWidget(self.local_detail)
+            return
+        if skill:
+            self.show_version(skill.name)
+
+    def _update_action_label(self, checked):
+        label = self.tr("返回技能内容") if checked else self.tr("版本与更新")
+        self.update_btn.setToolTip(label)
+        self.update_btn.setAccessibleName(label)
+
+    def show_version(self, name):
+        row = next((row for row in self.discovery.catalog() if row["id"] == name), None)
+        if row:
+            self.extension_details.set_extension(row)
+            self.detail_stack.setCurrentWidget(self.extension_details)
+            self.update_btn.setChecked(True)
+            self.list_body.show_detail()
+
+    def cancel_pending(self):
+        self.discovery.cancel_pending()
+
+    def hideEvent(self, event):
+        self.cancel_pending()
+        super().hideEvent(event)
 
     def _on_selection_changed(self, current: QListWidgetItem | None, _prev) -> None:
+        payload = current.data(Qt.ItemDataRole.UserRole) if current else None
+        for label in (self.source_label, self.provenance_label, self.description_label):
+            label.setVisible(True)
+        self.action_bar.setVisible(self._view == "active" and isinstance(payload, str))
+        self.update_btn.setChecked(False)
+        self.update_btn.setVisible(self._view == "active" and isinstance(payload, str) and self._extensions is not None)
+        if isinstance(payload, dict):
+            self.extension_details.set_extension(payload)
+            self.detail_stack.setCurrentWidget(self.extension_details)
+            self._sync_actions(None)
+            return
+        self.detail_stack.setCurrentWidget(self.local_detail)
         if self._view == "candidates":
             candidate = next((item for item in self._candidates if current is not None and item["id"] == current.data(Qt.ItemDataRole.UserRole)), None)
             self._selected_candidate = candidate
@@ -373,28 +446,25 @@ class SkillsPage(QWidget):
                 except (OSError, ValueError, KeyError) as exc:
                     self.source_label.setText(QCoreApplication.translate('SkillsPage', '存储不可读：{exc}').format(exc=exc))
             return
-        if not current:
+        if not payload:
             self.preview.clear()
             self.source_label.setText("")
             self.provenance_label.setText("")
             self.description_label.setText("")
             self._sync_actions(None)
             return
-        skill = self._service.get(
-            current.data(Qt.ItemDataRole.UserRole),
-            work_dir=self._work_dir,
-            include_disabled=True,
-        )
+        # Filtering projects the already loaded catalog. Commands below resolve
+        # a fresh skill through the service before changing its installation.
+        skill = next((skill for skill in self._skills if skill.name == payload), None)
         if skill:
-            status = QCoreApplication.translate('SkillsPage', '已启用') if getattr(skill, "enabled", True) else QCoreApplication.translate('SkillsPage', '已停用')
             usage_line = self._usage_summary(skill)
-            source_text = f"{self._source_scope(skill)} · {status}"
             self.source_label.setToolTip(QCoreApplication.translate('SkillsPage', '文件：{source}').format(source=skill.source))
-            if usage_line:
-                source_text += f"\n{usage_line}"
-            self.source_label.setText(source_text)
+            self.source_label.setText(usage_line)
+            self.source_label.setVisible(bool(usage_line))
             self.provenance_label.setText(self._provenance_summary(skill))
+            self.provenance_label.setVisible(bool(self.provenance_label.text()))
             self.description_label.setText(skill.description or "")
+            self.description_label.setVisible(bool(skill.description))
             self.preview.setMarkdown(skill.content)
             self._sync_actions(skill)
             return
@@ -463,7 +533,7 @@ class SkillsPage(QWidget):
 
     def _current_skill(self):
         item = self.skill_list.currentItem()
-        if item is None:
+        if self._view != "active" or item is None or not isinstance(item.data(Qt.ItemDataRole.UserRole), str):
             return None
         return self._service.get(
             str(item.data(Qt.ItemDataRole.UserRole) or ""),
@@ -502,66 +572,37 @@ class SkillsPage(QWidget):
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
-    def _add_skill(self) -> None:
-        dialog = SkillCreateDialog(has_project=bool(str(self._work_dir or "").strip()), parent=self)
+    def _add_skill(self, _checked=False, *, source: Path | None = None) -> None:
+        dialog = SkillAddDialog(has_project=bool(self._work_dir.strip()), allow_github=self._extensions is not None, parent=self)
+        if source is not None:
+            dialog.set_local_source(source)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        name, description, scope = dialog.values()
+        values = dialog.values()
+        if values["kind"] == "github":
+            if self._extensions:
+                self.extension_details.prepare_skill(values["repository"], values["directory"], values["ref"], values["scope"])
+            return
+        if values["kind"] == "local":
+            self._import_skill_source(Path(values["source"]), scope=values["scope"])
+            return
         try:
-            skill_file = self._service.create_managed(
-                name,
-                description=description,
-                scope=scope,
-                work_dir=self._work_dir,
-            )
+            skill_file = self._service.create_managed(values["name"], description=values["description"],
+                                                      scope=values["scope"], work_dir=self._work_dir)
         except Exception as exc:
             QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '创建技能失败'), str(exc))
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(skill_file)))
         self._refresh_list()
-        self._select_skill(name)
-
-    def _import_skill_picker(self) -> None:
-        path, _selected = QFileDialog.getOpenFileName(
-            self,
-            QCoreApplication.translate('SkillsPage', '选择技能文件'),
-            "",
-            QCoreApplication.translate('SkillsPage', '技能文件 (*.md *.zip);;所有文件 (*)'),
-        )
-        if not path:
-            return
-        self._import_skill_source(Path(path))
+        self._select_skill(values["name"])
 
     def _on_skill_sources_dropped(self, sources: list[Path]) -> None:
         if len(sources) > 1:
             QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '导入技能'), QCoreApplication.translate('SkillsPage', '一次只能导入一个技能文件或压缩包。'))
-            return
-        if not sources:
-            return
-        self._import_skill_source(sources[0])
+        elif sources:
+            self._add_skill(source=sources[0])
 
-    def _import_skill_source(self, source: Path) -> None:
-        source = Path(source)
-        if not source.exists():
-            QMessageBox.warning(self, QCoreApplication.translate('SkillsPage', '导入技能'), QCoreApplication.translate('SkillsPage', '导入来源不存在。'))
-            return
-        is_zip = source.is_file() and source.suffix.lower() == ".zip"
-        is_md_file = source.is_file() and source.suffix.lower() == ".md"
-        if not is_zip and not is_md_file and not source.is_dir():
-            QMessageBox.warning(
-                self,
-                QCoreApplication.translate('SkillsPage', '导入技能'),
-                QCoreApplication.translate('SkillsPage', '只支持 .md 技能文件、包含 SKILL.md 的目录或 .zip 压缩包。'),
-            )
-            return
-        dialog = SkillImportDialog(
-            source.stem if is_zip or is_md_file else source.name,
-            has_project=bool(str(self._work_dir or "").strip()),
-            parent=self,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        scope = dialog.scope()
+    def _import_skill_source(self, source: Path, *, scope: str) -> None:
         overwrite = False
         try:
             skill_file = self._service.import_managed(

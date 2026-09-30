@@ -2,7 +2,7 @@
 import re
 from typing import Any, Dict, List, Optional
 
-from pycat.core.app.services.search_providers.base import BaseSearchProvider
+from pycat.core.app.services.search_providers.base import BaseSearchProvider, SearchError
 from pycat.core.app.services.search_providers.factory import SearchProviderFactory
 from pycat.models.search_config import (
     DEFAULT_MAX_RESULTS,
@@ -60,16 +60,14 @@ class SearchService:
         return max(MIN_MAX_RESULTS, min(int(resolved), MAX_MAX_RESULTS))
 
     async def search(self, query: str) -> str:
-        """Execute search and return formatted results."""
+        """Return formatted results, or raise SearchError for a failed search."""
         if not self.is_available():
-            return "Search is not configured or the selected provider is not available."
-
-        if self._provider is None:
-            return f"Unknown search provider: {self.config.provider}"
+            raise SearchError("Search is not configured or the selected provider is not available.",
+                              code="search_not_configured")
 
         query = self.normalize_query(query)
         if not query:
-            return "No search query provided."
+            raise SearchError("No search query provided.", code="invalid_arguments")
 
         try:
             limit = self._resolve_max_results()
@@ -82,8 +80,10 @@ class SearchService:
                 return self._provider.format_for_llm(results, include_date=self.config.include_date)
 
             return self._provider._format_results(results, include_date=self.config.include_date)
-        except Exception as e:
-            return f"Search error: {str(e)}"
+        except SearchError:
+            raise
+        except Exception as exc:
+            raise SearchError(f"{self._provider.display_name} search failed: {exc}") from exc
 
     async def check(self) -> tuple[bool, Optional[str]]:
         """Check if the current provider is properly configured and reachable.

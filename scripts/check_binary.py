@@ -72,10 +72,15 @@ def check_tui(worker):
         import asyncio, tempfile
         from pycat import PyCat
         from pycat.tui.app import WorkbenchApp
+        from pycat.tui.brand import terminal_logo
+        from pycat.core.i18n import Translator
         from textual.widgets import TextArea
         from pygments.lexers import get_lexer_by_name
         from pygments.styles import get_style_by_name
         assert get_lexer_by_name('python') and get_style_by_name('monokai')
+        assert Translator('en')('保存') == 'Save'
+        assert Translator('zh_CN')('保存') == '保存'
+        assert len(terminal_logo().plain.splitlines()) == 12
         async def check():
             with tempfile.TemporaryDirectory() as directory:
                 async with PyCat(data_dir=directory) as app:
@@ -484,7 +489,7 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
             assert isinstance(json.loads(config.read_text(encoding="utf-8")), dict)
             with tempfile.TemporaryDirectory() as data:
                 skills = SkillsManager(work_dir=data, data_dir=data)
-                for name in ("find-skills", "skill-creator", "pdf"):
+                for name in ("find-skills", "skill-creator", "pdf", "deep-research"):
                     skill = skills.get(name)
                     assert skill and skill.source_scope == "bundled" and skill.read_only, name
                     assert skill.description and skill.content, name

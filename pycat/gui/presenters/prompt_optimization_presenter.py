@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtWidgets import QMessageBox
 
 from pycat.core.capabilities.defaults import default_capabilities_config
@@ -69,7 +70,7 @@ class PromptOptimizationPresenter:
             host.input_area.set_prompt_optimize_busy(False)
         except Exception as e:
             logger.debug("Failed to reset prompt optimize busy: %s", e)
-        QMessageBox.warning(host, '提示词优化失败', err or '未知错误')
+        QMessageBox.warning(host, QCoreApplication.translate('PromptOptimizationPresenter', '提示词优化失败'), err or QCoreApplication.translate('PromptOptimizationPresenter', '未知错误'))
 
     def on_cancelled(
         self,
@@ -101,7 +102,7 @@ class PromptOptimizationPresenter:
             host.current_conversation = host.conversation_presenter.ensure_current_conversation_shell()
 
         if host.message_runtime.is_streaming(host.current_conversation.id):
-            QMessageBox.information(host, '提示', '当前会话正在生成中，请先停止或等待完成。')
+            QMessageBox.information(host, QCoreApplication.translate('PromptOptimizationPresenter', '提示'), QCoreApplication.translate('PromptOptimizationPresenter', '当前会话正在生成中，请先停止或等待完成。'))
             return
 
         text = (raw_text or '').strip()
@@ -113,11 +114,11 @@ class PromptOptimizationPresenter:
 
         provider = host.services.conv_service.find_provider(host.providers, provider_id)
         if not provider:
-            QMessageBox.warning(host, '错误', '请先在设置中配置服务商')
+            QMessageBox.warning(host, QCoreApplication.translate('PromptOptimizationPresenter', '错误'), QCoreApplication.translate('PromptOptimizationPresenter', '请先在设置中配置服务商'))
             return
 
         if not base_model:
-            QMessageBox.warning(host, '错误', '请选择一个模型')
+            QMessageBox.warning(host, QCoreApplication.translate('PromptOptimizationPresenter', '错误'), QCoreApplication.translate('PromptOptimizationPresenter', '请选择一个模型'))
             return
 
         try:
@@ -126,7 +127,7 @@ class PromptOptimizationPresenter:
             logger.debug("Failed to read prompt optimizer capability from container: %s", e)
             prompt_capability = default_capabilities_config().capability("prompt_optimize")
         if prompt_capability is None or not prompt_capability.enabled:
-            QMessageBox.warning(host, '错误', '提示词优化能力已停用。')
+            QMessageBox.warning(host, QCoreApplication.translate('PromptOptimizationPresenter', '错误'), QCoreApplication.translate('PromptOptimizationPresenter', '提示词优化能力已停用。'))
             return
 
         target = prompt_capability.model_target

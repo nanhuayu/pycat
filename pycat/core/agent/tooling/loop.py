@@ -100,6 +100,20 @@ class ToolCallCoordinator:
                     detail=f"Tool {tool_name} stopped: repeated identical arguments.",
                     data={**tool_event_base, "phase": "repetition", "is_error": True},
                 )
+                self._close_unexecuted_tool_calls(
+                    conversation,
+                    assistant_msg,
+                    start_index=tool_index,
+                    reason="Tool not executed: repeated identical arguments.",
+                    error_code="tool_repetition",
+                )
+                emit_conversation_patch(
+                    emitter,
+                    conversation,
+                    turn=turn_context.turn,
+                    detail="Conversation state synchronized after tool repetition stop.",
+                    include_messages=False,
+                )
                 turn_context.runtime_messages = [Message(role="user", content=REPETITION_WARNING)]
                 repetition_detector.reset()
                 return TurnOutcome(kind=TurnOutcomeKind.CONTINUE, context=turn_context, final_message=assistant_msg)
@@ -291,6 +305,33 @@ class ToolCallCoordinator:
 
         turn_context.runtime_messages = []
         return TurnOutcome(kind=TurnOutcomeKind.CONTINUE, context=turn_context, final_message=assistant_msg)
+
+    def _close_unexecuted_tool_calls(
+        self,
+        conversation: Conversation,
+        assistant_msg: Message,
+        *,
+        start_index: int,
+        reason: str,
+        error_code: str,
+    ) -> None:
+        # A persisted tool call without a result is treated as an in-flight
+        # protocol tail by context maintenance, so skipped calls must be closed.
+        for tool_call in list(assistant_msg.tool_calls or [])[start_index:]:
+            if not isinstance(tool_call, dict) or tool_call.get("result") is not None:
+                continue
+            tool_name, _args, tool_call_id = self.tool_executor.parse_tool_call(tool_call)
+            conversation.attach_tool_result(
+                tool_call_id,
+                {"type": "tool_result", "content": reason, "summary": reason},
+                summary=reason,
+                metadata={
+                    "name": tool_name,
+                    "tool_call_id": str(tool_call_id or ""),
+                    "is_error": True,
+                    "error_code": error_code,
+                },
+            )
 
     @staticmethod
     def _trace_arguments(arguments: Any, *, limit: int = 2_000) -> tuple[dict[str, Any], int]:

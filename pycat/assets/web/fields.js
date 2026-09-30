@@ -1,7 +1,8 @@
+import {tr} from './i18n.js';
 import {node, button} from './ui.js';
 
 export const option = (value, label = value) => ({value, label});
-export const categories = [['read', '读取与搜索'], ['web', '联网请求'], ['edit', '修改文件'], ['execute', '终端与进程'], ['state', '状态与资料'], ['delegate', '委派 Agent'], ['capability', '模型能力'], ['mcp', 'MCP 工具']];
+export const categories = [['read', tr("读取与搜索")], ['web', tr("联网请求")], ['edit', tr("修改文件")], ['execute', tr("终端与进程")], ['state', tr("状态与资料")], ['delegate', tr("委派 Agent")], ['capability', tr("模型能力")], ['mcp', tr("MCP 工具")]];
 export const getPath = (object, path) => path.split('.').reduce((value, key) => value?.[key], object);
 export function setPath(object, path, value) {
   const keys = path.split('.'), last = keys.pop();
@@ -25,8 +26,8 @@ export function fieldControl(field, value, change) {
   if (type === 'float') input.step = 'any';
   if (type === 'bool') input.checked = !!value;
   else input.value = field.secret && value === '__secret__' ? '' : value == null ? '' : type === 'json' ? JSON.stringify(value, null, 2) : type === 'lines' ? value.join('\n') : value;
-  if (field.secret && value === '__secret__') input.placeholder = '已保存，留空保留';
-  else input.placeholder = field.placeholder || (field.nullable ? '继承默认值' : '');
+  if (field.secret && value === '__secret__') input.placeholder = tr("已保存，留空保留");
+  else input.placeholder = field.placeholder || (field.nullable ? tr("继承默认值") : '');
   const update = () => {
     let next;
     input.setCustomValidity('');
@@ -38,14 +39,14 @@ export function fieldControl(field, value, change) {
       else if (type === 'lines') next = input.value.split('\n').map(item => item.trim()).filter(Boolean);
       else if (type === 'int' || type === 'float') {
         next = Number(input.value);
-        if (!input.value || !Number.isFinite(next) || type === 'int' && !Number.isInteger(next)) throw Error('请输入有效数字');
+        if (!input.value || !Number.isFinite(next) || type === 'int' && !Number.isInteger(next)) throw Error(tr("请输入有效数字"));
       } else next = input.value;
       change(next);
     } catch (error) { input.setCustomValidity(error.message); }
   };
   input.addEventListener('input', update); input.addEventListener('change', update);
   const control = node('div', {class: 'field-control'}, input);
-  if (field.secret) control.append(button('清除', () => { input.value = ''; input.dataset.cleared = '1'; update(); }, 'text-button'));
+  if (field.secret) control.append(button(tr("清除"), () => { input.value = ''; input.dataset.cleared = '1'; update(); }, 'text-button'));
   row.append(control); return row;
 }
 export function fieldset(title, description, object, fields, change = () => {}) {

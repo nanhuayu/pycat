@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from pycat.gui.settings.components import build_dialog_button_box
+from pycat.gui.settings.components import build_dialog_button_box, settings_dialog_layout
 from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.form_builder import FormSection
 from pycat.gui.widgets.themed_line_edit import ThemedTextEdit
@@ -120,14 +120,11 @@ class ModelProfileDialog(QDialog):
         return self._provider.model_profile_template()
 
     def _setup_ui(self) -> None:
-        self.setWindowTitle(QCoreApplication.translate('ModelProfileDialog', '添加模型') if not self._original_model_id else QCoreApplication.translate('ModelProfileDialog', '编辑模型'))
+        root = settings_dialog_layout(self, QCoreApplication.translate('ModelProfileDialog', '添加模型') if not self._original_model_id else QCoreApplication.translate('ModelProfileDialog', '编辑模型'))
         self.setObjectName("model_profile_dialog")
         self.setMinimumSize(560, 500)
         self.resize(620, 590)
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(14, 14, 14, 14)
-        root.setSpacing(10)
 
         self.tabs = QTabWidget()
         for title, content in ((QCoreApplication.translate('ModelProfileDialog', '基本'), self._build_basic_tab()), (QCoreApplication.translate('ModelProfileDialog', '高级'), self._build_advanced_tab())):

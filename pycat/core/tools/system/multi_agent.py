@@ -83,27 +83,23 @@ class AgentRunTool(BaseTool):
     def input_schema(self) -> Dict[str, Any]:
         return self.input_schema_for_work_dir("", include_profiles=False)
 
-    @staticmethod
-    def profile_names(work_dir: str, *, data_dir: str | None = None) -> list[str]:
-        try:
-            return [profile.slug for profile in ModeManager(work_dir, data_dir=data_dir).list_subagent_profiles()]
-        except Exception:
-            return []
-
     @classmethod
     def input_schema_for_work_dir(cls, work_dir: str, *, data_dir: str | None = None, include_profiles: bool = True) -> Dict[str, Any]:
         profile_schema: dict[str, Any] = {
             "type": "string",
             "description": "Configured sub-agent profile.",
         }
-        profiles = cls.profile_names(work_dir, data_dir=data_dir) if include_profiles else []
+        profiles = ModeManager(work_dir, data_dir=data_dir).list_subagent_profiles() if include_profiles else []
         if profiles:
-            profile_schema["enum"] = profiles
+            profile_schema["enum"] = [profile.slug for profile in profiles]
+            profile_schema["description"] += " " + "; ".join(
+                f"{profile.slug}: {' '.join(profile.purpose.split())[:240]}" for profile in profiles
+            )
         return {
             "type": "object",
             "properties": {
                 "profile": profile_schema,
-                "goal": {"type": "string", "description": "Focused outcome for the sub-agent."},
+                "goal": {"type": "string", "description": "Self-contained question, scope and expected evidence; parent history is not copied."},
                 "refs": {
                     "type": "array",
                     "items": {"type": "string"},

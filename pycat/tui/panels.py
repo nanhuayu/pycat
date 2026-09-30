@@ -22,9 +22,9 @@ class Picker(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(classes='dialog'):
             yield Label(self.title, classes='dialog-title')
-            yield Input(placeholder='搜索…', id='filter')
+            yield Input(placeholder=self.app.tr('搜索…'), id='filter')
             yield OptionList(*[Option(Text(label, no_wrap=True, overflow='ellipsis'), id=str(key)) for key, label in self.items], id='choices')
-            yield Button('取消', id='dismiss')
+            yield Button(self.app.tr('取消'), id='dismiss')
 
     def on_input_changed(self, event: Input.Changed):
         choices = self.query_one('#choices', OptionList)
@@ -53,7 +53,7 @@ class Picker(ModalScreen):
 class Form(ModalScreen):
     BINDINGS = [('escape', 'dismiss(None)', '关闭')]
 
-    def __init__(self, title, fields, values=None, *, submit='执行'):
+    def __init__(self, title, fields, values=None, *, submit=None):
         super().__init__()
         self.title, self.fields, self.values, self.submit = title, fields, values or {}, submit
 
@@ -73,8 +73,8 @@ class Form(ModalScreen):
                         yield Input(text, id=f'field-{index}', password=field['name'] in {'password', 'token', 'api_key'})
             yield Label('', id='form-error')
             with Horizontal(classes='dialog-actions'):
-                yield Button('取消', id='dismiss')
-                yield Button(self.submit, id='accept', variant='primary')
+                yield Button(self.app.tr('取消'), id='dismiss')
+                yield Button(self.submit or self.app.tr('执行'), id='accept', variant='primary')
 
     def on_button_pressed(self, event):
         if event.button.id == 'dismiss':
@@ -94,7 +94,7 @@ class Form(ModalScreen):
                     result[field['name']] = text
             self.dismiss(result)
         except ValueError as exc:
-            self.query_one('#form-error', Label).update(f'请输入有效值：{exc}')
+            self.query_one('#form-error', Label).update(self.app.tr('请输入有效值：{value0}', value0=exc))
 
 
 class Reader(ModalScreen):
@@ -121,9 +121,9 @@ class Reader(ModalScreen):
                 yield Markdown(self.page_text(), id='reader-content')
             yield Label('', id='reader-error')
             with Horizontal(classes='dialog-actions'):
-                yield Button('上一页', id='reader-previous', disabled=True)
-                yield Button('下一页', id='reader-next', disabled=not self.more())
-                yield Button('关闭', id='dismiss', variant='primary')
+                yield Button(self.app.tr('上一页'), id='reader-previous', disabled=True)
+                yield Button(self.app.tr('下一页'), id='reader-next', disabled=not self.more())
+                yield Button(self.app.tr('关闭'), id='dismiss', variant='primary')
 
     def more(self):
         return self.has_more if self.loader else self._pages[self._page] + self.PAGE_SIZE < len(self._text)
@@ -171,23 +171,23 @@ class Interaction(ModalScreen):
     def compose(self):
         data = self.interaction['payload']
         with Vertical(classes='dialog'):
-            yield Label('工具需要批准' if self.interaction['kind'] == 'approval' else '需要你的回答', classes='dialog-title')
+            yield Label(self.app.tr('工具需要批准') if self.interaction['kind'] == 'approval' else self.app.tr('需要你的回答'), classes='dialog-title')
             yield Label(data.get('message') or data.get('text') or data.get('tool_name', ''))
             if self.interaction['kind'] == 'approval':
                 yield Label(f"{data.get('tool_name', '')} · {data.get('risk', '')}")
                 yield TextArea(json.dumps(data.get('arguments', {}), ensure_ascii=False, indent=2), read_only=True, classes='json-editor')
                 with Horizontal(classes='dialog-actions'):
-                    yield Button('拒绝', id='deny')
-                    yield Button('允许一次', id='allow', variant='primary')
+                    yield Button(self.app.tr('拒绝'), id='deny')
+                    yield Button(self.app.tr('允许一次'), id='allow', variant='primary')
                     if data.get('requires_path_approval') or data.get('external_path'):
-                        yield Button('本次运行可读', id='run')
+                        yield Button(self.app.tr('本次运行可读'), id='run')
             else:
                 for index, option in enumerate(data.get('options', []), 1):
                     yield Label(f"{index}. {option['label']}  {option.get('description', '')}")
-                yield Input(placeholder='输入选项编号（多选用逗号）或文字', id='answer')
+                yield Input(placeholder=self.app.tr('输入选项编号（多选用逗号）或文字'), id='answer')
                 with Horizontal(classes='dialog-actions'):
-                    yield Button('跳过', id='skip')
-                    yield Button('提交', id='answer-submit', variant='primary')
+                    yield Button(self.app.tr('跳过'), id='skip')
+                    yield Button(self.app.tr('提交'), id='answer-submit', variant='primary')
 
     def on_button_pressed(self, event):
         event.stop()
@@ -211,7 +211,7 @@ class Interaction(ModalScreen):
         if all(value.isdigit() and 1 <= int(value) <= len(options) for value in values):
             selected = [options[int(value) - 1]['label'] for value in values]
             if len(selected) > 1 and not self.interaction['payload'].get('multiple'):
-                self.notify('本题只能选择一项', severity='warning')
+                self.notify(self.app.tr('本题只能选择一项'), severity='warning')
                 return
             self.dismiss({'selected': selected, 'freeText': None, 'skipped': False})
         else:

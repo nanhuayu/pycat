@@ -167,7 +167,7 @@ class ToolCallArchiveService:
         if name == "agent__run":
             return True
         if name.startswith("file__"):
-            return name in {"file__read", "file__list", "file__search"}
+            return name in {"file__read", "file__view", "file__ocr", "file__list", "file__search"}
         return len(text) > self.ARCHIVE_THRESHOLD_CHARS
 
     def _inline(self, tool_name: str, text: str) -> ToolCallArchiveResult:
@@ -209,6 +209,7 @@ class ToolCallArchiveService:
                 **{key: value for key, value in result_metadata.items() if key in {
                     "model", "provider", "image_protocol", "image_operation", "image_options", "image_outputs",
                     "input_image_count", "has_mask", "request_id", "image_errors", "usage",
+                    "auto_summary", "source_ref", "source_digest",
                 }},
                 "tool_call_id": str(tool_call_id or ""),
                 "content_kind": content_kind,
@@ -330,7 +331,7 @@ class ToolResultViewService:
             return archive_result
 
         record = archive_result.archive
-        if len(str(text or "")) <= self.FULL_LIMIT:
+        if record.metadata.get("auto_summary") is False or len(str(text or "")) <= self.FULL_LIMIT:
             view = self._full_view(record=record, tool_name=tool_name, text=text)
             return self._apply_view(archive_result, view, summary=record.summary)
         view = self._long_view(
@@ -376,7 +377,7 @@ class ToolResultViewService:
             f"[char:0-{head_end}]\nexact=true\n{body[:head_end]}\n\n"
             f"[char:{tail_start}-{total}]\nexact=true\n{body[tail_start:]}\n\n"
             f'Use archive__read(content_id="{record.id}", view="content", offset={head_end}) '
-            "to restore omitted exact content and images."
+            "to restore omitted exact text and image refs; use file__view for those images."
         )
         return ContentView(
             label=ContentViewLabel("summary", "" if summary_text else "unavailable"),

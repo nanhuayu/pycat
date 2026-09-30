@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import uuid
+from dataclasses import fields as dataclass_fields
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -12,6 +13,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 import httpx
 
 from pycat.core.app.serialization import json_value
+from pycat.core.i18n import Translator
 from pycat.models.contracts.agent import ApplicationError
 
 
@@ -135,7 +137,9 @@ class RemoteExecutor:
         self._catalog = {}
 
     async def connect(self):
-        self._catalog = (await self.client.bootstrap())['operations']
+        initial = await self.client.bootstrap()
+        self._catalog = initial['operations']
+        self.out.tr = Translator(initial.get('language', 'zh_CN'))
 
     def catalog(self):
         return self._catalog
@@ -156,6 +160,7 @@ class RemoteExecutor:
         from pycat.cli.executor import CliExecutor
         from pycat.core.tools.base import ToolApprovalRequest
         from pycat.models.contracts.agent import RunEvent, RunEventKind
+        event_fields = {field.name for field in dataclass_fields(RunEvent)}
         async def answer(item):
             if item['kind'] == 'approval':
                 decision = await CliExecutor.approval(self.out)(ToolApprovalRequest(**item['payload']))
@@ -169,7 +174,7 @@ class RemoteExecutor:
                 if value['type'] == 'interaction':
                     await answer(value)
                 elif value['type'] == 'event':
-                    fields = {key: item for key, item in value.items() if key not in {'type', 'version', 'cursor'}}
+                    fields = {key: item for key, item in value.items() if key in event_fields}
                     fields['kind'] = RunEventKind(fields['kind'])
                     self.out.event(RunEvent(**fields))
                 elif value['type'] == 'final':

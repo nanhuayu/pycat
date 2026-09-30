@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from pycat.core.content.archive_store import SessionArchiveStore, estimate_tokens
@@ -14,18 +14,22 @@ from pycat.core.context.compression import (
     CompressionSource,
     build_history_source,
     build_history_source_from_envelopes,
+    combine_history_sources,
 )
 from pycat.core.context.history import (
+    HISTORY_SUMMARY_CONTRACT,
     build_turn_blocks,
     count_user_turn_blocks,
     is_real_user_message,
     project_history,
+    read_turn_prefix,
+    reusable_history_summary,
     turn_fingerprint,
 )
 from pycat.core.llm.token_budget import estimate_conversation_tokens
 from pycat.core.state.operations import archive_trace_through, remember_archive
 from pycat.core.state.work_trace import compact_work_route, work_trace_refs
-from pycat.models.contracts.content import FileChange
+from pycat.models.contracts.content import ArchivedContentRecord, FileChange
 from pycat.models.contracts.session_state import SessionState
 from pycat.models.conversation import Conversation, Message, normalize_tool_result, tool_call_name
 from pycat.models.provider import Provider
@@ -104,12 +108,18 @@ class ContextMaintenance:
         )
         created = reused = enriched = failed = 0
         content_ids: list[str] = []
+        root = self._conversation_root(conversation)
+        latest_user_id = self._latest_turn_user_id(conversation)
 
         for block_index, block in enumerate(closed):
+            if self._conversation_root(conversation) != root:
+                failed += 1
+                break
             if not block or not is_real_user_message(block[0]):
                 continue
-            if not terminal_status and any(self._has_incomplete_tool_call(message) for message in block):
+            if not terminal_status and self._has_live_tool_tail(block, latest_user_id):
                 continue
+            self._backfill_history_images(block, store=store, state=state)
             fingerprint = turn_fingerprint(block)
             user = block[0]
             is_terminal_block = block_index == len(closed) - 1
@@ -127,6 +137,14 @@ class ContextMaintenance:
                 content_ids.append(existing.id)
                 if on_archive is not None:
                     on_archive(existing)
+                if enrich and str(getattr(expected_status, "value", expected_status)) != "cancelled":
+                    try:
+                        updated, _calls, _error = await self._enrich_turn_capsule(
+                            conversation, block, existing, store=store, client=client, provider=provider,
+                        )
+                        enriched += int(updated)
+                    except Exception:
+                        failed += 1
                 continue
             try:
                 end_seq = max(int(getattr(message, "seq_id", 0) or 0) for message in block)
@@ -194,42 +212,20 @@ class ContextMaintenance:
                 created += 1
                 content_ids.append(record.id)
 
-                source = build_history_source(block, None, conversation=conversation)
                 normalized_status = str(
                     getattr(expected_status, "value", expected_status) or ""
                 ).strip().lower()
                 if (
                     not enrich
                     or normalized_status == "cancelled"
-                    or source.chars < MIN_LLM_COMPRESSION_CHARS
                     or client is None
                     or provider is None
                 ):
                     continue
-                result, _calls, _reason = await self._summarize_source(
-                    source,
-                    conversation=conversation,
-                    client=client,
-                    provider=provider,
-                    content_id=record.id,
+                updated, _calls, _error = await self._enrich_turn_capsule(
+                    conversation, block, record, store=store, client=client, provider=provider,
                 )
-                narrative = str(result.summary or "").strip()
-                combined = f"{narrative}\n\nStructured receipt:\n{fallback}".strip() if narrative else ""
-                latest = store.read_record(record.id, kind="history")
-                if (
-                    latest is not None
-                    and latest.metadata.get("fingerprint") == fingerprint
-                    and combined
-                    and estimate_tokens(combined) < max(1, source.token_estimate)
-                ):
-                    store.write_summary_view(
-                        latest,
-                        summary=combined,
-                        source=f"capability__{result.capability_id or 'compress'}",
-                        model=result.model,
-                        metadata={"fallback": False, "scope": "turn_capsule"},
-                    )
-                    enriched += 1
+                enriched += int(updated)
             except Exception:
                 failed += 1
 
@@ -240,6 +236,85 @@ class ContextMaintenance:
             failed=failed,
             content_ids=tuple(content_ids),
         )
+
+    async def _enrich_turn_capsule(
+        self, conversation: Conversation, block: list[Message], record: ArchivedContentRecord,
+        *, store: SessionArchiveStore, client: Any, provider: Provider | None,
+    ) -> tuple[bool, int, str]:
+        if reusable_history_summary(record) or client is None or provider is None:
+            return False, 0, ""
+        fingerprint = turn_fingerprint(block)
+        root = self._conversation_root(conversation)
+        source = self._turn_summary_source(conversation, block, store)
+        source = replace(source, images=tuple(dict.fromkeys([*source.images, *store.read_images(record)])))
+        result, _calls, _reason = await self._summarize_source(
+            source, conversation=conversation, client=client, provider=provider, content_id=record.id,
+        )
+        if not result.summary or result.status not in {"complete", "degraded"}:
+            return False, _calls, str(result.error or _reason or "summary_unavailable")
+        # The exact receipt stays in the archive. Repeating its entire result
+        # and tool list here would defeat the semantic summary's token budget.
+        summary = self._with_recovery_footer(
+            f"{result.summary}\n\nTurn status={record.metadata.get('terminal_status', 'unknown')}"
+            f"; reason={record.metadata.get('terminal_reason', '')}",
+            history_content_id=record.id,
+            references=self._ordered_projection_references(block, list(source.references)),
+        )
+        latest = self._publish_target(store, record.id)
+        if (
+            latest is None or latest.metadata.get("fingerprint") != fingerprint
+            or not self._source_unchanged(conversation, block, fingerprint, root)
+            or estimate_tokens(summary) >= source.token_estimate
+        ):
+            return False, _calls, "summary_rejected"
+        store.write_summary_view(
+            latest, summary=summary, source=f"capability__{result.capability_id or 'compress'}", model=result.model,
+            metadata={"fallback": False, "summary_contract": HISTORY_SUMMARY_CONTRACT,
+                      "compression_calls": int(result.calls or _calls)},
+        )
+        return True, _calls, ""
+
+    @staticmethod
+    def _conversation_root(conversation: Conversation) -> tuple[str, str, str | None]:
+        return (conversation.id, conversation.work_dir, getattr(conversation, "data_dir", None))
+
+    @staticmethod
+    def _publish_target(store: SessionArchiveStore, content_id: str) -> ArchivedContentRecord | None:
+        record = store.read_record(content_id, kind="history")
+        try:
+            if record is not None and store.original_matches(record, store.read_original(record)):
+                return record
+        except (OSError, ValueError):
+            pass
+        return None
+
+    @classmethod
+    def _source_unchanged(
+        cls, conversation: Conversation, messages: list[Message], fingerprint: str,
+        root: tuple[str, str, str | None],
+    ) -> bool:
+        start, end = messages[0].seq_id, messages[-1].seq_id
+        current = [message for message in conversation.messages if message.role != "system" and start <= message.seq_id <= end]
+        return cls._conversation_root(conversation) == root and turn_fingerprint(current) == fingerprint
+
+    @staticmethod
+    def _summary_source(record: ArchivedContentRecord, label: str) -> CompressionSource:
+        return CompressionSource(
+            text=f"## {label} seq={record.metadata['start_seq']}-{record.metadata['end_seq']}\n{record.summary}",
+            references=tuple(dict.fromkeys([record.id, *record.references])),
+        )
+
+    def _turn_summary_source(
+        self, conversation: Conversation, block: list[Message], store: SessionArchiveStore,
+    ) -> CompressionSource:
+        previous = read_turn_prefix(store, block)
+        if previous is None:
+            return build_history_source(block, None, conversation=conversation)
+        tail = [message for message in block if message.seq_id > int(previous.metadata["end_seq"])]
+        return combine_history_sources([
+            self._summary_source(previous, "Earlier completed steps in this user turn"),
+            build_history_source(tail, None, conversation=conversation),
+        ])
 
     @staticmethod
     def _valid_turn_capsule(
@@ -423,66 +498,148 @@ class ContextMaintenance:
             ),
             protect_current_turn=protect_current_turn,
         )
-        if not candidates:
-            capsule_archived = self._select_turn_capsules(
-                conversation,
-                recent_turn_target=(
-                    self.policy.recent_turn_target
-                    if recent_turn_target is None
-                    else recent_turn_target
-                ),
-                protect_current_turn=protect_current_turn,
+        archived, summary_updated, compact_metrics = 0, False, {"compression_calls": 0}
+        if candidates:
+            archived, summary_updated, compact_metrics = await self._compact_messages(
+                conversation, state, candidates, client=client, provider=provider,
             )
-            state.last_maintenance_seq = max(last_seq, latest_seq, int(current_seq or 0))
-            if capsule_archived:
-                state.state_version += 1
-                state.last_updated_seq = max(state.last_updated_seq, state.last_maintenance_seq)
-            conversation.set_state(state)
-            metrics = {
-                **diagnostics,
-                "skip_reason": "capsules" if capsule_archived else "no_candidates",
-                "compression_calls": 0,
-                "capsule_archived_messages": capsule_archived,
-            }
-            return MaintenanceReport(
-                archived_messages=capsule_archived,
-                reason="capsules" if capsule_archived else "no_candidates",
-                metrics=metrics,
-            )
-
-        archived, summary_updated, compact_metrics = await self._compact_messages(
-            conversation,
-            state,
-            candidates,
-            client=client,
-            provider=provider,
-        )
+            if compact_metrics.get("fallback_reason") == "source_changed":
+                return MaintenanceReport(reason="source_changed", metrics=compact_metrics)
         capsule_archived = self._select_turn_capsules(
             conversation,
-            recent_turn_target=(
-                self.policy.recent_turn_target
-                if recent_turn_target is None
-                else recent_turn_target
-            ),
+            recent_turn_target=self.policy.recent_turn_target if recent_turn_target is None else recent_turn_target,
             protect_current_turn=protect_current_turn,
         )
+        prefix_archived = 0
+        if protect_current_turn and not archived and not capsule_archived:
+            prefix_archived, prefix_metrics = await self._compact_current_turn(
+                conversation, client=client, provider=provider,
+                excluded=set(exclude_message_ids or set()),
+            )
+            if prefix_metrics:
+                compact_metrics = {
+                    **compact_metrics, **prefix_metrics,
+                    "compression_calls": int(compact_metrics.get("compression_calls", 0))
+                    + int(prefix_metrics.get("compression_calls", 0)),
+                }
+                if prefix_metrics.get("fallback_reason") == "source_changed":
+                    return MaintenanceReport(reason="source_changed", metrics=compact_metrics)
         state.last_maintenance_seq = max(last_seq, latest_seq, int(current_seq or 0))
-        if archived or capsule_archived or summary_updated:
+        changed = archived + capsule_archived + prefix_archived
+        if changed or summary_updated:
             state.state_version += 1
             state.last_updated_seq = max(state.last_updated_seq, state.last_maintenance_seq)
         conversation.set_state(state)
+        if prefix_archived:
+            reason = "turn_prefix"
+        elif not changed:
+            # no_candidates only describes protection; an attempted summary that
+            # failed must stay distinguishable so callers can surface the cause.
+            reason = "compression_failed" if compact_metrics.get("fallback_reason") else "no_candidates"
         return MaintenanceReport(
-            summarized_messages=1 if summary_updated else 0,
-            archived_messages=archived + capsule_archived,
+            summarized_messages=int(summary_updated) + int(bool(prefix_archived)),
+            archived_messages=changed,
             summary_updated=summary_updated,
             reason=reason,
-            archive_updates=1 if summary_updated else 0,
+            archive_updates=int(summary_updated) + int(bool(prefix_archived)),
             metrics={
-                **diagnostics,
-                **compact_metrics,
+                **diagnostics, **compact_metrics,
+                "skip_reason": compact_metrics.get("skip_reason", "" if changed else "no_candidates"),
                 "capsule_archived_messages": capsule_archived,
+                "prefix_archived_messages": prefix_archived,
             },
         )
+
+    async def _compact_current_turn(
+        self, conversation: Conversation, *, client: Any, provider: Provider | None, excluded: set[str],
+    ) -> tuple[int, dict[str, Any]]:
+        blocks = self._turn_blocks(conversation.messages)
+        if not blocks or client is None or provider is None:
+            return 0, {}
+        block = blocks[-1]
+        # Native signed thinking can depend on the unchanged preceding prefix.
+        # Keep that user turn exact until a provider-safe boundary is available.
+        for message in block:
+            reasoning = (message.metadata or {}).get("reasoning_state") or {}
+            if not isinstance(reasoning, dict):
+                continue
+            if any(
+                isinstance(item, dict) and item.get("type") in {"thinking", "redacted_thinking"}
+                for item in reasoning.get("items", [])
+            ):
+                return 0, {"skip_reason": "provider_thinking_boundary"}
+        steps = [index for index, message in enumerate(block) if message.role == "assistant"]
+        if len(steps) <= 3:
+            return 0, {}
+        cutoff = steps[-3]
+        for index, message in enumerate(block[:cutoff]):
+            if message.id in excluded or self._has_incomplete_tool_call(message):
+                cutoff = index
+                break
+        prefix = block[:cutoff]
+        if len(prefix) < 2:
+            return 0, {}
+        store = SessionArchiveStore(conversation.work_dir, conversation.id, data_dir=getattr(conversation, "data_dir", None))
+        previous = read_turn_prefix(store, prefix)
+        if previous is not None and int(previous.metadata["end_seq"]) >= prefix[-1].seq_id:
+            return 0, {"skip_reason": "prefix_up_to_date"}
+        root = self._conversation_root(conversation)
+        payload, references, images = self._exact_history_payload(
+            prefix, state=conversation.get_state(), end_seq=prefix[-1].seq_id,
+            store=store, include_work_trace=False,
+        )
+        fingerprint = turn_fingerprint(prefix)
+        payload.update({"kind": "turn_prefix", "fingerprint": fingerprint})
+        source = self._turn_summary_source(conversation, prefix, store)
+        source = replace(source, images=tuple(dict.fromkeys([*source.images, *images])))
+        record = store.write_original(
+            kind="history", title=f"prefix_{prefix[0].seq_id}_{prefix[-1].seq_id}",
+            content=json.dumps(payload, ensure_ascii=False, indent=2), source="turn_prefix",
+            seq_id=prefix[-1].seq_id, extension=".json", images=images,
+            metadata={
+                "scope": "turn_prefix", "fingerprint": fingerprint,
+                "start_seq": prefix[0].seq_id, "end_seq": prefix[-1].seq_id,
+                "user_message_id": prefix[0].id, "message_ids": [message.id for message in prefix],
+                "references": references, "terminal_status": "running",
+            },
+        )
+        result, calls, reason = await self._summarize_source(
+            source, conversation=conversation, client=client, provider=provider, content_id=record.id,
+        )
+        metrics = {"compression_calls": calls, "input_chars": source.chars, "content_id": record.id}
+        if not result.summary or result.status not in {"complete", "degraded"}:
+            return 0, {**metrics, "fallback_reason": reason or "summary_unavailable",
+                       "compression_error": str(result.error or reason or "")}
+        summary = self._with_recovery_footer(
+            result.summary, history_content_id=record.id,
+            references=self._ordered_projection_references(prefix, references),
+        )
+        # Compare against the actually selected previous W plus its new exact tail.
+        previous_projection = project_history(conversation, messages=prefix)[1:]
+        before = estimate_conversation_tokens(previous_projection)
+        if estimate_tokens(summary) >= max(1, before):
+            return 0, {**metrics, "fallback_reason": "summary_no_savings"}
+        latest = self._publish_target(store, record.id)
+        if latest is None or not self._source_unchanged(conversation, prefix, fingerprint, root):
+            return 0, {**metrics, "fallback_reason": "source_changed"}
+        try:
+            store.write_summary_view(
+                latest, summary=summary, source=f"capability__{result.capability_id or 'compress'}", model=result.model,
+                metadata={"fallback": False, "summary_contract": HISTORY_SUMMARY_CONTRACT},
+            )
+        except Exception as exc:
+            return 0, {**metrics, "fallback_reason": f"persist_failed:{exc}"}
+        user = prefix[0]
+        user.metadata = dict(user.metadata or {})
+        user.metadata["turn_prefix_ref"] = {
+            "content_id": record.id, "fingerprint": fingerprint,
+            "start_seq": user.seq_id, "end_seq": prefix[-1].seq_id,
+        }
+        visible_ids = {message.id for message in previous_projection}
+        archived = sum(message.id in visible_ids for message in prefix[1:])
+        for message in prefix[1:]:
+            message.archived_content_id = record.id
+        return archived, {**metrics, "summary_tokens": estimate_tokens(summary), "replaceable_tokens": before}
 
     def _select_turn_capsules(
         self,
@@ -497,9 +654,10 @@ class ContextMaintenance:
             keep = max(0, int(recent_turn_target) - (1 if protect_current_turn else 0))
             completed = completed[-keep:] if keep else []
         store = SessionArchiveStore(conversation.work_dir, conversation.id, data_dir=getattr(conversation, "data_dir", None))
+        latest_user_id = self._latest_turn_user_id(conversation)
         archived = 0
         for block in completed:
-            if len(block) <= 1 or any(self._has_incomplete_tool_call(message) for message in block):
+            if len(block) <= 1 or self._has_live_tool_tail(block, latest_user_id):
                 continue
             user = block[0]
             fingerprint = turn_fingerprint(block)
@@ -509,7 +667,7 @@ class ContextMaintenance:
             tail = block[1:]
             if all(str(message.archived_content_id or "") == record.id for message in tail):
                 continue
-            exact_tokens = estimate_conversation_tokens(tail)
+            exact_tokens = estimate_conversation_tokens(project_history(conversation, messages=block)[1:])
             capsule_tokens = estimate_tokens(record.summary)
             if capsule_tokens >= max(1, exact_tokens):
                 continue
@@ -552,12 +710,27 @@ class ContextMaintenance:
             data_dir=getattr(conversation, "data_dir", None),
         )
         end_seq = max(int(getattr(message, "seq_id", 0) or 0) for message in candidates)
-        payload, references, history_images, source, covered_messages = self._checkpoint_manifest(
+        original_prefix = [message for message in conversation.messages if message.role != "system" and message.seq_id <= end_seq]
+        self._backfill_history_images(original_prefix, store=store, state=state)
+        fingerprint = turn_fingerprint(original_prefix)
+        root = self._conversation_root(conversation)
+        previous_summary = state.summary
+        payload, references, history_images, source, covered_messages = await self._checkpoint_manifest(
             conversation,
             state=state,
             end_seq=end_seq,
             store=store,
+            client=client,
+            provider=provider,
         )
+        if not self._source_unchanged(conversation, original_prefix, fingerprint, root):
+            return 0, False, {"fallback_reason": "source_changed", "compression_calls": payload["capsule_summary_calls"]}
+        if payload.get("capsule_enrichment_failed"):
+            return 0, False, {
+                "compression_calls": payload["capsule_summary_calls"],
+                "fallback": True, "fallback_reason": "turn_summary_unavailable",
+                "compression_error": payload.get("capsule_enrichment_error", ""),
+            }
         start_seq = int(payload.get("start_seq", 0) or 0)
         record = store.write_original(
             kind="history",
@@ -567,6 +740,7 @@ class ContextMaintenance:
             seq_id=end_seq,
             metadata={
                 "scope": "checkpoint",
+                "fingerprint": fingerprint,
                 "start_seq": start_seq,
                 "end_seq": end_seq,
                 "message_ids": [message.id for message in covered_messages],
@@ -583,13 +757,30 @@ class ContextMaintenance:
             extension=".json",
             images=history_images,
         )
-        result, calls, fallback_reason = await self._summarize_source(
-            source,
-            conversation=conversation,
-            client=client,
-            provider=provider,
-            content_id=record.id,
-        )
+        if payload["reused_summaries"] and source.chars < MIN_LLM_COMPRESSION_CHARS and not source.images:
+            # Joining already compact inputs is lossless; no extra LLM roundtrip.
+            result = CompressionResult(summary=source.text, status="complete", strategy="reuse")
+            calls, fallback_reason = 0, ""
+        else:
+            result, calls, fallback_reason = await self._summarize_source(
+                source, conversation=conversation, client=client, provider=provider, content_id=record.id,
+            )
+        calls = int(result.calls or calls or 0) + payload["capsule_summary_calls"]
+        if (
+            not self._source_unchanged(conversation, original_prefix, fingerprint, root)
+            or conversation.get_state().summary != previous_summary
+        ):
+            return 0, False, {"fallback_reason": "source_changed", "compression_calls": calls}
+        if self._publish_target(store, record.id) is None:
+            return 0, False, {"fallback_reason": "source_unavailable", "compression_calls": calls}
+        result.calls = calls
+        if not result.summary and calls:
+            return 0, False, {
+                "compression_calls": calls, "input_chars": source.chars,
+                "fallback": True, "fallback_reason": fallback_reason or result.error,
+                "compression_error": str(result.error or fallback_reason or ""),
+                "content_id": record.id,
+            }
         if result.summary:
             result.summary = self._with_recovery_footer(
                 result.summary,
@@ -643,12 +834,15 @@ class ContextMaintenance:
                 record,
                 summary=result.summary,
                 source=(
-                    f"capability__{result.capability_id or 'compress'}"
+                    "runtime_projection"
+                    if result.strategy == "reuse"
+                    else f"capability__{result.capability_id or 'compress'}"
                     if result.status in {"complete", "degraded"}
                     else "runtime_deterministic"
                 ),
                 model=result.model,
-                metadata={"fallback": result.status == "fallback", "reason": fallback_reason},
+                metadata={"fallback": result.status == "fallback", "reason": fallback_reason,
+                          "summary_contract": HISTORY_SUMMARY_CONTRACT},
             )
         except Exception as exc:
             return 0, False, {
@@ -720,13 +914,13 @@ class ContextMaintenance:
         except Exception as exc:
             return CompressionResult(status="fallback", error=str(exc)), 1, "compressor_error"
         summary = str(getattr(result, "summary", "") or "").strip()
-        if not summary:
+        if not summary or result.status not in {"complete", "degraded"}:
             return CompressionResult(status="fallback", error=getattr(result, "error", "summary_empty")), int(result.calls or 1), str(
                 getattr(result, "error", "summary_empty") or "summary_empty"
             )
         if estimate_tokens(summary) >= max(1, source.token_estimate):
             return CompressionResult(status="fallback", error="summary_no_savings"), int(result.calls or 1), "summary_no_savings"
-        return result, int(result.calls or 1), ""
+        return replace(result), int(result.calls or 1), ""
 
     def _messages_to_archive(
         self,
@@ -746,12 +940,7 @@ class ContextMaintenance:
         ):
             for message in block:
                 message_id = str(getattr(message, "id", "") or "")
-                if (
-                    not message_id
-                    or message_id in seen
-                    or message.role == "system"
-                    or self._has_incomplete_tool_call(message)
-                ):
+                if not message_id or message_id in seen or message.role == "system":
                     continue
                 seen.add(message_id)
                 messages.append(message)
@@ -771,14 +960,13 @@ class ContextMaintenance:
         blocks = self._turn_blocks(conversation.messages)
         keep = max(1 if protect_current_turn else 0, int(recent_turn_target or 0))
         prefix = blocks[:-keep] if keep else blocks
+        latest_user_id = self._latest_turn_user_id(conversation)
         result: list[list[Message]] = []
         for block in prefix:
             if not block or not is_real_user_message(block[0]):
                 break
-            if any(
-                str(getattr(message, "id", "") or "") in excluded
-                or self._has_incomplete_tool_call(message)
-                for message in block
+            if self._has_live_tool_tail(block, latest_user_id) or any(
+                str(getattr(message, "id", "") or "") in excluded for message in block
             ):
                 break
             result.append(list(block))
@@ -788,6 +976,23 @@ class ContextMaintenance:
     def _has_incomplete_tool_call(message: Message) -> bool:
         tool_calls = [tool_call for tool_call in (message.tool_calls or []) if isinstance(tool_call, dict)]
         return bool(tool_calls) and any(tool_call.get("result") is None for tool_call in tool_calls)
+
+    @staticmethod
+    def _latest_turn_user_id(conversation: Conversation) -> str:
+        return next(
+            (str(message.id) for message in reversed(conversation.messages) if is_real_user_message(message)),
+            "",
+        )
+
+    @classmethod
+    def _has_live_tool_tail(cls, block: list[Message], latest_user_id: str) -> bool:
+        # Only the latest user turn can still be executing tools. A missing
+        # result in an older turn is an orphan and must not pin that history.
+        return (
+            bool(block)
+            and str(block[0].id) == latest_user_id
+            and any(cls._has_incomplete_tool_call(message) for message in block)
+        )
 
     def _exact_history_payload(
         self,
@@ -831,108 +1036,136 @@ class ContextMaintenance:
         }
         return payload, references, history_images
 
-    def _checkpoint_manifest(
+    async def _checkpoint_manifest(
         self,
         conversation: Conversation,
         *,
         state: SessionState,
         end_seq: int,
         store: SessionArchiveStore,
+        client: Any,
+        provider: Provider | None,
     ) -> tuple[dict[str, Any], list[str], list[str], CompressionSource, list[Message]]:
-        sources: list[dict[str, Any]] = []
-        envelopes: list[dict[str, Any]] = []
-        references = list(work_trace_refs(state.work_trace, through_seq=end_seq))
+        covered_messages = [
+            message for message in conversation.messages
+            if message.role != "system" and 0 < message.seq_id <= end_seq
+        ]
+        if not covered_messages:
+            raise ValueError("checkpoint manifest requires a completed conversation prefix")
+        base, base_manifest = self._reusable_checkpoint(conversation, covered_messages, store)
+        base_end = int(base.metadata["end_seq"]) if base is not None else 0
+        # Keep a flat exact manifest. Reuse its references, not its old tool bodies.
+        sources = list(base_manifest.get("sources") or [])
+        source_capsule_ids = list(base_manifest.get("source_capsule_ids") or [])
+        source_fingerprints = dict(base_manifest.get("source_fingerprints") or {})
+        references = list(base_manifest.get("refs") or [])
+        self._extend_unique(references, work_trace_refs(state.work_trace, through_seq=end_seq))
         history_images: list[str] = []
-        covered_messages: list[Message] = []
-        source_capsule_ids: list[str] = []
-        source_fingerprints: dict[str, str] = {}
+        parts = [self._summary_source(base, "Previous continuation summary")] if base is not None else []
+        summary_calls = 0
+        enrichment_failed = False
+        enrichment_error = ""
+        reused_summaries = int(base is not None)
+        root = self._conversation_root(conversation)
+        latest_user_id = self._latest_turn_user_id(conversation)
 
-        blocks = build_turn_blocks(
-            [
-                message
-                for message in conversation.messages
-                if message.role != "system"
-                and 0 < int(getattr(message, "seq_id", 0) or 0) <= end_seq
-            ]
-        )
-        for block in blocks:
+        for block in build_turn_blocks(covered_messages):
+            if self._conversation_root(conversation) != root:
+                enrichment_failed = True
+                break
             if not block or not is_real_user_message(block[0]):
                 continue
-            block_end = max(int(getattr(message, "seq_id", 0) or 0) for message in block)
-            if block_end > end_seq or any(self._has_incomplete_tool_call(message) for message in block):
-                break
+            block_end = max(message.seq_id for message in block)
+            if block_end <= base_end:
+                continue
+            if self._has_live_tool_tail(block, latest_user_id):
+                raise ValueError("checkpoint cannot cross an incomplete tool batch")
             fingerprint = turn_fingerprint(block)
-            user = block[0]
-            record = self._valid_turn_capsule(store, user, fingerprint)
-            envelope = self._read_turn_capsule_envelope(
-                store,
-                record,
-                block=block,
-                fingerprint=fingerprint,
-            )
-            message_ids = [message.id for message in block]
+            record = self._valid_turn_capsule(store, block[0], fingerprint)
+            envelope = self._read_turn_capsule_envelope(store, record, block=block, fingerprint=fingerprint)
+            inline_images = []
+            source_item = {
+                "fingerprint": fingerprint, "start_seq": block[0].seq_id,
+                "end_seq": block_end, "message_ids": [message.id for message in block],
+            }
             if envelope is not None and record is not None:
-                sources.append(
-                    {
-                        "type": "turn_capsule",
-                        "content_id": record.id,
-                        "fingerprint": fingerprint,
-                        "start_seq": int(getattr(user, "seq_id", 0) or 0),
-                        "end_seq": block_end,
-                        "message_ids": message_ids,
-                    }
-                )
+                sources.append({**source_item, "type": "turn_capsule", "content_id": record.id})
                 source_capsule_ids.append(record.id)
                 source_fingerprints[record.id] = fingerprint
                 self._extend_unique(references, record.references)
-                self._extend_unique(references, envelope.get("refs") or [])
-                self._extend_unique(history_images, store.read_images(record))
+                enriched, calls, error = await self._enrich_turn_capsule(
+                    conversation, block, record, store=store, client=client, provider=provider,
+                )
+                summary_calls += calls
+                if enriched:
+                    record = store.read_record(record.id, kind="history")
+                elif calls:
+                    enrichment_failed = True
+                    enrichment_error = error
+                    break
+                if reusable_history_summary(record):
+                    parts.append(self._summary_source(record, "Completed user turn"))
+                    reused_summaries += 1
+                    continue
+                inline_images = store.read_images(record)
             else:
-                envelope, inline_refs, inline_images = self._exact_history_payload(
-                    block,
-                    state=state,
-                    end_seq=block_end,
-                    store=store,
-                    include_work_trace=False,
+                envelope, _refs, inline_images = self._exact_history_payload(
+                    block, state=state, end_seq=block_end, store=store, include_work_trace=False,
                 )
-                sources.append(
-                    {
-                        "type": "inline_turn",
-                        "fingerprint": fingerprint,
-                        "start_seq": int(getattr(user, "seq_id", 0) or 0),
-                        "end_seq": block_end,
-                        "message_ids": message_ids,
-                        "envelope": envelope,
-                    }
-                )
-                self._extend_unique(references, inline_refs)
                 self._extend_unique(history_images, inline_images)
-            envelopes.append(envelope)
-            covered_messages.extend(block)
+                sources.append({**source_item, "type": "inline_turn", "envelope": envelope})
+            # Missing/legacy/failed summaries never become authoritative inputs.
+            if read_turn_prefix(store, block) is not None:
+                parts.append(self._turn_summary_source(conversation, block, store))
+            else:
+                parts.append(build_history_source_from_envelopes(
+                    [envelope], conversation=conversation, images=inline_images,
+                ))
 
-        if not covered_messages:
-            raise ValueError("checkpoint manifest requires a completed conversation prefix")
-        start_seq = min(int(getattr(message, "seq_id", 0) or 0) for message in covered_messages)
+        source = combine_history_sources(parts)
+        self._extend_unique(references, source.references)
         payload = {
-            "kind": "history_checkpoint_manifest",
-            "version": 1,
-            "start_seq": start_seq,
-            "end_seq": end_seq,
-            "sources": sources,
-            "source_capsule_ids": source_capsule_ids,
+            "kind": "history_checkpoint_manifest", "version": 2,
+            "start_seq": covered_messages[0].seq_id, "end_seq": end_seq,
+            "sources": sources, "source_capsule_ids": source_capsule_ids,
             "source_fingerprints": source_fingerprints,
             "message_ids": [message.id for message in covered_messages],
+            "base_checkpoint_id": base.id if base is not None else "",
+            "reused_summaries": reused_summaries, "capsule_summary_calls": summary_calls,
+            "capsule_enrichment_failed": enrichment_failed,
+            "capsule_enrichment_error": enrichment_error,
             "work_trace_route": compact_work_route(state.work_trace, through_seq=end_seq),
-            "refs": references,
-            "image_count": len(history_images),
+            "refs": references, "image_count": len(history_images),
         }
-        source = build_history_source_from_envelopes(
-            envelopes,
-            conversation=conversation,
-            references=references,
-            images=history_images,
-        )
         return payload, references, history_images, source, covered_messages
+
+    @staticmethod
+    def _reusable_checkpoint(
+        conversation: Conversation, covered_messages: list[Message], store: SessionArchiveStore,
+    ) -> tuple[ArchivedContentRecord | None, dict[str, Any]]:
+        content_id = str(covered_messages[0].archived_content_id or "")
+        record = store.read_record(content_id, kind="history") if content_id else None
+        if (
+            not reusable_history_summary(record)
+            or record.metadata.get("scope") != "checkpoint"
+            or record.summary != conversation.get_state().summary
+        ):
+            return None, {}
+        end_seq = int(record.metadata.get("end_seq", 0) or 0)
+        prefix = [message for message in covered_messages if message.seq_id <= end_seq]
+        if (
+            not prefix or [message.id for message in prefix] != record.metadata.get("message_ids")
+            or turn_fingerprint(prefix) != record.metadata.get("fingerprint")
+            or any(message.archived_content_id != content_id for message in prefix)
+        ):
+            return None, {}
+        try:
+            payload = json.loads(store.read_original(record))
+        except (OSError, ValueError):
+            return None, {}
+        if payload.get("kind") != "history_checkpoint_manifest" or payload.get("version") != 2:
+            return None, {}
+        return record, payload
 
     @staticmethod
     def _read_turn_capsule_envelope(
@@ -966,6 +1199,20 @@ class ContextMaintenance:
             clean = str(value or "").strip()
             if clean and clean not in target:
                 target.append(clean)
+
+    @staticmethod
+    def _backfill_history_images(
+        messages: list[Message], *, store: SessionArchiveStore, state: SessionState,
+    ) -> None:
+        # Pin legacy inline images before fingerprinting. Attaching an image can
+        # legitimately change the tool Archive id; it is not a concurrent edit.
+        for message in messages:
+            if any(
+                isinstance(call, dict)
+                and ContextMaintenance._tool_result_images(call, normalize_tool_result(call.get("result")))
+                for call in message.tool_calls or []
+            ):
+                ContextMaintenance._message_for_history(message, store=store, state=state, references=[])
 
     @staticmethod
     def _message_for_history(

@@ -322,7 +322,7 @@ class ChatView(QWidget):
             if isinstance(widget, AssistantRunWidget):
                 widget._sync_process_visibility()
             for button in widget.findChildren(QToolButton):
-                icon = {"msg_copy_btn": Icons.COPY, "msg_edit_btn": Icons.EDIT, "msg_regenerate_btn": Icons.REFRESH, "msg_continue_btn": Icons.PLAY}.get(button.objectName())
+                icon = {"msg_copy_btn": Icons.COPY, "tool_detail_copy_btn": Icons.COPY, "msg_edit_btn": Icons.EDIT, "msg_regenerate_btn": Icons.REFRESH, "msg_continue_btn": Icons.PLAY}.get(button.objectName())
                 if icon:
                     button.setIcon(Icons.get_muted(icon))
 

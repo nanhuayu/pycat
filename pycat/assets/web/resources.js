@@ -1,8 +1,9 @@
+import {tr} from './i18n.js';
 import {node, button} from './ui.js';
 
 // The same detail stays mounted across width changes; CSS selects one or two panes.
 export function resourceBrowser(list, detail) {
-  const back = button('← 返回列表', () => show(false), 'resource-back text-button');
+  const back = button(tr("← 返回列表"), () => show(false), 'resource-back text-button');
   const detailPage = node('section', {class: 'resource-detail-page'}, back, detail);
   const element = node('div', {class: 'resource-browser'}, list, detailPage);
   function show(value, title) {
@@ -20,8 +21,8 @@ export function resourceRow({title, description = '', meta = '', enabled, toggle
   if (toggle) {
     const control = button('', toggle, 'resource-toggle');
     control.setAttribute('role', 'switch'); control.setAttribute('aria-checked', String(enabled));
-    control.setAttribute('aria-label', (enabled ? '停用 ' : '启用 ') + title); row.append(control);
+    control.setAttribute('aria-label', (enabled ? tr("停用 ") : tr("启用 ")) + title); row.append(control);
   }
-  const more = button('›', open, 'resource-more'); more.setAttribute('aria-label', '查看 ' + title);
+  const more = button('›', open, 'resource-more'); more.setAttribute('aria-label', tr("查看 ") + title);
   row.append(more); return row;
 }

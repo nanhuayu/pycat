@@ -41,15 +41,15 @@ def reconcile_after_turn_restart(
         ):
             safe_history.append(record)
     safe_history.sort(key=lambda record: _history_range(record)[0])
-    safe_history_ids = {record.id for record in safe_history}
     checkpoint = safe_history[-1] if safe_history else None
+    # A later checkpoint re-marks its whole prefix with its own id, so the
+    # restored summary must re-select exactly the messages it covers.
+    covered_ids = _history_range(checkpoint)[1] if checkpoint is not None else set()
 
     for message in conversation.messages:
-        archive_id = str(getattr(message, "archived_content_id", "") or "")
-        message_seq = int(getattr(message, "seq_id", 0) or 0)
-        if archive_id and not (
-            0 < message_seq < target_user_seq and archive_id in safe_history_ids
-        ):
+        if str(message.id) in covered_ids:
+            message.archived_content_id = checkpoint.id
+        else:
             message.archived_content_id = None
 
     state = conversation.get_state()
@@ -87,6 +87,10 @@ def reconcile_after_turn_restart(
         if not block or not is_real_user_message(block[0]):
             continue
         user = block[0]
+        # Prefix summaries are projections within a run. Rebuild them on demand
+        # after a restart, while leaving their exact archives available.
+        user.metadata = dict(user.metadata or {})
+        user.metadata.pop("turn_prefix_ref", None)
         ref = (user.metadata or {}).get("turn_capsule_ref") if isinstance(user.metadata, dict) else None
         if not isinstance(ref, dict):
             continue

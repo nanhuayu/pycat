@@ -9,6 +9,7 @@ import sys
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any, TextIO
 
+from pycat.core.i18n import Translator
 from pycat.models.contracts.agent import RunEvent, RunEventKind
 
 
@@ -29,6 +30,7 @@ class CliOutput:
     err_stream: TextIO | None = None
     input_stream: TextIO | None = None
     interactive: bool | None = None
+    tr: Translator = Translator()
 
     def __post_init__(self):
         if self.mode not in {"text", "json", "stream-json"}:

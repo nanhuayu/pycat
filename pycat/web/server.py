@@ -17,9 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.background import BackgroundTask
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from pycat.core.app.client import LocalClient
 from pycat.core.app.container import AppContainer
 from pycat.core.app.serialization import json_value
 from pycat.core.content.resolver import SessionContentResolver
+from pycat.core.i18n import ui_catalog
 from pycat.models.contracts.agent import ApplicationError, ConversationBusyError, MentionRef, RunRequest, TurnRevision
 
 
@@ -146,10 +148,9 @@ def create_app(*, services=None, data_dir=None, token: str, allowed_hosts=None):
     async def bootstrap():
         from pycat.core.version import __version__
         active = app.state.services
-        return {'version': __version__, 'protocol': 1, 'operations': active.workbench.catalog(),
+        return {**await LocalClient(active).bootstrap(), 'version': __version__, 'protocol': 1,
                 'commands': [{'name': cmd.name, 'description': cmd.description, 'aliases': cmd.aliases,
-                              'usage': cmd.presentation.usage} for cmd in active.command_registry.list_commands()],
-                'runs': active.interactive.list()}
+                              'usage': cmd.presentation.usage} for cmd in active.command_registry.list_commands()]}
 
     def client_source(request):
         source = request.headers.get('x-pycat-client', 'web')
@@ -275,6 +276,13 @@ def create_app(*, services=None, data_dir=None, token: str, allowed_hosts=None):
             raise
 
     assets = Path(__file__).resolve().parents[1] / 'assets'
+
+    @app.get('/ui-language.json')
+    async def language_catalog():
+        # Public presentation resources only, like the logo and stylesheets.
+        # Do not expose settings snapshots, provider metadata or session data.
+        return ui_catalog(app.state.services.settings_update_service.load().get('language'))
+
     app.mount('/assets', StaticFiles(directory=assets / 'web', check_dir=False), name='web-assets')
 
     @app.get('/brand.svg')

@@ -1,4 +1,4 @@
-"""One-way persisted configuration migration to the v8 runtime contracts."""
+"""One-way persisted configuration migration to the current runtime contracts."""
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +8,31 @@ from typing import Any, Mapping
 from pycat.models.contracts.config import DEFAULT_ACCENT, SUPPORTED_ACCENTS, AgentRuntimeConfig
 from pycat.models.contracts.tooling import TOOL_CATEGORIES
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
+
+# Shipped builtin texts verified in Git (12ad114 through 694d40e). Match the
+# complete normalized prompt, including former custom_instructions, by slug.
+# Never rewrite tool names inside user-authored instructions.
+_PRE_V9_MODE_PROMPTS = {
+    "chat": {"7a17c12beddc513298964bbd1190a7f2766ecb48ca7603cf450061bd87590f40",
+             "5b2f30ff2948bf9d184120cb512335dca06ee7accb8d8cd0a9246af31cd19be9"},
+    "channel": {"e571785cd8f30ac326fccaebabf7ba79a4ea184dbe3b2dd0125425756499dad4",
+                "9c1b877434339e29a0013ba7cf6e99702c5973224b645c2b09621ade193113dd"},
+    "agent": {"bbd3e3aa9ce0f74a3640c3c92cbca66cdc625a1c61fd980a16d613676c86a659",
+              "5b0be0648aaefc56c0db78b15dfac4716be884c4cd8ec6210cf56b7d0e4a512e"},
+    "plan": {"bd9fefd1135edb06fe362f66bc540391de3c5bf411e5117575ae38f3a253d92e",
+             "0fb2e426cbb2de960de0992e4692ccded3f9a7c70c02c0e09f5a8a18db494310"},
+    "explore": {"76abc2ab8e4bb2110404b75fd2e7aa289ebb07d1a8c52532ca0893ffbf2b2d54",
+                "81b8c3d8a87b45dc5c488154dd5ad856159f3ca8dbb7df12a8a3c0d7ac62981e",
+                "12746c04ac99d174955c8568944b27678c05b6523c063e67eaab28ca121f5d3f"},
+    "search": {"7a3d714b58aefb1a5dc97816fa2f7f2134ab92587dbe1f4a1e9207eb3b6d7762",
+               "56180ce934749378aeaf46fedd963801d17cf18b8b4a74ea58f4914f78b66723"},
+    "read_analyze": {"4f724ac74710938c71a817df08307eb0ad35efc38aa8e3ca00c2608c171ea0a1",
+                     "0abb7150e723d6c6b51c8d5cb134e1c9c8aa5f04df00d77bedade4cea5c43494",
+                     "3809145bee81d731945af984ea4c1c381ef2470750f4357e141a4f4e34991699"},
+    "review": {"ffbbfa7e3a0cd536d5669234c34d0cb782d8b3d98907cad684d9c0f5d4939fe7",
+               "c959f05bca4165f5f463f02790ba17ffe0e5e20fe81808c545e6b3664a6689c8"},
+}
 
 # Exact previous builtin prompts only. User-authored prompts remain untouched.
 _V6_KNOWLEDGE_PROMPTS = {
@@ -16,6 +40,7 @@ _V6_KNOWLEDGE_PROMPTS = {
     "wiki_synthesize": "398af039882fd00ebe5202215a942a383014a60f102f16b9591e39aa0730a22a",
 }
 _V7_MEMORY_REVIEW_PROMPT = "9edcd729d095bde46201bafe0748f673a93f14ef85d044b92017f204d70f367f"
+_V8_MEMORY_REVIEW_PROMPT = "133a931ae8efc6f614980a64ded797d72eb1fd8cea5413529f79ba5c338b0d77"
 
 _CATEGORY_MAP = {
     "read": "read",
@@ -188,6 +213,11 @@ def migrate_capabilities_payload(data: Mapping[str, Any] | None) -> tuple[dict[s
             if hashlib.sha256(prompt.encode()).hexdigest() == _V7_MEMORY_REVIEW_PROMPT:
                 for key in ("prompt", "system_prompt", "systemPrompt"):
                     item.pop(key, None)
+        if capability_id == "memory_review" and int(payload.get("schema_version") or 0) < 9:
+            prompt = str(item.get("prompt") or item.get("system_prompt") or item.get("systemPrompt") or "")
+            if hashlib.sha256(prompt.encode()).hexdigest() == _V8_MEMORY_REVIEW_PROMPT:
+                for key in ("prompt", "system_prompt", "systemPrompt"):
+                    item.pop(key, None)
         categories = [migrate_category(value) for value in item.get("allowed_tool_categories") or []]
         raw_runtime = str(
             item.get("runtime")
@@ -302,12 +332,15 @@ def migrate_mode_payload(data: Mapping[str, Any]) -> dict[str, Any]:
 
 def migrate_modes_payload(data: Any, *, extra_profiles: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     payload = dict(data) if isinstance(data, Mapping) else {}
+    upgrade_prompts = int(payload.get("schema_version") or 0) < 9
     raw_modes = payload.get("modes") if isinstance(payload.get("modes"), list) else (data if isinstance(data, list) else [])
     modes: dict[str, dict[str, Any]] = {}
     for raw in list(raw_modes or []) + list(extra_profiles or []):
         if not isinstance(raw, Mapping):
             continue
         mode = migrate_mode_payload(raw)
+        if upgrade_prompts and hashlib.sha256(mode["prompt"].encode("utf-8")).hexdigest() in _PRE_V9_MODE_PROMPTS.get(mode["slug"], ()):
+            mode["prompt"] = ""
         if mode["slug"]:
             modes[mode["slug"]] = mode
     return {"schema_version": SCHEMA_VERSION, "modes": list(modes.values())}

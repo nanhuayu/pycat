@@ -27,13 +27,14 @@ logger = logging.getLogger(__name__)
 def _format_error_message(error: str) -> str:
     text = (error or "").strip()
     if not text:
-        return "模型调用失败：未知错误"
+        return QCoreApplication.translate('StreamingMessagePresenter', '模型调用失败：未知错误')
     if text == "已取消生成":
         return text
     if text.startswith("Error sending message:"):
         detail = text.split(":", 1)[1].strip() if ":" in text else ""
-        return f"模型调用失败：{detail or '未知错误'}"
-    return f"错误: {text}"
+        return QCoreApplication.translate('StreamingMessagePresenter', '模型调用失败：{detail}').format(
+            detail=detail or QCoreApplication.translate('StreamingMessagePresenter', '未知错误'))
+    return QCoreApplication.translate('StreamingMessagePresenter', '错误: {text}').format(text=text)
 
 
 _STATE_BOOKKEEPING_FIELDS = {

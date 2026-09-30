@@ -1,3 +1,4 @@
+import {tr} from './i18n.js';
 import {node, button, modal, closeModal, toast} from './ui.js';
 import {renderSettingsPage, groups} from './settings-pages.js';
 
@@ -26,9 +27,9 @@ export function closeSettings(after) {
     document.querySelector('#composer').focus(); after?.();
   };
   if (!workspace.dirty.length && !workspace.invalid) { close(); return; }
-  modal('保存设置更改？', node('p', {}, '更改尚未保存。可以保存后返回，或放弃本次草稿。'), [
-    button('继续编辑', closeModal), button('放弃更改', close),
-    button('保存并返回', async () => { closeModal(); if (await workspace.save()) close(); }, 'primary')
+  modal(tr("保存设置更改？"), node('p', {}, tr("更改尚未保存。可以保存后返回，或放弃本次草稿。")), [
+    button(tr("继续编辑"), closeModal), button(tr("放弃更改"), close),
+    button(tr("保存并返回"), async () => { closeModal(); if (await workspace.save()) close(); }, 'primary')
   ]);
 }
 
@@ -36,21 +37,21 @@ class SettingsWorkspace {
   constructor(api, refresh, snapshot) {
     this.api = api; this.refresh = refresh; this.snapshot = snapshot;
     this.draft = structuredClone(snapshot.values); this.page = 'models'; this.version = 0;
-    this.context = context; this.search = node('input', {placeholder: '搜索设置', 'aria-label': '搜索设置'});
-    this.nav = node('nav', {'aria-label': '设置导航'});
+    this.context = context; this.search = node('input', {placeholder: tr("搜索设置"), 'aria-label': tr("搜索设置")});
+    this.nav = node('nav', {'aria-label': tr("设置导航")});
     const brand = node('div', {class: 'brand'}, node('img', {src: '/brand.svg', alt: ''}), node('strong', {}, 'PyCat'),
       button('←', () => closeSettings(), 'brand-action'));
-    brand.lastChild.setAttribute('aria-label', '返回会话');
+    brand.lastChild.setAttribute('aria-label', tr("返回会话"));
     this.sidebar = node('aside', {class: 'settings-sidebar'}, brand, node('label', {class: 'search'}, this.search), this.nav);
     this.content = node('div', {class: 'settings-content'});
     this.error = node('p', {class: 'form-error', role: 'alert'});
     this.status = node('span', {class: 'muted'});
-    this.discardButton = button('放弃更改', () => {
-      modal('放弃全部设置更改？', node('p', {}, '尚未保存的配置将恢复为上次读取的状态。'), [
-        button('继续编辑', closeModal), button('放弃更改', () => { this.draft = structuredClone(this.snapshot.values); closeModal(); this.navigate(this.page, true); }, 'danger')]);
+    this.discardButton = button(tr("放弃更改"), () => {
+      modal(tr("放弃全部设置更改？"), node('p', {}, tr("尚未保存的配置将恢复为上次读取的状态。")), [
+        button(tr("继续编辑"), closeModal), button(tr("放弃更改"), () => { this.draft = structuredClone(this.snapshot.values); closeModal(); this.navigate(this.page, true); }, 'danger')]);
     });
-    this.saveButton = button('保存更改', () => this.save(), 'primary');
-    this.element = node('section', {id: 'settings-layout', 'aria-label': '设置'},
+    this.saveButton = button(tr("保存更改"), () => this.save(), 'primary');
+    this.element = node('section', {id: 'settings-layout', 'aria-label': tr("设置")},
       this.sidebar, node('div', {class: 'settings-workspace'},
         node('div', {class: 'settings-scroll'}, this.content),
         node('footer', {class: 'settings-save'}, this.error, node('div', {class: 'save-row'}, this.status, node('span', {}, this.discardButton, this.saveButton)))));
@@ -66,11 +67,11 @@ class SettingsWorkspace {
   get session() { return this.context.session?.(); }
   changed() {
     const dirty = this.dirty.length || !!this.invalid;
-    this.status.textContent = this.invalid ? '输入尚未完成，请修正后保存' : dirty ? dirty + ' 个配置域有未保存更改' : '所有更改已保存';
+    this.status.textContent = this.invalid ? tr("输入尚未完成，请修正后保存") : dirty ? dirty + tr(" 个配置域有未保存更改") : tr("所有更改已保存");
     this.saveButton.disabled = !dirty || this.saving; this.discardButton.disabled = !dirty || this.saving;
-    this.saveButton.textContent = '保存更改';
+    this.saveButton.textContent = tr("保存更改");
     this.saveButton.hidden = this.discardButton.hidden = this.resources && this.page === 'skills' && !dirty;
-    if (this.resources && !dirty) this.status.textContent = this.page === 'skills' ? '技能操作即时生效' : 'MCP 配置保存后生效';
+    if (this.resources && !dirty) this.status.textContent = this.page === 'skills' ? tr("技能操作即时生效") : tr("MCP 配置保存后生效");
   }
   renderNav() {
     const query = this.search.value.trim().toLowerCase();
@@ -88,14 +89,14 @@ class SettingsWorkspace {
     this.page = page; const version = ++this.version;
     this.renderNav(); this.changed(); this.content.replaceChildren(node('div', {class: 'settings-title'},
       node('h1', {}, group.title),
-      node('p', {class: 'muted'}, this.resources ? '管理技能、连接外部工具，或从市场发现新能力。' : group.description)));
+      node('p', {class: 'muted'}, this.resources ? tr("管理技能、连接外部工具，或从市场发现新能力。") : group.description)));
     if (group.pages.length > 1) this.content.append(node('div', {class: 'settings-tabs'}, group.pages.map(([id, title]) =>
       button(title, () => this.navigate(id), id === page ? 'active' : ''))));
     this.resourceTabs = this.resources ? node('div', {class: 'settings-tabs resource-views'}) : null;
     if (this.resourceTabs) this.content.append(this.resourceTabs);
     const body = node('div', {class: 'settings-page'}); this.content.append(body);
     try { await renderSettingsPage(this, page, body); }
-    catch (error) { if (version === this.version) body.replaceChildren(node('p', {class: 'form-error'}, error.message), button('重试', () => this.navigate(page))); }
+    catch (error) { if (version === this.version) body.replaceChildren(node('p', {class: 'form-error'}, error.message), button(tr("重试"), () => this.navigate(page))); }
   }
   async save() {
     if (this.saving) return false;
@@ -106,7 +107,7 @@ class SettingsWorkspace {
     try {
       const patch = Object.fromEntries(this.dirty.map(key => [key, this.draft[key]]));
       const policy = this.draft.app_settings.context.compression_policy;
-      if (policy.tight_replay_threshold_ratio >= policy.token_threshold_ratio) throw Error('工具压缩阈值必须低于上下文压缩阈值');
+      if (policy.tight_replay_threshold_ratio >= policy.token_threshold_ratio) throw Error(tr("工具压缩阈值必须低于上下文压缩阈值"));
       const result = await this.api.operation('config.update', {patch, expected_revision: this.snapshot.revision});
       const saved = {providers: 'providers', app_settings: 'app_settings', mcp: 'mcp_servers', modes: 'modes', search: 'search_config'};
       for (const domain of result.saved_domains) {
@@ -118,8 +119,8 @@ class SettingsWorkspace {
         this.error.textContent = [...result.domain_errors, ...result.stage_errors].map(item => item[1]).join('\n');
         return false;
       }
-      toast('设置已保存'); await this.navigate(this.page); return true;
-    } catch (error) { this.error.textContent = error.message + '；草稿已保留。'; return false; }
+      toast(tr("设置已保存")); await this.navigate(this.page); return true;
+    } catch (error) { this.error.textContent = error.message + tr("；草稿已保留。"); return false; }
     finally { this.saving = false; this.element.classList.remove('saving'); this.changed(); }
   }
   edit(title, item, fields, accept, extra) {
@@ -129,7 +130,7 @@ class SettingsWorkspace {
     for (const build of fields) body.append(build(copy));
     if (extra) body.append(extra(copy));
     const error = node('p', {class: 'form-error', role: 'alert'}); body.append(error);
-    modal(title, body, [button('取消', closeModal), button('应用到草稿', async () => {
+    modal(title, body, [button(tr("取消"), closeModal), button(tr("应用到草稿"), async () => {
       const invalid = body.querySelector(':invalid'); if (invalid) { invalid.reportValidity(); return; }
       try { await accept(copy); this.changed(); closeModal(); await this.navigate(this.page); }
       catch (failure) { error.textContent = failure.message; }

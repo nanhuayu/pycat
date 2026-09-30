@@ -8,7 +8,10 @@ the route marker from the Provider at the narrow request boundary.
 """
 from __future__ import annotations
 
+import copy
+import json
 import logging
+import re
 from typing import Any, MutableMapping
 
 from pycat.models.model_profile import REASONING_CODEC_ALIASES, ModelProfile
@@ -16,6 +19,83 @@ from pycat.models.model_profile import REASONING_CODEC_ALIASES, ModelProfile
 logger = logging.getLogger(__name__)
 CHAT_REASONING_CODEC = "chat_reasoning"
 _BOOLEAN_MODES = {"on", "auto"}
+_CONTROL_PATHS = (
+    ("reasoning_effort",), ("reasoning", "effort"), ("reasoning", "enabled"), ("output_config", "effort"),
+    ("thinking",), ("enable_thinking",), ("think",),
+)
+
+
+def capability_reasoning_mode(profile: ModelProfile, *, prefer_low: bool = False) -> str:
+    """Prefer light reasoning for fixed transformations without guessing support."""
+    if profile.supports_reasoning and normalize_reasoning_codec(profile.reasoning_codec) != "none":
+        for mode in (("low", "off", "minimal") if prefer_low else ("off", "low", "minimal")):
+            if mode in profile.reasoning_options:
+                return mode
+    # Explicit inherit bypasses a model's saved high/max default for this helper.
+    # It does not claim that server-side thinking is disabled.
+    return "inherit"
+
+
+def rejected_reasoning_parameters(
+    body: dict[str, Any], content: str, metadata: dict[str, Any],
+) -> tuple[tuple[str, ...], ...]:
+    """Identify controls explicitly rejected by HTTP validation, never by model prose."""
+    if not metadata.get("runtime_error") or metadata.get("http_status") not in {400, 422}:
+        return ()
+    error: Any = None
+    try:
+        error = json.loads(content[content.index("{"):])
+    except (ValueError, TypeError):
+        pass
+    if isinstance(error, dict):
+        error = error.get("error") if isinstance(error.get("error"), dict) else error
+        error = error.get("extError") if isinstance(error.get("extError"), dict) else error
+        param = str(error.get("param") or "").casefold()
+        detail = " ".join(str(error.get(key) or "") for key in ("code", "message", "msg"))
+    else:
+        param, detail = "", content
+    if not re.search(r"unsupported|unknown|unrecogni[sz]ed|unexpected|not (?:supported|allowed|permitted)"
+                     r"|does not support|invalid (?:parameter|argument|value)", detail, re.IGNORECASE):
+        return ()
+    if not param:
+        # Require a named rejected field, not a mention of reasoning somewhere
+        # in an unrelated validation error.
+        for pattern in (
+            r"(?:unsupported|unknown|unrecogni[sz]ed|unexpected|invalid)\s+(?:parameter|argument|field)\s*:?\s*[`'\"]?([\w.]+)",
+            r"[`'\"]?([\w.]+)[`'\"]?\s+(?:is\s+)?(?:not supported|not allowed|not permitted|does not support|unsupported)",
+        ):
+            match = re.search(pattern, detail, re.IGNORECASE)
+            if match:
+                param = match[1].casefold()
+                break
+    rejected = []
+    for path in _CONTROL_PATHS:
+        parent = body if len(path) == 1 else body.get(path[0])
+        if not isinstance(parent, dict) or path[-1] not in parent:
+            continue
+        if param in {".".join(path), path[0]}:
+            rejected.append((path[0],) if param == path[0] else path)
+    return tuple(dict.fromkeys(rejected))
+
+
+def omit_reasoning_parameters(body: dict[str, Any], paths: tuple[tuple[str, ...], ...]) -> dict[str, Any]:
+    """Drop only rejected fields, preserving other nested reasoning options."""
+    if not paths:
+        return body
+    result = copy.deepcopy(body)
+    for path in paths:
+        parent = result if len(path) == 1 else result.get(path[0])
+        if isinstance(parent, dict):
+            parent.pop(path[-1], None)
+            if len(path) > 1 and not parent:
+                result.pop(path[0], None)
+    return result
+
+
+def reasoning_parameters_signature(body: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    """A rejected value such as 'none' must not suppress a supported 'low'."""
+    return tuple((key, json.dumps(body[key], sort_keys=True))
+                 for key in dict.fromkeys(path[0] for path in _CONTROL_PATHS) if key in body)
 
 
 def normalize_reasoning_codec(value: Any) -> str:

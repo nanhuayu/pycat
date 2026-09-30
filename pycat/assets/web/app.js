@@ -1,3 +1,4 @@
+import {tr, translateDocument} from './i18n.js';
 import {Api} from './api.js';
 import {$, node, button, toast, modal, closeModal, picker, reader, form, markdown} from './ui.js';
 import {showConfig, configureSettings, settingsActive, closeSettings} from './config.js';
@@ -6,6 +7,7 @@ import {icon, installIcons} from './icons.js';
 import {showChannels} from './channels.js';
 import {materials, trace, openMaterial, inspector, contextDetails} from './views.js';
 
+translateDocument();
 const api = new Api();
 const state = {session: null, operations: {}, commands: [], runs: new Map(), refs: [], mentions: [], drafts: new Map(), submitting: false};
 const compactLayout = matchMedia('(max-width: 900px)');
@@ -39,7 +41,7 @@ async function refreshInspector() {
   await inspector(api, session, projection, state.inspectorTab, referenceActions());
   if (version !== inspectorVersion) return;
   $('#inspector-content').replaceChildren(projection);
-  $('#state-version').textContent = '当前状态 · v' + (session?.state?.state_version || 0);
+  $('#state-version').textContent = tr("当前状态 · v") + (session?.state?.state_version || 0);
 }
 function showInspector(open) {
   $('#inspector').hidden = !open; $('#toggle-inspector').setAttribute('aria-expanded', String(open));
@@ -55,7 +57,7 @@ async function refreshContext() {
   const value = await operation('sessions.context', {session: session.id});
   if (state.session?.id === session.id) {
     $('#context-value').textContent = (value.usage_ratio * 100).toFixed(0) + '%';
-    $('#context').title = '上下文估算 ' + value.context_tokens.toLocaleString() + ' / ' + value.budget.effective_prompt_limit.toLocaleString() + ' Token';
+    $('#context').title = tr("上下文估算 ") + value.context_tokens.toLocaleString() + ' / ' + value.budget.effective_prompt_limit.toLocaleString() + ' Token';
   }
 }
 
@@ -67,20 +69,20 @@ async function refreshSessions() {
   for (const row of rows) { const key = row.work_dir || ''; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(row); }
   $('#sessions').replaceChildren();
   for (const [path, items] of groups) {
-    const heading = node('div', {class: 'project-heading', title: path || '独立会话'}, icon(path ? 'folder' : 'chat'),
-      node('span', {}, path ? path.split(/[\\/]/).filter(Boolean).at(-1) : '最近'));
-    if (path) heading.append(button('＋', guarded(() => newSession(path))), button('···', () => picker('项目操作', [
-      {label: '在此新建会话', action: () => newSession(path)}, {label: '复制完整路径', action: async () => { await navigator.clipboard.writeText(path); toast('已复制路径'); }},
-      {label: '查看项目资料', action: async () => { await selectSession(items[0].id); await openLibrary(); }}
+    const heading = node('div', {class: 'project-heading', title: path || tr("独立会话")}, icon(path ? 'folder' : 'chat'),
+      node('span', {}, path ? path.split(/[\\/]/).filter(Boolean).at(-1) : tr("最近")));
+    if (path) heading.append(button('＋', guarded(() => newSession(path))), button('···', () => picker(tr("项目操作"), [
+      {label: tr("在此新建会话"), action: () => newSession(path)}, {label: tr("复制完整路径"), action: async () => { await navigator.clipboard.writeText(path); toast(tr("已复制路径")); }},
+      {label: tr("查看项目资料"), action: async () => { await selectSession(items[0].id); await openLibrary(); }}
     ], guarded(async item => { closeModal(); await item.action(); }))));
     $('#sessions').append(heading);
     for (const item of items) {
-      const menu = button('···', guarded(async () => { await selectSession(item.id); await sessionMenu(); }), 'row-menu'); menu.setAttribute('aria-label', (item.title || '未命名会话') + '的操作');
+      const menu = button('···', guarded(async () => { await selectSession(item.id); await sessionMenu(); }), 'row-menu'); menu.setAttribute('aria-label', (item.title || tr("未命名会话")) + tr("的操作"));
       $('#sessions').append(node('div', {class: 'session-row' + (item.id === state.session?.id ? ' active' : '')},
-        button((item.pinned ? '⌁ ' : '') + (item.title || '未命名会话'), guarded(() => selectSession(item.id)), 'session-link'), menu));
+        button((item.pinned ? '⌁ ' : '') + (item.title || tr("未命名会话")), guarded(() => selectSession(item.id)), 'session-link'), menu));
     }
   }
-  if (!rows.length) $('#sessions').append(node('p', {class: 'empty-small'}, $('#session-search').value ? '没有匹配会话' : '新建会话，开始工作'));
+  if (!rows.length) $('#sessions').append(node('p', {class: 'empty-small'}, $('#session-search').value ? tr("没有匹配会话") : tr("新建会话，开始工作")));
 }
 
 function messageElement(message) {
@@ -88,18 +90,18 @@ function messageElement(message) {
   const article = node(tool ? 'details' : 'article', {class: 'message ' + message.role, 'data-message': message.id});
   article.append(node(tool ? 'summary' : 'div', {class: 'message-heading'},
     !tool && message.role !== 'user' ? node('img', {src: '/brand.svg', alt: ''}) : null,
-    tool ? (message.name || '工具结果') : message.role === 'user' ? '你' : 'PyCat',
+    tool ? (message.name || tr("工具结果")) : message.role === 'user' ? tr("你") : 'PyCat',
     message.created_at ? node('time', {datetime: message.created_at}, new Date(message.created_at).toLocaleString([], {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})) : null));
-  if (message.thinking && showThinking()) article.append(node('details', {class: 'thinking'}, node('summary', {}, '思考过程'), markdown(message.thinking)));
+  if (message.thinking && showThinking()) article.append(node('details', {class: 'thinking'}, node('summary', {}, tr("思考过程")), markdown(message.thinking)));
   article.append(node('div', {class: 'message-body'}, markdown(message.content)));
   if (message.tool_calls?.length) {
     const steps = node('div');
     for (const call of message.tool_calls) steps.append(node('details', {class: 'tool-card'},
-      node('summary', {}, (call.result?.is_error ? '未完成 · ' : '') + (call.function?.name || call.name || '工具调用')),
-      node('div', {}, call.result?.content ? markdown(call.result.content) : node('p', {class: 'muted'}, '查看运行检查中的完整调用记录。'),
-        node('details', {}, node('summary', {}, '调用参数'), node('pre', {class: 'data-reader'}, typeof call.function?.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function?.arguments || {}, null, 2))))));
-    article.append(node('details', {class: 'run-summary'}, node('summary', {}, message.tool_calls.length + ' 次工具调用'), steps),
-      button('查看本次运行', guarded(() => trace(api, state.session, perform)), 'text-button'));
+      node('summary', {}, (call.result?.is_error ? tr("未完成 · ") : '') + (call.function?.name || call.name || tr("工具调用"))),
+      node('div', {}, call.result?.content ? markdown(call.result.content) : node('p', {class: 'muted'}, tr("查看运行检查中的完整调用记录。")),
+        node('details', {}, node('summary', {}, tr("调用参数")), node('pre', {class: 'data-reader'}, typeof call.function?.arguments === 'string' ? call.function.arguments : JSON.stringify(call.function?.arguments || {}, null, 2))))));
+    article.append(node('details', {class: 'run-summary'}, node('summary', {}, message.tool_calls.length + tr(" 次工具调用")), steps),
+      button(tr("查看本次运行"), guarded(() => trace(api, state.session, perform)), 'text-button'));
   }
   const refs = [...(message.content_refs || []), ...(message.tool_calls || []).flatMap(call => call.result?.is_error ? [] : call.result?.metadata?.content_refs || [])];
   const seen = new Set();
@@ -108,14 +110,14 @@ function messageElement(message) {
     article.append(button([icon('file'), ref.name, node('small', {}, ref.mime || ref.kind || '')], guarded(() => openMaterial(api, state.session, ref, referenceActions())), 'artifact-link'));
   }
   if (!tool) {
-    const actions = node('div', {class: 'message-actions'}, button('复制', guarded(async () => { await navigator.clipboard.writeText(message.content || ''); toast('已复制'); })));
+    const actions = node('div', {class: 'message-actions'}, button(tr("复制"), guarded(async () => { await navigator.clipboard.writeText(message.content || ''); toast(tr("已复制")); })));
     if (message.role === 'user') {
-      actions.append(button('编辑', () => {
+      actions.append(button(tr("编辑"), () => {
         state.edit = {action: 'edit', message_id: message.id};
         $('#composer').value = message.content; $('#edit-status').hidden = false; $('#composer').focus(); saveDraft();
       }));
-      actions.append(button('重试', guarded(() => submit('', {action: 'retry', message_id: message.id}))));
-      actions.append(button('删除', () => modal('删除消息', node('p', {}, '删除此轮及之后的消息？'), [button('取消', closeModal), button('删除', guarded(async () => {
+      actions.append(button(tr("重试"), guarded(() => submit('', {action: 'retry', message_id: message.id}))));
+      actions.append(button(tr("删除"), () => modal(tr("删除消息"), node('p', {}, tr("删除此轮及之后的消息？")), [button(tr("取消"), closeModal), button(tr("删除"), guarded(async () => {
         await operation('sessions.remove', {session: state.session.id, message: message.id, expected_revision: state.session.revision}); closeModal(); await reloadSession();
       }), 'danger')])));
     }
@@ -127,12 +129,12 @@ function messageElement(message) {
 
 function renderSession({prepend = false} = {}) {
   const session = state.session, container = $('#messages'), atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-  $('#session-title').textContent = session?.title || '新会话';
-  $('#workspace').textContent = (session?.work_dir || '个人空间') + ' ⌄';
-  $('#model').textContent = (session?.model || '选择模型') + ' ⌄';
-  $('#model').title = session?.provider_name || '选择模型';
+  $('#session-title').textContent = session?.title || tr("新会话");
+  $('#workspace').textContent = (session?.work_dir || tr("个人空间")) + ' ⌄';
+  $('#model').textContent = (session?.model || tr("选择模型")) + ' ⌄';
+  $('#model').title = session?.provider_name || tr("选择模型");
   $('#mode').textContent = (session?.mode || 'chat') + ' ⌄';
-  $('#permissions').textContent = ({default: '默认权限', ask: '逐次询问', allow: '允许工具', deny: '禁用工具', custom: '自定义权限'}[session?.settings?.tool_approval] || '默认权限') + ' ⌄';
+  $('#permissions').textContent = ({default: tr("默认权限"), ask: tr("逐次询问"), allow: tr("允许工具"), deny: tr("禁用工具"), custom: tr("自定义权限")}[session?.settings?.tool_approval] || tr("默认权限")) + ' ⌄';
   const existing = new Map([...container.querySelectorAll('[data-message]')].map(element => [element.dataset.message, element]));
   const nodes = (session?.messages || []).map(message => {
     const old = existing.get(message.id); existing.delete(message.id);
@@ -143,7 +145,7 @@ function renderSession({prepend = false} = {}) {
   container.querySelector('.load-older')?.remove();
   welcome.hidden = !!nodes.length;
   if (!welcome.parentElement) container.prepend(welcome);
-  if (session?.message_offset > 0) container.prepend(button('加载更早的消息', guarded(async () => {
+  if (session?.message_offset > 0) container.prepend(button(tr("加载更早的消息"), guarded(async () => {
     const height = container.scrollHeight, offset = Math.max(0, session.message_offset - 100);
     const page = await operation('sessions.read', {session: session.id, offset, limit: session.message_offset - offset});
     if (state.session !== session) return;
@@ -213,10 +215,10 @@ async function submit(text = $('#composer').value.trim(), revision = null) {
   if (state.submitting || !text && !state.refs.length && !revision) return;
   const active = currentRun();
   if (active) {
-    if (revision || state.refs.length) throw Error('运行中请发送文字引导；附件和消息修改可在本轮结束后提交。');
+    if (revision || state.refs.length) throw Error(tr("运行中请发送文字引导；附件和消息修改可在本轮结束后提交。"));
     const result = await api.json(`/runs/${active.id}/guidance`, {method: 'POST', body: {text}});
-    if (!result.accepted) throw Error('本轮已结束，请重新发送。');
-    $('#composer').value = ''; toast('引导已提交'); return;
+    if (!result.accepted) throw Error(tr("本轮已结束，请重新发送。"));
+    $('#composer').value = ''; toast(tr("引导已提交")); return;
   }
   state.submitting = true; $('#send').disabled = true;
   try {
@@ -235,9 +237,9 @@ async function submit(text = $('#composer').value.trim(), revision = null) {
       state.runs.set(run.id, run); renderRun(); observe(run);
     } else {
       if (result.session) await selectSession(result.session);
-      if (result.message) reader('提示', result.message);
+      if (result.message) reader(tr("提示"), result.message);
       if (result.panel) await openPanel(result.panel, result.data);
-      if (result.kind === 'exit') toast('当前运行已保留，可以关闭此页面。');
+      if (result.kind === 'exit') toast(tr("当前运行已保留，可以关闭此页面。"));
     }
   } catch (error) {
     if (error.status && error.status < 500) state.pendingSubmit = null;
@@ -249,9 +251,9 @@ function renderRun() {
   const view = $('#messages'), atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 100;
   const run = currentRun(); $('#run-status').hidden = !run; $('#cancel').disabled = !!run?.cancelling;
   $('#pending').hidden = !run?.pending.size;
-  $('#run-label').textContent = run?.pending.size ? '等待你的回复' : run?.cancelling ? '正在停止…' : run?.label || '正在处理';
-  $('#send').title = run ? '发送引导' : '发送消息';
-  $('#composer').placeholder = run ? '补充说明，指导当前任务…' : '描述任务… 输入 / 查看命令，@ 添加引用';
+  $('#run-label').textContent = run?.pending.size ? tr("等待你的回复") : run?.cancelling ? tr("正在停止…") : run?.label || tr("正在处理");
+  $('#send').title = run ? tr("发送引导") : tr("发送消息");
+  $('#composer').placeholder = run ? tr("补充说明，指导当前任务…") : tr("描述任务… 输入 / 查看命令，@ 添加引用");
   let element = $('#live-message');
   if (!run) { element?.remove(); return; }
   welcome.hidden = true;
@@ -266,7 +268,7 @@ async function observe(run) {
       if (event.conversation_id) run.session = event.conversation_id;
       if (event.type === 'event') {
         if (event.kind === 'text_delta') run.text = (run.text + String(event.data || '')).slice(-32768);
-        else if (event.tool_name) run.label = '正在使用 ' + event.tool_name;
+        else if (event.tool_name) run.label = tr("正在使用 ") + event.tool_name;
         if (!run.timer) run.timer = setTimeout(() => { run.timer = null; renderRun(); }, 50);
       } else if (event.type === 'interaction') {
         run.pending.set(event.id, event); renderRun(); if (run === currentRun()) showInteraction(run, event);
@@ -277,9 +279,9 @@ async function observe(run) {
         if (run.session === state.session?.id) await reloadSession();
         if (event.done) await finishRun(run, event.final);
       } else if (event.type === 'final') await finishRun(run, event);
-      else if (event.type === 'operation_result') reader('操作结果', event.data);
+      else if (event.type === 'operation_result') reader(tr("操作结果"), event.data);
     }
-  } catch (error) { run.label = '连接中断，可刷新页面恢复'; toast(error.message, true); renderRun(); }
+  } catch (error) { run.label = tr("连接中断，可刷新页面恢复"); toast(error.message, true); renderRun(); }
 }
 
 async function finishRun(run, result) {
@@ -287,7 +289,7 @@ async function finishRun(run, result) {
   if (run.pending.has(state.interaction)) { closeModal(); state.interaction = null; }
   run.pending.clear();
   if (result.error) toast(result.error, true);
-  if (result.data !== null && result.data !== undefined) reader('操作结果', result.data);
+  if (result.data !== null && result.data !== undefined) reader(tr("操作结果"), result.data);
   if (run.session === state.session?.id) {
     await reloadSession();
     if (result.status === 'failed' && !state.session.messages.some(message => message.role === 'user' && message.content === run.draft) && !$('#composer').value) $('#composer').value = run.draft;
@@ -298,50 +300,50 @@ async function finishRun(run, result) {
 
 function showInteraction(run, item) {
   if (settingsActive() || $('#dialog').open) {
-    toast('本轮正在等待回复，可返回会话处理。');
+    toast(tr("本轮正在等待回复，可返回会话处理。"));
     return;
   }
   state.interaction = item.id;
   const reply = guarded(async decision => { await api.json(`/runs/${run.id}/interactions/${item.id}`, {method: 'POST', body: decision}); closeModal(); state.interaction = null; });
   if (item.kind === 'approval') {
-    modal('批准工具操作', [node('p', {}, item.payload.reason || '此操作需要你的批准。'), node('pre', {class: 'data-reader'}, JSON.stringify(item.payload, null, 2))],
-      [button('拒绝', () => reply({approved: false})), button('允许本次', () => reply({approved: true, read_scope: 'call'}), 'primary'), ...(item.payload.external_path ? [button('允许本轮读取', () => reply({approved: true, read_scope: 'run'}))] : [])], '等待回复');
+    modal(tr("批准工具操作"), [node('p', {}, item.payload.reason || tr("此操作需要你的批准。")), node('pre', {class: 'data-reader'}, JSON.stringify(item.payload, null, 2))],
+      [button(tr("拒绝"), () => reply({approved: false})), button(tr("允许本次"), () => reply({approved: true, read_scope: 'call'}), 'primary'), ...(item.payload.external_path ? [button(tr("允许本轮读取"), () => reply({approved: true, read_scope: 'run'}))] : [])], tr("等待回复"));
   } else {
     const options = (item.payload.options || []).map(option => {
       const input = node('input', {type: item.payload.multiple ? 'checkbox' : 'radio', name: 'answer', value: option.label});
       return {input, element: node('label', {class: 'answer-option'}, input, node('span', {}, option.label, node('small', {}, option.description || '')))};
     });
-    const free = node('textarea', {rows: 3, placeholder: '补充说明（可选）', 'aria-label': '补充说明'});
-    modal(item.payload.text || '需要你的选择', [node('div', {class: 'answer-options'}, options.map(item => item.element)), free],
-      [button('跳过', () => reply({selected: [], freeText: null, skipped: true})), button('提交', () => {
+    const free = node('textarea', {rows: 3, placeholder: tr("补充说明（可选）"), 'aria-label': tr("补充说明")});
+    modal(item.payload.text || tr("需要你的选择"), [node('div', {class: 'answer-options'}, options.map(item => item.element)), free],
+      [button(tr("跳过"), () => reply({selected: [], freeText: null, skipped: true})), button(tr("提交"), () => {
         const selected = options.filter(item => item.input.checked).map(item => item.input.value);
-        if (!selected.length && !free.value.trim()) { toast('请选择选项或填写补充说明'); return; }
+        if (!selected.length && !free.value.trim()) { toast(tr("请选择选项或填写补充说明")); return; }
         reply({selected, freeText: free.value.trim() || null, skipped: false});
-      }, 'primary')], '等待回复');
+      }, 'primary')], tr("等待回复"));
   }
 }
 
 async function selectModel() {
   await ensureSession(); const models = await operation('model.list');
   if (!models.length) { await showConfig(api, settingsRefresh); return; }
-  picker('选择模型', models.map(model => ({label: model.model, detail: model.provider, ...model})), guarded(async item => {
+  picker(tr("选择模型"), models.map(model => ({label: model.model, detail: model.provider, ...model})), guarded(async item => {
     await operation('sessions.select', {session: state.session.id, model: item.ref, expected_revision: state.session.revision}); closeModal(); await reloadSession();
   }));
 }
 async function selectMode() {
   await ensureSession(); const modes = await operation('mode.list', {work_dir: state.session.work_dir});
-  picker('选择模式', modes.filter(mode => ['primary', 'both'].includes(mode.profile_kind) && mode.slug !== 'channel').map(mode => ({label: mode.name, detail: mode.purpose, ...mode})), guarded(async item => {
+  picker(tr("选择模式"), modes.filter(mode => ['primary', 'both'].includes(mode.profile_kind) && mode.slug !== 'channel').map(mode => ({label: mode.name, detail: mode.purpose, ...mode})), guarded(async item => {
     await operation('sessions.select', {session: state.session.id, mode: item.slug, expected_revision: state.session.revision}); closeModal(); await reloadSession();
   }));
 }
 async function permissions() {
   await ensureSession();
-  form('工具与文件权限', [
-    {name: 'tool_approval', label: '工具批准', options: [{value: 'default', label: '默认'}, {value: 'ask', label: '逐次询问'}, {value: 'allow', label: '允许'}, {value: 'deny', label: '禁用工具'}, {value: 'custom', label: '自定义规则'}]},
-    {name: 'filesystem_mode', label: '文件范围', options: [{value: 'confined', label: '当前工作区'}, {value: 'full_access', label: '完整文件访问'}]}
+  form(tr("工具与文件权限"), [
+    {name: 'tool_approval', label: tr("工具批准"), options: [{value: 'default', label: tr("默认")}, {value: 'ask', label: tr("逐次询问")}, {value: 'allow', label: tr("允许")}, {value: 'deny', label: tr("禁用工具")}, {value: 'custom', label: tr("自定义规则")}]},
+    {name: 'filesystem_mode', label: tr("文件范围"), options: [{value: 'confined', label: tr("当前工作区")}, {value: 'full_access', label: tr("完整文件访问")}]}
   ], {tool_approval: state.session.settings?.tool_approval || 'default', filesystem_mode: state.session.settings?.filesystem_mode || 'confined'}, async values => {
     await operation('sessions.permissions', {session: state.session.id, ...values, expected_revision: state.session.revision}); closeModal(); await reloadSession();
-  }, {description: '变更即时作用于后续工具调用。正在执行的调用不会被重新执行。'});
+  }, {description: tr("变更即时作用于后续工具调用。正在执行的调用不会被重新执行。")});
 }
 
 async function openPanel(panel, data) {
@@ -355,7 +357,7 @@ async function openPanel(panel, data) {
   if (panel === 'mcp') return showConfig(api, settingsRefresh, 'mcp');
   if (panel === 'context') { await ensureSession(); return contextDetails(api, state.session, perform); }
   if (panel === 'export') return exportSession(data || 'markdown');
-  if (panel === 'copy') { await navigator.clipboard.writeText(state.session?.messages.filter(item => item.role === 'assistant').at(-1)?.content || ''); toast('已复制'); return; }
+  if (panel === 'copy') { await navigator.clipboard.writeText(state.session?.messages.filter(item => item.role === 'assistant').at(-1)?.content || ''); toast(tr("已复制")); return; }
   const name = {agents: 'mode.list', status: 'doctor', context: 'sessions.read', mcp: 'mcp.list', channels: 'channels.list', doctor: 'doctor'}[panel];
   if (name) return perform(name, {session: state.session?.id, work_dir: state.session?.work_dir || ''});
   return resources(panel);
@@ -368,26 +370,26 @@ async function sessionSettings() {
     pycat_assistant_enabled: true, tool_selection: {}, channel_notice_policy: 'notice',
     allowed_channel_sources: null, trusted_channel_sources: [], ...value.settings};
   const llm = Object.fromEntries(Object.entries(value.llm).filter(([key]) => ['temperature', 'top_p', 'max_tokens', 'stream', 'reasoning_mode'].includes(key)));
-  const content = node('div', {}, fieldset('会话', '仅应用于当前会话。', settings, [
-    {key: 'session_instructions', label: '会话指令', type: 'text'}, {key: 'memory_enabled', label: '启用记忆', type: 'bool'},
-    {key: 'show_thinking', label: '显示思考过程', type: 'bool'}, {key: 'max_context_messages', label: '最多上下文消息', type: 'int', nullable: true, min: 1},
-    {key: 'pycat_assistant_enabled', label: '使用 PyCat 助手提示', type: 'bool', help: 'Agent 模式始终启用；Chat 模式可以关闭。'}
-  ]), fieldset('生成参数', '留空表示继承模型档案的默认值。', llm, [
+  const content = node('div', {}, fieldset(tr("会话"), tr("仅应用于当前会话。"), settings, [
+    {key: 'session_instructions', label: tr("会话指令"), type: 'text'}, {key: 'memory_enabled', label: tr("启用记忆"), type: 'bool'},
+    {key: 'show_thinking', label: tr("显示思考过程"), type: 'bool'}, {key: 'max_context_messages', label: tr("最多上下文消息"), type: 'int', nullable: true, min: 1},
+    {key: 'pycat_assistant_enabled', label: tr("使用 PyCat 助手提示"), type: 'bool', help: tr("Agent 模式始终启用；Chat 模式可以关闭。")}
+  ]), fieldset(tr("生成参数"), tr("留空表示继承模型档案的默认值。"), llm, [
     {key: 'temperature', label: 'Temperature', type: 'float', nullable: true}, {key: 'top_p', label: 'Top P', type: 'float', nullable: true},
-    {key: 'max_tokens', label: '最大输出', type: 'int', nullable: true, min: 1}, {key: 'stream', label: '流式响应', type: 'bool'},
-    {key: 'reasoning_mode', label: '思考强度', options: ['inherit', 'off', 'on', 'auto', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']}
+    {key: 'max_tokens', label: tr("最大输出"), type: 'int', nullable: true, min: 1}, {key: 'stream', label: tr("流式响应"), type: 'bool'},
+    {key: 'reasoning_mode', label: tr("思考强度"), options: ['inherit', 'off', 'on', 'auto', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']}
   ]));
-  const restrictions = node('details', {}, node('summary', {}, '工具与频道'),
-    choices('允许的工具类别', categories, settings.tool_selection?.allowed_categories || categories.map(item => item[0]),
+  const restrictions = node('details', {}, node('summary', {}, tr("工具与频道")),
+    choices(tr("允许的工具类别"), categories, settings.tool_selection?.allowed_categories || categories.map(item => item[0]),
       values => { settings.tool_selection = {...settings.tool_selection, allowed_categories: values}; }),
-    fieldset('频道来源', '来源名称与频道配置一致；留空允许来源表示继承默认值。每行一项。', settings, [
-      {key: 'allowed_channel_sources', label: '允许来源', type: 'lines', nullable: true},
-      {key: 'trusted_channel_sources', label: '信任来源', type: 'lines'},
-      {key: 'channel_notice_policy', label: '来源提示', options: [{value: 'notice', label: '默认提醒'}, {value: 'strict', label: '严格限制未信任来源'}, {value: 'silent', label: '简洁提示'}]}
+    fieldset(tr("频道来源"), tr("来源名称与频道配置一致；留空允许来源表示继承默认值。每行一项。"), settings, [
+      {key: 'allowed_channel_sources', label: tr("允许来源"), type: 'lines', nullable: true},
+      {key: 'trusted_channel_sources', label: tr("信任来源"), type: 'lines'},
+      {key: 'channel_notice_policy', label: tr("来源提示"), options: [{value: 'notice', label: tr("默认提醒")}, {value: 'strict', label: tr("严格限制未信任来源")}, {value: 'silent', label: tr("简洁提示")}]}
     ]));
   content.append(restrictions);
   const error = node('p', {class: 'form-error', role: 'alert'}); content.append(error);
-  const save = button('保存', async () => {
+  const save = button(tr("保存"), async () => {
     const invalid = content.querySelector(':invalid'); if (invalid) { invalid.reportValidity(); return; }
     save.disabled = true;
     try {
@@ -397,11 +399,11 @@ async function sessionSettings() {
       closeModal(); await reloadSession();
     } catch (failure) { error.textContent = failure.message; } finally { save.disabled = false; }
   }, 'primary');
-  modal('会话设置', content, [button('取消', closeModal), save]);
+  modal(tr("会话设置"), content, [button(tr("取消"), closeModal), save]);
 }
 
 async function perform(name, initial = {}) {
-  const descriptor = state.operations[name]; if (!descriptor) throw Error('操作不可用：' + name);
+  const descriptor = state.operations[name]; if (!descriptor) throw Error(tr("操作不可用：") + name);
   const values = {session: state.session?.id, work_dir: state.session?.work_dir || '', expected_revision: state.session?.revision, ...initial};
   const fields = descriptor.parameters.filter(field => !(field.name in values && values[field.name] !== undefined && ['session', 'work_dir', 'expected_revision'].includes(field.name)));
   const run = async data => {
@@ -412,39 +414,39 @@ async function perform(name, initial = {}) {
     if (name.startsWith('sessions.')) await reloadSession();
   };
   if (!fields.length) return run({});
-  form(descriptor.label, fields.map(field => ({...field, type: /^(dict|list|bool)/.exec(field.type)?.[1] || field.type, label: field.name})), values, run, {label: '执行'});
+  form(descriptor.label, fields.map(field => ({...field, type: /^(dict|list|bool)/.exec(field.type)?.[1] || field.type, label: field.name})), values, run, {label: tr("执行")});
 }
 
 function resources(group = '') {
   if (!group) {
     const commands = [
-      {label: '新建会话', detail: '/new · Ctrl N', action: newSession},
-      {label: '继续会话', detail: '/resume', action: resumePicker},
-      {label: '选择模型', detail: '/model', action: () => openPanel('model')},
-      {label: '选择模式', detail: '/mode', action: () => openPanel('mode')},
-      {label: '工具与文件权限', detail: '/permissions', action: () => openPanel('permissions')},
-      {label: '重命名会话', detail: '/rename', action: rename},
-      {label: '会话设置', detail: '指令、生成参数、工具与频道', action: sessionSettings},
-      {label: '资料与记忆', detail: '阅读、下载、项目知识', action: openLibrary},
-      {label: '运行检查', detail: '过程与当前状态 · Ctrl J', action: async () => { await ensureSession(); await trace(api, state.session, perform); }},
-      {label: '设置', detail: '/config · 模型、工具与能力、消息通道', action: () => showConfig(api, settingsRefresh)},
-      {label: '导入会话', detail: 'PyCat JSON', action: () => $('#import-input').click()},
-      {label: '导出会话', detail: '/export', action: exportSession},
-      {label: '所有管理操作', detail: '搜索工具、进程、SSH 等高级操作', action: () => resources('*')}
+      {label: tr("新建会话"), detail: '/new · Ctrl N', action: newSession},
+      {label: tr("继续会话"), detail: '/resume', action: resumePicker},
+      {label: tr("选择模型"), detail: '/model', action: () => openPanel('model')},
+      {label: tr("选择模式"), detail: '/mode', action: () => openPanel('mode')},
+      {label: tr("工具与文件权限"), detail: '/permissions', action: () => openPanel('permissions')},
+      {label: tr("重命名会话"), detail: '/rename', action: rename},
+      {label: tr("会话设置"), detail: tr("指令、生成参数、工具与频道"), action: sessionSettings},
+      {label: tr("资料与记忆"), detail: tr("阅读、下载、项目知识"), action: openLibrary},
+      {label: tr("运行检查"), detail: tr("过程与当前状态 · Ctrl J"), action: async () => { await ensureSession(); await trace(api, state.session, perform); }},
+      {label: tr("设置"), detail: tr("/config · 模型、工具与能力、消息通道"), action: () => showConfig(api, settingsRefresh)},
+      {label: tr("导入会话"), detail: 'PyCat JSON', action: () => $('#import-input').click()},
+      {label: tr("导出会话"), detail: '/export', action: exportSession},
+      {label: tr("所有管理操作"), detail: tr("搜索工具、进程、SSH 等高级操作"), action: () => resources('*')}
     ];
-    picker('命令', commands, guarded(async item => { closeModal(); await item.action(); })); return;
+    picker(tr("命令"), commands, guarded(async item => { closeModal(); await item.action(); })); return;
   }
   if (['skills', 'channels', 'mcp', 'providers'].includes(group)) return showConfig(api, settingsRefresh, group);
   if (['memory', 'materials'].includes(group)) return openLibrary(group);
   const items = Object.entries(state.operations).filter(([name]) => !name.startsWith('input.') && !name.startsWith('config.') && (group === '*' || name.startsWith(group + '.')));
-  picker(group === '*' ? '所有管理操作' : '管理 ' + group, items.map(([name, descriptor]) => ({label: descriptor.label, detail: name, name})), guarded(item => perform(item.name)));
+  picker(group === '*' ? tr("所有管理操作") : tr("管理 ") + group, items.map(([name, descriptor]) => ({label: descriptor.label, detail: name, name})), guarded(item => perform(item.name)));
 }
 async function resumePicker() {
   const rows = await operation('sessions.list', {limit: 200});
-  picker('继续会话', rows.map(row => ({label: row.title || '未命名会话', detail: row.work_dir || '个人空间', id: row.id})), guarded(async item => { closeModal(); await selectSession(item.id); }));
+  picker(tr("继续会话"), rows.map(row => ({label: row.title || tr("未命名会话"), detail: row.work_dir || tr("个人空间"), id: row.id})), guarded(async item => { closeModal(); await selectSession(item.id); }));
 }
 async function rename() {
-  await ensureSession(); form('重命名会话', [{name: 'title', label: '名称', required: true}], {title: state.session.title}, async ({title}) => {
+  await ensureSession(); form(tr("重命名会话"), [{name: 'title', label: tr("名称"), required: true}], {title: state.session.title}, async ({title}) => {
     await operation('sessions.rename', {session: state.session.id, title}); closeModal(); await reloadSession();
   });
 }
@@ -455,14 +457,14 @@ async function exportSession(format = 'markdown') {
 }
 async function sessionMenu() {
   await ensureSession();
-  picker('会话操作', [
-    {label: '重命名', action: rename}, {label: state.session.pinned ? '取消置顶' : '置顶', action: async () => { await operation('sessions.pin', {session: state.session.id, pinned: !state.session.pinned}); closeModal(); await reloadSession(); }},
-    {label: '会话设置', action: sessionSettings},
-    {label: '导出', action: () => picker('导出格式', ['markdown', 'json', 'html', 'docx'].map(value => ({label: value})), guarded(async item => { await exportSession(item.label); closeModal(); }))},
-    {label: '导入', action: () => { closeModal(); $('#import-input').click(); }},
-    {label: '压缩上下文', action: () => perform('sessions.compact')},
-    {label: '归档', action: async () => { await operation('sessions.archive', {session: state.session.id}); closeModal(); state.session = null; await refreshSessions(); renderSession(); }},
-    {label: '删除', action: () => modal('删除会话', node('p', {}, '会话及其消息将被删除。此操作无法撤销。'), [button('取消', closeModal), button('删除', guarded(async () => { await operation('sessions.delete', {session: state.session.id}); closeModal(); state.session = null; renderSession(); await refreshSessions(); }), 'danger')])}
+  picker(tr("会话操作"), [
+    {label: tr("重命名"), action: rename}, {label: state.session.pinned ? tr("取消置顶") : tr("置顶"), action: async () => { await operation('sessions.pin', {session: state.session.id, pinned: !state.session.pinned}); closeModal(); await reloadSession(); }},
+    {label: tr("会话设置"), action: sessionSettings},
+    {label: tr("导出"), action: () => picker(tr("导出格式"), ['markdown', 'json', 'html', 'docx'].map(value => ({label: value})), guarded(async item => { await exportSession(item.label); closeModal(); }))},
+    {label: tr("导入"), action: () => { closeModal(); $('#import-input').click(); }},
+    {label: tr("压缩上下文"), action: () => perform('sessions.compact')},
+    {label: tr("归档"), action: async () => { await operation('sessions.archive', {session: state.session.id}); closeModal(); state.session = null; await refreshSessions(); renderSession(); }},
+    {label: tr("删除"), action: () => modal(tr("删除会话"), node('p', {}, tr("会话及其消息将被删除。此操作无法撤销。")), [button(tr("取消"), closeModal), button(tr("删除"), guarded(async () => { await operation('sessions.delete', {session: state.session.id}); closeModal(); state.session = null; renderSession(); await refreshSessions(); }), 'danger')])}
   ], guarded(item => item.action()));
 }
 
@@ -473,7 +475,7 @@ async function complete() {
   const result = await operation('input.complete', {text, cursor, utf16: true, session});
   if (version !== completionVersion || session !== (state.session?.id || null) || text !== $('#composer').value || cursor !== $('#composer').selectionStart) return;
   const popup = $('#completions'); popup.hidden = !result.candidates.length;
-  popup.replaceChildren(...result.candidates.map(item => button([node('span', {}, item.label), node('small', {}, {file: '文件', agent: 'Agent', channel: '频道', run: '运行', content: '资料', command: '命令'}[item.kind] || item.kind)], guarded(async () => {
+  popup.replaceChildren(...result.candidates.map(item => button([node('span', {}, item.label), node('small', {}, {file: tr("文件"), agent: 'Agent', channel: tr("频道"), run: tr("运行"), content: tr("资料"), command: tr("命令")}[item.kind] || item.kind)], guarded(async () => {
     if (session !== (state.session?.id || null) || text !== $('#composer').value || cursor !== $('#composer').selectionStart) { popup.hidden = true; return; }
     const start = Array.from(text).slice(0, result.query.start_pos).join('').length, end = Array.from(text).slice(0, result.query.end_pos).join('').length;
     let insert = item.insert_text || '';
@@ -494,23 +496,23 @@ async function upload(files) {
   else {
     const draft = state.drafts.get(session.id) || {text: '', refs: [], mentions: []};
     draft.refs.push(...refs); state.drafts.set(session.id, draft);
-    toast('附件已保留在原会话草稿');
+    toast(tr("附件已保留在原会话草稿"));
   }
   $('#file-input').value = '';
 }
 
 async function boot() {
   if (!api.token) {
-    form('连接工作台', [{name: 'token', label: '访问令牌', secret: true, required: true}], {}, async ({token}) => {
+    form(tr("连接工作台"), [{name: 'token', label: tr("访问令牌"), secret: true, required: true}], {}, async ({token}) => {
       api.token = token; sessionStorage.setItem('pycat-token', token); await boot(); closeModal();
-    }, {label: '连接', description: '使用 pycat serve 输出的访问链接或令牌。'}); return;
+    }, {label: tr("连接"), description: tr("使用 pycat serve 输出的访问链接或令牌。")}); return;
   }
   let bootstrap;
   try { bootstrap = await api.json('/bootstrap'); }
   catch (error) { if (error.status === 401) { api.token = ''; sessionStorage.removeItem('pycat-token'); await boot(); return; } throw error; }
   state.operations = bootstrap.operations; state.commands = bootstrap.commands;
   await refreshConfiguration();
-  $('#connection-label').textContent = '已连接 · ' + bootstrap.version;
+  $('#connection-label').textContent = tr("已连接 · {version}", {version: bootstrap.version});
   for (const item of bootstrap.runs.filter(run => !run.done)) {
     const run = {id: item.run_id, session: item.session, pending: new Map(item.pending.map(value => [value.id, value])), text: '', done: false};
     state.runs.set(run.id, run); observe(run);
@@ -534,14 +536,14 @@ $('#context').onclick = guarded(async () => { await ensureSession(); await conte
 $('#toggle-inspector').onclick = toggleInspector;
 $('#state-version').onclick = guarded(async () => { await ensureSession(); await trace(api, state.session, perform, 'state'); });
 $('#cancel-edit').onclick = () => { state.edit = null; $('#edit-status').hidden = true; $('#composer').value = ''; saveDraft(); };
-$('#project-new').onclick = () => form('添加项目', [{name: 'work_dir', label: '项目目录或 SSH 工作区', required: true}], {}, async ({work_dir}) => { await newSession(work_dir); closeModal(); });
+$('#project-new').onclick = () => form(tr("添加项目"), [{name: 'work_dir', label: tr("项目目录或 SSH 工作区"), required: true}], {}, async ({work_dir}) => { await newSession(work_dir); closeModal(); });
 for (const item of document.querySelectorAll('[data-inspector]')) item.onclick = () => {
   state.inspectorTab = item.dataset.inspector; document.querySelectorAll('[data-inspector]').forEach(value => value.classList.toggle('active', value === item)); guarded(refreshInspector)();
 };
 $('#workspace').onclick = guarded(async () => {
-  await ensureSession(); form('工作区', [{name: 'work_dir', label: '本地目录或 SSH 工作区', required: false, default: ''}], {work_dir: state.session.work_dir}, async values => {
+  await ensureSession(); form(tr("工作区"), [{name: 'work_dir', label: tr("本地目录或 SSH 工作区"), required: false, default: ''}], {work_dir: state.session.work_dir}, async values => {
     const result = await operation('workspace.select', {session: state.session.id, ...values});
-    if (result.ok === false || result.error) throw Error(result.error || '无法切换工作区'); closeModal(); await reloadSession();
+    if (result.ok === false || result.error) throw Error(result.error || tr("无法切换工作区")); closeModal(); await reloadSession();
   });
 });
 $('#attach').onclick = () => $('#file-input').click();

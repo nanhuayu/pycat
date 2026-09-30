@@ -31,7 +31,7 @@ class ManageArtifactTool(BaseTool):
             "properties": {
                 "action": {"type": "string", "enum": ["list", "read", "upsert", "append", "update", "delete"]},
                 "name": {"type": "string", "description": "Stable artifact name; required except for list."},
-                "content": {"type": "string", "description": "Required for upsert or append; omitted for update."},
+                "content": {"type": "string", "description": "Required for upsert or append. For update, omit or leave empty; nonempty content requires upsert."},
                 "kind": {"type": "string", "description": "Optional type such as plan, exploration, report, or note."},
                 "status": {"type": "string", "description": "Optional lifecycle status such as draft, approved, or final."},
             },
@@ -69,7 +69,7 @@ class ManageArtifactTool(BaseTool):
         if action in {"upsert", "append"} and not content.strip():
             return ToolResult("content is required for upsert or append.", is_error=True)
         if action == "update":
-            if "content" in arguments:
+            if content.strip():
                 return ToolResult("update preserves the body; use upsert to replace content.", is_error=True)
             if "kind" not in arguments and "status" not in arguments:
                 return ToolResult("kind or status is required for update.", is_error=True)

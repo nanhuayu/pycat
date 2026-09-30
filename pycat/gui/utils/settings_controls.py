@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QPushButton,
     QSizePolicy,
     QSpinBox,
     QTextEdit,
@@ -155,7 +156,7 @@ class SettingsFormLayout(QFormLayout):
     a full-width field. ``info=True`` marks non-editable explanatory rows.
     """
 
-    _RIGHT_ALIGNED_TYPES = (QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox, QLabel)
+    _RIGHT_ALIGNED_TYPES = (QComboBox, QLineEdit, QSpinBox, QDoubleSpinBox, QLabel, QPushButton)
     _STRETCH_TYPES = (QTextEdit, QPlainTextEdit, SettingsToggle)
 
     def __init__(self, parent=None, *, stacked_labels=False) -> None:
@@ -177,6 +178,10 @@ class SettingsFormLayout(QFormLayout):
             super().addRow(*args)
             return
         mark_settings_controls(field)
+        if isinstance(field, QPushButton):
+            field.setFixedHeight(SETTINGS_SINGLE_LINE_HEIGHT)
+            field.setMinimumWidth(64)
+            field.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
 
         card = _RowCard(info=info)
         stacked = (self._stacked_labels or isinstance(field, (QTextEdit, QPlainTextEdit)) or bool(field.findChildren(QCheckBox))) and (label is not None or bool(label_text))

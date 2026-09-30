@@ -12,6 +12,7 @@ from textual.widgets import Label, TextArea
 
 from pycat.core.app.client import LocalClient
 from pycat.core.content.mime import is_text_mime
+from pycat.core.i18n import Translator
 from pycat.models.contracts.agent import MentionRef, RunRequest, TurnRevision
 from pycat.tui.composer import InputPanel, single_line
 from pycat.tui.panels import Form, Interaction, Picker, Reader
@@ -42,6 +43,7 @@ class WorkbenchApp(App):
 
     def __init__(self, *, services=None, client=None, session=None, work_dir='', initial_prompt='', open_sessions=False):
         super().__init__()
+        self.tr = Translator()
         self.body = Vertical(id='main')
         self.client = client or LocalClient(services)
         self.session, self.work_dir = session, work_dir
@@ -71,6 +73,7 @@ class WorkbenchApp(App):
 
     async def on_mount(self):
         initial = await self.client.bootstrap()
+        self.tr = Translator(initial.get('language', 'zh_CN'))
         self.catalog = initial['operations']
         for item in initial.get('runs', []):
             if not item['done']:
@@ -91,6 +94,7 @@ class WorkbenchApp(App):
 
     def on_resize(self, event):
         if self.body.is_mounted:
+            self.body.query_one(Transcript).welcome(self.work_dir)
             self.refresh_status()
 
     def action_revise(self):
@@ -98,26 +102,26 @@ class WorkbenchApp(App):
 
     async def revise(self):
         if not self.session or self.active_run():
-            self.notify('请先选择一个空闲会话')
+            self.notify(self.tr('请先选择一个空闲会话'))
             return
         messages = [item for item in self.session['messages'] if item['role'] == 'user']
-        identity = await self.push_screen_wait(Picker('选择消息', [(item['id'], item['content'][:100]) for item in messages]))
+        identity = await self.push_screen_wait(Picker(self.tr('选择消息'), [(item['id'], item['content'][:100]) for item in messages]))
         if not identity:
             return
         message = next(item for item in messages if item['id'] == identity)
-        action = await self.push_screen_wait(Picker('消息操作', [('edit', '编辑并重发'), ('retry', '重试'), ('delete', '删除此轮及后续消息')]))
+        action = await self.push_screen_wait(Picker(self.tr('消息操作'), [('edit', self.tr('编辑并重发')), ('retry', self.tr('重试')), ('delete', self.tr('删除此轮及后续消息'))]))
         if not action:
             return
         try:
             if action == 'delete':
-                confirm = await self.push_screen_wait(Picker('确认删除此轮及后续消息', [('cancel', '取消'), ('delete', '删除')]))
+                confirm = await self.push_screen_wait(Picker(self.tr('确认删除此轮及后续消息'), [('cancel', self.tr('取消')), ('delete', self.tr('删除'))]))
                 if confirm == 'delete':
                     await self.client.operation('sessions.remove', {'session': self.session['id'], 'message': identity, 'expected_revision': self.session['revision']})
                     await self.select_session(self.session['id'])
                 return
             text = ''
             if action == 'edit':
-                edited = await self.push_screen_wait(Form('编辑消息', [{'name': 'text', 'type': 'text', 'required': True}], {'text': message['content']}))
+                edited = await self.push_screen_wait(Form(self.tr('编辑消息'), [{'name': 'text', 'type': 'text', 'required': True}], {'text': message['content']}))
                 if edited is None:
                     return
                 text = edited['text']
@@ -180,16 +184,16 @@ class WorkbenchApp(App):
 
     def refresh_status(self):
         session = self.session or {}
-        project = self.work_dir.replace('\\', '/').rstrip('/').rsplit('/', 1)[-1] or '未选择项目'
-        self.body.query_one('#session-title', Label).update(single_line('PyCat · ' + project + ' · ' + (session.get('title') or '新会话'), self.size.width - 2))
-        label = f"{session.get('model') or 'F2 选择模型'} · {session.get('mode', 'chat')} · 权限 {session.get('settings', {}).get('tool_approval', 'default')}"
+        project = self.work_dir.replace('\\', '/').rstrip('/').rsplit('/', 1)[-1] or self.tr('未选择项目')
+        self.body.query_one('#session-title', Label).update(single_line('PyCat · ' + project + ' · ' + (session.get('title') or self.tr('新会话')), self.size.width - 2))
+        label = self.tr('{value0} · {value1} · 权限 {value2}', value0=session.get('model') or self.tr('F2 选择模型'), value1=session.get('mode', 'chat'), value2=session.get('settings', {}).get('tool_approval', 'default'))
         self.body.query_one('#status-line', Label).update(single_line(label, self.size.width - 2))
         self.on_input_panel_candidates_changed()
 
     def refresh_attachments(self):
         label = self.body.query_one('#attachments', Label)
         values = [item.get('path', '') for item in self.attachments] + self.references
-        label.update(Text('附件 / 引用：' + ' · '.join(values)))
+        label.update(Text(self.tr('附件 / 引用：') + ' · '.join(values)))
         label.display = bool(values)
 
     def activity(self, text):
@@ -200,8 +204,8 @@ class WorkbenchApp(App):
         # A queued child message can arrive while the screen is being torn down.
         if not self.body.query(InputPanel) or not self.body.query('#input-hints'):
             return
-        text = '↑↓ 选择 · Tab 补全 · Enter 确认 · Esc 收起' if self.body.query_one(InputPanel).has_candidates else (
-            'Enter 引导 · Esc 停止 · F1 帮助' if self.active_run() else 'Enter 发送 · Ctrl+J 换行 · / 命令 · @ 引用 · F1 帮助')
+        text = self.tr('↑↓ 选择 · Tab 补全 · Enter 确认 · Esc 收起') if self.body.query_one(InputPanel).has_candidates else (
+            self.tr('Enter 引导 · Esc 停止 · F1 帮助') if self.active_run() else self.tr('Enter 发送 · Ctrl+J 换行 · / 命令 · @ 引用 · F1 帮助'))
         self.body.query_one('#input-hints', Label).update(single_line(text, self.size.width - 2))
 
     def on_input_panel_submitted(self):
@@ -236,17 +240,17 @@ class WorkbenchApp(App):
     async def open_content(self, identity, ref):
         mime = ref.get('mime') or ''
         if mime and not is_text_mime(mime):
-            self.push_screen(Reader(ref.get('name', '资料'), {'ref': ref['ref'], 'mime': mime,
-                '说明': '此内容可在桌面或 Web 资料视图中打开；终端不将二进制文件解码为文本。'}))
+            self.push_screen(Reader(ref.get('name', self.tr('资料')), {'ref': ref['ref'], 'mime': mime,
+                '说明': self.tr('此内容可在桌面或 Web 资料视图中打开；终端不将二进制文件解码为文本。')}))
             return
         async def load(offset):
             return await self.client.operation('materials.read', {'session': identity, 'ref': ref['ref'], 'offset': offset})
         try:
             data = await load(0)
-            self.push_screen(Reader(data.get('name') or '资料', data['text'], loader=load,
+            self.push_screen(Reader(data.get('name') or self.tr('资料'), data['text'], loader=load,
                 has_more=data.get('has_more', False), next_offset=data.get('next_offset', 65536)))
         except Exception as exc:
-            self.notify(str(exc), title='无法打开资料', severity='error')
+            self.notify(str(exc), title=self.tr('无法打开资料'), severity='error')
 
     async def new_session(self):
         session = await self.client.operation('sessions.create', {'work_dir': self.work_dir})
@@ -271,7 +275,7 @@ class WorkbenchApp(App):
         try:
             if (active := self.active_run()) and not text.startswith('/'):
                 if self.attachments or self.references:
-                    self.notify('运行中请发送文字引导；附件可在下一轮发送', severity='warning')
+                    self.notify(self.tr('运行中请发送文字引导；附件可在下一轮发送'), severity='warning')
                     return
                 result = await self.client.guidance(active, text)
                 if result['accepted']:
@@ -293,7 +297,7 @@ class WorkbenchApp(App):
                 self.runs[run] = self.session['id'] if self.session else ''
                 self.stream_text[run] = ''
                 self.run_worker(self.observe(run), group=run)
-                self.activity('正在运行 · Esc 停止 · 输入文字补充引导')
+                self.activity(self.tr('正在运行 · Esc 停止 · 输入文字补充引导'))
                 self.on_input_panel_candidates_changed()
                 if self.session:
                     await self.select_session(self.session['id'])
@@ -307,7 +311,7 @@ class WorkbenchApp(App):
                 if result.get('message'):
                     self.push_screen(Reader('PyCat', result['message']))
         except Exception as exc:
-            self.notify(str(exc), title='未能发送', severity='error', timeout=10)
+            self.notify(str(exc), title=self.tr('未能发送'), severity='error', timeout=10)
         finally:
             self._submitting = False
 
@@ -325,8 +329,8 @@ class WorkbenchApp(App):
                         data = event.get('data') or {}
                         tools = self.live_tools.setdefault(run, {})
                         key = data.get('tool_call_id') or event.get('root_tool_call_id') or str(event.get('sequence', ''))
-                        status = '执行中' if event['kind'] == 'tool_start' else '失败' if data.get('is_error') else '已拒绝' if data.get('allowed') is False else '完成'
-                        tools[key] = f"{status} · {event.get('tool_name') or data.get('tool_name') or '工具'} · {str(data.get('summary') or '')[:160]}"
+                        status = self.tr('执行中') if event['kind'] == 'tool_start' else self.tr('失败') if data.get('is_error') else self.tr('已拒绝') if data.get('allowed') is False else self.tr('完成')
+                        tools[key] = f"{status} · {event.get('tool_name') or data.get('tool_name') or self.tr('工具')} · {str(data.get('summary') or '')[:160]}"
                         if len(tools) > 32:
                             del tools[next(iter(tools))]
                 elif event['type'] == 'interaction':
@@ -350,7 +354,7 @@ class WorkbenchApp(App):
                             self.notify(event['final']['error'], severity='error')
                 elif event['type'] == 'final':
                     if event.get('data') is not None:
-                        self.push_screen(Reader('操作结果', event['data']))
+                        self.push_screen(Reader(self.tr('操作结果'), event['data']))
                     identity = event.get('conversation_id') or self.runs.get(run)
                     self.runs.pop(run, None)
                     self.stream_text.pop(run, None)
@@ -425,25 +429,24 @@ class WorkbenchApp(App):
         self.body.query_one(InputPanel).trigger_mention()
 
     def action_help(self):
-        shortcuts = '\n'.join(f'- **{key}**：{description}' for key, _, description in self.BINDINGS)
-        self.push_screen(Reader('终端帮助', 'Enter 发送 / 引导；Ctrl+J 换行；粘贴不会自动发送。\n\n'
-            '输入 `/` 选择命令，`@` 添加带类型的引用。候选开启时 ↑↓ 选择、Tab 补全、Enter 确认、Esc 收起。\n\n' + shortcuts))
+        shortcuts = '\n'.join(f'- **{key}**: {self.tr(description)}' for key, _, description in self.BINDINGS)
+        self.push_screen(Reader(self.tr('终端帮助'), self.tr('Enter 发送 / 引导；Ctrl+J 换行；粘贴不会自动发送。\n\n输入 `/` 选择命令，`@` 添加带类型的引用。候选开启时 ↑↓ 选择、Tab 补全、Enter 确认、Esc 收起。\n\n') + shortcuts))
 
     async def pick_operation(self):
-        choice = await self.push_screen_wait(Picker('所有操作', [(name, data['label'] + ' · ' + name) for name, data in self.catalog.items()]))
+        choice = await self.push_screen_wait(Picker(self.tr('所有操作'), [(name, self.tr(data['label']) + ' · ' + name) for name, data in self.catalog.items()]))
         if choice:
             await self.perform(choice)
 
     async def perform(self, name):
         if name not in self.catalog:
-            self.notify('此操作尚不可用', severity='warning')
+            self.notify(self.tr('此操作尚不可用'), severity='warning')
             return
         definition = self.catalog[name]
         preset = {'session': self.session['id'] if self.session else None, 'work_dir': self.work_dir,
                   'expected_revision': self.session.get('revision') if self.session else None}
         values = {**preset, **self._form_drafts.get(name, {})}
         fields = definition['parameters']
-        data = await self.push_screen_wait(Form(definition['label'], fields, values)) if fields else {}
+        data = await self.push_screen_wait(Form(self.tr(definition['label']), fields, values)) if fields else {}
         if data is None:
             return
         self._form_drafts[name] = data
@@ -455,30 +458,30 @@ class WorkbenchApp(App):
                 self.stream_text[run] = ''
                 self.run_worker(self.observe(run), group='observe-' + run)
             else:
-                self.push_screen(Reader(definition['label'], result))
+                self.push_screen(Reader(self.tr(definition['label']), result))
             if self.session:
                 await self.select_session(self.session['id'])
         except Exception as exc:
-            self.notify(str(exc), title='操作失败；草稿已保留', severity='error', timeout=12)
+            self.notify(str(exc), title=self.tr('操作失败；草稿已保留'), severity='error', timeout=12)
 
     async def configure(self):
         view = await self.client.operation('config.read', {})
-        labels = {'app_settings': '通用与运行设置', 'providers': '模型与服务商', 'mcp_servers': 'MCP', 'modes': '模式与 Agent', 'search_config': '搜索'}
-        domain = await self.push_screen_wait(Picker('设置', list(labels.items())))
+        labels = {'app_settings': self.tr('通用与运行设置'), 'providers': self.tr('模型与服务商'), 'mcp_servers': 'MCP', 'modes': self.tr('模式与 Agent'), 'search_config': self.tr('搜索')}
+        domain = await self.push_screen_wait(Picker(self.tr('设置'), list(labels.items())))
         if not domain:
             return
         field = {'name': 'value', 'type': 'list' if isinstance(view['values'][domain], list) else 'dict', 'required': True}
-        draft = await self.push_screen_wait(Form(labels[domain], [field], {'value': view['values'][domain]}, submit='保存'))
+        draft = await self.push_screen_wait(Form(labels[domain], [field], {'value': view['values'][domain]}, submit=self.tr('保存')))
         if draft:
             try:
                 result = await self.client.operation('config.update', {'patch': {domain: draft['value']}, 'expected_revision': view['revision']})
                 if not result['ok']:
-                    self.push_screen(Reader('部分设置未保存', result))
+                    self.push_screen(Reader(self.tr('部分设置未保存'), result))
                 else:
-                    self.notify('设置已保存')
+                    self.notify(self.tr('设置已保存'))
             except Exception as exc:
                 self._form_drafts['config.update'] = {'patch': {domain: draft['value']}, 'expected_revision': view['revision']}
-                self.notify(str(exc), title='保存失败；草稿已保留', severity='error')
+                self.notify(str(exc), title=self.tr('保存失败；草稿已保留'), severity='error')
 
     async def open_panel(self, panel):
         self.body.query_one(InputPanel).dismiss_candidates()
@@ -490,7 +493,7 @@ class WorkbenchApp(App):
                 try:
                     await self.select_session(choice)
                 except Exception as exc:
-                    self.notify(str(exc), title='无法恢复会话', severity='error')
+                    self.notify(str(exc), title=self.tr('无法恢复会话'), severity='error')
             self.body.query_one('#composer', TextArea).focus()
             return
         if panel == 'config':
@@ -515,22 +518,22 @@ class WorkbenchApp(App):
             if self.session:
                 try:
                     value = await self.client.operation('sessions.context' if panel == 'context' else 'sessions.read', {'session': self.session['id']})
-                    self.push_screen(Reader('上下文预算' if panel == 'context' else '会话状态', value))
+                    self.push_screen(Reader(self.tr('上下文预算') if panel == 'context' else self.tr('会话状态'), value))
                 except Exception as exc:
                     self.notify(str(exc), severity='error')
             else:
-                self.notify('请先开始或恢复一个会话')
+                self.notify(self.tr('请先开始或恢复一个会话'))
             return
         mapping = {'mcp': 'mcp.list', 'channels': 'channels.list',
                    'permissions': 'sessions.permissions', 'doctor': 'doctor', 'rename': 'sessions.rename', 'export': 'sessions.export'}
         if panel == 'copy' and self.session:
             self.copy_to_clipboard(next((m['content'] for m in reversed(self.session['messages']) if m['role'] == 'assistant'), ''))
-            self.notify('已复制')
+            self.notify(self.tr('已复制'))
         elif panel in mapping:
             await self.perform(mapping[panel])
 
     async def attach(self):
-        data = await self.push_screen_wait(Form('添加附件', [{'name': 'path', 'label': '本地文件路径', 'required': True}]))
+        data = await self.push_screen_wait(Form(self.tr('添加附件'), [{'name': 'path', 'label': self.tr('本地文件路径'), 'required': True}]))
         if data:
             self.attachments.append({'path': data['path']})
             self.refresh_attachments()

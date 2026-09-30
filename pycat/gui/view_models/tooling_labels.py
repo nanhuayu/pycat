@@ -40,6 +40,7 @@ _BUILTIN_NAMES = {
     'file__ocr': QT_TRANSLATE_NOOP("ToolingLabels", '提取图片文字'),
     'file__patch': QT_TRANSLATE_NOOP("ToolingLabels", '应用补丁'),
     'file__read': QT_TRANSLATE_NOOP("ToolingLabels", '读取文件'),
+    'file__view': QT_TRANSLATE_NOOP("ToolingLabels", '查看图像'),
     'file__search': QT_TRANSLATE_NOOP("ToolingLabels", '搜索文件'),
     'file__write': QT_TRANSLATE_NOOP("ToolingLabels", '写入文件'),
     'python__exec': QT_TRANSLATE_NOOP("ToolingLabels", '运行 Python'),

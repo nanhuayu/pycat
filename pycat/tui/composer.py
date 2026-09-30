@@ -175,16 +175,16 @@ class InputPanel(Vertical):
         except Exception as exc:
             if generation == self._generation and self.is_mounted:
                 self.dismiss_candidates()
-                self.notify(str(exc), title='补全暂不可用', severity='warning')
+                self.notify(str(exc), title=self.app.tr('补全暂不可用'), severity='warning')
 
     def render_candidates(self):
         listing = self.query_one('#completions', OptionList)
         selected = listing.highlighted or 0
         width = max(1, self.size.width - 2)
-        labels = {'command': '命令', 'file': '文件', 'agent': 'Agent', 'run': '任务', 'channel': '频道', 'content': '资料'}
+        labels = {'command': self.app.tr('命令'), 'file': self.app.tr('文件'), 'agent': 'Agent', 'run': self.app.tr('任务'), 'channel': self.app.tr('频道'), 'content': self.app.tr('资料')}
         rows = []
         for item in self.candidates:
-            kind = '目录' if not item['terminal'] else labels.get(item['kind'], item['kind'])
+            kind = self.app.tr('目录') if not item['terminal'] else labels.get(item['kind'], item['kind'])
             label, _, description = item['label'].partition(' - ')
             row = single_line(label, max(1, width - 9) if width < 65 else min(30, width // 3))
             if width >= 65:

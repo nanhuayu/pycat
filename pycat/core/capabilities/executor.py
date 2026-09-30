@@ -13,6 +13,12 @@ from pycat.core.capabilities.validation import output_schema_contract, parse_and
 from pycat.core.content.images import decode_image
 from pycat.core.llm.images import with_cancellation
 from pycat.core.llm.model_selection import ResolvedModelSelection, resolve_model_target
+from pycat.core.llm.reasoning import (
+    capability_reasoning_mode,
+    omit_reasoning_parameters,
+    reasoning_parameters_signature,
+    rejected_reasoning_parameters,
+)
 from pycat.core.prompts.renderer import PromptRenderer
 from pycat.models.contracts.agent import RunPolicy, RunStatus
 from pycat.models.contracts.capability import CapabilitiesConfig, CapabilityConfig, ImageGenerationOptions
@@ -68,6 +74,7 @@ class CapabilityExecutor:
         self._provider_catalog_provider = provider_catalog_provider or (lambda: ())
         self._default_auxiliary_model = str(default_auxiliary_model or "").strip()
         self._agent_runtime: Any = None
+        self._unsupported_reasoning_parameters: dict[tuple, tuple[tuple[str, ...], ...]] = {}
 
     def bind_agent_runtime(self, runtime: Any) -> None:
         self._agent_runtime = runtime
@@ -80,6 +87,7 @@ class CapabilityExecutor:
     ) -> None:
         self.capabilities = CapabilitiesManager.merge(default_capabilities_config(), capabilities)
         self._default_auxiliary_model = str(default_auxiliary_model or "").strip()
+        self._unsupported_reasoning_parameters.clear()
 
     def get_capability(
         self,
@@ -223,21 +231,14 @@ class CapabilityExecutor:
             api_messages,
             tools=[],
             llm_config=request_config,
-            reasoning_mode="off",
-        )
-        response = await with_cancellation(self.client.send_request(
-            provider=execution_provider,
-            request_body=request_body,
-            show_thinking=False,
-            debug_trace=getattr(call_context, "debug_trace", None),
-            debug_turn=int(getattr(getattr(call_context, "debug_trace", None), "turn", 0) or 0),
-            debug_purpose=str(
-                getattr(getattr(call_context, "debug_trace", None), "default_purpose", "") or "capability"
+            reasoning_mode=capability_reasoning_mode(
+                profile, prefer_low=capability.id in {"compress", "memory_review", "wiki_synthesize"},
             ),
-            conversation_id=str(temp_conversation.id or ""),
-            model_hint=model,
-            cancel_event=getattr(call_context, "cancel_event", None),
-        ), getattr(call_context, "cancel_event", None))
+        )
+        response = await self._send_single_turn(
+            provider=execution_provider, request_body=request_body, context=call_context,
+            conversation_id=str(temp_conversation.id or ""), model=model,
+        )
         metadata = dict(getattr(response, "metadata", {}) or {})
         content = str(getattr(response, "content", "") or "")
         if metadata.get("runtime_error"):
@@ -261,6 +262,36 @@ class CapabilityExecutor:
             model=str(metadata.get("model") or model),
             metadata=metadata,
         )
+
+    async def _send_single_turn(self, *, provider: Provider, request_body: dict[str, Any],
+                                context: CapabilityRunContext, conversation_id: str, model: str) -> Message:
+        profile = provider.effective_model_profile(model)
+        key = (provider.id, provider.get_chat_endpoint(), provider.api_type, model,
+               profile.reasoning_codec, tuple(profile.reasoning_options), reasoning_parameters_signature(request_body))
+        omitted = self._unsupported_reasoning_parameters.get(key, ())
+        body = omit_reasoning_parameters(request_body, omitted)
+        trace = getattr(context, "debug_trace", None)
+        cancel_event = getattr(context, "cancel_event", None)
+        for attempt in range(2):
+            response = await with_cancellation(self.client.send_request(
+                provider=provider, request_body=body, show_thinking=False,
+                debug_trace=trace, debug_turn=int(getattr(trace, "turn", 0) or 0),
+                debug_purpose=str(getattr(trace, "default_purpose", "") or "capability"),
+                conversation_id=conversation_id, model_hint=model, cancel_event=cancel_event,
+            ), cancel_event)
+            metadata = dict(getattr(response, "metadata", {}) or {})
+            rejected = rejected_reasoning_parameters(body, str(getattr(response, "content", "") or ""), metadata)
+            if attempt or not rejected:
+                break
+            omitted = tuple(dict.fromkeys((*omitted, *rejected)))
+            self._unsupported_reasoning_parameters[key] = omitted
+            body = omit_reasoning_parameters(body, rejected)
+            logger.warning("Capability model %s rejected %s; retrying once without those parameters",
+                           model, ", ".join(".".join(path) for path in rejected))
+        response.metadata = {**metadata, "capability_request_count": attempt + 1}
+        if omitted:
+            response.metadata["omitted_reasoning_parameters"] = [".".join(path) for path in omitted]
+        return response
 
     async def _run_agent_loop(
         self,

@@ -1,13 +1,16 @@
 """In-process client port. Views consume projections and explicit application actions."""
 import uuid
 
+from pycat.core.i18n import normalize_language
+
 
 class LocalClient:
     def __init__(self, services, *, source='tui'):
         self.services, self.source = services, source
 
     async def bootstrap(self):
-        return {'operations': self.services.workbench.catalog(), 'runs': self.services.interactive.list()}
+        return {'operations': self.services.workbench.catalog(), 'runs': self.services.interactive.list(),
+                'language': normalize_language(self.services.settings_update_service.load().get('language'))}
 
     async def operation(self, name, arguments):
         return await self.services.interactive.operation(name, arguments, request_id=uuid.uuid4().hex, source=self.source)
