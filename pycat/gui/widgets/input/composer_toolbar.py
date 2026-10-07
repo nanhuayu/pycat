@@ -91,6 +91,7 @@ class ComposerToolbar(QWidget):
         self._access_enabled = False
         self._is_streaming = False
         self._has_draft = False
+        self._can_resume = False
         self._primary_enabled = True
         self._primary_visual_key: tuple[str, str, str] | None = None
         self._context_busy = False
@@ -423,15 +424,17 @@ class ComposerToolbar(QWidget):
         self._sync_access_btn_enabled()
         self._sync_primary_action()
 
-    def set_primary_action_state(self, *, has_draft: bool, enabled: bool) -> None:
+    def set_primary_action_state(self, *, has_draft: bool, enabled: bool, can_resume: bool = False) -> None:
         normalized_draft = bool(has_draft)
         normalized_enabled = bool(enabled)
         if (
             normalized_draft == self._has_draft
             and normalized_enabled == self._primary_enabled
+            and bool(can_resume) == self._can_resume
         ):
             return
         self._has_draft = normalized_draft
+        self._can_resume = bool(can_resume)
         self._primary_enabled = normalized_enabled
         self.primary_action_btn.setEnabled(normalized_enabled)
         self._sync_primary_action()
@@ -446,9 +449,14 @@ class ComposerToolbar(QWidget):
 
     def _sync_primary_action(self) -> None:
         stopping = self._is_streaming and not self._has_draft
-        action = "stop" if stopping else (
-            "guide" if self._is_streaming else ("revision" if self._revision_active else "send")
-        )
+        if self._is_streaming:
+            action = "stop" if stopping else "guide"
+        elif self._revision_active:
+            action = "revision"
+        elif self._can_resume and not self._has_draft:
+            action = "resume"
+        else:
+            action = "send"
         theme = resolve_theme(self)
         accent = resolve_accent(self)
         visual_key = (action, theme, accent)
@@ -490,6 +498,9 @@ class ComposerToolbar(QWidget):
             tone = "primary"
         elif self._revision_active:
             tooltip = QCoreApplication.translate('ComposerToolbar', "替换并重试") + send_hint
+            tone = "primary"
+        elif action == "resume":
+            tooltip = QCoreApplication.translate('ComposerToolbar', "继续任务") + send_hint
             tone = "primary"
         else:
             tooltip = QCoreApplication.translate('ComposerToolbar', "发送消息") + send_hint

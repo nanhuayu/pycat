@@ -5,7 +5,8 @@ Main application window over the shared application services.
 import logging
 from typing import Optional
 
-from PyQt6.QtCore import QCoreApplication, QSize, Qt, QTimer, pyqtSignal
+from PyQt6 import sip
+from PyQt6.QtCore import QCoreApplication, QSize, Qt, QThreadPool, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QApplication,
@@ -24,12 +25,15 @@ from pycat.core.app.container import AppContainer
 from pycat.core.content.export import CONVERSATION_FORMATS
 from pycat.gui.dialogs.debug_trace_dialog import DebugTraceDialog
 from pycat.gui.i18n import install_language
+from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.runtime.channel_gateway_bridge import ChannelGatewayBridge
 from pycat.gui.runtime.message_runtime import MessageRuntime
 from pycat.gui.runtime.prompt_optimizer_runtime import PromptOptimizer
 from pycat.gui.runtime.screenshot_controller import ScreenshotController
 from pycat.gui.runtime.tray_controller import TrayController
 from pycat.gui.utils.theme import COMPACT_CONTROL_HEIGHT
+from pycat.gui.widgets.app_navigation import AppNavigation
+from pycat.gui.widgets.library_panel import LibraryPanel
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
 
@@ -140,6 +144,10 @@ class MainWindow(QMainWindow):
         if not self._shutdown_started:
             self.window_state_presenter.on_app_state_store_changed()
             self.delegation_presenter.on_app_state(self.services.app_coordinator.store.get_state())
+            state = self.services.app_coordinator.store.get_state()
+            if state.content_revision != self._library_revision and 'library' in state.changed_domains:
+                self._library_revision = state.content_revision
+                self._load_library_favorites()
     
     def _setup_ui(self):
         self.setWindowTitle("PyCat | LLM chat · agent · tools")
@@ -154,9 +162,18 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        self.navigation = AppNavigation()
+        self.navigation.selected.connect(self.navigate_section)
+        self.navigation.new_conversation_requested.connect(self.new_conversation_from_navigation)
+        self.navigation.about_requested.connect(self.settings_presenter.show_about)
+        main_layout.addWidget(self.navigation)
+        self.library_panel = None
+        self._library_job = None
+        self._library_revision = -1
         
         # Sidebar
         self.sidebar = Sidebar()
+        self.sidebar.library_item_requested.connect(self.open_library_item)
         self.sidebar.conversation_selected.connect(self.conversation_presenter.select)
         self.sidebar.new_conversation.connect(self.conversation_presenter.new)
         self.sidebar.import_conversation.connect(self.conversation_presenter.import_from_file)
@@ -166,10 +183,8 @@ class MainWindow(QMainWindow):
         self.sidebar.project_requested.connect(self.conversation_presenter.add_project)
         self.sidebar.navigation_requested.connect(self.conversation_presenter.update_navigation)
         self.sidebar.preferences_changed.connect(self.conversation_presenter.save_navigation_preferences)
-        self.sidebar.settings_requested.connect(self.settings_presenter.open_settings)
         self.sidebar.materials_requested.connect(self.knowledge_presenter.show_library)
         self.sidebar.about_requested.connect(self.settings_presenter.show_about)
-        self.sidebar.search_requested.connect(self._focus_conversation_search)
         
         # Chat area
         chat_widget = QWidget()
@@ -184,7 +199,7 @@ class MainWindow(QMainWindow):
         self.chat_view.edit_message.connect(self.message_presenter.edit)
         self.chat_view.regenerate_message.connect(self.message_presenter.regenerate)
         self.chat_view.delete_message.connect(self.message_presenter.delete_message)
-        self.chat_view.continue_message.connect(self.message_presenter.resume_interrupted)
+        self.chat_view.continue_message.connect(self.message_presenter.resume_task)
         self.chat_view.images_dropped.connect(self._on_images_dropped)
         self.chat_view.workspace_requested.connect(self.conversation_presenter.select_work_dir)
         self.chat_view.trace_requested.connect(self._open_debug_trace_dialog)
@@ -221,6 +236,8 @@ class MainWindow(QMainWindow):
         self.chat_splitter.addWidget(self.input_area)
         self.chat_splitter.setSizes([520, 140])
         self.chat_splitter.splitterMoved.connect(self.settings_presenter.persist_chat_splitter_layout)
+        self._composer_attachment_height = 0
+        self.input_area.attachment_height_changed.connect(self._resize_composer_for_attachments)
 
         chat_layout.addWidget(self.chat_splitter, stretch=1)
 
@@ -253,8 +270,89 @@ class MainWindow(QMainWindow):
 
         self.workspace_stack = QStackedWidget()
         self.workspace_stack.addWidget(self.splitter)
+        self.workspace_stack.currentChanged.connect(self.sync_navigation)
         main_layout.addWidget(self.workspace_stack)
         self._create_header_actions()
+        self._load_library_favorites()
+
+    def _load_library_favorites(self):
+        if self._library_job:
+            self._library_job.abandon()
+        job = BackgroundJob(lambda: self.services.library_service.items(favorites=True, limit=8))
+        self._library_job = job
+        def complete(page, error):
+            if sip.isdeleted(self) or self._library_job is not job or self._shutdown_started:
+                return
+            self._library_job = None
+            if not error:
+                self.sidebar.update_library_favorites(page.items)
+        job.signals.finished.connect(complete)
+        QThreadPool.globalInstance().start(job)
+
+    def navigate_section(self, section):
+        if section in {'home', 'spaces'} and self.settings_presenter._settings_dialog is not None:
+            self.settings_presenter.leave_settings(lambda: self.navigate_section(section))
+            self.sync_navigation()
+            return
+        if section == 'home':
+            self.workspace_stack.setCurrentWidget(self.splitter)
+        elif section == 'spaces':
+            if self.library_panel is None:
+                self.library_panel = LibraryPanel(self.services, self)
+                self.library_panel.return_to_chat.connect(lambda: self.navigate_section('home'))
+                self.library_panel.about_requested.connect(self.settings_presenter.show_about)
+                self.library_panel.content_requested.connect(self.open_library_item)
+                self.library_panel.file_created.connect(lambda identifier: self.open_library_item(identifier, edit=True))
+                self.workspace_stack.addWidget(self.library_panel)
+            self.workspace_stack.setCurrentWidget(self.library_panel)
+        elif section in {'tools', 'settings'}:
+            self.settings_presenter.open_settings(initial_page='skills' if section == 'tools' else '')
+        self.sync_navigation()
+
+    def sync_navigation(self):
+        """The rail projects the displayed page, including cancelled navigation."""
+        current = self.workspace_stack.currentWidget()
+        dialog = self.settings_presenter._settings_dialog
+        if dialog is not None and current is dialog:
+            spec = dialog._current_spec()
+            section = 'tools' if spec and spec.group == 'tools' else 'settings'
+        else:
+            section = 'spaces' if self.library_panel is not None and current is self.library_panel else 'home'
+        self.navigation.set_current(section)
+
+    def new_conversation_from_navigation(self):
+        if self.settings_presenter._settings_dialog is not None:
+            self.settings_presenter.leave_settings(self.new_conversation_from_navigation)
+            return
+        self.navigate_section('home')
+        self.conversation_presenter.new()
+
+    def _resize_composer_for_attachments(self, height):
+        """Allocate just the attachment row while keeping the user's splitter size."""
+        delta = height - self._composer_attachment_height
+        self._composer_attachment_height = height
+        sizes = self.chat_splitter.sizes()
+        self.chat_splitter.setSizes([max(0, sizes[0] - delta), max(0, sizes[1] + delta)])
+
+    def open_library_item(self, identifier, *, edit=False):
+        if self.settings_presenter._settings_dialog is not None:
+            self.settings_presenter.leave_settings(lambda: self.open_library_item(identifier, edit=edit))
+            return
+        if not identifier:
+            self.navigate_section('spaces')
+            self.library_panel.show_favorites()
+            return
+        self.knowledge_presenter.open_content(library_id=identifier, edit=edit)
+
+    def add_content_to_main(self, path):
+        if self.input_area.is_streaming():
+            detail = self.knowledge_presenter.detail
+            if detail:
+                detail.set_status(QCoreApplication.translate('MainWindow', '主对话正在运行；完成后再加入资料。'))
+            return
+        self.navigate_section('home')
+        self.input_area.add_attachments([path])
+        self.input_area.text_input.setFocus()
 
     def apply_window_size(self, size: object = None) -> None:
         values = list(size) if isinstance(size, (list, tuple)) else []
@@ -404,8 +502,10 @@ class MainWindow(QMainWindow):
             shortcut.setKey(shortcut_sequence(key, overrides))
         search_key = shortcut_sequence("search_conversations", overrides)
         self.sidebar.search_input.set_shortcut_text(search_key)
-        self.sidebar.search_btn.setToolTip(QCoreApplication.translate('MainWindow', "搜索对话") + (f" · {search_key}" if search_key else ""))
         self.input_area.set_app_settings(self.app_settings)
+        detail = self.knowledge_presenter.detail
+        if detail and detail.chat:
+            detail.chat.set_shortcuts(overrides)
 
     def _focus_conversation_search(self):
         settings = self.settings_presenter._settings_dialog
@@ -413,6 +513,7 @@ class MainWindow(QMainWindow):
             settings.search_input.setFocus()
             settings.search_input.selectAll()
             return
+        self.navigate_section('home')
         self.settings_presenter.toggle_sidebar_panel(True)
         self.sidebar.search_input.setFocus()
         self.sidebar.search_input.selectAll()
@@ -518,6 +619,10 @@ class MainWindow(QMainWindow):
         self.screenshot_controller.dispose()
         self._update_check_timer.stop()
         self.knowledge_presenter.dispose()
+        if self._library_job:
+            self._library_job.abandon()
+        if self.library_panel:
+            self.library_panel.dispose()
         self.workspace_files_presenter.dispose()
         self.settings_presenter.abandon_release_job()
         self.interaction_presenter.dispose()
@@ -570,7 +675,7 @@ class MainWindow(QMainWindow):
         if not self._shutdown_started and not self.settings_presenter.allow_window_close():
             event.ignore()
             return
-        if not self._shutdown_started and not self.knowledge_presenter.allow_context_change(self.close):
+        if not self._shutdown_started and not self.knowledge_presenter.allow_window_close(self.close):
             event.ignore()
             return
         self._persist_window_size()

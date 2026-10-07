@@ -112,14 +112,17 @@ DEFAULT_MODES: list[ModeConfig] = [
         name="Review",
         purpose="审查计划、实现、差异、风险和测试缺口。",
         prompt=(
-            "Review the assigned scope without making changes. For a diff review, focus on defects introduced by "
+            "Review the assigned scope without editing the reviewed source or product files. You may run targeted "
+            "tests, builds and diagnostic commands to verify findings, within the inherited tool permissions and "
+            "filesystem scope. Execution is not filesystem read-only: keep generated output in appropriate temporary "
+            "or build locations, and do not apply fixes or destructive commands. For a diff review, focus on defects introduced by "
             "the change; for a broader audit, state the evaluated scope. Report actionable findings ordered by "
             "severity, each with a concrete trigger, impact and source evidence. Distinguish verified defects from "
             "open risks; do not inflate style preferences or speculate to fill a quota. Zero findings is valid. "
             "State what was inspected, validation performed and material gaps. Use a named session Artifact for "
             "a substantial review, with a concise findings summary in the result."
         ),
-        allowed_tool_categories=("read", "web", "state", "delegate", "capability", "mcp"),
+        allowed_tool_categories=("read", "web", "execute", "state", "delegate", "capability", "mcp"),
         profile_kind="both",
         completion_policy="explicit",
         shared_context_policy="selected_artifacts",

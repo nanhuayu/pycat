@@ -155,7 +155,7 @@ class ToolResultRecorder:
                 else {}
             ),
         )
-        if handle.archive is not None:
+        if handle.archive is not None and handle.strategy != "error":
             handle = ToolResultViewService().build_display(
                 tool_name=tool_name,
                 text=result_text,

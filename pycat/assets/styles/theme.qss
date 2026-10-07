@@ -22,16 +22,54 @@ QWidget#conversation_settings_content {
     color: $text;
 }
 
-/* Reading surfaces (document/image previews): always light for readability. */
-QScrollArea#content_preview_scroll,
+/* Native workbench surfaces follow the application theme and occupy the whole pane. */
 QWidget#content_preview_viewport,
 QWidget#content_preview_surface,
 QPlainTextEdit#content_text_preview,
 QGraphicsView#image_viewer_surface,
 QWidget#image_viewer_viewport {
-    background-color: $preview_surface;
-    color: $preview_text;
+    background-color: $surface;
+    color: $text;
 }
+
+QPlainTextEdit#content_text_preview, QTextBrowser#content_preview_surface {
+    border: none;
+    border-radius: 0;
+    padding: 8px;
+}
+#app_navigation { background-color: $window; border-right: 1px solid $border; }
+#app_navigation QToolButton { border: 1px solid transparent; border-radius: 7px; background: transparent; }
+#app_navigation QToolButton:hover { background-color: $surface_hover; }
+#app_navigation QToolButton:checked { background-color: $selected; color: $selected_text; }
+#app_navigation QToolButton:focus { border-color: $primary; }
+#content_chat { background-color: $surface; }
+QPlainTextEdit#content_chat_input { background: transparent; border: none; border-radius: 0; padding: 0; }
+QTreeWidget#library_topics {
+    background: transparent; border: none;
+    selection-background-color: $selected; selection-color: $selected_text;
+}
+QTreeWidget#library_topics::item {
+    padding: 4px 8px; border: none; border-radius: 0;
+}
+QListWidget#image_annotation_list::item {
+    padding: 4px 8px; border: none; border-radius: 6px;
+}
+QTreeWidget#library_topics::item:selected, QListWidget#image_annotation_list::item:selected,
+QTableWidget#library_items::item:selected {
+    background-color: $selected; color: $selected_text;
+}
+QTreeWidget#library_topics::item:hover:!selected, QListWidget#image_annotation_list::item:hover:!selected,
+QTableWidget#library_items::item:hover:!selected {
+    background-color: $surface_hover; color: $text;
+}
+QListWidget#image_annotation_list, QTableWidget#library_items { background: transparent; border: none; }
+QTableWidget#library_items::item { padding: 4px 8px; border: none; }
+QTableWidget#library_items QHeaderView::section {
+    background: transparent; color: $muted; border: none; border-bottom: 1px solid $border; padding: 8px;
+}
+#library_panel QLabel#page_title { font-size: 18px; font-weight: 600; }
+#content_chat QComboBox#bottom_model_selector QLineEdit { background: transparent; border: none; padding: 0; }
+#library_panel { background-color: $surface; }
 
 QWidget, QLabel { color: $text; }
 
@@ -75,7 +113,8 @@ QMenu::separator { background-color: $window; border-top: 1px solid $border; }
 /* Shell surfaces */
 #sidebar,
 Sidebar,
-#settings_sidebar {
+#settings_sidebar,
+#library_navigation {
     background-color: $surface_alt;
 }
 InspectorPanel, #inspector_panel { background-color: $surface; }
@@ -86,7 +125,7 @@ InputArea {
     background-color: $surface;
 }
 
-#sidebar, Sidebar, #settings_sidebar { border-right: 1px solid $border; }
+#sidebar, Sidebar, #settings_sidebar, #library_navigation { border-right: 1px solid $border; }
 
 InspectorPanel, #inspector_panel { border-left: 1px solid $border; }
 
@@ -118,13 +157,10 @@ QPushButton#brand_btn, QPushButton#sidebar_footer_btn {
 }
 QPushButton#brand_btn:hover, QPushButton#sidebar_footer_btn:hover { background: $surface_hover; }
 QFrame#sidebar_footer_separator { background-color: $border; border: none; }
-QPushButton#sidebar_search_btn { background: transparent; }
-QPushButton#sidebar_search_btn:hover { background: $surface_hover; }
 QFrame#trace_metrics { border: none; border-bottom: 1px solid $border; }
 QTextBrowser#trace_summary { background: transparent; border: none; }
 QTreeWidget#trace_tree::item:selected { background: $selected; color: $selected_text; }
 QLabel#trace_node_title { border-left: 2px solid $primary; padding-left: 8px; }
-QPushButton#new_chat_btn { background: $primary_hover; color: $primary; border: none; }
 
 /* Primary controls */
 QPushButton {
@@ -298,6 +334,8 @@ QListWidget#settings_nav::item:hover:!selected,
     color: $text;
 }
 
+QListWidget#settings_nav::item:focus { border: 1px solid $primary; }
+
 QListWidget#settings_nav::item:disabled {
     background-color: transparent;
     color: $muted;
@@ -311,13 +349,13 @@ QCheckBox {
 }
 
 QWidget[settings_toggle="true"] {
-    background-color: $surface_alt;
+    background-color: transparent;
     color: $text;
     border: 1px solid transparent;
 }
 
 QWidget[settings_toggle="true"]:hover,
-QWidget[settings_toggle="true"]:focus {
+QWidget[settings_toggle="true"][focused="true"] {
     background-color: $surface_hover;
     border-color: $selected_border;
 }
@@ -327,11 +365,11 @@ QLabel#settings_toggle_label {
 }
 
 QWidget[settings_toggle="true"]:disabled {
-    background-color: $surface_alt;
+    background-color: transparent;
     color: $disabled;
 }
 
-QWidget[settings_toggle="true"]:disabled QLabel#settings_toggle_label {
+QLabel#settings_toggle_label:disabled {
     color: $disabled;
 }
 

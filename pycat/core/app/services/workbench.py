@@ -40,13 +40,14 @@ def operation(name, label, *, observed=False):
 
 class WorkbenchService:
     def __init__(self, *, commands, settings, providers, provider_service, modes, tools, mcp,
-                 skills, knowledge, workspace, channels, content, release, ocr, extensions=None):
+                 skills, knowledge, workspace, channels, content, release, ocr, extensions=None, library=None):
         self.commands, self.settings = commands, settings
         self.providers, self.provider_service, self.modes = providers, provider_service, modes
         self.tools, self.mcp, self.skills, self.knowledge = tools, mcp, skills, knowledge
         self.workspace, self.channels, self.content = workspace, channels, content
         self.release, self.ocr = release, ocr
         self.extensions = extensions
+        self.library = library
         self.conversations, self.runs = commands.conversations, commands.runs
         self._operations = {method.operation[0]: method for _, method in inspect.getmembers(self, inspect.ismethod)
                             if hasattr(method, 'operation')}
@@ -94,6 +95,52 @@ class WorkbenchService:
 
     def _session(self, session):
         return self.commands.require_session(session)
+
+    @operation('library.list', '资料库列表')
+    def library_items(self, topic_id: str = '', favorites: bool = False, query: str = '', offset: int = 0, limit: int = 100):
+        return self.library.items(topic_id=topic_id, favorites=favorites, query=query, offset=offset, limit=limit)
+
+    @operation('library.topics', '资料主题')
+    def library_topics(self, parent_id: str = '', offset: int = 0, limit: int = 200):
+        return self.library.topics(parent_id, offset=offset, limit=limit)
+
+    @operation('library.topic', '管理资料主题')
+    def library_topic(self, action: str, id: str = '', title: str = '', parent_id: str = ''):
+        if action == 'create':
+            return self.library.create_topic(title, parent_id)
+        if action == 'rename':
+            return self.library.rename_topic(id, title)
+        if action == 'move':
+            return self.library.move_topic(id, parent_id)
+        if action == 'delete':
+            return self.library.delete_topic(id)
+        raise InvalidRequestError('Unknown topic action')
+
+    @operation('library.add', '添加资料')
+    def library_add(self, path: str = '', ref: dict | None = None, copy: bool = False, topic_id: str = '', favorite: bool = False):
+        if bool(path) == bool(ref) or (ref and copy):
+            raise InvalidRequestError('Select one file path or reference; copy requires a file path')
+        if ref:
+            return self.library.add_reference(ContentRef.from_dict(ref), topic_id=topic_id, favorite=favorite)
+        method = self.library.import_file if copy else self.library.add_file
+        return method(path, topic_id=topic_id, favorite=favorite)
+
+    @operation('library.create', '新建资料文件')
+    def library_create(self, name: str, topic_id: str = '', favorite: bool = False):
+        return self.library.create_file(name, topic_id=topic_id, favorite=favorite)
+
+    @operation('library.update', '整理资料')
+    def library_update(self, id: str, topic_id: str | None = None, favorite: bool | None = None, remove: bool = False):
+        if remove:
+            if topic_id is not None or favorite is not None:
+                raise InvalidRequestError('Remove cannot also change classification')
+            self.library.remove(id)
+            return None
+        if topic_id is not None:
+            self.library.move_item(id, topic_id)
+        if favorite is not None:
+            self.library.set_favorite(id, favorite)
+        return self.library.get(id)
 
     def _provider(self, provider):
         found = next((item for item in self.providers.current() if item.id == provider or item.name == provider), None)

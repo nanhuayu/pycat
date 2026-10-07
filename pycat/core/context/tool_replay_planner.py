@@ -126,7 +126,13 @@ class ToolReplayPlanner:
         refreshed = self._render_refreshed_long_view(payload, metadata)
         if refreshed:
             return refreshed
-        return self._render_inline_result(payload)
+        rendered = self._render_inline_result(payload)
+        if (self.visible_tool_names is not None and "archive__read" not in self.visible_tool_names
+                and str(metadata.get("tool_result_view_kind")) == "error"
+                and str(metadata.get("tool_result_exactness")) == ContentExactness.DERIVED.value):
+            # Remove only the generated final hint, never matching source lines.
+            rendered = rendered.rsplit("\nUse archive__read", 1)[0]
+        return rendered
 
     @staticmethod
     def _render_refreshed_long_view(payload: dict[str, Any], metadata: dict[str, Any]) -> str:
@@ -217,6 +223,15 @@ class ToolReplayPlanner:
                 self._mark_ccr(candidate, reason="tool_batch_window")
 
     def _restore_exact(self, candidate: _ReplayCandidate) -> None:
+        # An explicit Archive page is already exact for its requested range.
+        if (tool_call_name(candidate.tool_call) == "archive__read"
+                and str(candidate.metadata.get("tool_result_exactness")) == ContentExactness.EXACT.value):
+            return
+        # A bounded failure receipt is useful without an evidence-reading tool.
+        # Expanding arbitrary failed stdout would undo its pre-send safety view.
+        if (str(candidate.metadata.get("tool_result_view_kind")) == "error"
+                and str(candidate.metadata.get("tool_result_exactness")) == ContentExactness.DERIVED.value):
+            return
         content_id = str(candidate.metadata.get("content_id") or "").strip()
         if not content_id or self.conversation is None:
             return
@@ -282,6 +297,10 @@ class ToolReplayPlanner:
         excerpt = self._exact_excerpt(payload.get("content"))
 
         lines = ["[tool_result:archived]", f"source={source}"]
+        is_error = bool(metadata.get("is_error")) or str(metadata.get("tool_result_view_kind")) == "error"
+        if is_error:
+            lines.extend(("status=error", f"error_code={metadata.get('error_code') or metadata.get('tool_result_view_desc') or 'tool_failed'}",
+                          f"retryable={'true' if metadata.get('retryable', False) else 'false'}"))
         if total_chars:
             lines.append(f"chars={total_chars}")
         if content_id:
@@ -290,6 +309,10 @@ class ToolReplayPlanner:
             lines.append(f"summary={summary[:500]}")
         if excerpt:
             lines.extend(("exact_excerpt:", excerpt))
+        if is_error:
+            content = str(payload.get("content") or "")
+            content = content.split("\nUse archive__read", 1)[0]
+            lines.extend(("error_tail:", content[-CCR_EXCERPT_CHARS:]))
         if content_id:
             lines.append(
                 f'Use archive__read(content_id="{content_id}", view="summary") for the full summary, '

@@ -38,7 +38,7 @@ Connect **ChatGPT / Codex or WorkBuddy / CodeBuddy accounts**, an API key, or a 
 
 ## Quick start
 
-**0.2.3** shares Chinese and English settings across desktop, terminal and web, adds a terminal cat logo, simplifies Skills and MCP settings, and improves file reading, image viewing, research workflows and context maintenance. Published versions are listed in [release notes and downloads](https://github.com/nanhuayu/pycat/releases).
+**0.2.5** adds a topic-based library, shared content previews and content conversations, text editing, image annotations, and a bundled presentation Skill. It also improves failed-task recovery, context handling for oversized tool results, compact stream diagnostics, and consistency across desktop navigation and settings. See [GitHub Releases](https://github.com/nanhuayu/pycat/releases) for release notes and downloads.
 
 **Use the desktop**
 

@@ -6,8 +6,8 @@ from typing import Any, Dict
 
 from pycat.core.hosts.python import resolve_python_runner, run_python_code
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.core.tools.process import CommandExecutionRequest, decode_subprocess_output
-from pycat.core.tools.system.shell_exec import _executor, _session_root
+from pycat.core.tools.system.execution_context import command_executor, session_root
+from pycat.core.tools.system.process import CommandExecutionRequest, decode_subprocess_output
 
 
 class PythonExecTool(BaseTool):
@@ -73,11 +73,11 @@ class PythonExecTool(BaseTool):
 
         try:
             if context.files:
-                executor = _executor(context)
+                executor = command_executor(context)
                 program = context.files.connection.info["executable"]
                 request = CommandExecutionRequest(command=f"{program} -c <code>", cwd=cwd_path,
                     program=program, argv=("-c", str(code)), timeout_sec=timeout_sec,
-                    session_root=_session_root(context), remote=context.files)
+                    session_root=session_root(context), remote=context.files)
                 result = await asyncio.to_thread(executor.execute, request)
                 if result.running:
                     await asyncio.to_thread(executor.kill, result.process_id)

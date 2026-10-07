@@ -5,6 +5,7 @@ from typing import Any
 
 from pycat.core.capabilities.compression import CapabilityCompressor
 from pycat.core.context.maintainer import ContextMaintainer
+from pycat.core.tools.tool_call_archive import ToolCallArchiveService
 from pycat.models.contracts.config import AppConfig
 from pycat.models.conversation import Conversation
 from pycat.models.provider import Provider
@@ -57,7 +58,16 @@ class ContextService:
         The explicit action need not retain the automatic path's three-turn
         starting target. Closed tails may still use their recoverable capsules.
         """
-        return await self._maintenance.maintain_async(
+        messages, changed = ToolCallArchiveService(
+            conversation.work_dir, conversation.id, data_dir=conversation.data_dir,
+        ).prepare_request_views(conversation.messages, require_archive=True)
+        repaired = sum(
+            old_call.get("result") != new_call.get("result")
+            for old, new in zip(conversation.messages, messages)
+            for old_call, new_call in zip(old.tool_calls or [], new.tool_calls or [])
+        ) if changed else 0
+        conversation.messages = messages
+        report = await self._maintenance.maintain_async(
             conversation,
             provider=provider,
             client=self._client,
@@ -67,3 +77,6 @@ class ContextService:
             recent_turn_target=1,
             protect_current_turn=False,
         )
+        if report is not None and repaired:
+            report.metrics["tool_errors_archived"] = repaired
+        return report

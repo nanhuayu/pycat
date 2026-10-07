@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 
 from pycat.gui.settings.components import build_dialog_button_box, settings_dialog_layout
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
 from pycat.models.model_profile import BUNDLED_MODEL_TAG, ModelProfile
 from pycat.models.provider import Provider
@@ -37,6 +38,7 @@ class ModelCatalogDialog(QDialog):
         self._rebuild_list()
 
     def _setup_ui(self) -> None:
+        """Build searchable model selection with accessible refresh and apply actions."""
         root = settings_dialog_layout(self, QCoreApplication.translate('ModelCatalogDialog', '{name} 模型目录').format(name=self._provider.name))
         self.setObjectName("model_catalog_dialog")
         self.setMinimumSize(560, 500)
@@ -51,8 +53,10 @@ class ModelCatalogDialog(QDialog):
         search_row.addWidget(self.search_input, 1)
         self.refresh_btn = QToolButton()
         self.refresh_btn.setObjectName("toolbar_btn")
-        self.refresh_btn.setIcon(Icons.get(Icons.REFRESH))
-        self.refresh_btn.setToolTip(QCoreApplication.translate('ModelCatalogDialog', '重新获取远端模型'))
+        configure_icon_button(
+            self.refresh_btn, Icons.get(Icons.REFRESH),
+            QCoreApplication.translate('ModelCatalogDialog', '重新获取远端模型'),
+        )
         self.refresh_btn.clicked.connect(self.refresh_requested)
         search_row.addWidget(self.refresh_btn)
         root.addLayout(search_row)

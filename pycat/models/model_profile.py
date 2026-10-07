@@ -185,6 +185,9 @@ class ModelProfile:
     notes: str = ""
     source_url: str = ""
     verified_at: str = ""
+    # Transient field-presence information for catalog enrichment. It is not
+    # persisted: explicit false/text-only declarations differ from missing data.
+    declared_fields: frozenset[str] = field(default_factory=frozenset, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.model_id = str(self.model_id or "").strip()
@@ -306,6 +309,7 @@ class ModelProfile:
             notes=payload.get("notes") or "",
             source_url=payload.get("source_url") or "",
             verified_at=payload.get("verified_at") or "",
+            declared_fields=frozenset(payload),
         )
 
     def supports_input(self, modality: str) -> bool:

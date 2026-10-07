@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from PyQt6.QtCore import QCoreApplication, QObject, QThreadPool, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QInputDialog
 
 from pycat.gui.runtime.background_job import BackgroundJob
@@ -156,9 +156,7 @@ class DelegationPresenter(QObject):
         self.refresh()
 
     def open_task(self, task_id, message_id=''):
-        self.host.conversation_presenter.select(task_id)
-        if message_id:
-            QTimer.singleShot(0, lambda: self.host.chat_view.reveal_message(task_id, message_id))
+        self.host.conversation_presenter.select(task_id, message_id=message_id)
 
     def abandon(self):
         self._disposed = True

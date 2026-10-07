@@ -12,6 +12,11 @@ def resolve_skill_root(path: Path) -> Path:
     return path.parent if path.is_file() else path
 
 
+def _is_supporting_resource(path: Path, root: Path) -> bool:
+    return (path.is_file() and "__pycache__" not in path.relative_to(root).parts
+            and path.suffix.lower() not in {".pyc", ".pyo"})
+
+
 def list_skill_resource_paths(skill: Skill) -> List[str]:
     root = resolve_skill_root(Path(skill.source))
     results: List[str] = []
@@ -22,7 +27,7 @@ def list_skill_resource_paths(skill: Skill) -> List[str]:
             candidate.relative_to(root.resolve())
         except Exception:
             continue
-        if candidate.exists() and candidate.is_file():
+        if _is_supporting_resource(candidate, root):
             results.append(candidate.relative_to(root).as_posix())
 
     for directory_name in ("references", "templates", "scripts", "assets"):
@@ -30,7 +35,7 @@ def list_skill_resource_paths(skill: Skill) -> List[str]:
         if not directory.is_dir():
             continue
         for path in sorted(directory.rglob("*")):
-            if path.is_file():
+            if _is_supporting_resource(path, root):
                 results.append(path.relative_to(root).as_posix())
 
     return dedupe_preserve_order(results)

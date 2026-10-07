@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Dict
 
-from PyQt6.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -34,6 +35,7 @@ from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.qr_code import build_qr_code_pixmap
 from pycat.gui.utils.settings_controls import SettingsFormLayout
+from pycat.gui.utils.theme import configure_icon_button
 from pycat.gui.view_models.channel_status import (
     channel_detail_label,
     channel_metadata_text,
@@ -94,7 +96,8 @@ class ChannelInstanceDialog(QDialog):
 
         header = QHBoxLayout()
         icon = QLabel()
-        icon.setPixmap(Icons.get(self._definition.icon_name, scale_factor=1.1).pixmap(24, 24))
+        icon.setPixmap(Icons.channel(self._definition.type, fallback=self._definition.icon_name).pixmap(
+            QSize(24, 24), self.devicePixelRatioF()))
         icon.setFixedSize(28, 28)
         header.addWidget(icon)
         heading = QVBoxLayout()
@@ -192,8 +195,9 @@ class ChannelInstanceDialog(QDialog):
         qr_layout.addWidget(self.verify_row)
 
         qr_actions = QHBoxLayout()
-        self.regenerate_qr_button = QPushButton(QCoreApplication.translate('ChannelInstanceDialog', '重新生成二维码'))
-        self.regenerate_qr_button.setIcon(Icons.get(Icons.REFRESH, scale_factor=1.0))
+        self.regenerate_qr_button = QToolButton()
+        configure_icon_button(self.regenerate_qr_button, Icons.get(Icons.REFRESH),
+                              QCoreApplication.translate('ChannelInstanceDialog', '重新生成二维码'))
         self.regenerate_qr_button.clicked.connect(lambda: self._begin_login(force=True))
         qr_actions.addWidget(self.regenerate_qr_button)
         qr_actions.addStretch(1)
@@ -210,8 +214,9 @@ class ChannelInstanceDialog(QDialog):
         self.session_summary_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         session_layout.addWidget(self.session_summary_label)
         session_actions = QHBoxLayout()
-        self.change_session_btn = QPushButton(QCoreApplication.translate('ChannelInstanceDialog', '更换对话'))
-        self.change_session_btn.setIcon(Icons.get(Icons.CHAT, scale_factor=1.0))
+        self.change_session_btn = QToolButton()
+        configure_icon_button(self.change_session_btn, Icons.get(Icons.EDIT),
+                              QCoreApplication.translate('ChannelInstanceDialog', '更换对话'))
         self.change_session_btn.clicked.connect(self._open_session_picker)
         session_actions.addWidget(self.change_session_btn)
         session_actions.addStretch(1)
@@ -506,6 +511,7 @@ class ChannelInstanceDialog(QDialog):
         self.detail_label.setText(channel_detail_label(snapshot) or "")
 
     def _update_login_controls(self) -> None:
+        """Disable repeated login actions while the current request completes."""
         self.regenerate_qr_button.setEnabled(not self._login_request_running)
         self.verify_button.setEnabled(not self._login_request_running)
 

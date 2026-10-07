@@ -14,7 +14,7 @@ def get_debug_log_path(app_settings: dict[str, Any] | None, data_dir: Any) -> st
     if not bool((app_settings or {}).get("log_stream", False)):
         return None
     try:
-        return str(Path(data_dir) / "stream_debug.log")
+        return str(Path(data_dir) / "stream_debug.jsonl")
     except Exception as exc:
         logger.debug("Failed to construct debug log path: %s", exc)
         return None

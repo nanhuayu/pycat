@@ -6,7 +6,7 @@ from typing import Any
 
 from pycat.core.content.ocr import OcrError, OcrService
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.core.tools.system.file_source import resolve_file_source
+from pycat.core.tools.file.file_source import resolve_file_source
 
 _RETRYABLE_ERRORS = {"source_changed", "inference_failed"}
 

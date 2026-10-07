@@ -24,6 +24,8 @@ Try a short question before processing larger files. Account-login integrations 
 
 Create or select a project folder in the sidebar, then start a conversation. Add files with the attachment button or paste a screenshot. Before organizing or modifying files, check the project shown at the top.
 
+The icon rail stays visible when you hide the conversation sidebar. Showing the sidebar again keeps its width, selection and search. The conversation search shortcut also restores it; hiding the panel keeps your unsent message and attachments.
+
 The permission menu beside the composer controls approvals and file scope. Current desktop defaults allow **automatic execution and access to all local paths**. You can request confirmation or restrict file access to the project. File scope is not a system sandbox for every external program; shells and third-party tools have their own behavior.
 
 Use Chat for ordinary questions. Choose an appropriate Agent mode when a task requires tools, file changes or several steps.
@@ -94,3 +96,15 @@ Shared attachment limits are 25 MiB per file, eight files per batch and 64 MiB t
 Projects and conversations are stored locally. Cloud models, online tools and messaging services receive the content sent to them; choose services and permissions appropriate for your materials.
 
 For help, open an [issue](https://github.com/nanhuayu/pycat/issues) with the version, system, reproduction steps and a redacted screenshot. Do not include API keys, bot secrets or private files.
+
+## Library and content workbench
+
+Home keeps project conversations; Spaces opens the library. Tools and Settings share the existing configuration pages. Add a file reference, import an independent copy, or create topics. Topics expand level by level; selecting a parent includes descendant materials. Rename, move and delete classifications without moving source files.
+
+The reader, list and Home shortcuts share one favorite state. Removing a favorite or reference leaves its source intact. Imported copies survive source-file or source-session deletion; removing a copy requires confirmation.
+
+TXT, Markdown and CSV use a full native text surface with search, logical line numbers and wrapping. Long Markdown uses source view. Complete UTF-8 reading has a candidate 20 MiB ceiling and line-layout budgets; unsupported sizes/layouts fall back to a read-only preview. Draft edits are undoable. Save checks the source version and preserves UTF-8 BOM and LF/CRLF; incomplete or mixed-newline previews never overwrite their source. HTML remains source-only; PDFs retain page viewing.
+
+Content chat is an independent normal Chat session and can run alongside the main task. Select text and use Add to content chat; use source selection for exact replacements. Review a reply, apply it to an undoable draft, then save explicitly. Changes to the file view, selection or draft invalidate old suggestions. Ctrl+Enter/Esc in the content input sends/stops that chat only.
+
+Select numbered blue image regions and add notes without altering image bytes. Zoom preserves normalized coordinates. Questions require an image-capable model. Add to main chat places the verified file in the main composer draft for existing Agent/image-generation workflows; it never sends automatically.

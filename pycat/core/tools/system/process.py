@@ -16,9 +16,11 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO
 
+import psutil
+
 from pycat.core.hosts.process import SshProcess
 from pycat.core.hosts.shell import process_invocation, resolve_shell, shell_command
-from pycat.core.tools.terminal import TerminalProcess
+from pycat.core.tools.system.terminal import TerminalProcess
 from pycat.models.contracts.config import ShellConfig
 
 logger = logging.getLogger(__name__)
@@ -280,22 +282,82 @@ class _BackgroundProcessRecord:
     lock: threading.RLock = field(default_factory=threading.RLock)
 
 
+def _windows_descendants(family: dict[int, float]) -> list[psutil.Process]:
+    """Find late descendants even after Windows has removed their parents."""
+    processes = list(psutil.process_iter(["pid", "ppid", "create_time"]))
+    births = {child.pid: child.info["create_time"] for child in processes}
+    found = []
+    while True:
+        added = False
+        for child in processes:
+            parent = child.info["ppid"]
+            born = child.info["create_time"]
+            if child.pid in family or parent not in family or born is None:
+                continue
+            if born < family[parent]:
+                continue
+            # A surviving old child may reference a PID now used by another
+            # parent. Never follow children created by that replacement parent.
+            current_parent = births.get(parent)
+            if current_parent is not None and current_parent > family[parent] and born >= current_parent:
+                continue
+            family[child.pid] = born
+            found.append(child)
+            added = True
+        if not added:
+            return found
+
+
 def _kill_process_tree(proc: subprocess.Popen) -> None:
-    """Terminate a process and its children (best effort per platform)."""
+    """Terminate the tree and wait for observed and late Windows descendants."""
     if isinstance(proc, (SshProcess, TerminalProcess)):
         proc.terminate()
         return
     if os.name == "nt":
+        family = {}
         try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                capture_output=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
+            root = psutil.Process(proc.pid)
+            family[proc.pid] = root.create_time()
+            children = root.children(recursive=True)
+            for child in children:
+                try:
+                    family[child.pid] = child.create_time()
+                except psutil.NoSuchProcess:
+                    pass
+        except psutil.NoSuchProcess:
+            children = []
+        result = subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+            capture_output=True,
+            timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        # taskkill returning and the root exiting do not ensure descendants
+        # have released inherited stdout/stderr handles. Wait on their identities.
+        _, alive = psutil.wait_procs(children, timeout=5)
+        if result.returncode and (proc.poll() is None or alive):
+            raise subprocess.CalledProcessError(
+                result.returncode, result.args, output=result.stdout, stderr=result.stderr,
             )
-            return
-        except Exception as exc:
-            logger.debug("taskkill /T failed for pid %s: %s", proc.pid, exc)
+        if alive:
+            raise TimeoutError(f"Process {proc.pid} descendants did not exit: {[child.pid for child in alive]}")
+        # The root must be gone before scanning: taskkill's tree snapshot can
+        # miss a child being created during stop. Windows retains its parent PID.
+        proc.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while family:
+            late = _windows_descendants(family)
+            if not late:
+                break
+            for child in late:
+                try:
+                    child.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            _, alive = psutil.wait_procs(late, timeout=max(0, deadline - time.monotonic()))
+            if alive or time.monotonic() >= deadline:
+                raise TimeoutError(f"Process {proc.pid} late descendants did not exit: {[child.pid for child in alive]}")
+        return
     else:
         try:
             os.killpg(proc.pid, signal.SIGTERM)
@@ -543,15 +605,19 @@ class BackgroundProcessManager:
 
     def kill(self, process_id: str, *, conversation_id: str | None = None) -> BackgroundProcessSnapshot:
         record = self._get_record(process_id, conversation_id)
-        self._refresh(record)
-        if record.exit_code is None:
-            _kill_process_tree(record.process)
+        with record.lock:
             try:
-                record.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                record.process.kill()
-                record.process.wait(timeout=5)
-        self._refresh(record)
+                self._refresh_locked(record)
+                if record.exit_code is None:
+                    _kill_process_tree(record.process)
+                    try:
+                        record.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        record.process.kill()
+                        record.process.wait(timeout=5)
+                self._refresh_locked(record)
+            finally:
+                self._close_log_locked(record)
         return self._snapshot(record)
 
     def list(
@@ -602,19 +668,25 @@ class BackgroundProcessManager:
             self._refresh_locked(record)
 
     def _refresh_locked(self, record: _BackgroundProcessRecord) -> None:
-        if record.exit_code is not None:
+        if record.exit_code is None:
+            exit_code = record.process.poll()
+            if exit_code is None:
+                return
+            record.exit_code = exit_code
+            record.ended_at = time.time()
+        self._close_log_locked(record)
+
+    @staticmethod
+    def _close_log_locked(record: _BackgroundProcessRecord) -> None:
+        handle = record.log_handle
+        if handle is None:
             return
-        exit_code = record.process.poll()
-        if exit_code is None:
-            return
-        record.exit_code = exit_code
-        record.ended_at = time.time()
-        if record.log_handle is not None:
-            try:
-                record.log_handle.flush()
-                record.log_handle.close()
-            except Exception as exc:
-                logger.debug("Failed to close background process log handle %s: %s", record.process_id, exc)
+        try:
+            handle.flush()
+        finally:
+            # Flush failure still requires close; a failed close retains the
+            # reference so an exited record can retry release on its next refresh.
+            handle.close()
             record.log_handle = None
 
     def _snapshot(self, record: _BackgroundProcessRecord) -> BackgroundProcessSnapshot:

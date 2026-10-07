@@ -9,7 +9,7 @@ import asyncio
 import logging
 import threading
 import time
-from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 import httpx
@@ -18,7 +18,8 @@ from pycat.core.llm.images import request_image
 from pycat.core.llm.reasoning import normalize_reasoning_codec
 from pycat.core.llm.response_handler import parse_non_stream_response, parse_stream_response
 from pycat.core.llm.thinking_parser import ThinkingStreamParser
-from pycat.core.observability.debug_trace import DebugTraceContext, ensure_debug_trace
+from pycat.core.observability.debug_trace import DebugTraceContext, ensure_debug_trace, redact_debug_payload
+from pycat.core.observability.stream import StreamTraceWriter
 from pycat.models.contracts.capability import ImageGenerationOptions
 from pycat.models.conversation import Message
 from pycat.models.provider import Provider
@@ -40,6 +41,21 @@ def _format_runtime_error(error: Exception) -> str:
     if detail:
         return f"[{error_type}] {detail}"
     return f"[{error_type}] 未知错误"
+
+
+def _debug_response_status(message: Message) -> str:
+    metadata = message.metadata or {}
+    return "interrupted" if metadata.get("incomplete") else "error" if metadata.get("runtime_error") else "completed"
+
+
+async def _finish_stream_capture(writer, status: str) -> dict:
+    if writer is None:
+        return {}
+    try:
+        return await writer.finish(status)
+    except Exception as exc:
+        logger.debug("Failed to finish stream capture: %s", exc)
+        return {"capture_error": str(redact_debug_payload(str(exc)))}
 
 
 class LLMClient:
@@ -84,24 +100,10 @@ class LLMClient:
         start_time = time.time()
 
         thinking_parser = ThinkingStreamParser()
-        log_fp = None
-        trace_log_fp = None
-        combined_log_fp = None
+        stream_trace = None
         trace_context = ensure_debug_trace(debug_trace)
         llm_trace: DebugTraceContext | None = None
         refs: dict[str, str] = {}
-        use_legacy_stream_log = bool(debug_log_path) and not bool(
-            trace_context is not None and getattr(trace_context.sink, "capture_stream", False)
-        )
-        if use_legacy_stream_log:
-            try:
-                log_fp = open(debug_log_path, "a", encoding="utf-8")
-                log_fp.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} START =====\n")
-                log_fp.flush()
-            except Exception as exc:
-                logger.debug("Failed to open debug log file %s: %s", debug_log_path, exc)
-                log_fp = None
-
         try:
             response_format = str(getattr(provider, "api_type", "") or "openai_compatible")
             logical_model = str(model_hint or request_body.get("model") or "").strip()
@@ -130,7 +132,8 @@ class LLMClient:
                 )
                 refs = dict(llm_trace.refs or {})
                 if refs.get("request"):
-                    trace_context.sink.write_json(
+                    await asyncio.to_thread(
+                        trace_context.sink.write_json,
                         refs["request"],
                         {
                             "endpoint": endpoint,
@@ -145,8 +148,13 @@ class LLMClient:
                         },
                     )
                 if refs.get("stream"):
-                    trace_log_fp = trace_context.sink.open_stream_file(refs["stream"])
-            combined_log_fp = trace_log_fp or log_fp
+                    stream_trace = trace_context.sink.open_stream_file(refs["stream"])
+            if (stream_trace is None and debug_log_path and request_body.get("stream", True)
+                    and not (trace_context is not None and getattr(trace_context.sink, "capture_stream", False))):
+                try:
+                    stream_trace = StreamTraceWriter(Path(debug_log_path), redact=redact_debug_payload)
+                except Exception as exc:
+                    logger.debug("Failed to open explicit stream capture: %s", exc)
 
             timeout_config = httpx.Timeout(self.timeout, connect=60.0)
             transport = self._transport_factory() if self._transport_factory is not None else None
@@ -168,7 +176,8 @@ class LLMClient:
                         start_time=start_time,
                     )
                     self._attach_metadata(msg, provider, request_body, model_hint=model_hint)
-                    self._record_debug_response(
+                    await asyncio.to_thread(
+                        self._record_debug_response,
                         llm_trace,
                         refs=refs,
                         msg=msg,
@@ -194,41 +203,38 @@ class LLMClient:
                         on_token=on_token,
                         on_thinking=on_thinking,
                         cancel_event=cancel_event,
-                        log_fp=combined_log_fp,
+                        log_fp=None,
                         start_time=start_time,
+                        stream_trace=stream_trace,
                     )
                     self._attach_metadata(msg, provider, request_body, model_hint=model_hint)
-                    self._record_debug_response(
+                    stream_summary = await _finish_stream_capture(stream_trace, _debug_response_status(msg))
+                    await asyncio.to_thread(
+                        self._record_debug_response,
                         llm_trace,
                         refs=refs,
                         msg=msg,
                         provider=provider,
                         response_format=response_format,
                         start_time=start_time,
+                        stream_summary=stream_summary,
                     )
                     return msg
 
         except asyncio.CancelledError as e:
-            self._record_debug_error(llm_trace, refs=refs, error=e, start_time=start_time)
+            stream_summary = await _finish_stream_capture(stream_trace, "cancelled")
+            await asyncio.to_thread(self._record_debug_error, llm_trace, refs=refs, error=e,
+                                    start_time=start_time, stream_summary=stream_summary)
             logger.debug("LLM send_message cancelled: %s", _format_runtime_error(e))
             raise
         except Exception as e:
-            self._record_debug_error(llm_trace, refs=refs, error=e, start_time=start_time)
+            stream_summary = await _finish_stream_capture(stream_trace, "error")
+            await asyncio.to_thread(self._record_debug_error, llm_trace, refs=refs, error=e,
+                                    start_time=start_time, stream_summary=stream_summary)
             logger.exception("LLM send_message failed: %s", _format_runtime_error(e))
             raise RuntimeError(f"Error sending message: {_format_runtime_error(e)}") from e
         finally:
-            if combined_log_fp is not None:
-                try:
-                    combined_log_fp.close()
-                except Exception as exc:
-                    logger.debug("Failed to close combined debug log file: %s", exc)
-            else:
-                for fp in (trace_log_fp, log_fp):
-                    if fp is not None:
-                        try:
-                            fp.close()
-                        except Exception as exc:
-                            logger.debug("Failed to close debug log file: %s", exc)
+            await _finish_stream_capture(stream_trace, "error")
 
     @staticmethod
     def _attach_metadata(
@@ -260,16 +266,12 @@ class LLMClient:
         provider: Provider,
         response_format: str,
         start_time: float,
+        stream_summary: dict | None = None,
     ) -> None:
         if debug_trace is None or not debug_trace.enabled:
             return
         metadata = getattr(msg, "metadata", {}) or {}
-        if bool(metadata.get("incomplete")):
-            status = "interrupted"
-        elif bool(metadata.get("runtime_error")):
-            status = "error"
-        else:
-            status = "completed"
+        status = _debug_response_status(msg)
         duration_ms = int((time.time() - start_time) * 1000)
         if refs.get("response"):
             debug_trace.sink.write_json(
@@ -303,6 +305,8 @@ class LLMClient:
             if metadata.get(key) is not None:
                 metrics[key] = metadata[key]
         metrics["incomplete"] = bool(metadata.get("incomplete", False))
+        if stream_summary:
+            metrics["stream_capture"] = stream_summary
         debug_trace.sink.finish_llm(
             debug_trace,
             status=status,
@@ -319,15 +323,17 @@ class LLMClient:
         refs: dict[str, str],
         error: Exception,
         start_time: float,
+        stream_summary: dict | None = None,
     ) -> None:
         if debug_trace is None or not debug_trace.enabled:
             return
         duration_ms = int((time.time() - start_time) * 1000)
+        status = "cancelled" if isinstance(error, asyncio.CancelledError) else "error"
         if refs.get("response"):
             debug_trace.sink.write_json(
                 refs["response"],
                 {
-                    "status": "error",
+                    "status": status,
                     "duration_ms": duration_ms,
                     "error": _format_runtime_error(error),
                     "error_type": type(error).__name__,
@@ -335,9 +341,9 @@ class LLMClient:
             )
         debug_trace.sink.finish_llm(
             debug_trace,
-            status="error",
+            status=status,
             duration_ms=duration_ms,
             refs=refs,
             summary=_format_runtime_error(error)[:220],
-            data={"error_type": type(error).__name__},
+            data={"error_type": type(error).__name__, "stream_capture": stream_summary or {}},
         )

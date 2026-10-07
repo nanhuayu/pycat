@@ -23,6 +23,7 @@ class AssistantRunWidget(QFrame):
     """Show intermediate assistant steps behind one compact process row."""
 
     continue_requested = pyqtSignal(str)
+    copy_completed = pyqtSignal()
     image_edit_requested = pyqtSignal(str)
     regenerate_requested = pyqtSignal(str)
     delete_requested = pyqtSignal(str)
@@ -131,6 +132,8 @@ class AssistantRunWidget(QFrame):
                 return RunStatus(value)
             if message.metadata.get("interrupted"):
                 return RunStatus.INTERRUPTED
+            if message.metadata.get("runtime_error"):
+                return RunStatus.FAILED
         return None
 
     @property
@@ -178,7 +181,10 @@ class AssistantRunWidget(QFrame):
             return self._manual_process_expanded
         if self._run_active:
             return True
-        return (self._terminal_status or self._saved_status()) in {
+        # Keep the process visible when the run just failed in this window.
+        # Persisted history retains the status/error, but creates details only
+        # on demand; many old failures must not expand the entire transcript.
+        return self._terminal_status in {
             RunStatus.FAILED,
             RunStatus.CANCELLED,
             RunStatus.INTERRUPTED,
@@ -232,6 +238,7 @@ class AssistantRunWidget(QFrame):
             allow_restart=self._allow_restart and not process,
         )
         widget.continue_requested.connect(self.continue_requested.emit)
+        widget.copy_completed.connect(self.copy_completed.emit)
         widget.image_edit_requested.connect(self.image_edit_requested.emit)
         widget.regenerate_requested.connect(self.regenerate_requested.emit)
         if not process:
@@ -275,9 +282,11 @@ class AssistantRunWidget(QFrame):
         self.time_label.setText(message_time(run.primary_message.created_at))
         self.time_label.setToolTip(message_time(run.primary_message.created_at, full=True))
         self.role_label.setToolTip(str(run.primary_message.metadata.get("model_ref") or run.primary_message.metadata.get("model") or ""))
+        next_snapshots = {}
         for message in (run.process_messages if self._effective_process_expanded() or self._run_active else ()):
             message_id = str(getattr(message, "id", "") or "")
             snapshot = self._message_snapshot(message)
+            next_snapshots[message_id] = snapshot
             widget = old_by_id.get(message_id)
             if not (
                 isinstance(widget, MessageWidget)
@@ -305,11 +314,7 @@ class AssistantRunWidget(QFrame):
         for widget in old_widgets:
             if widget not in retained:
                 widget.deleteLater()
-        self._message_snapshots = {
-            str(getattr(message, "id", "") or ""): self._message_snapshot(message)
-            for message in self._messages
-            if str(getattr(message, "id", "") or "")
-        }
+        self._message_snapshots = next_snapshots
 
         self.process_toggle.setVisible(True)
         self.progress_row.setVisible(True)

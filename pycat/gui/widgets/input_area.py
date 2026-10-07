@@ -52,6 +52,7 @@ class InputArea(QWidget):
     session_settings_requested = pyqtSignal()
     shell_requested = pyqtSignal()
     model_edit_requested = pyqtSignal()
+    attachment_height_changed = pyqtSignal(int)
 
     def __init__(
         self,
@@ -73,6 +74,7 @@ class InputArea(QWidget):
         self._context_busy = False
         self._submission_busy = False
         self._is_streaming = False
+        self._resume_available = False
         self._input_enabled = True
         self._revision_state: Dict[str, Any] | None = None
         self._setup_ui()
@@ -176,10 +178,6 @@ class InputArea(QWidget):
         self.revision_bar.setVisible(False)
         layout.addWidget(self.revision_bar)
 
-        self.attachment_strip = AttachmentPreviewStrip()
-        self.attachment_strip.remove_requested.connect(self._remove_attachment)
-        layout.addWidget(self.attachment_strip)
-        
         # ===== Main input wrapper =====
         input_wrapper = QFrame()
         input_wrapper.setObjectName("input_wrapper")
@@ -188,6 +186,12 @@ class InputArea(QWidget):
         wrapper_layout = QVBoxLayout(input_wrapper)
         wrapper_layout.setContentsMargins(12, 8, 10, 8)
         wrapper_layout.setSpacing(4)
+
+        self.attachment_strip = AttachmentPreviewStrip()
+        self.attachment_strip.remove_requested.connect(self._remove_attachment)
+        self.attachment_strip.visibility_changed.connect(lambda visible: self.attachment_height_changed.emit(
+            self.attachment_strip.height() + wrapper_layout.spacing() if visible else 0))
+        wrapper_layout.addWidget(self.attachment_strip)
         
         # Text input
         self.text_input = MessageTextEdit()
@@ -258,6 +262,9 @@ class InputArea(QWidget):
         except Exception as e:
             logger.debug("Failed to emit mode change: %s", e)
 
+    def is_streaming(self) -> bool:
+        return self._is_streaming
+
     def set_streaming_state(self, is_streaming: bool):
         self._is_streaming = bool(is_streaming)
         self.toolbar.set_streaming_state(self._is_streaming)
@@ -304,6 +311,7 @@ class InputArea(QWidget):
         attachments_ready = not self._has_attachment_errors()
         self.toolbar.set_primary_action_state(
             has_draft=self._has_actionable_draft(),
+            can_resume=self._resume_available,
             enabled=self._is_streaming
             or (
                 attachments_ready
@@ -324,6 +332,11 @@ class InputArea(QWidget):
         self.text_input.setEnabled(editable)
         self.attachment_strip.setEnabled(editable)
         self.toolbar.setEnabled(not self._submission_busy or self._is_streaming)
+        self._sync_primary_action()
+
+    def set_resume_available(self, available: bool) -> None:
+        """Project the selected conversation's terminal record onto the button."""
+        self._resume_available = bool(available)
         self._sync_primary_action()
 
     def _has_actionable_draft(self) -> bool:

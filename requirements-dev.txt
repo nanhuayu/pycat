@@ -1,6 +1,7 @@
 # Development tooling; install together with requirements.txt:
 #   pip install -r requirements.txt -r requirements-dev.txt
 pytest>=8.0
+pytest-asyncio>=0.23
 ruff>=0.5
 # Standard sdist -> wheel build; never a runtime dependency.
 build>=1.2,<2

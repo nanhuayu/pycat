@@ -39,6 +39,7 @@ class FormSection:
     """A styled section surface wrapping a ``QFormLayout``."""
 
     def __init__(self, title: str) -> None:
+        """Build a wrapping section heading and an inset-free shared form body."""
         self.group = QFrame()
         self.group.setObjectName("settings_form_section")
         self.group.setMaximumWidth(SETTINGS_FORM_MAX_WIDTH)
@@ -48,10 +49,12 @@ class FormSection:
         root.setSpacing(8)
         heading = QLabel(str(title or ""))
         heading.setObjectName("settings_section_title")
+        heading.setWordWrap(True)
         root.addWidget(heading)
         form_host = QFrame()
         form_host.setObjectName("settings_section_body")
         self.form = SettingsFormLayout(form_host)
+        self.form.setContentsMargins(0, 0, 0, 0)
         self.form.setHorizontalSpacing(10)
         self.form.setVerticalSpacing(6)
         root.addWidget(form_host)

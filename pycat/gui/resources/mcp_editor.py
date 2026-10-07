@@ -242,6 +242,7 @@ class McpSettingsWidget(QWidget):
         self.refresh_list()
 
     def _setup_ui(self) -> None:
+        """Build the resource browser and accessible fields over the MCP draft."""
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(8)
@@ -304,10 +305,9 @@ class McpSettingsWidget(QWidget):
             danger=True,
         )
         actions.add_stretch()
-        self.test_btn = QPushButton(QCoreApplication.translate('McpEditor', '测试'))
-        self.test_btn.setAccessibleName(QCoreApplication.translate('McpEditor', '测试 MCP 连接'))
-        self.test_btn.setMinimumWidth(self.test_btn.fontMetrics().horizontalAdvance(QCoreApplication.translate('McpEditor', '测试中…')) + 24)
-        self.test_btn.setToolTip(QCoreApplication.translate('McpEditor', '用当前草稿测试连接和读取工具目录'))
+        self.test_btn = QToolButton()
+        self.test_btn.setObjectName("settings_action_btn")
+        self._sync_probe_action()
         self.test_btn.clicked.connect(self._test_connection)
         actions.add_widget(self.test_btn)
         split.detail_layout.insertWidget(1, actions)
@@ -328,17 +328,6 @@ class McpSettingsWidget(QWidget):
         form.setVerticalSpacing(16)
         form.setColumnStretch(0, 1)
         form.setColumnStretch(1, 1)
-        def field(label, widget, row, column=0, span=1):
-            container = QWidget()
-            column_layout = QVBoxLayout(container)
-            column_layout.setContentsMargins(0, 0, 0, 0)
-            column_layout.setSpacing(6)
-            column_layout.addWidget(label if isinstance(label, QLabel) else QLabel(label))
-            column_layout.addWidget(widget)
-            widget.setMinimumWidth(0)
-            widget.setSizePolicy(QSizePolicy.Policy.Ignored, widget.sizePolicy().verticalPolicy())
-            form.addWidget(container, row, column, 1, span)
-            return container
         self.name_edit = ThemedLineEdit()
         self.transport_combo = QComboBox()
         for key, label in _TRANSPORT_LABELS.items():
@@ -365,14 +354,18 @@ class McpSettingsWidget(QWidget):
         self._env_label = QLabel(QCoreApplication.translate('McpEditor', '环境变量'))
         self._url_label = QLabel(QCoreApplication.translate('McpEditor', '服务 URL'))
         self._headers_label = QLabel(QCoreApplication.translate('McpEditor', '请求头'))
-        field(QCoreApplication.translate('McpEditor', '名称'), self.name_edit, 0)
-        field(QCoreApplication.translate('McpEditor', '传输方式'), self.transport_combo, 0, 1)
-        self._stdio_fields = [field(self._command_label, self.command_edit, 1),
-            field(self._args_label, self.args_edit, 1, 1),
-            field(self._cwd_label, self.cwd_edit, 2, span=2),
-            field(self._env_label, self.env_edit, 3, span=2)]
-        self._remote_fields = [field(self._url_label, self.url_edit, 4, span=2),
-            field(self._headers_label, self.headers_edit, 5, span=2)]
+        self._add_labeled_field(form, QCoreApplication.translate('McpEditor', '名称'), self.name_edit, 0)
+        self._add_labeled_field(form, QCoreApplication.translate('McpEditor', '传输方式'), self.transport_combo, 0, 1)
+        self._stdio_fields = [
+            self._add_labeled_field(form, self._command_label, self.command_edit, 1),
+            self._add_labeled_field(form, self._args_label, self.args_edit, 1, 1),
+            self._add_labeled_field(form, self._cwd_label, self.cwd_edit, 2, span=2),
+            self._add_labeled_field(form, self._env_label, self.env_edit, 3, span=2),
+        ]
+        self._remote_fields = [
+            self._add_labeled_field(form, self._url_label, self.url_edit, 4, span=2),
+            self._add_labeled_field(form, self._headers_label, self.headers_edit, 5, span=2),
+        ]
         self.tool_catalog = ToolCatalog()
         form.addWidget(self.tool_catalog, 6, 0, 1, 2)
         form.setRowStretch(7, 1)
@@ -390,6 +383,37 @@ class McpSettingsWidget(QWidget):
         root.addWidget(split, 1)
         root.addWidget(self.extension_details.status_bar)
         self._search_hint()
+
+    @staticmethod
+    def _add_labeled_field(
+        form: QGridLayout,
+        label: str | QLabel,
+        widget: QWidget,
+        row: int,
+        column: int = 0,
+        span: int = 1,
+    ) -> QWidget:
+        """Add a shrinkable grid field with a label buddy and a fallback name.
+
+        Return the visibility container so transport changes keep
+        hiding the label and input together without touching draft values.
+        Explicit accessibility metadata on the input remains authoritative.
+        """
+
+        container = QWidget()
+        column_layout = QVBoxLayout(container)
+        column_layout.setContentsMargins(0, 0, 0, 0)
+        column_layout.setSpacing(6)
+        title = label if isinstance(label, QLabel) else QLabel(label)
+        title.setBuddy(widget)
+        if not widget.accessibleName():
+            widget.setAccessibleName(title.text())
+        column_layout.addWidget(title)
+        column_layout.addWidget(widget)
+        widget.setMinimumWidth(0)
+        widget.setSizePolicy(QSizePolicy.Policy.Ignored, widget.sizePolicy().verticalPolicy())
+        form.addWidget(container, row, column, 1, span)
+        return container
 
     def _clone(self, server: McpServerConfig) -> McpServerConfig:
         return McpServerConfig.from_dict(server.to_dict())
@@ -656,9 +680,21 @@ class McpSettingsWidget(QWidget):
         candidate.validate()
         self.servers[self._active_index] = candidate
 
+    def _sync_probe_action(self) -> None:
+        """Keep the MCP test command compact and named during idle and busy states."""
+        busy = self._probe_job is not None
+        label = (QCoreApplication.translate('McpEditor', '测试中…') if busy
+                 else QCoreApplication.translate('McpEditor', '测试'))
+        configure_icon_button(self.test_btn, Icons.get(Icons.SPINNER if busy else Icons.TEST), label)
+        if not busy:
+            self.test_btn.setAccessibleName(QCoreApplication.translate('McpEditor', '测试 MCP 连接'))
+            self.test_btn.setToolTip(QCoreApplication.translate('McpEditor', '用当前草稿测试连接和读取工具目录'))
+
     def _test_connection(self) -> None:
         """Probe the current form config with one real discovery round."""
 
+        if self._probe_job is not None:
+            return
         if self._connection_tester is None:
             QMessageBox.information(
                 self, QCoreApplication.translate('McpEditor', '测试连接'), QCoreApplication.translate('McpEditor', '当前环境未提供 MCP 运行时，无法测试连接。')
@@ -671,26 +707,25 @@ class McpSettingsWidget(QWidget):
         except ValueError as exc:
             QMessageBox.warning(self, QCoreApplication.translate('McpEditor', 'MCP 配置无效'), str(exc))
             return
-        if self._probe_job is not None:
-            return
         config = self._clone(self.servers[self._active_index])
         self._probe_config = config
         self.test_btn.setEnabled(False)
-        self.test_btn.setText(QCoreApplication.translate('McpEditor', '测试中…'))
         tester = self._connection_tester
         job = BackgroundJob(lambda: tester(config))
         self._probe_job = job
+        self._sync_probe_action()
         self.destroyed.connect(job.abandon)
         job.signals.finished.connect(lambda result, error: self._finish_probe(job, result, error))
         QThreadPool.globalInstance().start(job)
 
     def _finish_probe(self, job, result, error):
+        """Restore the test action and apply results only to the same server draft."""
         if sip.isdeleted(self) or self._probe_job is not job:
             return
         self._probe_job = None
         self.destroyed.disconnect(job.abandon)
         self.test_btn.setEnabled(True)
-        self.test_btn.setText(QCoreApplication.translate('McpEditor', '测试'))
+        self._sync_probe_action()
         try:
             self._commit_active()
         except ValueError:
@@ -722,12 +757,13 @@ class McpSettingsWidget(QWidget):
             )
 
     def cancel_probe(self):
+        """Abandon an obsolete probe and restore the idle connection command."""
         job, self._probe_job = self._probe_job, None
         if job is not None:
             job.abandon()
             self.destroyed.disconnect(job.abandon)
             self.test_btn.setEnabled(True)
-            self.test_btn.setText(QCoreApplication.translate('McpEditor', '测试'))
+            self._sync_probe_action()
 
     def hideEvent(self, event):
         self.cancel_pending()

@@ -337,6 +337,7 @@ class Conversation:
     mode: str = "chat" # "chat" or "agent"
     llm_config: Dict[str, Any] = field(default_factory=dict)
     delegation: TaskDelegation | None = None
+    content_target: str = ''  # Auxiliary Chat binding; does not copy source history.
     
     # === SessionState: Centralized state management ===
     # Lazy-loaded to avoid circular import; use get_state() method
@@ -407,6 +408,7 @@ class Conversation:
             'mode': self.mode,
             'llm_config': self.get_llm_config().to_dict(),
             'delegation': self.delegation.to_dict() if self.delegation else None,
+            'content_target': self.content_target,
             'state': self._state_dict,
             '_seq_counter': self._seq_counter
         }
@@ -488,6 +490,7 @@ class Conversation:
             mode=data.get('mode', 'chat'),
             llm_config=llm_config,
             delegation=TaskDelegation.from_dict(data['delegation']) if data.get('delegation') else None,
+            content_target=str(data.get('content_target') or ''),
             _state_dict=state_dict,
             _seq_counter=seq_counter
         )

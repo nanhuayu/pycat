@@ -86,12 +86,12 @@ class ThemedSelectableLabel(QLabel):
 
     def createStandardContextMenu(self):
         menu = QMenu(self)
-        copy_action = menu.addAction("复制")
+        copy_action = menu.addAction(self.tr("复制"))
         copy_action.setShortcut(QKeySequence.StandardKey.Copy)
         copy_action.setEnabled(self.hasSelectedText())
         copy_action.triggered.connect(self._copy_selected_text)
 
-        select_all_action = menu.addAction("全选")
+        select_all_action = menu.addAction(self.tr("全选"))
         select_all_action.setShortcut(QKeySequence.StandardKey.SelectAll)
         select_all_action.setEnabled(bool(self.text()))
         select_all_action.triggered.connect(self._select_all_text)

@@ -16,7 +16,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pycat.core.capabilities.tool_adapter import CAPABILITY_TOOL_PREFIX, build_capability_tools
 from pycat.core.content.ocr import OcrService, OcrStatus
+from pycat.core.tools.agent import AgentCompleteTool, AgentRunTool, AgentTaskTool
+from pycat.core.tools.archive import ArchiveListTool, ArchiveReadTool
 from pycat.core.tools.base import ToolResult
+from pycat.core.tools.file.file_ops import DeleteFileTool, EditFileTool, WriteToFileTool
+from pycat.core.tools.file.file_view import ViewFileTool
+from pycat.core.tools.file.filesystem import DeliverFilesTool, GrepTool, LsTool, ReadFileTool
+from pycat.core.tools.file.ocr import FileOcrTool
+from pycat.core.tools.file.patch import PatchTool
+from pycat.core.tools.interaction import AskQuestionsTool
 from pycat.core.tools.mcp.browser import (
     prepare_browser_daemon,
     reap_browser_processes,
@@ -31,22 +39,14 @@ from pycat.core.tools.mcp.naming import (
     parse_mcp_tool_name,
 )
 from pycat.core.tools.mcp.proxies import McpProxyTool
-from pycat.core.tools.process import BackgroundProcessManager
 from pycat.core.tools.registry import ToolRegistry
-from pycat.core.tools.system.artifact_tools import ManageArtifactTool
-from pycat.core.tools.system.ask_questions import AskQuestionsTool
-from pycat.core.tools.system.content_tools import ArchiveListTool, ArchiveReadTool
-from pycat.core.tools.system.file_ops import DeleteFileTool, EditFileTool, WriteToFileTool
-from pycat.core.tools.system.file_view import ViewFileTool
-
-# System Tools
-from pycat.core.tools.system.filesystem import DeliverFilesTool, GrepTool, LsTool, ReadFileTool
-from pycat.core.tools.system.memory_tools import ManageMemoryTool
-from pycat.core.tools.system.multi_agent import AgentCompleteTool, AgentRunTool, AgentTaskTool
-from pycat.core.tools.system.ocr import FileOcrTool
-from pycat.core.tools.system.patch import PatchTool
+from pycat.core.tools.skills import LoadSkillTool, ManageSkillTool, ReadSkillResourceTool
+from pycat.core.tools.state.artifact import ManageArtifactTool
+from pycat.core.tools.state.memory import ManageMemoryTool
+from pycat.core.tools.state.todo import ManageTodoTool
+from pycat.core.tools.state.wiki import ManageWikiTool
+from pycat.core.tools.system.process import BackgroundProcessManager
 from pycat.core.tools.system.python_exec import PythonExecTool
-from pycat.core.tools.system.search import FetchUrlTool, WebSearchTool
 from pycat.core.tools.system.shell_exec import (
     ExecuteCommandTool,
     ShellKillTool,
@@ -54,10 +54,7 @@ from pycat.core.tools.system.shell_exec import (
     ShellReadTool,
     ShellWriteTool,
 )
-from pycat.core.tools.system.skill_manage import ManageSkillTool
-from pycat.core.tools.system.skills import LoadSkillTool, ReadSkillResourceTool
-from pycat.core.tools.system.todo_tools import ManageTodoTool
-from pycat.core.tools.system.wiki_tools import ManageWikiTool
+from pycat.core.tools.web.search import FetchUrlTool, WebSearchTool
 from pycat.models.contracts.capability import CapabilitiesConfig
 from pycat.models.contracts.config import OcrConfig
 from pycat.models.contracts.mcp import (
@@ -180,8 +177,8 @@ class ToolManager:
         # Initialize Registry
         self.registry = ToolRegistry()
         
-        # Register System Tools
-        self._register_default_system_tools()
+        # Register built-in adapters through this single registry.
+        self._register_builtin_tools()
         
         self.search_service = search_service
         self.registry.register(WebSearchTool(self.search_service))
@@ -198,7 +195,7 @@ class ToolManager:
         # Single owner of every background shell process (shell__run/read/list/kill).
         self.processes = BackgroundProcessManager()
 
-    def _register_default_system_tools(self):
+    def _register_builtin_tools(self):
         tools = [
             LsTool(), ReadFileTool(), ViewFileTool(), self._ocr_tool, GrepTool(), DeliverFilesTool(), FetchUrlTool(),
             PythonExecTool(),

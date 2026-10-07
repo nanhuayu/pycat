@@ -1,6 +1,6 @@
 """Domestic WorkBuddy browser authentication, owned by the PyCat application.
 
-Protocol reference: CodeBuddy CLI 2.155.0. No CLI process, external credential
+Protocol reference: CodeBuddy CLI 2.161.4. No CLI process, external credential
 import, account pool, or Agent execution is involved.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ from pycat.models.provider import WORKBUDDY_ORIGIN
 # /v3/config parses this protocol version from User-Agent (business code 12403
 # when absent). Identity follows the CLI product/client-info contract, not the
 # WorkBuddy desktop host's CLIENT_INFO_* overrides.
-WORKBUDDY_CLIENT_VERSION = '2.155.0'
+WORKBUDDY_CLIENT_VERSION = '2.161.4'
 _CLIENT_HEADERS = {
     'User-Agent': f'CLI/{WORKBUDDY_CLIENT_VERSION} CodeBuddy/{WORKBUDDY_CLIENT_VERSION}',
     'X-IDE-Type': 'CLI',

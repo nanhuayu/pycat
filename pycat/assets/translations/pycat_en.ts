@@ -58,7 +58,7 @@
             <translation>View release</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="644" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="668" />
             <source>关于 {name}</source>
             <translation>About {name}</translation>
         </message>
@@ -66,61 +66,99 @@
     <context>
         <name>AboutPage</name>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="32" />
+            <location filename="../../gui/settings/pages/about_page.py" line="34" />
             <source>关于</source>
             <translation>About</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="61" />
+            <location filename="../../gui/settings/pages/about_page.py" line="63" />
             <source>打开 PyCat 开源仓库</source>
             <translation>Open the PyCat source repository</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="122" />
-            <location filename="../../gui/settings/pages/about_page.py" line="69" />
+            <location filename="../../gui/settings/pages/about_page.py" line="129" />
+            <location filename="../../gui/settings/pages/about_page.py" line="71" />
             <source>尚未检查更新</source>
             <translation>Updates have not been checked</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="115" />
-            <location filename="../../gui/settings/pages/about_page.py" line="79" />
+            <location filename="../../gui/settings/pages/about_page.py" line="121" />
+            <location filename="../../gui/settings/pages/about_page.py" line="84" />
             <source>检查更新</source>
             <translation>Check for updates</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="85" />
+            <location filename="../../gui/settings/pages/about_page.py" line="91" />
             <source>查看新版本</source>
             <translation>View release</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="92" />
+            <location filename="../../gui/settings/pages/about_page.py" line="96" />
             <source>忽略此版本</source>
             <translation>Ignore this version</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="115" />
+            <location filename="../../gui/settings/pages/about_page.py" line="120" />
             <source>检查中…</source>
             <translation>Checking…</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="128" />
+            <location filename="../../gui/settings/pages/about_page.py" line="135" />
             <source>发现新版本 {version}</source>
             <translation>Version {version} is available</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="135" />
+            <location filename="../../gui/settings/pages/about_page.py" line="142" />
             <source>，已忽略</source>
             <translation> (ignored)</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="144" />
+            <location filename="../../gui/settings/pages/about_page.py" line="151" />
             <source>已是最新稳定版本 v{current}</source>
             <translation>You have the latest stable version, v{current}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/about_page.py" line="146" />
+            <location filename="../../gui/settings/pages/about_page.py" line="153" />
             <source>暂时无法检查更新</source>
             <translation>Unable to check for updates right now</translation>
+        </message>
+    </context>
+    <context>
+        <name>AppNavigation</name>
+        <message>
+            <location filename="../../gui/widgets/app_navigation.py" line="22" />
+            <source>PyCat · 主页</source>
+            <translation>PyCat · Home</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/app_navigation.py" line="25" />
+            <source>新建对话</source>
+            <translation>New conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/app_navigation.py" line="29" />
+            <source>主页</source>
+            <translation>Home</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/app_navigation.py" line="29" />
+            <source>空间</source>
+            <translation>Spaces</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/app_navigation.py" line="30" />
+            <source>工具</source>
+            <translation>Tools</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/app_navigation.py" line="30" />
+            <source>设置</source>
+            <translation>Settings</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/app_navigation.py" line="39" />
+            <source>关于 PyCat</source>
+            <translation>About PyCat</translation>
         </message>
     </context>
     <context>
@@ -224,53 +262,52 @@
     <context>
         <name>AssistantRunWidget</name>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="205" />
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="94" />
-            <source>查看本次运行</source>
-            <translation>Inspect run</translation>
-        </message>
-        <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="196" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="206" />
             <source>运行中</source>
             <translation>Running</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="197" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="207" />
             <source>失败</source>
             <translation>Failed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="198" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="208" />
             <source>已停止</source>
             <translation>Stopped</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="199" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="209" />
             <source>未完成</source>
             <translation>Incomplete</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="200" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="210" />
             <source>已完成</source>
             <translation>Completed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="202" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="212" />
             <source>{status} · {steps} 步 · {tool_calls} 次工具调用</source>
             <translation>{status} · Steps: {steps} · Tool calls: {tool_calls}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="206" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="216" />
+            <source>查看本次运行</source>
+            <translation>Inspect run</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="218" />
             <source>收起执行过程</source>
             <translation>Collapse process</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="207" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="219" />
             <source>展开执行过程</source>
             <translation>Expand process</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/assistant_run_widget.py" line="310" />
+            <location filename="../../gui/widgets/assistant_run_widget.py" line="321" />
             <source>展开本次回复的中间思考、工具调用和阶段输出</source>
             <translation>Show the reasoning, tool calls and intermediate outputs for this response.</translation>
         </message>
@@ -278,12 +315,17 @@
     <context>
         <name>AttachmentPreviewStrip</name>
         <message>
-            <location filename="../../gui/widgets/input/attachment_strip.py" line="96" />
+            <location filename="../../gui/widgets/input/attachment_strip.py" line="92" />
+            <source>移除附件</source>
+            <translation>Remove attachment</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/input/attachment_strip.py" line="102" />
             <source>粘贴图片</source>
             <translation>Pasted image</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/attachment_strip.py" line="101" />
+            <location filename="../../gui/widgets/input/attachment_strip.py" line="107" />
             <source>{tooltip}
 准备失败：{detail}</source>
             <translation>{tooltip}
@@ -293,62 +335,57 @@ Preparation failed: {detail}</translation>
     <context>
         <name>AutomationPage</name>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="22" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="24" />
             <source>屏幕截图</source>
             <translation>Screen capture</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="26" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="30" />
             <source>截图并预览</source>
             <translation>Capture and preview</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="30" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="35" />
             <source>设置快捷键</source>
             <translation>Set shortcut</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="35" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="40" />
             <source>拖动框选，在选区旁调整尺寸或精确坐标。确认后可复制、保存、贴图、提取文字或加入对话。</source>
             <translation>Drag to select an area, then adjust its size or coordinates. After confirming, copy, save, pin, extract text or add it to the conversation.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="41" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="46" />
             <source>Agent 操作</source>
             <translation>Agent actions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="43" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="48" />
             <source>浏览器操作</source>
             <translation>Browser control</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="43" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="48" />
             <source>在 MCP 的“发现”中安装原生浏览器驱动，或配置其他浏览器 MCP。</source>
             <translation>Install the native browser driver in MCP &gt; Discover, or configure another browser MCP.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="44" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="49" />
             <source>桌面操作</source>
             <translation>Desktop control</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="44" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="49" />
             <source>查看跨平台桌面驱动及平台要求，再通过 MCP 配置连接。</source>
             <translation>Review desktop drivers and platform requirements, then configure the connection in MCP.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="53" />
-            <source>配置</source>
-            <translation>Configure</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="54" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="60" />
             <source>配置{title}</source>
             <translation>Configure {title}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/automation_page.py" line="59" />
+            <location filename="../../gui/settings/pages/automation_page.py" line="65" />
             <source>连接和启停在 MCP 中管理，工具授权在“运行与权限”中设置。手动截图不改变 Agent 的屏幕访问权限。</source>
             <translation>Manage connections in MCP and tool permissions in Run &amp; permissions. Manual capture does not change the Agent's screen access permissions.</translation>
         </message>
@@ -585,214 +622,214 @@ Preparation failed: {detail}</translation>
     <context>
         <name>ChannelInstanceDialog</name>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="76" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="78" />
             <source>编辑 {value}</source>
             <translation>Edit {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="104" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="107" />
             <source>配置连接；主对话会在完成后自动创建</source>
             <translation>Configure the connection. A primary conversation is created when you finish.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="119" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="122" />
             <source>基础</source>
             <translation>Basic</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="125" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="128" />
             <source>连接名称</source>
             <translation>Connection name</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="126" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="129" />
             <source>名称</source>
             <translation>Name</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="133" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="136" />
             <source>Agent 模式</source>
             <translation>Agent mode</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="137" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="140" />
             <source>连接方式</source>
             <translation>Connection mode</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="145" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="148" />
             <source>工具类别</source>
             <translation>Tool categories</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="156" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="159" />
             <source>连接配置</source>
             <translation>Connection settings</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="272" />
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="163" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="277" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="166" />
             <source>个人微信扫码（实验）</source>
             <translation>Personal WeChat QR sign-in (experimental)</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="167" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="170" />
             <source>连接状态：正在准备</source>
             <translation>Connection: Preparing</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="170" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="173" />
             <source>二维码会自动生成并持续检查扫码状态。</source>
             <translation>A QR code is generated automatically. Scan status is checked while this window is open.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="174" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="177" />
             <source>正在生成二维码</source>
             <translation>Generating QR code</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="185" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="188" />
             <source>输入手机微信显示的数字</source>
             <translation>Enter the digits shown in WeChat on your phone</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="188" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="191" />
             <source>验证</source>
             <translation>Verify</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="195" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="200" />
             <source>重新生成二维码</source>
             <translation>Regenerate QR code</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="203" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="207" />
             <source>绑定对话</source>
             <translation>Linked conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="213" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="219" />
             <source>更换对话</source>
             <translation>Change conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="221" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="226" />
             <source>诊断信息</source>
             <translation>Diagnostics</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="231" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="236" />
             <source>凭据</source>
             <translation>Credentials</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="241" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="246" />
             <source>完成</source>
             <translation>Done</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="327" />
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="258" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="332" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="263" />
             <source>继承路径：Channel Mode ∩ 频道实例</source>
             <translation>Inherited policy: Channel mode ∩ channel instance</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="272" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="277" />
             <source>公众号 Webhook（稳定）</source>
             <translation>Official account webhook (stable)</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="274" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="279" />
             <source>长连接</source>
             <translation>Persistent connection</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="276" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="281" />
             <source>Gateway 长连接</source>
             <translation>Gateway connection</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="278" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="283" />
             <source>Stream 长连接</source>
             <translation>Stream connection</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="351" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="356" />
             <source>实验功能。二维码由微信 iLink 服务生成，扫码页可能显示上游品牌。</source>
             <translation>Experimental. The QR code is generated by WeChat iLink. The sign-in page may show the upstream brand.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="353" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="358" />
             <source>稳定入口，适合具有公网回调地址的公众号或服务号。</source>
             <translation>Stable integration for official or service accounts with a public callback URL.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="355" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="360" />
             <source>无需公网回调，使用 App ID 和 App Secret 建立长连接。</source>
             <translation>Connect using App ID and App Secret. No public callback is required.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="357" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="362" />
             <source>通过 QQ 官方 Gateway 建立长连接。</source>
             <translation>Connect through the official QQ Gateway.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="359" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="364" />
             <source>无需公网地址；在钉钉开发者后台启用机器人，选择 Stream 接收模式并发布应用。</source>
             <translation>Enable the bot in the DingTalk developer console, select Stream mode and publish the app. No public URL is required.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="361" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="366" />
             <source>填写连接所需字段，主设置窗口保存后启动。</source>
             <translation>Enter the connection fields. The connection starts after saving in the main settings window.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="406" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="411" />
             <source>连接状态：正在生成二维码</source>
             <translation>Connection: Generating QR code</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="407" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="412" />
             <source>正在连接微信服务，请稍候。</source>
             <translation>Connecting to WeChat. Please wait.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="482" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="487" />
             <source>二维码生成失败：{error}</source>
             <translation>Could not generate QR code: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="490" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="495" />
             <source>连接状态：{value}</source>
             <translation>Connection: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="491" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="496" />
             <source>等待连接状态。</source>
             <translation>Waiting for connection status.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="499" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="504" />
             <source>二维码渲染失败</source>
             <translation>Could not render QR code</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="502" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="507" />
             <source>微信已连接</source>
             <translation>WeChat connected</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="505" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="510" />
             <source>暂无二维码</source>
             <translation>No QR code yet</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="525" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="531" />
             <source>完成后会自动创建一个 PyCat 对话作为主绑定。</source>
             <translation>A PyCat conversation will be created as the primary link when you finish.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="539" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="545" />
             <source>{title}
 Session ID: {session_id}
 更新：{updated_at}</source>
@@ -801,17 +838,17 @@ Session ID: {session_id}
 Updated: {updated_at}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="553" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="559" />
             <source>已配置</source>
             <translation>Configured</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="553" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="559" />
             <source>未配置</source>
             <translation>Not configured</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="567" />
+            <location filename="../../gui/dialogs/channel_instance_dialog.py" line="573" />
             <source>更换绑定对话失败：{exc}</source>
             <translation>Could not change linked conversation: {exc}</translation>
         </message>
@@ -1181,24 +1218,24 @@ Preview: {value_}</translation>
     <context>
         <name>ChannelsPage</name>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="46" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="48" />
             <source>
 标签：{value}</source>
             <translation>
 Tags: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="55" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="57" />
             <source>配置校验通过</source>
             <translation>Configuration valid</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="56" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="58" />
             <source>未填写摘要</source>
             <translation>No summary</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="63" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="65" />
             <source>类型：{value}
 来源：{source}
 摘要：{summary}
@@ -1209,84 +1246,84 @@ Summary: {summary}
 Validation: {validation}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="93" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="95" />
             <source>消息通道</source>
             <translation>Channels</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="94" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="96" />
             <source>连接消息平台，管理绑定的对话。</source>
             <translation>Connect messaging platforms and manage linked conversations.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="110" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="113" />
             <source>添加频道</source>
             <translation>Add channel</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="111" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="114" />
             <source>编辑频道</source>
             <translation>Edit channel</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="294" />
-            <location filename="../../gui/settings/pages/channels_page.py" line="112" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="299" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="115" />
             <source>启用</source>
             <translation>Enable</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="114" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="117" />
             <source>删除频道</source>
             <translation>Delete channel</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="232" />
-            <location filename="../../gui/settings/pages/channels_page.py" line="135" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="235" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="138" />
             <source>请选择一个频道查看详情。</source>
             <translation>Select a channel to view its details.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="145" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="148" />
             <source>诊断信息</source>
             <translation>Diagnostics</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="159" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="162" />
             <source>打开对话</source>
             <translation>Open conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="164" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="167" />
             <source>更换对话</source>
             <translation>Change conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="205" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="208" />
             <source>当前没有可用的频道类型。</source>
             <translation>No channel types are available.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="216" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="219" />
             <source>该频道类型还没有配置，点击“+”添加。</source>
             <translation>No connections configured. Click + to add one.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="265" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="268" />
             <source>已绑定对话</source>
             <translation>Conversation linked</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="265" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="268" />
             <source>保存后自动新建对话</source>
             <translation>Create a conversation on save</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="270" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="273" />
             <source>校验：{value}</source>
             <translation>Validation: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="278" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="281" />
             <source>ID: {value}
 Source: {value_}
 Mode: {value__}
@@ -1297,7 +1334,7 @@ Mode: {value__}
 Linked conversation: {value___}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/channels_page.py" line="291" />
+            <location filename="../../gui/settings/pages/channels_page.py" line="296" />
             <source>停用</source>
             <translation>Disable</translation>
         </message>
@@ -1305,127 +1342,128 @@ Linked conversation: {value___}</translation>
     <context>
         <name>ChatView</name>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="456" />
-            <location filename="../../gui/widgets/chat_view.py" line="456" />
-            <location filename="../../gui/widgets/chat_view.py" line="163" />
+            <location filename="../../gui/widgets/chat_view.py" line="465" />
+            <location filename="../../gui/widgets/chat_view.py" line="465" />
+            <location filename="../../gui/widgets/chat_view.py" line="167" />
             <location filename="../../gui/widgets/chat_view.py" line="93" />
             <source>等待下一次请求</source>
             <translation>Waiting for the next request</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="385" />
-            <location filename="../../gui/widgets/chat_view.py" line="125" />
+            <location filename="../../gui/widgets/chat_view.py" line="391" />
+            <location filename="../../gui/widgets/chat_view.py" line="129" />
             <source>个人空间</source>
             <translation>Personal space</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="127" />
+            <location filename="../../gui/widgets/chat_view.py" line="131" />
             <source>工作区</source>
             <translation>Workspace</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="387" />
-            <location filename="../../gui/widgets/chat_view.py" line="129" />
+            <location filename="../../gui/widgets/chat_view.py" line="393" />
+            <location filename="../../gui/widgets/chat_view.py" line="133" />
             <source>未设置工作区；只读工具以用户目录为默认范围。点击设置</source>
             <translation>No workspace selected. Read-only tools default to your home directory. Click to choose a workspace.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="445" />
-            <location filename="../../gui/widgets/chat_view.py" line="160" />
+            <location filename="../../gui/widgets/chat_view.py" line="466" />
+            <location filename="../../gui/widgets/chat_view.py" line="451" />
+            <location filename="../../gui/widgets/chat_view.py" line="164" />
             <source>运行检查</source>
             <translation>Inspect run</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="164" />
+            <location filename="../../gui/widgets/chat_view.py" line="168" />
             <source>运行状态与调用链路</source>
             <translation>Run status and trace</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="1148" />
-            <location filename="../../gui/widgets/chat_view.py" line="286" />
+            <location filename="../../gui/widgets/chat_view.py" line="1176" />
+            <location filename="../../gui/widgets/chat_view.py" line="292" />
             <source>上一条消息</source>
             <translation>Previous message</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="1149" />
-            <location filename="../../gui/widgets/chat_view.py" line="290" />
+            <location filename="../../gui/widgets/chat_view.py" line="1177" />
+            <location filename="../../gui/widgets/chat_view.py" line="296" />
             <source>下一条消息</source>
             <translation>Next message</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="345" />
+            <location filename="../../gui/widgets/chat_view.py" line="351" />
             <source>和 {PRODUCT_NAME} 开始对话</source>
             <translation>Start a conversation with {PRODUCT_NAME}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="351" />
+            <location filename="../../gui/widgets/chat_view.py" line="357" />
             <source>写下目标，或添加资料开始。</source>
             <translation>Describe your goal, or add files to get started.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="357" />
+            <location filename="../../gui/widgets/chat_view.py" line="363" />
             <source>选择工作区</source>
             <translation>Choose workspace</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="358" />
+            <location filename="../../gui/widgets/chat_view.py" line="364" />
             <source>添加图片或文件</source>
             <translation>Add images or files</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="359" />
+            <location filename="../../gui/widgets/chat_view.py" line="365" />
             <source>选择模型</source>
             <translation>Choose model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="400" />
+            <location filename="../../gui/widgets/chat_view.py" line="406" />
             <source>SSH 工作区：{endpoint}:{root}
 运行前检查连接；点击重新连接或选择目录</source>
             <translation>SSH workspace: {endpoint}:{root}
 Check the connection before running. Click to reconnect or choose a directory.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="402" />
+            <location filename="../../gui/widgets/chat_view.py" line="408" />
             <source>工作区：{path}</source>
             <translation>Workspace: {path}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="404" />
+            <location filename="../../gui/widgets/chat_view.py" line="410" />
             <source>工作区不可访问：{path}。点击重新选择</source>
             <translation>Workspace unavailable: {path}. Click to choose another directory.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="423" />
+            <location filename="../../gui/widgets/chat_view.py" line="429" />
             <source>新会话</source>
             <translation>New conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="427" />
+            <location filename="../../gui/widgets/chat_view.py" line="433" />
             <source>当前会话：{text}</source>
             <translation>Current conversation: {text}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="459" />
+            <location filename="../../gui/widgets/chat_view.py" line="468" />
             <source>模型：{_header_model_ref}</source>
             <translation>Model: {_header_model_ref}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="461" />
+            <location filename="../../gui/widgets/chat_view.py" line="470" />
             <source>消息：{_header_message_count} 条</source>
             <translation>Messages: {_header_message_count}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="487" />
+            <location filename="../../gui/widgets/chat_view.py" line="496" />
             <source>操作反馈：{value}</source>
             <translation>Action feedback: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="1161" />
+            <location filename="../../gui/widgets/chat_view.py" line="1189" />
             <source>上一条消息 ({pos_text})</source>
             <translation>Previous message ({pos_text})</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/chat_view.py" line="1162" />
+            <location filename="../../gui/widgets/chat_view.py" line="1190" />
             <source>下一条消息 ({pos_text})</source>
             <translation>Next message ({pos_text})</translation>
         </message>
@@ -1503,66 +1541,66 @@ Check the connection before running. Click to reconnect or choose a directory.</
             <translation>Built-in file tools may access paths outside the workspace. Shell and Python are not isolated by an OS sandbox.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="107" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="108" />
             <source>添加文件/图片</source>
             <translation>Add files or images</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="113" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="114" />
             <source>选择对话模式</source>
             <translation>Choose conversation mode</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="116" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="117" />
             <source>会话访问设置</source>
             <translation>Conversation access settings</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="123" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="124" />
             <source>工具操作</source>
             <translation>Tool actions</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="140" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="141" />
             <source>内置文件工具范围</source>
             <translation>Built-in file access</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="170" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="171" />
             <source>对话设置</source>
             <translation>Conversation settings</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="355" />
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="181" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="356" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="182" />
             <source>选择模型</source>
             <translation>Choose model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="366" />
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="191" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="367" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="192" />
             <source>选择当前对话模型</source>
             <translation>Choose the conversation model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="209" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="210" />
             <source>编辑模型</source>
             <translation>Edit model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="525" />
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="215" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="536" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="216" />
             <source>优化提示词</source>
             <translation>Improve prompt</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="495" />
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="219" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="506" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="220" />
             <source>发送消息</source>
             <translation>Send message</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="291" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="292" />
             <source>工具操作：{approval}
 {approval_detail}
 内置文件工具范围：{scope}
@@ -1573,36 +1611,329 @@ Built-in file access: {scope}
 {scope_detail}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="366" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="367" />
             <source>选择当前对话模型
 当前：{model_ref}</source>
             <translation>Choose the conversation model
 Current: {model_ref}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="484" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="492" />
             <source>停止当前任务 (Esc)</source>
             <translation>Stop current task (Esc)</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="487" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="495" />
             <source>引导当前任务 ({shortcut}；Esc 停止)</source>
             <translation>Guide current task ({shortcut}; Esc to stop)</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="489" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="497" />
             <source>引导当前任务 (Esc 停止)</source>
             <translation>Guide current task (Esc to stop)</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="492" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="500" />
             <source>替换并重试</source>
             <translation>Replace and retry</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input/composer_toolbar.py" line="522" />
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="503" />
+            <source>继续任务</source>
+            <translation>Resume task</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/input/composer_toolbar.py" line="533" />
             <source>取消提示词优化</source>
             <translation>Cancel prompt improvement</translation>
+        </message>
+    </context>
+    <context>
+        <name>ContentChat</name>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="59" />
+            <source>内容对话</source>
+            <translation>Content chat</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="67" />
+            <source>内容对话记录</source>
+            <translation>Content chat history</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="86" />
+            <source>应用到草稿</source>
+            <translation>Apply to draft</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="89" />
+            <source>先检查回复；应用后仍需显式保存，可撤销。</source>
+            <translation>Review the reply first. Apply creates an undoable draft; save explicitly.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="99" />
+            <source>询问、解释或改写选中内容…</source>
+            <translation>Ask, explain or rewrite the selection…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="104" />
+            <source>默认模型</source>
+            <translation>Default model</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="144" />
+            <source>正在读取…</source>
+            <translation>Loading…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="367" />
+            <location filename="../../gui/widgets/content_chat.py" line="338" />
+            <location filename="../../gui/widgets/content_chat.py" line="167" />
+            <source>正在生成…</source>
+            <translation>Generating…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="198" />
+            <source>围绕当前资料提问，或选中正文后请求修改。</source>
+            <translation>Ask about this material, or select text to request a change.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="238" />
+            <source>复制原文</source>
+            <translation>Copy original text</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="265" />
+            <source>已选择：</source>
+            <translation>Selected: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="287" />
+            <source>停止</source>
+            <translation>Stop</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="287" />
+            <source>发送</source>
+            <translation>Send</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="372" />
+            <source>正在思考…</source>
+            <translation>Thinking…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="372" />
+            <source>正在压缩…</source>
+            <translation>Compacting…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="372" />
+            <source>正在重试…</source>
+            <translation>Retrying…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_chat.py" line="380" />
+            <source>已取消</source>
+            <translation>Cancelled</translation>
+        </message>
+    </context>
+    <context>
+        <name>ContentOpenUseCase</name>
+        <message>
+            <location filename="../../gui/runtime/content_navigation.py" line="163" />
+            <source>静态 HTML 预览 · 支持文本与表格；脚本、外部资源和网页布局请使用系统浏览器。</source>
+            <translation>Static HTML preview · Text and tables are supported. Use your browser for scripts, external resources and web layouts.</translation>
+        </message>
+    </context>
+    <context>
+        <name>ContentPreviewDialog</name>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="145" />
+            <source>返回</source>
+            <translation>Back</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="146" />
+            <source>阅读</source>
+            <translation>Read</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="147" />
+            <source>源码</source>
+            <translation>Source</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="155" />
+            <source>上一页</source>
+            <translation>Previous page</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="159" />
+            <source>下一页</source>
+            <translation>Next page</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="160" />
+            <source>缩小</source>
+            <translation>Zoom out</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="164" />
+            <source>放大</source>
+            <translation>Zoom in</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="165" />
+            <source>适应窗口</source>
+            <translation>Fit to window</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="168" />
+            <source>编辑</source>
+            <translation>Edit</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="169" />
+            <source>整理为项目知识</source>
+            <translation>Curate project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="170" />
+            <source>保存</source>
+            <translation>Save</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="173" />
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="174" />
+            <source>查看来源</source>
+            <translation>View sources</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="179" />
+            <source>收藏</source>
+            <translation>Favorite</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="181" />
+            <source>内容对话</source>
+            <translation>Content chat</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="183" />
+            <source>圈选图片区域</source>
+            <translation>Select image region</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="191" />
+            <source>搜索文档 · Ctrl+F</source>
+            <translation>Find in document · Ctrl+F</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="197" />
+            <source>自动换行</source>
+            <translation>Wrap lines</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="201" />
+            <source>显示行号</source>
+            <translation>Show line numbers</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="307" />
+            <location filename="../../gui/dialogs/content_preview.py" line="307" />
+            <location filename="../../gui/dialogs/content_preview.py" line="207" />
+            <source>复制正文</source>
+            <translation>Copy text</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="208" />
+            <source>另存为</source>
+            <translation>Save as</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="209" />
+            <source>更多操作</source>
+            <translation>More</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="214" />
+            <source>重新读取</source>
+            <translation>Reload</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="254" />
+            <source>内容</source>
+            <translation>Content</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="307" />
+            <source>复制原图</source>
+            <translation>Copy original image</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="307" />
+            <source>复制当前页</source>
+            <translation>Copy current page</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="307" />
+            <source>复制位置</source>
+            <translation>Copy location</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="620" />
+            <source>内容尚未准备好</source>
+            <translation>Content is not ready</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="622" />
+            <source>当前内容对话支持文本和图片。</source>
+            <translation>Content chat currently supports text and images.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="646" />
+            <source>内容或草稿已变化，请重新选择后生成建议。</source>
+            <translation>Content or draft changed. Select it again and request a new suggestion.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="651" />
+            <source>选区已变化，请重新生成建议。</source>
+            <translation>The selection changed. Request a new suggestion.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="657" />
+            <source>选中内容已变化，建议未应用。</source>
+            <translation>The selection changed. The suggestion was not applied.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="670" />
+            <source>建议已应用到草稿；可撤销，保存后才会写入来源。</source>
+            <translation>Suggestion applied to the draft. Undo is available; save to update the source.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="693" />
+            <source>关闭内容对话</source>
+            <translation>Close content chat</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="693" />
+            <source>打开内容对话</source>
+            <translation>Open content chat</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="866" />
+            <source>清除图片标注</source>
+            <translation>Clear image annotations</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/content_preview.py" line="868" />
+            <source>加入主对话</source>
+            <translation>Add to main chat</translation>
         </message>
     </context>
     <context>
@@ -1750,6 +2081,29 @@ Current: {model_ref}</translation>
             <location filename="../../gui/widgets/content_ref_widget.py" line="398" />
             <source>{_context_label} · 内容当前不可用</source>
             <translation>{_context_label} · Content unavailable</translation>
+        </message>
+    </context>
+    <context>
+        <name>ContentViewer</name>
+        <message>
+            <location filename="../../gui/widgets/content_viewer.py" line="334" />
+            <source>此格式暂不支持内容预览。可用系统程序打开，或在主对话中处理。</source>
+            <translation>This format has no built-in preview. Open it with a system app or process it in the main chat.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_viewer.py" line="345" />
+            <source>在主对话中处理</source>
+            <translation>Use in main chat</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_viewer.py" line="351" />
+            <source>系统打开</source>
+            <translation>Open externally</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/content_viewer.py" line="357" />
+            <source>显示所在文件夹</source>
+            <translation>Show in folder</translation>
         </message>
     </context>
     <context>
@@ -1951,140 +2305,114 @@ Current: {model_ref}</translation>
     <context>
         <name>ConversationPresenter</name>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1283" />
-            <source>已压缩 {count} 条历史消息</source>
-            <translation>Compacted {count} history messages</translation>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="218" />
+            <source>正在打开会话…</source>
+            <translation>Opening conversation…</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1286" />
-            <source>该会话正在压缩</source>
-            <translation>This conversation is being compacted</translation>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="237" />
+            <source>会话不存在或已删除。</source>
+            <translation>The conversation is missing or has been deleted.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1288" />
-            <source>历史上下文已是最新状态</source>
-            <translation>History context is up to date</translation>
-        </message>
-        <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1290" />
-            <source>当前上下文未达到自动压缩阈值</source>
-            <translation>Context is below the automatic compaction threshold</translation>
-        </message>
-        <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1296" />
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1292" />
-            <source>没有可进一步压缩的历史；最近一轮和未完成的工具调用会保留</source>
-            <translation>No more history can be compacted; the latest turn and unfinished tool calls are retained</translation>
-        </message>
-        <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1295" />
-            <source>压缩未产生有效节省，历史保持不变</source>
-            <translation>Compaction did not save space; history is unchanged</translation>
-        </message>
-        <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1298" />
-            <source>压缩模型调用失败，历史保持不变：{error}</source>
-            <translation>Compaction model call failed; history is unchanged: {error}</translation>
-        </message>
-        <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="361" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="408" />
             <source>会话正在运行或维护，请结束后再修改。</source>
             <translation>The conversation is running or undergoing maintenance. Wait for it to finish before making changes.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="439" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="486" />
             <source>侧栏布局未保存，请重试。</source>
             <translation>The sidebar layout was not saved. Please try again.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="457" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="504" />
             <source>导入成功</source>
             <translation>Import complete</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="457" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="504" />
             <source>已导入会话: {title}</source>
             <translation>Imported conversation: {title}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="459" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="506" />
             <source>导入失败</source>
             <translation>Import failed</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="459" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="506" />
             <source>无法导入会话，请检查 JSON 格式</source>
             <translation>Could not import the conversation. Check the JSON format.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1146" />
-            <location filename="../../gui/presenters/conversation_presenter.py" line="476" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1193" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="523" />
             <source>该会话正在处理，请稍候</source>
             <translation>This conversation is busy. Please wait.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="484" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="531" />
             <source>请等待当前任务结束后再删除会话</source>
             <translation>Wait for the current task to finish before deleting the conversation.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="519" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="566" />
             <source>删除会话失败：{error}</source>
             <translation>Could not delete the conversation: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="531" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="578" />
             <source>删除会话失败：会话不存在或无法删除</source>
             <translation>Could not delete the conversation. It no longer exists or cannot be deleted.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="560" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="607" />
             <source>会话已删除</source>
             <translation>Conversation deleted</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="733" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="780" />
             <source>该会话正在处理，请稍候再切换工作区</source>
             <translation>This conversation is busy. Wait before switching workspaces.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="742" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="789" />
             <source>请等待当前任务结束后再切换工作区</source>
             <translation>Wait for the current task to finish before switching workspaces.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="801" />
-            <location filename="../../gui/presenters/conversation_presenter.py" line="787" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="848" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="834" />
             <source>切换工作区失败：{error}</source>
             <translation>Could not switch workspaces: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="803" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="850" />
             <source>无法迁移会话文件</source>
             <translation>Could not migrate conversation files</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="816" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="863" />
             <source>切换工作区失败：迁移后无法读取会话</source>
             <translation>Could not switch workspaces: the conversation could not be read after migration.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="841" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="888" />
             <source>工作区已切换</source>
             <translation>Workspace switched</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="914" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="961" />
             <source>停止 Shell 失败：{error}</source>
             <translation>Could not stop the shell: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1065" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1112" />
             <source>确认自动执行工具</source>
             <translation>Confirm automatic tool execution</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1066" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1113" />
             <source>自动执行会让本会话中当前可见的工具不再逐次确认。Shell 和 Python 获准执行后可访问当前系统用户可访问的文件、网络和进程。
 
 仅对完全可信的任务启用。是否继续？</source>
@@ -2093,12 +2421,12 @@ Current: {model_ref}</translation>
 Enable this only for tasks you fully trust. Continue?</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1081" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1128" />
             <source>确认所有本地路径访问</source>
             <translation>Confirm access to all local paths</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1082" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1129" />
             <source>该设置允许 PyCat 内置文件工具访问工作区之外的本地路径。它不会改变工具是否需要确认，也不会为 Shell 和 Python 提供操作系统级沙箱。
 
 仅对完全可信的任务启用。是否继续？</source>
@@ -2107,38 +2435,80 @@ Enable this only for tasks you fully trust. Continue?</translation>
 Enable this only for tasks you fully trust. Continue?</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1154" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1335" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1185" />
+            <source>该会话正在压缩</source>
+            <translation>This conversation is being compacted</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1201" />
             <source>请等待当前任务结束后再压缩上下文</source>
             <translation>Wait for the current task to finish before compacting context.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1163" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1210" />
             <source>未找到对应的 Provider，无法压缩上下文</source>
             <translation>Could not compact context: the model provider was not found.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1208" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1255" />
             <source>压缩失败：{error}</source>
             <translation>Compaction failed: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1230" />
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1221" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1277" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1268" />
             <source>会话已被删除，本次压缩结果已丢弃</source>
             <translation>The conversation was deleted. This compaction result has been discarded.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1238" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1285" />
             <source>会话已发生变化，本次压缩结果未写回</source>
             <translation>The conversation changed. This compaction result was not applied.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1334" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1332" />
+            <source>已压缩 {count} 条历史消息</source>
+            <translation>Compacted {count} history messages</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1337" />
+            <source>历史上下文已是最新状态</source>
+            <translation>History context is up to date</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1339" />
+            <source>当前上下文未达到自动压缩阈值</source>
+            <translation>Context is below the automatic compaction threshold</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1343" />
+            <source>已归档 {count} 条超大错误回执，完整原文可恢复</source>
+            <translation>Archived {count} oversized error receipts; complete originals remain recoverable</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1355" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1347" />
+            <source>没有可进一步压缩的历史；最近一轮和未完成的工具调用会保留</source>
+            <translation>No more history can be compacted; the latest turn and unfinished tool calls are retained</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1350" />
+            <source>压缩模型调用失败，历史保持不变：{error}</source>
+            <translation>Compaction model call failed; history is unchanged: {error}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1354" />
+            <source>压缩未产生有效节省，历史保持不变</source>
+            <translation>Compaction did not save space; history is unchanged</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1386" />
             <source>导出失败</source>
             <translation>Export failed</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/conversation_presenter.py" line="1334" />
+            <location filename="../../gui/presenters/conversation_presenter.py" line="1386" />
             <source>未找到要导出的会话</source>
             <translation>The conversation to export was not found.</translation>
         </message>
@@ -2221,163 +2591,163 @@ Enable this only for tasks you fully trust. Continue?</translation>
             <translation>Appended after other explicit instructions</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="182" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="183" />
             <source>会话模型</source>
             <translation>Conversation model</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="188" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="189" />
             <source>选择主模型</source>
             <translation>Choose primary model</translation>
         </message>
         <message>
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="203" />
             <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="202" />
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="201" />
             <source>编辑模型</source>
             <translation>Edit model</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="207" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="208" />
             <source>主模型</source>
             <translation>Primary model</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="214" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="215" />
             <source>启用</source>
             <translation>Enable</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="216" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="217" />
             <source>流式输出</source>
             <translation>Streaming</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="223" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="224" />
             <source>使用默认值</source>
             <translation>Use default</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="226" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="227" />
             <source>本次请求输出上限；0 表示使用产品默认 65,536，再按模型档案能力上限和总窗口校准。</source>
             <translation>Output limit for this request. Zero uses the default of 65,536, adjusted to the model's output and context limits.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="228" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="229" />
             <source>本次输出上限</source>
             <translation>Request output limit</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="230" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="231" />
             <source>推理强度和协议统一在“编辑模型”中设置。</source>
             <translation>Set reasoning effort and protocol in Edit model.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="233" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="234" />
             <source>推理</source>
             <translation>Reasoning</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="238" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="240" />
             <source>模型工具调用能力</source>
             <translation>Model tool access</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="254" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="256" />
             <source>显示</source>
             <translation>Display</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="257" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="259" />
             <source>显示推理过程</source>
             <translation>Show reasoning</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="312" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="314" />
             <source>记忆策略</source>
             <translation>Memory policy</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="318" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="320" />
             <source>记住有用的偏好与项目经验</source>
             <translation>Remember useful preferences and project experience</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="323" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="325" />
             <source>任务结束后在后台整理，下次运行时使用。关闭后停止收集、整理和使用记忆；已有内容仍可在右侧“记忆”中查看，重新启用后可编辑或忘记。</source>
             <translation>Memory is organized in the background after a task, for use in later runs. Turning this off stops memory collection, organization and use. Existing memories remain viewable in the Memory panel; re-enable to edit or forget them.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="331" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="333" />
             <source>频道策略</source>
             <translation>Channel policy</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="338" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="340" />
             <source>默认提醒来源</source>
             <translation>Standard source notice</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="339" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="341" />
             <source>严格限制未信任来源</source>
             <translation>Restrict untrusted sources</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="340" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="342" />
             <source>简洁提示来源</source>
             <translation>Brief source notice</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="344" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="346" />
             <source>来源提示策略</source>
             <translation>Source notice policy</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="360" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="362" />
             <source>当前没有启用的外部频道来源。可先到设置页的“频道”中配置来源，再在这里做会话级允许/信任控制。</source>
             <translation>No external channel sources are enabled. Configure sources in Settings → Channels, then set access and trust for this conversation here.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="379" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="381" />
             <source>可信来源</source>
             <translation>Trusted source</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="382" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="384" />
             <source>可信来源会在 prompt 中作为较高置信度的运行上下文，但仍不会覆盖系统规则。</source>
             <translation>Trusted sources are treated as higher-confidence runtime context. System rules still apply.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="388" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="390" />
             <source>来源标识：{source}</source>
             <translation>Source ID: {source}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="396" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="398" />
             <source>允许来源控制哪些外部频道可进入当前会话；可信来源是允许来源的子集，用于更清晰地表达 trust boundary。</source>
             <translation>Allowed sources control which channels can enter this conversation. Trusted sources are a subset of allowed sources.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="409" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="411" />
             <source>注入 PyCat 默认提示和当前环境信息；可关闭用于原生模型提示词调试。</source>
             <translation>Include PyCat instructions and current environment information. Disable to test native model prompts.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="413" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="415" />
             <source>Agent、Plan、Review 和频道模式固定使用运行规则。</source>
             <translation>Agent, Plan, Review and Channel modes always use the runtime rules.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="457" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="459" />
             <source>继承路径：Mode</source>
             <translation>Inherited policy: Mode</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="471" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="473" />
             <source> ∩ 频道实例</source>
             <translation> ∩ channel instance</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="472" />
+            <location filename="../../gui/dialogs/conversation_settings_dialog.py" line="474" />
             <source> ∩ 当前会话</source>
             <translation> ∩ current conversation</translation>
         </message>
@@ -3012,14 +3382,276 @@ Duration: {duration}</translation>
     <context>
         <name>DialogButtons</name>
         <message>
-            <location filename="../../gui/settings/components.py" line="286" />
+            <location filename="../../gui/settings/components.py" line="295" />
             <source>保存</source>
             <translation>Save</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="289" />
+            <location filename="../../gui/settings/components.py" line="298" />
             <source>取消</source>
             <translation>Cancel</translation>
+        </message>
+    </context>
+    <context>
+        <name>DocumentMarkdownView</name>
+        <message>
+            <location filename="../../gui/widgets/content_viewer.py" line="38" />
+            <source>加入内容对话</source>
+            <translation>Add to content chat</translation>
+        </message>
+    </context>
+    <context>
+        <name>DocumentTextEdit</name>
+        <message>
+            <location filename="../../gui/widgets/document_text_edit.py" line="122" />
+            <source>加入内容对话</source>
+            <translation>Add to content chat</translation>
+        </message>
+    </context>
+    <context>
+        <name>ExtensionDetails</name>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="40" />
+            <source>扩展详情</source>
+            <translation>Extension details</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="107" />
+            <location filename="../../gui/resources/extension_details.py" line="42" />
+            <source>展开说明</source>
+            <translation>Show description</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="46" />
+            <source>MCP 接入方式</source>
+            <translation>MCP connection method</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="51" />
+            <source>打开来源网站</source>
+            <translation>Open source website</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="54" />
+            <source>打开目录</source>
+            <translation>Open folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="143" />
+            <location filename="../../gui/resources/extension_details.py" line="56" />
+            <source>检查更新</source>
+            <translation>Check for updates</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <location filename="../../gui/resources/extension_details.py" line="58" />
+            <source>安装</source>
+            <translation>Install</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="68" />
+            <source>搜索市场或检查版本时才会联网。</source>
+            <translation>Network access is used only when searching the market or checking versions.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="73" />
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="93" />
+            <source>随 PyCat 更新。可在技能列表停用，或复制后编辑。</source>
+            <translation>Updated with PyCat. Disable it in the skills list, or copy it to edit.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="94" />
+            <source>由 PyCat 管理。检查更新后选择安装版本。</source>
+            <translation>Managed by PyCat. Check for updates, then choose a version to install.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="95" />
+            <source>外部管理，请通过原安装方式更新。</source>
+            <translation>Externally managed. Update it using its original installation method.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="96" />
+            <source>打开目录，选择需要的资源。</source>
+            <translation>Open the catalog and choose a resource.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="97" />
+            <source>添加后先填写凭据并测试，再启用。</source>
+            <translation>Add it, enter credentials and test the connection before enabling it.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="97" />
+            <source>准备安装时核对仓库与固定提交。</source>
+            <translation>Review the repository and pinned commit before installing.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="107" />
+            <source>收起说明</source>
+            <translation>Hide description</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="112" />
+            <source>来源：</source>
+            <translation>Source: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="114" />
+            <source>状态：</source>
+            <translation>Status: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="114" />
+            <source>当前版本：</source>
+            <translation>Current version: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="114" />
+            <source>未记录</source>
+            <translation>Not recorded</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="116" />
+            <source>本机浏览器：</source>
+            <translation>Local browser: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="116" />
+            <source>未找到；需先安装 Chrome / Edge / Chromium，或在 MCP 环境变量中指定程序。</source>
+            <translation>Not found. Install Chrome, Edge or Chromium, or specify its executable in the MCP environment variables.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="118" />
+            <source>此平台没有匹配的原生发布文件。</source>
+            <translation>No native release is available for this platform.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="120" />
+            <source>可安装版本：</source>
+            <translation>Available version: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="124" />
+            <source>市场版本：</source>
+            <translation>Market version: </translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="133" />
+            <source>该条目需要自定义安装步骤，请查看来源后通过“添加”手动配置。</source>
+            <translation>This entry needs custom installation. Review its source, then use Add to configure it manually.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="143" />
+            <source>准备安装</source>
+            <translation>Prepare installation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="147" />
+            <source>当前平台没有可用的发布文件</source>
+            <translation>No release is available for this platform</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <source>已添加</source>
+            <translation>Added</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <source>添加配置</source>
+            <translation>Add configuration</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="148" />
+            <source>更新</source>
+            <translation>Update</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="162" />
+            <source>技能来源已不存在，请刷新列表。</source>
+            <translation>The skill source no longer exists. Refresh the list.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="164" />
+            <source>无法打开技能目录。</source>
+            <translation>Could not open the skill directory.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="166" />
+            <source>无法定位技能来源：{exc}</source>
+            <translation>Could not locate the skill source: {exc}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="180" />
+            <source>操作已取消。</source>
+            <translation>Operation cancelled.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="220" />
+            <source>已请求取消。正在执行的下载将停止，原有配置保持不变。</source>
+            <translation>Cancellation requested. Downloads will stop and existing configuration will be kept.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="229" />
+            <source>已是最新版本。</source>
+            <translation>Already up to date.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="229" />
+            <source>版本已确认，点击安装或更新以继续。</source>
+            <translation>Version confirmed. Select Install or Update to continue.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="235" />
+            <source>正在检查官方来源…</source>
+            <translation>Checking the official source…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="243" />
+            <source>已存在同名 MCP，请在列表中查看或修改名称。</source>
+            <translation>An MCP with this name already exists. Select it in the list to review or rename it.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="248" />
+            <source>已加入停用草稿；填写凭据、测试连接并启用，保存设置后生效。</source>
+            <translation>Added as a disabled draft. Enter credentials, test and enable it, then save settings to apply.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="258" />
+            <source>已存在名为 browser 的 MCP，请先重命名该服务。</source>
+            <translation>An MCP named browser already exists. Rename that service first.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="265" />
+            <source>驱动已验证，MCP 配置已加入草稿。保存设置后生效。</source>
+            <translation>Driver verified and MCP configuration added to the draft. Save settings to apply.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="267" />
+            <source>正在下载、校验并测试浏览器 MCP…</source>
+            <translation>Downloading, verifying and testing the browser MCP…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="274" />
+            <source>技能已安装并生效，来源和提交已记录。</source>
+            <translation>Skill installed and active. Its source and commit have been recorded.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="277" />
+            <source>正在下载并验证技能…</source>
+            <translation>Downloading and verifying the skill…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="294" />
+            <source>已固定提交，请核对来源后点击安装。</source>
+            <translation>Commit pinned. Review the source, then select Install.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/extension_details.py" line="296" />
+            <source>正在检查技能来源…</source>
+            <translation>Checking skill source…</translation>
         </message>
     </context>
     <context>
@@ -3203,59 +3835,97 @@ Duration: {duration}</translation>
         </message>
     </context>
     <context>
+        <name>ImageAnnotationPanel</name>
+        <message>
+            <location filename="../../gui/widgets/image_annotations.py" line="22" />
+            <source>图片标注</source>
+            <translation>Image annotations</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/image_annotations.py" line="25" />
+            <source>保存说明</source>
+            <translation>Save note</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/image_annotations.py" line="26" />
+            <source>删除选中标注 · Delete</source>
+            <translation>Delete selected annotation · Delete</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/image_annotations.py" line="32" />
+            <source>圈选区域后添加说明；选中标注可按 Delete 删除。</source>
+            <translation>Draw a region to add a note. Select an annotation and press Delete to remove it.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/image_annotations.py" line="43" />
+            <source>说明此区域需要修改或关注的内容…</source>
+            <translation>Describe what to change or inspect in this region…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/image_annotations.py" line="44" />
+            <source>选中区域的说明</source>
+            <translation>Selected region note</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/image_annotations.py" line="55" />
+            <source>区域 {number}</source>
+            <translation>Region {number}</translation>
+        </message>
+    </context>
+    <context>
         <name>InputArea</name>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="88" />
+            <location filename="../../gui/widgets/input_area.py" line="90" />
             <source>· {sequence} 发送</source>
             <translation>· {sequence} to send</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="99" />
+            <location filename="../../gui/widgets/input_area.py" line="101" />
             <source>打开 Shell · {count} 个运行中</source>
             <translation>Open shell · {count} running</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="173" />
+            <location filename="../../gui/widgets/input_area.py" line="175" />
             <source>取消编辑</source>
             <translation>Cancel editing</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="232" />
+            <location filename="../../gui/widgets/input_area.py" line="236" />
             <source>打开当前会话的 Shell</source>
             <translation>Open this conversation's shell</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="236" />
+            <location filename="../../gui/widgets/input_area.py" line="240" />
             <source>· {value} 发送</source>
             <translation>· {value} to send</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="266" />
+            <location filename="../../gui/widgets/input_area.py" line="273" />
             <source>追加要求，将在当前步骤完成后处理</source>
             <translation>Add guidance to apply after the current step</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="276" />
+            <location filename="../../gui/widgets/input_area.py" line="283" />
             <source>输入消息… ({commands}@文件或 Agent, /skill-name)</source>
             <translation>Write a message… ({commands}@file or agent, /skill-name)</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="473" />
+            <location filename="../../gui/widgets/input_area.py" line="486" />
             <source>添加文件</source>
             <translation>Add files</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="474" />
+            <location filename="../../gui/widgets/input_area.py" line="487" />
             <source>所有文件 (*);;Word/Excel (*.doc *.docx *.docm *.dotx *.dotm *.xls *.xlsx *.xlsm *.xltx *.xltm);;图片 (*.png *.jpg *.jpeg *.gif *.webp)</source>
             <translation>All files (*);;Word/Excel (*.doc *.docx *.docm *.dotx *.dotm *.xls *.xlsx *.xlsm *.xltx *.xltm);;Images (*.png *.jpg *.jpeg *.gif *.webp)</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="612" />
+            <location filename="../../gui/widgets/input_area.py" line="625" />
             <source>请把必要资料写入任务简报。独立任务暂不接收附件或 @ 引用，草稿已保留。</source>
             <translation>Include the necessary information in the task brief. Independent tasks do not yet accept attachments or @ references. Your draft has been kept.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/input_area.py" line="680" />
+            <location filename="../../gui/widgets/input_area.py" line="693" />
             <source>编辑第 {value} 轮 · 发送后将移除后续 {value_} 轮</source>
             <translation>Editing turn {value} · Sending will remove {value_} following turns</translation>
         </message>
@@ -3502,39 +4172,6 @@ Duration: {duration}</translation>
         </message>
     </context>
     <context>
-        <name>InstructionsPage</name>
-        <message>
-            <location filename="../../gui/settings/pages/instructions_page.py" line="27" />
-            <source>指令</source>
-            <translation>Instructions</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/instructions_page.py" line="27" />
-            <source>管理所有模式共享的用户级追加指令。</source>
-            <translation>Manage user instructions shared by all modes.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/instructions_page.py" line="29" />
-            <source>全局追加指令</source>
-            <translation>Global additional instructions</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/instructions_page.py" line="31" />
-            <source>内容</source>
-            <translation>Content</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/instructions_page.py" line="33" />
-            <source>追加到稳定全局原则之后；留空使用默认行为</source>
-            <translation>Appended after the global rules; leave empty for default behavior</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/instructions_page.py" line="37" />
-            <source>该内容作用于所有 Mode；单个能力的行为仍在“能力 → Prompt”中配置。</source>
-            <translation>Applies to all modes. Configure individual capability behavior under Model capabilities → Prompt.</translation>
-        </message>
-    </context>
-    <context>
         <name>InteractionPresenter</name>
         <message>
             <location filename="../../gui/presenters/interaction_presenter.py" line="82" />
@@ -3597,157 +4234,386 @@ Permission applies only to the current task and is not saved in conversation or 
     <context>
         <name>KnowledgePresenter</name>
         <message>
-            <location filename="../../gui/presenters/knowledge_presenter.py" line="66" />
+            <location filename="../../gui/presenters/knowledge_presenter.py" line="65" />
             <source>选择会话后查看资料</source>
             <translation>Select a conversation to view materials</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/knowledge_presenter.py" line="67" />
+            <location filename="../../gui/presenters/knowledge_presenter.py" line="66" />
             <source>选择会话后查看记忆</source>
             <translation>Select a conversation to view memory</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/knowledge_presenter.py" line="75" />
+            <location filename="../../gui/presenters/knowledge_presenter.py" line="76" />
             <source>资料已更新；当前编辑已保留，保存时将核对版本。</source>
             <translation>Materials updated. Your edits are preserved; the version will be checked when saving.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/knowledge_presenter.py" line="87" />
+            <location filename="../../gui/presenters/knowledge_presenter.py" line="88" />
             <source>正在读取…</source>
             <translation>Loading…</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/knowledge_presenter.py" line="102" />
+            <location filename="../../gui/presenters/knowledge_presenter.py" line="103" />
             <source>存储不可读</source>
             <translation>Storage is unreadable</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/knowledge_presenter.py" line="137" />
+            <location filename="../../gui/presenters/knowledge_presenter.py" line="160" />
             <source>忘记这条记忆</source>
             <translation>Forget this memory</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/knowledge_presenter.py" line="137" />
+            <location filename="../../gui/presenters/knowledge_presenter.py" line="160" />
             <source>确定忘记这条记忆？</source>
             <translation>Forget this memory?</translation>
         </message>
     </context>
     <context>
+        <name>LibraryPanel</name>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="208" />
+            <source>返回会话</source>
+            <translation>Back to conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="350" />
+            <location filename="../../gui/widgets/library_panel.py" line="215" />
+            <source>资料库</source>
+            <translation>Library</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="220" />
+            <source>搜索资料名称</source>
+            <translation>Search library names</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="225" />
+            <source>添加资料或主题</source>
+            <translation>Add material or topic</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="231" />
+            <source>显示或收起主题</source>
+            <translation>Show or hide topics</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="249" />
+            <source>名称</source>
+            <translation>Name</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="249" />
+            <source>来源</source>
+            <translation>Source</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="249" />
+            <source>最近修改</source>
+            <translation>Updated</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="270" />
+            <source>上一页</source>
+            <translation>Previous page</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="270" />
+            <source>下一页</source>
+            <translation>Next page</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="488" />
+            <location filename="../../gui/widgets/library_panel.py" line="340" />
+            <source>取消收藏</source>
+            <translation>Remove favorite</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="488" />
+            <location filename="../../gui/widgets/library_panel.py" line="340" />
+            <source>收藏</source>
+            <translation>Favorite</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="347" />
+            <source>资料库文件</source>
+            <translation>Library file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="348" />
+            <source>本机文件</source>
+            <translation>Local file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="348" />
+            <source>项目文件</source>
+            <translation>Project file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="348" />
+            <source>项目知识</source>
+            <translation>Project knowledge</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="349" />
+            <source>会话产物</source>
+            <translation>Conversation artifact</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="349" />
+            <source>会话附件</source>
+            <translation>Conversation attachment</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="349" />
+            <source>归档内容</source>
+            <translation>Archived content</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="350" />
+            <source>引用</source>
+            <translation>Reference</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="353" />
+            <source>共 {count} 项</source>
+            <translation>{count} items</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="385" />
+            <source>添加资料</source>
+            <translation>Add material</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="392" />
+            <source>新建主题</source>
+            <translation>New topic</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="451" />
+            <location filename="../../gui/widgets/library_panel.py" line="392" />
+            <source>主题名称</source>
+            <translation>Topic name</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="399" />
+            <source>新建文件</source>
+            <translation>New file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="400" />
+            <source>文件名（默认 .md，可用 .txt、.csv 等）</source>
+            <translation>File name (.md by default; .txt, .csv and other text formats)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="400" />
+            <source>未命名.md</source>
+            <translation>Untitled.md</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="407" />
+            <source>新建文件…</source>
+            <translation>New file…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="408" />
+            <source>链接文件…</source>
+            <translation>Link files…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="409" />
+            <source>导入副本…</source>
+            <translation>Import copies…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="411" />
+            <source>新建子主题…</source>
+            <translation>New child topic…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="411" />
+            <source>新建主题…</source>
+            <translation>New topic…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="422" />
+            <source>选择主题</source>
+            <translation>Choose topic</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="427" />
+            <source>无主题（根目录）</source>
+            <translation>No topic (root)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="451" />
+            <source>重命名主题</source>
+            <translation>Rename topic</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="465" />
+            <location filename="../../gui/widgets/library_panel.py" line="459" />
+            <source>删除主题</source>
+            <translation>Delete topic</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="459" />
+            <source>仅删除分类；子主题和资料会移到上一层，源文件保留。</source>
+            <translation>Remove the category only. Child topics and materials move up one level; source files remain.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="463" />
+            <source>重命名…</source>
+            <translation>Rename…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="464" />
+            <source>移动到…</source>
+            <translation>Move to…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="487" />
+            <source>打开</source>
+            <translation>Open</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="495" />
+            <source>删除导入副本？源文件保留。</source>
+            <translation>Delete the imported copy? The source file remains.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="495" />
+            <source>移除此引用？源文件保留。</source>
+            <translation>Remove this reference? The source file remains.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="499" />
+            <location filename="../../gui/widgets/library_panel.py" line="496" />
+            <source>移除资料</source>
+            <translation>Remove material</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="498" />
+            <source>移动到主题…</source>
+            <translation>Move to topic…</translation>
+        </message>
+    </context>
+    <context>
         <name>MainWindow</name>
         <message>
-            <location filename="../../gui/main_window.py" line="301" />
+            <location filename="../../gui/main_window.py" line="351" />
+            <source>主对话正在运行；完成后再加入资料。</source>
+            <translation>The main chat is running. Add this material after it finishes.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/main_window.py" line="399" />
             <source>展开/折叠左侧会话栏</source>
             <translation>Toggle conversation sidebar</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="309" />
+            <location filename="../../gui/main_window.py" line="407" />
             <source>显示/隐藏右侧辅助栏</source>
             <translation>Toggle inspector</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="315" />
+            <location filename="../../gui/main_window.py" line="413" />
             <source>更多操作</source>
             <translation>More actions</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="320" />
+            <location filename="../../gui/main_window.py" line="418" />
             <source>有新版本可用</source>
             <translation>An update is available</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="340" />
+            <location filename="../../gui/main_window.py" line="438" />
             <source>新建对话</source>
             <translation>New conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="341" />
+            <location filename="../../gui/main_window.py" line="439" />
             <source>截图...</source>
             <translation>Capture screen…</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="344" />
+            <location filename="../../gui/main_window.py" line="442" />
             <source>导入 JSON...</source>
             <translation>Import JSON…</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="345" />
+            <location filename="../../gui/main_window.py" line="443" />
             <source>设置...</source>
             <translation>Settings…</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="346" />
+            <location filename="../../gui/main_window.py" line="444" />
             <source>停止运行 / 返回会话</source>
             <translation>Stop run / Return to conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="350" />
+            <location filename="../../gui/main_window.py" line="448" />
             <source>新建独立任务...</source>
             <translation>New independent task…</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="351" />
+            <location filename="../../gui/main_window.py" line="449" />
             <source>会话设置...</source>
             <translation>Conversation settings…</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="353" />
+            <location filename="../../gui/main_window.py" line="451" />
             <source>压缩上下文</source>
             <translation>Compact context</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="354" />
+            <location filename="../../gui/main_window.py" line="452" />
             <source>压缩较早历史为摘要，同时保留最近完整轮次。</source>
             <translation>Summarize earlier history while keeping recent complete turns.</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="356" />
+            <location filename="../../gui/main_window.py" line="454" />
             <source>导出当前会话</source>
             <translation>Export current conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="359" />
+            <location filename="../../gui/main_window.py" line="457" />
             <source>导出为 {label}...</source>
             <translation>Export as {label}…</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="363" />
+            <location filename="../../gui/main_window.py" line="461" />
             <source>删除当前会话</source>
             <translation>Delete current conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="368" />
+            <location filename="../../gui/main_window.py" line="466" />
             <source>项目与对话</source>
             <translation>Projects &amp; conversations</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="384" />
+            <location filename="../../gui/main_window.py" line="482" />
             <source>快捷键...</source>
             <translation>Keyboard shortcuts…</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="386" />
+            <location filename="../../gui/main_window.py" line="484" />
             <source>恢复默认布局</source>
             <translation>Reset layout</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="389" />
+            <location filename="../../gui/main_window.py" line="487" />
             <source>退出</source>
             <translation>Quit</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="392" />
+            <location filename="../../gui/main_window.py" line="490" />
             <source>搜索对话或设置</source>
             <translation>Search conversations or settings</translation>
         </message>
         <message>
-            <location filename="../../gui/main_window.py" line="399" />
+            <location filename="../../gui/main_window.py" line="497" />
             <source>快捷键配置冲突，暂用默认绑定：{exc}</source>
             <translation>Conflicting shortcuts; using defaults for now: {exc}</translation>
-        </message>
-        <message>
-            <location filename="../../gui/main_window.py" line="407" />
-            <source>搜索对话</source>
-            <translation>Search conversations</translation>
         </message>
     </context>
     <context>
@@ -3924,237 +4790,271 @@ Permission applies only to the current task and is not saved in conversation or 
             <translation>Arguments, e.g. ["-y", "pkg"]</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="368" />
+            <location filename="../../gui/resources/mcp_editor.py" line="357" />
             <location filename="../../gui/resources/mcp_editor.py" line="148" />
             <source>名称</source>
             <translation>Name</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="369" />
+            <location filename="../../gui/resources/mcp_editor.py" line="358" />
             <location filename="../../gui/resources/mcp_editor.py" line="149" />
             <source>传输方式</source>
             <translation>Transport</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="362" />
+            <location filename="../../gui/resources/mcp_editor.py" line="351" />
             <location filename="../../gui/resources/mcp_editor.py" line="150" />
             <source>命令</source>
             <translation>Command</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="363" />
+            <location filename="../../gui/resources/mcp_editor.py" line="352" />
             <location filename="../../gui/resources/mcp_editor.py" line="152" />
             <source>参数</source>
             <translation>Arguments</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="366" />
+            <location filename="../../gui/resources/mcp_editor.py" line="355" />
             <location filename="../../gui/resources/mcp_editor.py" line="154" />
             <source>服务 URL</source>
             <translation>Server URL</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="260" />
+            <location filename="../../gui/resources/mcp_editor.py" line="261" />
             <location filename="../../gui/resources/mcp_editor.py" line="163" />
             <source>添加</source>
             <translation>Add</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="882" />
-            <location filename="../../gui/resources/mcp_editor.py" line="791" />
+            <location filename="../../gui/resources/mcp_editor.py" line="918" />
+            <location filename="../../gui/resources/mcp_editor.py" line="827" />
             <location filename="../../gui/resources/mcp_editor.py" line="215" />
             <source>MCP 服务名称重复：{name}</source>
             <translation>Duplicate MCP server name: {name}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="258" />
+            <location filename="../../gui/resources/mcp_editor.py" line="255" />
+            <location filename="../../gui/resources/mcp_editor.py" line="254" />
+            <source>搜索 MCP</source>
+            <translation>Search MCP</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="259" />
             <source>手动配置</source>
             <translation>Configure manually</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="802" />
-            <location filename="../../gui/resources/mcp_editor.py" line="756" />
-            <location filename="../../gui/resources/mcp_editor.py" line="259" />
+            <location filename="../../gui/resources/mcp_editor.py" line="838" />
+            <location filename="../../gui/resources/mcp_editor.py" line="792" />
+            <location filename="../../gui/resources/mcp_editor.py" line="260" />
             <source>导入 mcp.json</source>
             <translation>Import mcp.json</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="828" />
-            <location filename="../../gui/resources/mcp_editor.py" line="816" />
-            <location filename="../../gui/resources/mcp_editor.py" line="812" />
-            <location filename="../../gui/resources/mcp_editor.py" line="265" />
+            <location filename="../../gui/resources/mcp_editor.py" line="864" />
+            <location filename="../../gui/resources/mcp_editor.py" line="852" />
+            <location filename="../../gui/resources/mcp_editor.py" line="848" />
+            <location filename="../../gui/resources/mcp_editor.py" line="266" />
             <source>导出 mcp.json</source>
             <translation>Export mcp.json</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="266" />
+            <location filename="../../gui/resources/mcp_editor.py" line="267" />
             <source>重新读取</source>
             <translation>Reload</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="267" />
+            <location filename="../../gui/resources/mcp_editor.py" line="268" />
             <source>更多 MCP 操作</source>
             <translation>More MCP actions</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="920" />
-            <location filename="../../gui/resources/mcp_editor.py" line="297" />
+            <location filename="../../gui/resources/mcp_editor.py" line="281" />
+            <source>未找到匹配 MCP</source>
+            <translation>No matching MCP servers</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="281" />
+            <source>按回车搜索市场，或通过“添加”配置服务。</source>
+            <translation>Press Enter to search the market, or use Add to configure a server.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="609" />
+            <location filename="../../gui/resources/mcp_editor.py" line="293" />
+            <source>版本与更新</source>
+            <translation>Version and updates</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="956" />
+            <location filename="../../gui/resources/mcp_editor.py" line="298" />
             <source>停用</source>
             <translation>Disable</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="852" />
-            <location filename="../../gui/resources/mcp_editor.py" line="301" />
+            <location filename="../../gui/resources/mcp_editor.py" line="888" />
+            <location filename="../../gui/resources/mcp_editor.py" line="302" />
             <source>删除 MCP 服务</source>
             <translation>Delete MCP server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="730" />
-            <location filename="../../gui/resources/mcp_editor.py" line="693" />
-            <location filename="../../gui/resources/mcp_editor.py" line="307" />
-            <source>测试</source>
-            <translation>Test</translation>
+            <location filename="../../gui/resources/mcp_editor.py" line="314" />
+            <source>修改后保存生效。可先测试连接，再启用。</source>
+            <translation>Save changes to apply. Test the connection before enabling it.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="308" />
-            <source>测试 MCP 连接</source>
-            <translation>Test MCP connection</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="679" />
-            <location filename="../../gui/resources/mcp_editor.py" line="309" />
-            <source>测试中…</source>
-            <translation>Testing…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="310" />
-            <source>用当前草稿测试连接和读取工具目录</source>
-            <translation>Test the current draft connection and fetch its tools</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="349" />
+            <location filename="../../gui/resources/mcp_editor.py" line="338" />
             <source>JSON 数组或空格分隔参数，例如 ["-y", "pkg"]</source>
             <translation>JSON array or space-separated arguments, e.g. ["-y", "pkg"]</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="351" />
+            <location filename="../../gui/resources/mcp_editor.py" line="340" />
             <source>工作目录（可选，留空继承当前目录）</source>
             <translation>Optional; leave blank to use the current directory</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="354" />
+            <location filename="../../gui/resources/mcp_editor.py" line="343" />
             <source>JSON 对象，默认 {}，例如 {"API_KEY": "value"}</source>
             <translation>JSON object, default {}, e.g. {"API_KEY": "value"}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="360" />
+            <location filename="../../gui/resources/mcp_editor.py" line="349" />
             <source>JSON 对象，默认 {}，例如 {"Authorization": "Bearer xxx"}</source>
             <translation>JSON object, default {}, e.g. {"Authorization": "Bearer xxx"}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="364" />
+            <location filename="../../gui/resources/mcp_editor.py" line="353" />
             <source>工作目录</source>
             <translation>Working directory</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="641" />
-            <location filename="../../gui/resources/mcp_editor.py" line="365" />
+            <location filename="../../gui/resources/mcp_editor.py" line="665" />
+            <location filename="../../gui/resources/mcp_editor.py" line="354" />
             <source>环境变量</source>
             <translation>Environment variables</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="642" />
-            <location filename="../../gui/resources/mcp_editor.py" line="367" />
+            <location filename="../../gui/resources/mcp_editor.py" line="666" />
+            <location filename="../../gui/resources/mcp_editor.py" line="356" />
             <source>请求头</source>
             <translation>Headers</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="443" />
+            <location filename="../../gui/resources/mcp_editor.py" line="428" />
+            <source>输入筛选 MCP；回车搜索市场。新增配置在保存后生效。</source>
+            <translation>Type to filter MCP servers; press Enter to search the market. Save to apply new configurations.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="467" />
             <source>未命名服务</source>
             <translation>Unnamed server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="842" />
-            <location filename="../../gui/resources/mcp_editor.py" line="808" />
-            <location filename="../../gui/resources/mcp_editor.py" line="773" />
-            <location filename="../../gui/resources/mcp_editor.py" line="748" />
-            <location filename="../../gui/resources/mcp_editor.py" line="740" />
-            <location filename="../../gui/resources/mcp_editor.py" line="672" />
-            <location filename="../../gui/resources/mcp_editor.py" line="481" />
+            <location filename="../../gui/resources/mcp_editor.py" line="878" />
+            <location filename="../../gui/resources/mcp_editor.py" line="844" />
+            <location filename="../../gui/resources/mcp_editor.py" line="809" />
+            <location filename="../../gui/resources/mcp_editor.py" line="784" />
+            <location filename="../../gui/resources/mcp_editor.py" line="776" />
+            <location filename="../../gui/resources/mcp_editor.py" line="708" />
+            <location filename="../../gui/resources/mcp_editor.py" line="505" />
             <source>MCP 配置无效</source>
             <translation>Invalid MCP configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="711" />
-            <location filename="../../gui/resources/mcp_editor.py" line="664" />
+            <location filename="../../gui/resources/mcp_editor.py" line="609" />
+            <source>返回配置</source>
+            <translation>Back to configuration</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="686" />
+            <source>测试中…</source>
+            <translation>Testing…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="687" />
+            <source>测试</source>
+            <translation>Test</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="690" />
+            <source>测试 MCP 连接</source>
+            <translation>Test MCP connection</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="691" />
+            <source>用当前草稿测试连接和读取工具目录</source>
+            <translation>Test the current draft connection and fetch its tools</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="746" />
+            <location filename="../../gui/resources/mcp_editor.py" line="700" />
             <source>测试连接</source>
             <translation>Test connection</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="664" />
+            <location filename="../../gui/resources/mcp_editor.py" line="700" />
             <source>当前环境未提供 MCP 运行时，无法测试连接。</source>
             <translation>The MCP runtime is unavailable in this environment. Connection testing is not supported.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="703" />
+            <location filename="../../gui/resources/mcp_editor.py" line="738" />
             <source>连接测试未返回结果</source>
             <translation>The connection test returned no result</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="712" />
+            <location filename="../../gui/resources/mcp_editor.py" line="747" />
             <source>连接成功，发现 {value} 个工具。</source>
             <translation>Connected. Tools discovered: {value}.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="721" />
-            <location filename="../../gui/resources/mcp_editor.py" line="715" />
+            <location filename="../../gui/resources/mcp_editor.py" line="756" />
+            <location filename="../../gui/resources/mcp_editor.py" line="750" />
             <source>未知错误</source>
             <translation>Unknown error</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="720" />
+            <location filename="../../gui/resources/mcp_editor.py" line="755" />
             <source>MCP 连接失败</source>
             <translation>MCP connection failed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="816" />
-            <location filename="../../gui/resources/mcp_editor.py" line="756" />
+            <location filename="../../gui/resources/mcp_editor.py" line="852" />
+            <location filename="../../gui/resources/mcp_editor.py" line="792" />
             <source>MCP 配置 (*.json);;所有文件 (*)</source>
             <translation>MCP configuration (*.json);;All files (*)</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="768" />
-            <location filename="../../gui/resources/mcp_editor.py" line="764" />
+            <location filename="../../gui/resources/mcp_editor.py" line="804" />
+            <location filename="../../gui/resources/mcp_editor.py" line="800" />
             <source>导入失败</source>
             <translation>Import failed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="764" />
+            <location filename="../../gui/resources/mcp_editor.py" line="800" />
             <source>无法读取文件：{exc}</source>
             <translation>Could not read the file: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="768" />
+            <location filename="../../gui/resources/mcp_editor.py" line="804" />
             <source>文件必须是 {"mcpServers": {...}} 格式。</source>
             <translation>The file must use the {"mcpServers": {...}} format.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="780" />
+            <location filename="../../gui/resources/mcp_editor.py" line="816" />
             <source>服务名称必须是字符串</source>
             <translation>Server names must be strings</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="783" />
+            <location filename="../../gui/resources/mcp_editor.py" line="819" />
             <source>{name}：条目不是对象</source>
             <translation>{name}: the entry is not an object</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="799" />
+            <location filename="../../gui/resources/mcp_editor.py" line="835" />
             <source>导入 {value} 个服务。</source>
             <translation>Servers imported: {value}.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="801" />
+            <location filename="../../gui/resources/mcp_editor.py" line="837" />
             <source>
 以下条目被跳过：
 </source>
@@ -4163,17 +5063,17 @@ Skipped entries:
 </translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="812" />
+            <location filename="../../gui/resources/mcp_editor.py" line="848" />
             <source>没有已启用的 MCP 服务可导出。</source>
             <translation>No enabled MCP servers to export.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="824" />
+            <location filename="../../gui/resources/mcp_editor.py" line="860" />
             <source>导出失败</source>
             <translation>Export failed</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="829" />
+            <location filename="../../gui/resources/mcp_editor.py" line="865" />
             <source>已导出 {value} 个服务到：
 {path}
 
@@ -4184,96 +5084,59 @@ Skipped entries:
 The export includes credentials from request headers. Keep this file secure.</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="852" />
+            <location filename="../../gui/resources/mcp_editor.py" line="888" />
             <source>确定删除“{name}”吗？</source>
             <translation>Delete “{name}”?</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="864" />
+            <location filename="../../gui/resources/mcp_editor.py" line="900" />
             <source>放弃 MCP 更改</source>
             <translation>Discard MCP changes</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="865" />
+            <location filename="../../gui/resources/mcp_editor.py" line="901" />
             <source>重新读取会放弃尚未保存的 MCP 更改，是否继续？</source>
             <translation>Reloading will discard unsaved MCP changes. Continue?</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="910" />
+            <location filename="../../gui/resources/mcp_editor.py" line="946" />
             <source>停用 MCP 服务</source>
             <translation>Disable MCP server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="910" />
+            <location filename="../../gui/resources/mcp_editor.py" line="946" />
             <source>启用 MCP 服务</source>
             <translation>Enable MCP server</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="920" />
-            <source>启用</source>
-            <translation>Enable</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="920" />
+            <location filename="../../gui/resources/mcp_editor.py" line="956" />
             <source>状态：{value}</source>
             <translation>Status: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="921" />
+            <location filename="../../gui/resources/mcp_editor.py" line="956" />
+            <source>启用</source>
+            <translation>Enable</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/mcp_editor.py" line="957" />
             <source>传输：{transport}</source>
             <translation>Transport: {transport}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="926" />
+            <location filename="../../gui/resources/mcp_editor.py" line="962" />
             <source>请求头：{value}</source>
             <translation>Headers: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="928" />
+            <location filename="../../gui/resources/mcp_editor.py" line="964" />
             <source>命令：{value}</source>
             <translation>Command: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="929" />
+            <location filename="../../gui/resources/mcp_editor.py" line="965" />
             <source>参数：{value}</source>
             <translation>Arguments: {value}</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="254" />
-            <location filename="../../gui/resources/mcp_editor.py" line="253" />
-            <source>搜索 MCP</source>
-            <translation>Search MCP</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="280" />
-            <source>未找到匹配 MCP</source>
-            <translation>No matching MCP servers</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="280" />
-            <source>按回车搜索市场，或通过“添加”配置服务。</source>
-            <translation>Press Enter to search the market, or use Add to configure a server.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="585" />
-            <location filename="../../gui/resources/mcp_editor.py" line="292" />
-            <source>版本与更新</source>
-            <translation>Version and updates</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="314" />
-            <source>修改后保存生效。可先测试连接，再启用。</source>
-            <translation>Save changes to apply. Test the connection before enabling it.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="404" />
-            <source>输入筛选 MCP；回车搜索市场。新增配置在保存后生效。</source>
-            <translation>Type to filter MCP servers; press Enter to search the market. Save to apply new configurations.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/mcp_editor.py" line="585" />
-            <source>返回配置</source>
-            <translation>Back to configuration</translation>
         </message>
     </context>
     <context>
@@ -4282,6 +5145,86 @@ The export includes credentials from request headers. Keep this file secure.</tr
             <location filename="../../gui/resources/mcp_page.py" line="33" />
             <source>加载和管理外部 MCP Server。工具权限由“权限”页统一控制。</source>
             <translation>Manage external MCP servers. Configure tool access on the Permissions page.</translation>
+        </message>
+    </context>
+    <context>
+        <name>MemoryPage</name>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="57" />
+            <location filename="../../gui/settings/pages/memory_page.py" line="24" />
+            <source>记忆与资料</source>
+            <translation>Memory &amp; sources</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="25" />
+            <source>设置全局追加指令，查看项目规则、记忆和资料。</source>
+            <translation>Configure global instructions and view project rules, memory and materials.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="30" />
+            <location filename="../../gui/settings/pages/memory_page.py" line="27" />
+            <source>全局追加指令</source>
+            <translation>Global additional instructions</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="33" />
+            <source>应用于所有模式；留空使用默认行为。</source>
+            <translation>Applies to all modes; leave blank for the default behavior.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="39" />
+            <source>环境上下文</source>
+            <translation>Environment context</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="41" />
+            <source>包含环境信息</source>
+            <translation>Include environment information</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="43" />
+            <source>项目树深度</source>
+            <translation>Project tree depth</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="47" />
+            <source>项目与资料</source>
+            <translation>Project &amp; materials</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="48" />
+            <source>查看</source>
+            <translation>View</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="49" />
+            <source>查看项目 AGENTS.md</source>
+            <translation>View project AGENTS.md</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="51" />
+            <source>当前未选择项目</source>
+            <translation>No project selected</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="53" />
+            <source>项目指令</source>
+            <translation>Project instructions</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="54" />
+            <source>打开</source>
+            <translation>Open</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="55" />
+            <source>打开记忆与资料</source>
+            <translation>Open memory &amp; sources</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/memory_page.py" line="58" />
+            <source>阅读文件、审核项目记忆与用户偏好。</source>
+            <translation>Read files and review project memory and user preferences.</translation>
         </message>
     </context>
     <context>
@@ -4480,123 +5423,131 @@ The export includes credentials from request headers. Keep this file secure.</tr
         </message>
     </context>
     <context>
+        <name>MessagePresenter</name>
+        <message>
+            <location filename="../../gui/presenters/message_presenter.py" line="966" />
+            <source>任务状态保存失败，请重试</source>
+            <translation>Could not save task state. Try again.</translation>
+        </message>
+    </context>
+    <context>
         <name>MessageWidget</name>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="264" />
-            <source>已停止</source>
-            <translation>Stopped</translation>
+            <location filename="../../gui/widgets/chat_view.py" line="759" />
+            <source>已复制</source>
+            <translation>Copied</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="168" />
+            <location filename="../../gui/widgets/message_widget.py" line="177" />
             <source>子助手</source>
             <translation>Sub-agent</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="218" />
+            <location filename="../../gui/widgets/message_widget.py" line="229" />
             <source>模型调用失败</source>
             <translation>Model request failed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="222" />
+            <location filename="../../gui/widgets/message_widget.py" line="233" />
             <source>调用失败</source>
             <translation>Request failed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="348" />
+            <location filename="../../gui/widgets/message_widget.py" line="266" />
+            <source>已停止</source>
+            <translation>Stopped</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/message_widget.py" line="365" />
             <source>模型达到输出上限，未生成正文。请调整输出上限、推理强度或模型后继续。</source>
             <translation>The model reached its output limit without producing an answer. Adjust the output limit, reasoning effort or model before continuing.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="350" />
+            <location filename="../../gui/widgets/message_widget.py" line="367" />
             <source>模型达到输出上限，回答尚未完成。可以继续，或先调整模型设置。</source>
             <translation>The model reached its output limit before finishing. Continue, or adjust the model settings first.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="352" />
+            <location filename="../../gui/widgets/message_widget.py" line="369" />
             <source>尚未收到完成确认，运行已暂停。可以继续完成剩余步骤。</source>
             <translation>The run paused without a completion confirmation. Continue to finish the remaining steps.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="354" />
+            <location filename="../../gui/widgets/message_widget.py" line="371" />
             <source>运行尚未完成，可以继续。</source>
             <translation>The run is unfinished. You can continue.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="359" />
+            <location filename="../../gui/widgets/message_widget.py" line="376" />
             <source>此前工具结果和任务状态已保留。</source>
             <translation>Previous tool results and task state have been preserved.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="377" />
+            <location filename="../../gui/widgets/message_widget.py" line="380" />
             <source>本次请求上限：{count} token</source>
             <translation>Request output limit: {count} tokens</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="386" />
-            <source>服务端可能应用了更低的输出或推理上限。</source>
-            <translation>The server may apply a lower output or reasoning limit.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/widgets/message_widget.py" line="363" />
+            <location filename="../../gui/widgets/message_widget.py" line="384" />
             <source>输出：{count} token</source>
             <translation>Output: {count} tokens</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="365" />
+            <location filename="../../gui/widgets/message_widget.py" line="386" />
             <source>其中推理：{count} token</source>
             <translation>Reasoning within output: {count} tokens</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="400" />
-            <source>继续未完成的 Agent 运行</source>
-            <translation>Continue the unfinished agent run</translation>
+            <location filename="../../gui/widgets/message_widget.py" line="389" />
+            <source>服务端可能应用了更低的输出或推理上限。</source>
+            <translation>The server may apply a lower output or reasoning limit.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="599" />
-            <location filename="../../gui/widgets/message_widget.py" line="410" />
+            <location filename="../../gui/widgets/message_widget.py" line="419" />
+            <source>继续任务；保留已有工具结果和任务状态</source>
+            <translation>Resume task; keep existing tool results and task state</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/message_widget.py" line="434" />
+            <location filename="../../gui/widgets/message_widget.py" line="433" />
             <source>复制原文</source>
             <translation>Copy original text</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="422" />
+            <location filename="../../gui/widgets/message_widget.py" line="446" />
             <source>编辑并重试；发送后删除该轮原回复和后续对话</source>
             <translation>Edit and retry. Sending removes the original response and later messages.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="434" />
+            <location filename="../../gui/widgets/message_widget.py" line="458" />
             <source>重新生成；删除该轮回复和后续对话，已执行的操作不会撤销</source>
             <translation>Regenerate. Removes this response and later messages; completed actions are not undone.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="475" />
+            <location filename="../../gui/widgets/message_widget.py" line="502" />
             <source>复用到输入框（不修改历史）</source>
             <translation>Reuse in composer (keep history)</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="481" />
+            <location filename="../../gui/widgets/message_widget.py" line="508" />
             <source>删除该轮及后续对话</source>
             <translation>Delete this turn and later messages</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/message_widget.py" line="482" />
+            <location filename="../../gui/widgets/message_widget.py" line="509" />
             <source>只修改 PyCat 记录，不撤销已经执行的操作</source>
             <translation>Only changes PyCat records; completed actions are not undone</translation>
-        </message>
-        <message>
-            <location filename="../../gui/widgets/message_widget.py" line="592" />
-            <source>已复制</source>
-            <translation>Copied</translation>
         </message>
     </context>
     <context>
         <name>ModeKind</name>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="162" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="173" />
             <source>主模式</source>
             <translation>Primary mode</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="163" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="174" />
             <source>子 Agent</source>
             <translation>Subagent</translation>
         </message>
@@ -4604,72 +5555,72 @@ The export includes credentials from request headers. Keep this file secure.</tr
     <context>
         <name>ModelCatalogDialog</name>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="41" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="42" />
             <source>{name} 模型目录</source>
             <translation>{name} model catalog</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="50" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="51" />
             <source>搜索模型 ID 或名称</source>
             <translation>Search model ID or name</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="56" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="58" />
             <source>重新获取远端模型</source>
             <translation>Refresh remote models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="73" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="76" />
             <source>应用选择</source>
             <translation>Apply selection</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="83" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="86" />
             <source>正在获取远端模型...</source>
             <translation>Fetching remote models...</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="97" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="100" />
             <source>未找到远端模型</source>
             <translation>No remote models found</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="101" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="104" />
             <source>获取失败：{value}</source>
             <translation>Could not fetch models: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="101" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="104" />
             <source>未知错误</source>
             <translation>Unknown error</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="134" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
             <source>远端与本地</source>
             <translation>Remote and local</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="134" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
             <source>远端模型</source>
             <translation>Remote models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="134" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
             <source>本地模型</source>
             <translation>Local models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="137" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="140" />
             <source>上下文 {context_window:,}</source>
             <translation>Context {context_window:,}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="139" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="142" />
             <source>推理 {reasoning_codec}</source>
             <translation>Reasoning {reasoning_codec}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/model_catalog_dialog.py" line="167" />
+            <location filename="../../gui/settings/model_catalog_dialog.py" line="170" />
             <source>已选 {selected} / {total}</source>
             <translation>Selected {selected} / {total}</translation>
         </message>
@@ -4959,27 +5910,27 @@ The export includes credentials from request headers. Keep this file secure.</tr
     <context>
         <name>ModelRefCombo</name>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="146" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="154" />
             <source>当前绑定模型不在可用目录中；请检查服务、模型用途和输入能力。</source>
             <translation>The current model is not in the available catalog. Check its provider, purpose and input capabilities.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="75" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="83" />
             <source>跟随当前对话模型</source>
             <translation>Use conversation model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="86" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="94" />
             <source>搜索模型 / provider|model</source>
             <translation>Search models / provider|model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="87" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="95" />
             <source>从已添加的常用模型中搜索选择。</source>
             <translation>Search and select from your added models.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="104" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="112" />
             <source>留空表示跟随当前对话正在使用的模型。</source>
             <translation>Leave empty to use the current conversation's model.</translation>
         </message>
@@ -4987,28 +5938,28 @@ The export includes credentials from request headers. Keep this file secure.</tr
     <context>
         <name>ModelTargetCombo</name>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="258" />
-            <location filename="../../gui/widgets/model_ref_selector.py" line="223" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="266" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="231" />
             <source>使用辅助模型默认值</source>
             <translation>Use default auxiliary model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="237" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="245" />
             <source>搜索模型 / provider|model</source>
             <translation>Search models / provider|model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="238" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="246" />
             <source>可跟随辅助默认、跟随会话主模型，或指定 provider|model。</source>
             <translation>Use the default auxiliary model, the conversation's primary model, or an explicit provider|model.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="259" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="267" />
             <source>跟随会话主模型</source>
             <translation>Use primary conversation model</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/model_ref_selector.py" line="261" />
+            <location filename="../../gui/widgets/model_ref_selector.py" line="269" />
             <source>请选择模型</source>
             <translation>Choose a model</translation>
         </message>
@@ -5016,7 +5967,7 @@ The export includes credentials from request headers. Keep this file secure.</tr
     <context>
         <name>ModelsPage</name>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="38" />
+            <location filename="../../gui/settings/pages/models_page.py" line="39" />
             <source>{name}
 状态：{value}
 接口：{value_}
@@ -5027,105 +5978,105 @@ API type: {value_}
 API: {value__}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="38" />
+            <location filename="../../gui/settings/pages/models_page.py" line="39" />
             <source>启用</source>
             <translation>Enable</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="38" />
+            <location filename="../../gui/settings/pages/models_page.py" line="39" />
             <source>停用</source>
             <translation>Disable</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="72" />
+            <location filename="../../gui/settings/pages/models_page.py" line="74" />
             <source>模型</source>
             <translation>Models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="72" />
+            <location filename="../../gui/settings/pages/models_page.py" line="74" />
             <source>管理默认模型、服务商连接和单模型能力参数。</source>
             <translation>Manage default models, provider connections and model capabilities.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="83" />
+            <location filename="../../gui/settings/pages/models_page.py" line="86" />
             <source>选择模型</source>
             <translation>Choose model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="89" />
+            <location filename="../../gui/settings/pages/models_page.py" line="92" />
             <source>跟随会话模型</source>
             <translation>Follow conversation model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="93" />
+            <location filename="../../gui/settings/pages/models_page.py" line="94" />
             <source>新建桌面对话和频道会话默认使用该模型。</source>
             <translation>Default model for new desktop and channel conversations.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="94" />
+            <location filename="../../gui/settings/pages/models_page.py" line="95" />
             <source>能力和子 Agent 未指定模型时使用；留空则跟随当前会话主模型。</source>
             <translation>Used by capabilities and subagents without a model override. Leave empty to follow the conversation model.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="95" />
+            <location filename="../../gui/settings/pages/models_page.py" line="96" />
             <source>默认模型</source>
             <translation>Default model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="98" />
+            <location filename="../../gui/settings/pages/models_page.py" line="97" />
             <source>辅助模型</source>
             <translation>Auxiliary model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="106" />
+            <location filename="../../gui/settings/pages/models_page.py" line="104" />
             <source>添加 API 服务商</source>
             <translation>Add API provider</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="245" />
-            <location filename="../../gui/settings/pages/models_page.py" line="109" />
+            <location filename="../../gui/settings/pages/models_page.py" line="243" />
+            <location filename="../../gui/settings/pages/models_page.py" line="107" />
             <source>停用服务商</source>
             <translation>Disable provider</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="113" />
+            <location filename="../../gui/settings/pages/models_page.py" line="111" />
             <source>上移服务商</source>
             <translation>Move provider up</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="116" />
+            <location filename="../../gui/settings/pages/models_page.py" line="114" />
             <source>下移服务商</source>
             <translation>Move provider down</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="289" />
-            <location filename="../../gui/settings/pages/models_page.py" line="241" />
-            <location filename="../../gui/settings/pages/models_page.py" line="119" />
+            <location filename="../../gui/settings/pages/models_page.py" line="287" />
+            <location filename="../../gui/settings/pages/models_page.py" line="239" />
+            <location filename="../../gui/settings/pages/models_page.py" line="117" />
             <source>删除服务商</source>
             <translation>Delete provider</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="241" />
+            <location filename="../../gui/settings/pages/models_page.py" line="239" />
             <source>固定登录入口，可停用或退出登录</source>
             <translation>Built-in account connection; disable it or sign out</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="245" />
+            <location filename="../../gui/settings/pages/models_page.py" line="243" />
             <source>启用服务商</source>
             <translation>Enable provider</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="289" />
+            <location filename="../../gui/settings/pages/models_page.py" line="287" />
             <source>确定删除“{name}”吗？</source>
             <translation>Delete “{name}”?</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="128" />
+            <location filename="../../gui/settings/pages/models_page.py" line="126" />
             <source>尚未添加模型服务</source>
             <translation>No model providers yet</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/models_page.py" line="129" />
+            <location filename="../../gui/settings/pages/models_page.py" line="127" />
             <source>点击上方加号添加服务商，然后配置连接与模型。</source>
             <translation>Use the plus button above to add a provider, then configure its connection and models.</translation>
         </message>
@@ -5158,7 +6109,7 @@ API: {value__}</translation>
             <translation>Add mode</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="364" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="396" />
             <location filename="../../gui/settings/pages/modes_page.py" line="90" />
             <source>删除模式</source>
             <translation>Delete mode</translation>
@@ -5199,53 +6150,58 @@ API: {value__}</translation>
             <translation>Full conversation, read-only</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="141" />
-            <source>标识</source>
-            <translation>ID</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="142" />
-            <source>名称</source>
-            <translation>Name</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="143" />
-            <source>用途</source>
-            <translation>Purpose</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="144" />
-            <source>工具类别</source>
-            <translation>Tool categories</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="145" />
-            <source>完成策略</source>
-            <translation>Completion policy</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="146" />
-            <source>委托模型</source>
-            <translation>Delegated model</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="147" />
-            <source>共享上下文</source>
-            <translation>Shared context</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="150" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="140" />
             <source>指令</source>
             <translation>Instructions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="164" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="147" />
+            <source>恢复内置指令</source>
+            <translation>Restore built-in instructions</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="151" />
+            <source>标识</source>
+            <translation>ID</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="152" />
+            <source>名称</source>
+            <translation>Name</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="153" />
+            <source>用途</source>
+            <translation>Purpose</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="154" />
+            <source>工具类别</source>
+            <translation>Tool categories</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="155" />
+            <source>完成策略</source>
+            <translation>Completion policy</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="156" />
+            <source>委托模型</source>
+            <translation>Delegated model</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="157" />
+            <source>共享上下文</source>
+            <translation>Shared context</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="175" />
             <source>主模式 + 子 Agent</source>
             <translation>Primary mode and subagent</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="308" />
-            <location filename="../../gui/settings/pages/modes_page.py" line="180" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="340" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="191" />
             <source>{name}
 标识：{slug}
 类型：{kind_label}</source>
@@ -5254,172 +6210,180 @@ ID: {slug}
 Type: {kind_label}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="254" />
+            <location filename="../../gui/settings/pages/modes_page.py" line="265" />
             <source>Channel 使用 agent__complete 作为唯一正常完成协议。</source>
             <translation>Channel uses agent__complete as its only normal completion protocol.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="330" />
-            <source>该 profile 被委托运行时使用，轮次上限继承父任务。</source>
-            <translation>Used when this profile is delegated. The turn limit is inherited from the parent task.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="330" />
-            <source>主模式使用当前会话模型。</source>
-            <translation>Primary modes use the current conversation model.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="345" />
-            <source>自定义 Agent {index}</source>
-            <translation>Custom agent {index}</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="346" />
-            <source>自定义委托 profile</source>
-            <translation>Custom delegated profile</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="346" />
-            <source>自定义主模式</source>
-            <translation>Custom primary mode</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="361" />
-            <source>不能删除</source>
-            <translation>Cannot delete</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="361" />
-            <source>Chat、Agent、Plan、Review 和 Channel 是核心模式。</source>
-            <translation>Chat, Agent, Plan, Review and Channel are core modes.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/pages/modes_page.py" line="364" />
-            <source>确定删除“{name}”吗？</source>
-            <translation>Delete “{name}”?</translation>
-        </message>
-        <message>
-            <source>恢复内置指令</source>
-            <translation>Restore built-in instructions</translation>
-        </message>
-        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="288" />
             <source>内置指令 · 随版本更新</source>
             <translation>Built-in instructions · Updated with PyCat</translation>
         </message>
         <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="289" />
             <source>自定义指令</source>
             <translation>Custom instructions</translation>
         </message>
         <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="292" />
             <source>自定义指令会覆盖内置内容，请检查工具名称和完成策略。</source>
             <translation>Custom instructions override the built-in content. Check tool names and the completion policy.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="362" />
+            <source>该 profile 被委托运行时使用，轮次上限继承父任务。</source>
+            <translation>Used when this profile is delegated. The turn limit is inherited from the parent task.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="362" />
+            <source>主模式使用当前会话模型。</source>
+            <translation>Primary modes use the current conversation model.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="377" />
+            <source>自定义 Agent {index}</source>
+            <translation>Custom agent {index}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="378" />
+            <source>自定义委托 profile</source>
+            <translation>Custom delegated profile</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="378" />
+            <source>自定义主模式</source>
+            <translation>Custom primary mode</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="393" />
+            <source>不能删除</source>
+            <translation>Cannot delete</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="393" />
+            <source>Chat、Agent、Plan、Review 和 Channel 是核心模式。</source>
+            <translation>Chat, Agent, Plan, Review and Channel are core modes.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/modes_page.py" line="396" />
+            <source>确定删除“{name}”吗？</source>
+            <translation>Delete “{name}”?</translation>
+        </message>
+    </context>
+    <context>
+        <name>NavigationHeader</name>
+        <message>
+            <location filename="../../gui/widgets/navigation_header.py" line="23" />
+            <location filename="../../gui/widgets/navigation_header.py" line="22" />
+            <source>关于 PyCat</source>
+            <translation>About PyCat</translation>
         </message>
     </context>
     <context>
         <name>OcrPage</name>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="28" />
-            <location filename="../../gui/settings/pages/ocr_page.py" line="20" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="30" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="22" />
             <source>本地组件将在使用时检查</source>
             <translation>Local components will be checked when needed</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="22" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="24" />
             <source>缺少：{files}</source>
             <translation>Missing: {files}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="25" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="27" />
             <source>本地 PP-OCRv6 Small 组件完整</source>
             <translation>Local PP-OCRv6 Small components are ready</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="27" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="29" />
             <source>OCR 引擎可用</source>
             <translation>OCR engine is available</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="43" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="46" />
             <source>从图片、截图和扫描 PDF 中提取文字。所有入口共用此配置。</source>
             <translation>Extract text from images, screenshots and scanned PDFs. All entry points share this configuration.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="44" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="47" />
             <source>识别方式</source>
             <translation>Recognition</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="45" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="48" />
             <source>启用 OCR</source>
             <translation>Enable OCR</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="46" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="49" />
             <source>识别后端</source>
             <translation>OCR backend</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="47" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="50" />
             <source>本地 · PP-OCRv6 Small</source>
             <translation>Local · PP-OCRv6 Small</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="48" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="51" />
             <source>大模型 · 视觉识别</source>
             <translation>Model · Vision OCR</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="50" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="53" />
             <source>PDF 每批</source>
             <translation>PDF batch size</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="51" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="54" />
             <source> 页</source>
             <translation> pages</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="54" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="57" />
             <source>视觉模型</source>
             <translation>Vision model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="57" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="60" />
             <source>请选择支持图片输入的模型</source>
             <translation>Choose a model that supports image input</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="58" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="61" />
             <source>模型</source>
             <translation>Models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="59" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="62" />
             <source>识别提示词</source>
             <translation>OCR prompt</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="61" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="66" />
             <source>恢复默认提示词</source>
             <translation>Restore default prompt</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="67" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="74" />
             <source>运行状态</source>
             <translation>Runtime status</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="95" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="102" />
             <source>图片和 PDF 页面将发送给所选模型服务。按页识别，不自动切换后端；模型需支持图片输入。</source>
             <translation>Images and PDF pages are sent to the selected model service, one page at a time. The model must support image input. The backend will not switch automatically.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="96" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="103" />
             <source>本地识别不上传文件；PP-OCR 组件只在识别时加载。</source>
             <translation>Local OCR does not upload files. PP-OCR components load only when recognition starts.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/ocr_page.py" line="101" />
+            <location filename="../../gui/settings/pages/ocr_page.py" line="108" />
             <source>请为视觉 OCR 选择模型，并在模型设置中启用图片输入。</source>
             <translation>Choose a model for vision OCR and enable image input in its settings.</translation>
         </message>
@@ -5575,32 +6539,32 @@ Type: {kind_label}</translation>
     <context>
         <name>ProviderEditor</name>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="61" />
+            <location filename="../../gui/settings/provider_editor.py" line="63" />
             <source>未命名模型</source>
             <translation>Untitled model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="66" />
+            <location filename="../../gui/settings/provider_editor.py" line="68" />
             <source>工具</source>
             <translation>Tools</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="67" />
+            <location filename="../../gui/settings/provider_editor.py" line="69" />
             <source>推理</source>
             <translation>Reasoning</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="68" />
+            <location filename="../../gui/settings/provider_editor.py" line="70" />
             <source>图片输入</source>
             <translation>Image input</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="69" />
+            <location filename="../../gui/settings/provider_editor.py" line="71" />
             <source>音频输入</source>
             <translation>Audio input</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="78" />
+            <location filename="../../gui/settings/provider_editor.py" line="80" />
             <source>{title}
 模型 ID：{model_id}
 能力：{value}
@@ -5613,305 +6577,329 @@ Context window: {value_}
 Max output: {value__}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="78" />
+            <location filename="../../gui/settings/provider_editor.py" line="80" />
             <source>文本</source>
             <translation>Text</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="78" />
-            <location filename="../../gui/settings/provider_editor.py" line="78" />
+            <location filename="../../gui/settings/provider_editor.py" line="80" />
+            <location filename="../../gui/settings/provider_editor.py" line="80" />
             <source>未设置</source>
             <translation>Not set</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="134" />
+            <location filename="../../gui/settings/provider_editor.py" line="137" />
             <source>OpenAI 兼容 / Chat Completions</source>
             <translation>OpenAI compatible / Chat Completions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="136" />
+            <location filename="../../gui/settings/provider_editor.py" line="139" />
             <source>Anthropic 原生 / Messages API</source>
             <translation>Anthropic native / Messages API</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="137" />
+            <location filename="../../gui/settings/provider_editor.py" line="140" />
             <source>Ollama 本地 / Chat API</source>
             <translation>Ollama local / Chat API</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="147" />
+            <location filename="../../gui/settings/provider_editor.py" line="150" />
             <source>连接</source>
             <translation>Connection</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="148" />
+            <location filename="../../gui/settings/provider_editor.py" line="151" />
             <source>模型</source>
             <translation>Models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="177" />
+            <location filename="../../gui/settings/provider_editor.py" line="182" />
             <source>ChatGPT / Codex 登录</source>
             <translation>ChatGPT / Codex sign-in</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="178" />
+            <location filename="../../gui/settings/provider_editor.py" line="183" />
             <source>WorkBuddy / CodeBuddy（国内 · 实验性）</source>
             <translation>WorkBuddy / CodeBuddy (China, experimental)</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="190" />
+            <location filename="../../gui/settings/provider_editor.py" line="613" />
+            <location filename="../../gui/settings/provider_editor.py" line="196" />
             <source>显示 API Key</source>
             <translation>Show API key</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="202" />
+            <location filename="../../gui/settings/provider_editor.py" line="208" />
             <source>名称</source>
             <translation>Name</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="203" />
+            <location filename="../../gui/settings/provider_editor.py" line="209" />
             <source>登录方式</source>
             <translation>Authentication</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="206" />
+            <location filename="../../gui/settings/provider_editor.py" line="212" />
             <source>聊天接口类型</source>
             <translation>Chat API type</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="207" />
+            <location filename="../../gui/settings/provider_editor.py" line="213" />
             <source>API 地址</source>
             <translation>API URL</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="457" />
-            <location filename="../../gui/settings/provider_editor.py" line="215" />
+            <location filename="../../gui/settings/provider_editor.py" line="471" />
+            <location filename="../../gui/settings/provider_editor.py" line="221" />
             <source>登录 ChatGPT</source>
             <translation>Sign in to ChatGPT</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="216" />
+            <location filename="../../gui/settings/provider_editor.py" line="222" />
             <source>退出登录</source>
             <translation>Sign out</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="217" />
+            <location filename="../../gui/settings/provider_editor.py" line="223" />
             <source>取消</source>
             <translation>Cancel</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="218" />
+            <location filename="../../gui/settings/provider_editor.py" line="226" />
             <source>同步模型</source>
             <translation>Sync models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="466" />
-            <location filename="../../gui/settings/provider_editor.py" line="460" />
-            <location filename="../../gui/settings/provider_editor.py" line="220" />
+            <location filename="../../gui/settings/provider_editor.py" line="480" />
+            <location filename="../../gui/settings/provider_editor.py" line="474" />
+            <location filename="../../gui/settings/provider_editor.py" line="227" />
             <source>未登录</source>
             <translation>Not signed in</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="251" />
+            <location filename="../../gui/settings/provider_editor.py" line="258" />
             <source>图像接口</source>
             <translation>Image API</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="424" />
-            <location filename="../../gui/settings/provider_editor.py" line="263" />
+            <location filename="../../gui/settings/provider_editor.py" line="435" />
+            <location filename="../../gui/settings/provider_editor.py" line="270" />
             <source>自定义请求头</source>
             <translation>Custom headers</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="456" />
-            <location filename="../../gui/settings/provider_editor.py" line="273" />
-            <source>测试连接</source>
-            <translation>Test connection</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/provider_editor.py" line="274" />
-            <source>检查服务连接与模型目录，不发起图像生成。</source>
-            <translation>Check the provider connection and model catalog.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/provider_editor.py" line="297" />
+            <location filename="../../gui/settings/provider_editor.py" line="303" />
             <source>OpenAI Images（GPT Image）</source>
             <translation>OpenAI Images (GPT Image)</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="298" />
+            <location filename="../../gui/settings/provider_editor.py" line="304" />
             <source>Qwen Image（DashScope 同步）</source>
             <translation>Qwen Image (DashScope sync)</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="299" />
+            <location filename="../../gui/settings/provider_editor.py" line="305" />
             <source>Seedream（火山 / BytePlus Ark）</source>
             <translation>Seedream (Volcengine / BytePlus Ark)</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="303" />
+            <location filename="../../gui/settings/provider_editor.py" line="309" />
             <source>图像接口类型</source>
             <translation>Image API type</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="309" />
+            <location filename="../../gui/settings/provider_editor.py" line="315" />
             <source>图像生成地址</source>
             <translation>Generation URL</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="310" />
+            <location filename="../../gui/settings/provider_editor.py" line="316" />
             <source>图像编辑地址</source>
             <translation>Editing URL</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="312" />
+            <location filename="../../gui/settings/provider_editor.py" line="318" />
             <source>留空跟随聊天 API 地址；可填基础地址或完整请求地址</source>
             <translation>Leave empty to use the chat API URL; accepts a base URL or full endpoint</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="313" />
+            <location filename="../../gui/settings/provider_editor.py" line="319" />
             <source>生成和编辑分别配置。填写完整 HTTP(S) 地址，不要只填写 /v1/images/...。</source>
             <translation>Configure generation and editing separately. Enter a full HTTP(S) URL, including the host.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="347" />
+            <location filename="../../gui/settings/provider_editor.py" line="353" />
             <source>生成与编辑分别沿用上方 API 地址，也可设置独立地址。共用本服务 API Key。</source>
             <translation>Generation and editing use the API URL above unless overridden. Both use this provider's API key.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="356" />
+            <location filename="../../gui/settings/provider_editor.py" line="363" />
             <source>模型目录</source>
             <translation>Model catalog</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="357" />
+            <location filename="../../gui/settings/provider_editor.py" line="364" />
             <source>自定义模型</source>
             <translation>Custom model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="358" />
+            <location filename="../../gui/settings/provider_editor.py" line="365" />
             <source>编辑模型</source>
             <translation>Edit model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="662" />
-            <location filename="../../gui/settings/provider_editor.py" line="360" />
+            <location filename="../../gui/settings/provider_editor.py" line="698" />
+            <location filename="../../gui/settings/provider_editor.py" line="367" />
             <source>删除模型</source>
             <translation>Delete model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="414" />
+            <location filename="../../gui/settings/provider_editor.py" line="425" />
             <source>未选择服务商</source>
             <translation>No provider selected</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="454" />
+            <location filename="../../gui/settings/provider_editor.py" line="468" />
             <source>聊天与图像能力共用此账号，无需配置接口。图像权限和额度由账号决定。</source>
             <translation>Chat and images share this account. Image access and limits depend on the account.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="455" />
+            <location filename="../../gui/settings/provider_editor.py" line="469" />
             <source>国内账号 · 实验性。模型与可用额度由账号决定。</source>
             <translation>China account · Experimental. Models and limits depend on the account.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="456" />
-            <source>检查账号</source>
-            <translation>Check account</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/provider_editor.py" line="457" />
+            <location filename="../../gui/settings/provider_editor.py" line="471" />
             <source>登录 WorkBuddy</source>
             <translation>Sign in to WorkBuddy</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="458" />
+            <location filename="../../gui/settings/provider_editor.py" line="472" />
             <source>国内账号 · 实验性。使用浏览器授权所选身份；切换账号请退出后重新登录。</source>
             <translation>China account · Experimental. Authorize the selected identity in your browser. Sign out to switch accounts.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="466" />
+            <location filename="../../gui/settings/provider_editor.py" line="480" />
             <source>已登录 · </source>
             <translation>Signed in · </translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="476" />
+            <location filename="../../gui/settings/provider_editor.py" line="490" />
             <source>在浏览器中完成登录…</source>
             <translation>Complete sign-in in your browser...</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="476" />
+            <location filename="../../gui/settings/provider_editor.py" line="490" />
             <source>正在准备登录…</source>
             <translation>Preparing sign-in...</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="512" />
+            <location filename="../../gui/settings/provider_editor.py" line="528" />
             <source>无法打开默认浏览器，请检查系统设置后重试。</source>
             <translation>Could not open the default browser. Check your system settings and try again.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="517" />
+            <location filename="../../gui/settings/provider_editor.py" line="533" />
             <source>已登录。同步可用模型后保存设置，即可在对话中选择。</source>
             <translation>Signed in. Sync available models and save settings to use them in conversations.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="574" />
+            <location filename="../../gui/settings/provider_editor.py" line="601" />
             <source>{label} JSON 无效：{exc}</source>
             <translation>Invalid {label} JSON: {exc}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="576" />
+            <location filename="../../gui/settings/provider_editor.py" line="603" />
             <source>{label}必须是 JSON 对象</source>
             <translation>{label} must be a JSON object</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="629" />
+            <location filename="../../gui/settings/provider_editor.py" line="612" />
+            <source>隐藏 API Key</source>
+            <translation>Hide API key</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/provider_editor.py" line="665" />
             <source>模型已存在</source>
             <translation>Model already exists</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="629" />
+            <location filename="../../gui/settings/provider_editor.py" line="665" />
             <source>“{model_id}”已在常用模型目录中。</source>
             <translation>“{model_id}” is already in the model catalog.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="662" />
+            <location filename="../../gui/settings/provider_editor.py" line="698" />
             <source>确定从常用目录删除“{model_id}”吗？</source>
             <translation>Remove “{model_id}” from the model catalog?</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="696" />
+            <location filename="../../gui/settings/provider_editor.py" line="760" />
+            <location filename="../../gui/settings/provider_editor.py" line="729" />
             <source>正在测试连接...</source>
             <translation>Testing connection...</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="704" />
+            <location filename="../../gui/settings/provider_editor.py" line="731" />
+            <source>检查账号</source>
+            <translation>Check account</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/provider_editor.py" line="733" />
+            <source>测试连接</source>
+            <translation>Test connection</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/provider_editor.py" line="737" />
+            <source>检查服务连接与模型目录，不发起图像生成。</source>
+            <translation>Check the provider connection and model catalog.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/provider_editor.py" line="786" />
             <source>连接失败：{error}</source>
             <translation>Connection failed: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="708" />
+            <location filename="../../gui/settings/provider_editor.py" line="790" />
             <source>连接成功</source>
             <translation>Connected</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/provider_editor.py" line="708" />
+            <location filename="../../gui/settings/provider_editor.py" line="790" />
             <source>连接失败：{message}</source>
             <translation>Connection failed: {message}</translation>
         </message>
     </context>
     <context>
+        <name>ResourceDiscovery</name>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="25" />
+            <source>搜索市场（回车）</source>
+            <translation>Search market (Enter)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="27" />
+            <source>加载更多</source>
+            <translation>Load more</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="72" />
+            <source>输入至少两个字符后，按回车搜索市场。</source>
+            <translation>Enter at least two characters, then press Enter to search the market.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="90" />
+            <source>市场匹配 {count} 项。</source>
+            <translation>Market matches: {count}.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/discovery.py" line="93" />
+            <source>正在搜索市场…</source>
+            <translation>Searching the market…</translation>
+        </message>
+    </context>
+    <context>
         <name>RuntimeStatus</name>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="70" />
-            <source>已停止</source>
-            <translation>Stopped</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="71" />
-            <source>未完成</source>
-            <translation>Incomplete</translation>
-        </message>
         <message>
             <location filename="../../gui/view_models/runtime_status.py" line="26" />
             <source>等待回复</source>
@@ -5943,7 +6931,7 @@ Max output: {value__}</translation>
             <translation>Replacing the message and rebuilding the active conversation history</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="71" />
+            <location filename="../../gui/view_models/runtime_status.py" line="91" />
             <location filename="../../gui/view_models/runtime_status.py" line="37" />
             <source>压缩中</source>
             <translation>Compacting</translation>
@@ -5974,7 +6962,7 @@ Max output: {value__}</translation>
             <translation>Deleting the current conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="70" />
+            <location filename="../../gui/view_models/runtime_status.py" line="90" />
             <location filename="../../gui/view_models/runtime_status.py" line="45" />
             <source>处理中</source>
             <translation>Working</translation>
@@ -5995,78 +6983,100 @@ Max output: {value__}</translation>
             <translation>Waiting for the next request</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="57" />
+            <location filename="../../gui/view_models/runtime_status.py" line="59" />
             <source>正在生成…</source>
             <translation>Generating…</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="59" />
+            <location filename="../../gui/view_models/runtime_status.py" line="61" />
             <source>工具 · {name}</source>
             <translation>Tool · {name}</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="60" />
+            <location filename="../../gui/view_models/runtime_status.py" line="62" />
             <source>正在等待工具返回</source>
             <translation>Waiting for the tool result</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="64" />
-            <source>开始执行</source>
-            <translation>Starting</translation>
-        </message>
-        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="104" />
+            <location filename="../../gui/view_models/runtime_status.py" line="92" />
             <location filename="../../gui/view_models/runtime_status.py" line="65" />
-            <source>工具中</source>
-            <translation>Running tool</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="66" />
-            <source>工具完成</source>
-            <translation>Tool finished</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="67" />
-            <source>重试中</source>
-            <translation>Retrying</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="68" />
-            <source>已完成</source>
-            <translation>Completed</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="69" />
-            <source>出错</source>
-            <translation>Failed</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="84" />
-            <location filename="../../gui/view_models/runtime_status.py" line="72" />
             <source>生成中</source>
             <translation>Generating</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="73" />
-            <source>思考中</source>
-            <translation>Thinking</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="75" />
-            <source>运行中</source>
-            <translation>Running</translation>
-        </message>
-        <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="85" />
+            <location filename="../../gui/view_models/runtime_status.py" line="105" />
+            <location filename="../../gui/view_models/runtime_status.py" line="66" />
             <source>正在等待模型响应</source>
             <translation>Waiting for the model response</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="90" />
+            <location filename="../../gui/view_models/runtime_status.py" line="70" />
+            <source>已停止</source>
+            <translation>Stopped</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="71" />
+            <source>未完成</source>
+            <translation>Incomplete</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="72" />
+            <source>已完成</source>
+            <translation>Completed</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="76" />
+            <source>重试 {count}/{total}</source>
+            <translation>Retry {count}/{total}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="79" />
+            <source>将在 {seconds} 秒后重试当前模型请求</source>
+            <translation>Retrying the current model request in {seconds} seconds</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="85" />
+            <source>开始执行</source>
+            <translation>Starting</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="86" />
+            <source>工具中</source>
+            <translation>Running tool</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="87" />
+            <source>工具完成</source>
+            <translation>Tool finished</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="88" />
+            <source>重试中</source>
+            <translation>Retrying</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="89" />
+            <source>出错</source>
+            <translation>Failed</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="93" />
+            <source>思考中</source>
+            <translation>Thinking</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="95" />
+            <source>运行中</source>
+            <translation>Running</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/runtime_status.py" line="110" />
             <source>待处理 {count}</source>
             <translation>Pending: {count}</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/runtime_status.py" line="91" />
+            <location filename="../../gui/view_models/runtime_status.py" line="111" />
             <source>{detail}；当前步骤完成后处理补充要求</source>
             <translation>{detail}; guidance will be applied after the current step</translation>
         </message>
@@ -6101,12 +7111,6 @@ Max output: {value__}</translation>
     </context>
     <context>
         <name>SearchPage</name>
-        <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="86" />
-            <location filename="../../gui/settings/pages/search_page.py" line="34" />
-            <source>检查</source>
-            <translation>Check</translation>
-        </message>
         <message>
             <location filename="../../gui/settings/pages/search_page.py" line="41" />
             <source>搜索</source>
@@ -6168,58 +7172,63 @@ Max output: {value__}</translation>
             <translation>Include dates</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="121" />
+            <location filename="../../gui/settings/pages/search_page.py" line="123" />
             <source>DuckDuckGo 无需配置。</source>
             <translation>DuckDuckGo requires no configuration.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="122" />
+            <location filename="../../gui/settings/pages/search_page.py" line="124" />
             <source>Google 无需密钥；受网络连接和搜索站点限流影响。</source>
             <translation>Google requires no key. Availability depends on your network and search rate limits.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="123" />
+            <location filename="../../gui/settings/pages/search_page.py" line="125" />
             <source>Bing 使用公开 RSS，无需密钥；受站点可用性影响。</source>
             <translation>Bing uses public RSS and requires no key. Availability depends on the site.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="124" />
+            <location filename="../../gui/settings/pages/search_page.py" line="126" />
             <source>Tavily 需要 API Key，适合需要摘要质量的搜索。</source>
             <translation>Tavily requires an API key and is suited to searches that need quality summaries.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="125" />
+            <location filename="../../gui/settings/pages/search_page.py" line="127" />
             <source>Brave Search 需要 API Key，适合隐私友好的通用搜索。</source>
             <translation>Brave Search requires an API key and offers privacy-focused general search.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="126" />
+            <location filename="../../gui/settings/pages/search_page.py" line="128" />
             <source>SearXNG 需要填写自托管实例地址。</source>
             <translation>SearXNG requires the URL of your self-hosted instance.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="138" />
+            <location filename="../../gui/settings/pages/search_page.py" line="135" />
             <source>检查中</source>
             <translation>Checking</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="161" />
-            <location filename="../../gui/settings/pages/search_page.py" line="158" />
+            <location filename="../../gui/settings/pages/search_page.py" line="136" />
+            <source>检查</source>
+            <translation>Check</translation>
+        </message>
+        <message>
+            <location filename="../../gui/settings/pages/search_page.py" line="180" />
+            <location filename="../../gui/settings/pages/search_page.py" line="177" />
             <source>连接测试</source>
             <translation>Connection test</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="158" />
+            <location filename="../../gui/settings/pages/search_page.py" line="177" />
             <source>搜索配置可用。</source>
             <translation>Search configuration is working.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="160" />
+            <location filename="../../gui/settings/pages/search_page.py" line="179" />
             <source>连接失败: {message}</source>
             <translation>Connection failed: {message}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/search_page.py" line="160" />
+            <location filename="../../gui/settings/pages/search_page.py" line="179" />
             <source>连接失败</source>
             <translation>Connection failed</translation>
         </message>
@@ -6232,17 +7241,17 @@ Max output: {value__}</translation>
             <translation>Back to list</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="205" />
+            <location filename="../../gui/settings/components.py" line="208" />
             <source>选择条目查看详情</source>
             <translation>Select an item to view details</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="254" />
+            <location filename="../../gui/settings/components.py" line="258" />
             <source>暂无内容</source>
             <translation>No content yet</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/components.py" line="322" />
+            <location filename="../../gui/settings/components.py" line="331" />
             <source>未命名</source>
             <translation>Untitled</translation>
         </message>
@@ -6250,359 +7259,300 @@ Max output: {value__}</translation>
     <context>
         <name>SettingsDialog</name>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="99" />
+            <location filename="../../gui/settings/settings_dialog.py" line="100" />
             <source>通用</source>
             <translation>General</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="478" />
-            <location filename="../../gui/settings/settings_dialog.py" line="100" />
+            <location filename="../../gui/settings/settings_dialog.py" line="446" />
+            <location filename="../../gui/settings/settings_dialog.py" line="101" />
             <source>模型</source>
             <translation>Models</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="101" />
+            <location filename="../../gui/settings/settings_dialog.py" line="102" />
             <source>运行与权限</source>
             <translation>Run &amp; permissions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="102" />
+            <location filename="../../gui/settings/settings_dialog.py" line="103" />
             <source>工具</source>
             <translation>Tools</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="489" />
-            <location filename="../../gui/settings/settings_dialog.py" line="425" />
-            <location filename="../../gui/settings/settings_dialog.py" line="422" />
-            <location filename="../../gui/settings/settings_dialog.py" line="103" />
+            <location filename="../../gui/settings/settings_dialog.py" line="456" />
+            <location filename="../../gui/settings/settings_dialog.py" line="104" />
             <source>记忆与资料</source>
             <translation>Memory &amp; sources</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="490" />
-            <location filename="../../gui/settings/settings_dialog.py" line="104" />
+            <location filename="../../gui/settings/settings_dialog.py" line="457" />
+            <location filename="../../gui/settings/settings_dialog.py" line="105" />
             <source>消息通道</source>
             <translation>Channels</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="105" />
+            <location filename="../../gui/settings/settings_dialog.py" line="106" />
             <source>高级</source>
             <translation>Advanced</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="122" />
+            <location filename="../../gui/settings/settings_dialog.py" line="123" />
             <source>服务商</source>
             <translation>Providers</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="123" />
+            <location filename="../../gui/settings/settings_dialog.py" line="124" />
             <source>应用设置</source>
             <translation>Application settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="479" />
-            <location filename="../../gui/settings/settings_dialog.py" line="125" />
+            <location filename="../../gui/settings/settings_dialog.py" line="447" />
+            <location filename="../../gui/settings/settings_dialog.py" line="126" />
             <source>模式</source>
             <translation>Modes</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="486" />
-            <location filename="../../gui/settings/settings_dialog.py" line="126" />
+            <location filename="../../gui/settings/settings_dialog.py" line="453" />
+            <location filename="../../gui/settings/settings_dialog.py" line="127" />
             <source>搜索</source>
             <translation>Search</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="127" />
+            <location filename="../../gui/settings/settings_dialog.py" line="128" />
             <source>无效配置</source>
             <translation>Invalid configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="427" />
-            <location filename="../../gui/settings/settings_dialog.py" line="216" />
+            <location filename="../../gui/settings/settings_dialog.py" line="253" />
+            <location filename="../../gui/settings/settings_dialog.py" line="218" />
             <source>设置</source>
             <translation>Settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="246" />
-            <location filename="../../gui/settings/settings_dialog.py" line="245" />
+            <location filename="../../gui/settings/settings_dialog.py" line="236" />
             <source>返回会话</source>
             <translation>Back to conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="251" />
+            <location filename="../../gui/settings/settings_dialog.py" line="241" />
             <source>搜索设置…</source>
             <translation>Search settings…</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="252" />
+            <location filename="../../gui/settings/settings_dialog.py" line="242" />
             <source>搜索设置</source>
             <translation>Search settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="285" />
+            <location filename="../../gui/settings/settings_dialog.py" line="278" />
             <source>保存更改</source>
             <translation>Save changes</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="394" />
-            <source>查看项目 AGENTS.md</source>
-            <translation>View project AGENTS.md</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="396" />
-            <source>当前未选择项目</source>
-            <translation>No project selected</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="422" />
-            <source>查看来源、管理记忆和阅读资料。</source>
-            <translation>View sources, manage memory and read materials.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="423" />
-            <source>资料与上下文</source>
-            <translation>Sources &amp; context</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="425" />
-            <source>阅读文件、审核项目记忆与用户偏好。</source>
-            <translation>Read files and review project memory and user preferences.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="425" />
-            <source>打开</source>
-            <translation>Open</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="482" />
-            <location filename="../../gui/settings/settings_dialog.py" line="426" />
-            <source>指令与来源</source>
-            <translation>Instructions &amp; sources</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="426" />
-            <source>管理全局指令和项目 AGENTS.md。</source>
-            <translation>Manage global instructions and the project's AGENTS.md.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="426" />
-            <source>查看</source>
-            <translation>View</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="427" />
-            <source>压缩策略</source>
-            <translation>Compaction policy</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="427" />
-            <source>分别设置工具内容压缩与上下文压缩。</source>
-            <translation>Configure tool content and context compaction separately.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="476" />
+            <location filename="../../gui/settings/settings_dialog.py" line="444" />
             <source>外观</source>
             <translation>Appearance</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="477" />
+            <location filename="../../gui/settings/settings_dialog.py" line="445" />
             <source>快捷键</source>
             <translation>Shortcuts</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="480" />
+            <location filename="../../gui/settings/settings_dialog.py" line="448" />
             <source>权限</source>
             <translation>Permissions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="481" />
+            <location filename="../../gui/settings/settings_dialog.py" line="449" />
             <source>策略</source>
             <translation>Policies</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="483" />
+            <location filename="../../gui/settings/settings_dialog.py" line="450" />
             <source>技能</source>
             <translation>Skills</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="485" />
+            <location filename="../../gui/settings/settings_dialog.py" line="452" />
             <source>模型能力</source>
             <translation>Model capabilities</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="487" />
+            <location filename="../../gui/settings/settings_dialog.py" line="454" />
             <source>电脑与浏览器</source>
             <translation>Computer &amp; browser</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="491" />
+            <location filename="../../gui/settings/settings_dialog.py" line="458" />
             <source>网络与诊断</source>
             <translation>Network &amp; diagnostics</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="492" />
+            <location filename="../../gui/settings/settings_dialog.py" line="459" />
             <source>终端</source>
             <translation>Terminal</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="493" />
+            <location filename="../../gui/settings/settings_dialog.py" line="460" />
             <source>关于</source>
             <translation>About</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="535" />
+            <location filename="../../gui/settings/settings_dialog.py" line="478" />
             <source>没有匹配的设置
 试试页面名称或关键词</source>
             <translation>No matching settings
 Try a page name or keyword</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="654" />
+            <location filename="../../gui/settings/settings_dialog.py" line="621" />
             <source>模式配置无效</source>
             <translation>Invalid mode configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="663" />
+            <location filename="../../gui/settings/settings_dialog.py" line="630" />
             <source>服务商配置无效</source>
             <translation>Invalid provider configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="671" />
+            <location filename="../../gui/settings/settings_dialog.py" line="638" />
             <source>默认模型无效</source>
             <translation>Invalid default model</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="685" />
+            <location filename="../../gui/settings/settings_dialog.py" line="652" />
             <source>MCP 配置无效</source>
             <translation>Invalid MCP configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="696" />
+            <location filename="../../gui/settings/settings_dialog.py" line="663" />
             <source>搜索配置无效</source>
             <translation>Invalid search configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="704" />
+            <location filename="../../gui/settings/settings_dialog.py" line="671" />
             <source>通用配置无效</source>
             <translation>Invalid general settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="711" />
+            <location filename="../../gui/settings/settings_dialog.py" line="678" />
             <source>快捷键配置无效</source>
             <translation>Invalid shortcuts</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="718" />
+            <location filename="../../gui/settings/settings_dialog.py" line="685" />
             <source>权限配置无效</source>
             <translation>Invalid permission configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="726" />
+            <location filename="../../gui/settings/settings_dialog.py" line="693" />
             <source>重试策略无效</source>
             <translation>Invalid retry policy</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="733" />
+            <location filename="../../gui/settings/settings_dialog.py" line="700" />
             <source>Agent 策略无效</source>
             <translation>Invalid agent policy</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="740" />
+            <location filename="../../gui/settings/settings_dialog.py" line="707" />
             <source>压缩阈值无效</source>
             <translation>Invalid compaction threshold</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="748" />
+            <location filename="../../gui/settings/settings_dialog.py" line="715" />
             <source>指令配置无效</source>
             <translation>Invalid instructions</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="756" />
+            <location filename="../../gui/settings/settings_dialog.py" line="723" />
             <source>能力配置无效</source>
             <translation>Invalid capability configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="782" />
+            <location filename="../../gui/settings/settings_dialog.py" line="749" />
             <source>频道配置无效</source>
             <translation>Invalid channel configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="786" />
+            <location filename="../../gui/settings/settings_dialog.py" line="753" />
             <source>终端配置无效</source>
             <translation>Invalid terminal configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="794" />
+            <location filename="../../gui/settings/settings_dialog.py" line="761" />
             <source>OCR 配置无效</source>
             <translation>Invalid OCR configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="800" />
+            <location filename="../../gui/settings/settings_dialog.py" line="767" />
             <source>OCR 模型配置无效</source>
             <translation>Invalid OCR model configuration</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="866" />
+            <location filename="../../gui/settings/settings_dialog.py" line="833" />
             <source>未保存的设置</source>
             <translation>Unsaved settings</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="867" />
+            <location filename="../../gui/settings/settings_dialog.py" line="834" />
             <source>设置中有未保存的更改。</source>
             <translation>You have unsaved settings changes.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="868" />
+            <location filename="../../gui/settings/settings_dialog.py" line="835" />
             <source>保存后关闭，或放弃这些配置草稿？</source>
             <translation>Save before closing, or discard these changes?</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="878" />
+            <location filename="../../gui/settings/settings_dialog.py" line="845" />
             <source>保存并关闭</source>
             <translation>Save and close</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="880" />
+            <location filename="../../gui/settings/settings_dialog.py" line="847" />
             <source>放弃更改</source>
             <translation>Discard changes</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="882" />
+            <location filename="../../gui/settings/settings_dialog.py" line="849" />
             <source>继续编辑</source>
             <translation>Keep editing</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="963" />
+            <location filename="../../gui/settings/settings_dialog.py" line="930" />
             <source>未保存：</source>
             <translation>Not saved: </translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="965" />
+            <location filename="../../gui/settings/settings_dialog.py" line="932" />
             <source>设置已保存，但运行时尚未完全应用。</source>
             <translation>Settings were saved, but could not be fully applied to the runtime.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="967" />
+            <location filename="../../gui/settings/settings_dialog.py" line="934" />
             <source>设置已保存。重启 PyCat 后切换界面语言。</source>
             <translation>Settings saved. Restart PyCat to change the interface language.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="969" />
+            <location filename="../../gui/settings/settings_dialog.py" line="936" />
             <source>设置已保存。</source>
             <translation>Settings saved.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="980" />
+            <location filename="../../gui/settings/settings_dialog.py" line="947" />
             <source>保存失败：{error}</source>
             <translation>Save failed: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="1025" />
+            <location filename="../../gui/settings/settings_dialog.py" line="992" />
             <source>正在保存设置…</source>
             <translation>Saving settings…</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/settings_dialog.py" line="1059" />
+            <location filename="../../gui/settings/settings_dialog.py" line="1026" />
             <source>有未保存的更改</source>
             <translation>Unsaved changes</translation>
         </message>
@@ -6610,122 +7560,122 @@ Try a page name or keyword</translation>
     <context>
         <name>SettingsPresenter</name>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="136" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="138" />
             <source>无法保存服务商配置</source>
             <translation>Could not save provider settings</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="197" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="199" />
             <source>无法编辑模型</source>
             <translation>Could not edit the model</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="197" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="199" />
             <source>请先选择一个已配置的模型。</source>
             <translation>Choose a configured model first.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="222" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="224" />
             <source>模型保存失败</source>
             <translation>Could not save the model</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="255" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="257" />
             <source>请先为会话选择可用的模型。</source>
             <translation>Choose an available model for the conversation first.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="403" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="422" />
             <source>设置保存失败</source>
             <translation>Could not save settings</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="410" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="429" />
             <source>服务商</source>
             <translation>Providers</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="411" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="430" />
             <source>应用设置</source>
             <translation>Application settings</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="413" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="432" />
             <source>模式</source>
             <translation>Modes</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="414" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="433" />
             <source>搜索</source>
             <translation>Search</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="415" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="434" />
             <source>配置校验</source>
             <translation>Configuration validation</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="416" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="435" />
             <source>运行时刷新</source>
             <translation>Runtime refresh</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="417" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="436" />
             <source>Channel 协调</source>
             <translation>Channel coordination</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="505" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="524" />
             <source>设置未完全应用</source>
             <translation>Settings partially applied</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="514" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="533" />
             <source>、</source>
             <translation>, </translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="517" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="536" />
             <source>已保存：{domains}</source>
             <translation>Saved: {domains}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="520" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="539" />
             <source>未保存：{domains}</source>
             <translation>Not saved: {domains}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="523" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="542" />
             <source>未知错误</source>
             <translation>Unknown error</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="524" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="543" />
             <source>{label}失败：{detail}</source>
             <translation>{label} failed: {detail}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="526" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="545" />
             <source>设置更新失败。</source>
             <translation>Could not update settings.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="681" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="709" />
             <source>暂时无法检查更新：{error}</source>
             <translation>Could not check for updates right now: {error}</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="687" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="715" />
             <source>更新检查返回了无效结果。</source>
             <translation>The update check returned an invalid result.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="708" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="736" />
             <source>发现新版本 {tag_name}，点击打开 Release</source>
             <translation>New version {tag_name} available. Click to view the release.</translation>
         </message>
         <message>
-            <location filename="../../gui/presenters/settings_presenter.py" line="710" />
+            <location filename="../../gui/presenters/settings_presenter.py" line="738" />
             <source>检查 PyCat 稳定版本更新</source>
             <translation>Check for stable PyCat updates</translation>
         </message>
@@ -6741,102 +7691,117 @@ Try a page name or keyword</translation>
     <context>
         <name>ShellWindow</name>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="43" />
+            <location filename="../../gui/dialogs/shell_window.py" line="59" />
             <source>新建 Shell</source>
             <translation>New shell</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="56" />
+            <location filename="../../gui/dialogs/shell_window.py" line="96" />
             <source>暂无 Shell
 新建交互 Shell，或在对话中运行命令后查看输出。</source>
             <translation>No shells
 Create an interactive shell, or run a command in the conversation to view its output.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="149" />
-            <location filename="../../gui/dialogs/shell_window.py" line="64" />
+            <location filename="../../gui/dialogs/shell_window.py" line="233" />
+            <location filename="../../gui/dialogs/shell_window.py" line="104" />
             <source>接管输入</source>
             <translation>Take control</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="68" />
+            <location filename="../../gui/dialogs/shell_window.py" line="108" />
             <source>中断前台程序，保留 Shell</source>
             <translation>Interrupt the foreground program and keep the shell open</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="71" />
+            <location filename="../../gui/dialogs/shell_window.py" line="111" />
             <source>结束</source>
             <translation>End</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="72" />
+            <location filename="../../gui/dialogs/shell_window.py" line="112" />
             <source>结束此进程及其子进程</source>
             <translation>End this process and its child processes</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="76" />
+            <location filename="../../gui/dialogs/shell_window.py" line="116" />
             <source>关闭窗口会隐藏终端，运行中的 Shell 会继续。</source>
             <translation>Closing this window hides the terminal. Running shells continue.</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="104" />
+            <location filename="../../gui/dialogs/shell_window.py" line="149" />
             <source>Shell · {value}</source>
             <translation>Shell · {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="104" />
+            <location filename="../../gui/dialogs/shell_window.py" line="149" />
             <source>新会话</source>
             <translation>New conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="105" />
+            <location filename="../../gui/dialogs/shell_window.py" line="150" />
             <source>{value}  ·  固定在此会话</source>
             <translation>{value}  ·  Pinned to this conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="105" />
+            <location filename="../../gui/dialogs/shell_window.py" line="150" />
             <source>未设置工作目录</source>
             <translation>No working directory</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="149" />
+            <location filename="../../gui/dialogs/shell_window.py" line="233" />
             <source>归还 Agent</source>
             <translation>Return to Agent</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="154" />
+            <location filename="../../gui/dialogs/shell_window.py" line="238" />
             <source>状态未确认</source>
             <translation>Status unknown</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="154" />
+            <location filename="../../gui/dialogs/shell_window.py" line="238" />
             <source>运行中</source>
             <translation>Running</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="154" />
+            <location filename="../../gui/dialogs/shell_window.py" line="238" />
             <source>已退出 · {exit_code}</source>
             <translation>Exited · {exit_code}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="155" />
+            <location filename="../../gui/dialogs/shell_window.py" line="239" />
             <source>{status}  ·  {value}</source>
             <translation>{status}  ·  {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="155" />
+            <location filename="../../gui/dialogs/shell_window.py" line="239" />
             <source>由你输入</source>
             <translation>You control input</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="155" />
+            <location filename="../../gui/dialogs/shell_window.py" line="239" />
             <source>Agent 控制</source>
             <translation>Agent controls input</translation>
         </message>
         <message>
-            <location filename="../../gui/dialogs/shell_window.py" line="155" />
+            <location filename="../../gui/dialogs/shell_window.py" line="239" />
             <source>{status}  ·  日志</source>
             <translation>{status}  ·  Logs</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/shell_window.py" line="72" />
+            <source>历史</source>
+            <translation>History</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/shell_window.py" line="74" />
+            <source>显示此会话的全部进程记录</source>
+            <translation>Show all process records in this conversation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/dialogs/shell_window.py" line="80" />
+            <source>关闭显示，保留进程和日志</source>
+            <translation>Close this view; keep the process and logs</translation>
         </message>
     </context>
     <context>
@@ -6992,180 +7957,326 @@ Status: {status}</translation>
             <translation>Reply</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="203" />
-            <location filename="../../gui/widgets/sidebar.py" line="202" />
-            <source>关于 PyCat</source>
-            <translation>About PyCat</translation>
-        </message>
-        <message>
-            <location filename="../../gui/widgets/sidebar.py" line="210" />
+            <location filename="../../gui/widgets/sidebar.py" line="191" />
             <source>新建对话 · Ctrl+N</source>
             <translation>New conversation · Ctrl+N</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="454" />
-            <location filename="../../gui/widgets/sidebar.py" line="423" />
-            <location filename="../../gui/widgets/sidebar.py" line="211" />
+            <location filename="../../gui/widgets/sidebar.py" line="425" />
+            <location filename="../../gui/widgets/sidebar.py" line="394" />
+            <location filename="../../gui/widgets/sidebar.py" line="196" />
             <source>新建对话</source>
             <translation>New conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="225" />
-            <location filename="../../gui/widgets/sidebar.py" line="219" />
-            <location filename="../../gui/widgets/sidebar.py" line="218" />
+            <location filename="../../gui/widgets/sidebar.py" line="200" />
             <source>搜索对话</source>
             <translation>Search conversations</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="247" />
+            <location filename="../../gui/widgets/sidebar.py" line="220" />
             <source>记忆与资料</source>
             <translation>Memory &amp; sources</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="247" />
-            <source>设置</source>
-            <translation>Settings</translation>
+            <location filename="../../gui/widgets/sidebar.py" line="304" />
+            <source>收藏资料</source>
+            <translation>Favorite materials</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="346" />
+            <location filename="../../gui/widgets/sidebar.py" line="312" />
             <source>项目</source>
             <translation>Projects</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="352" />
+            <location filename="../../gui/widgets/sidebar.py" line="318" />
             <source>已归档</source>
             <translation>Archived</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="352" />
+            <location filename="../../gui/widgets/sidebar.py" line="318" />
             <source>最近</source>
             <translation>Recent</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="457" />
-            <location filename="../../gui/widgets/sidebar.py" line="424" />
+            <location filename="../../gui/widgets/sidebar.py" line="428" />
+            <location filename="../../gui/widgets/sidebar.py" line="395" />
             <source>取消置顶</source>
             <translation>Unpin</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="424" />
+            <location filename="../../gui/widgets/sidebar.py" line="395" />
             <source>置顶项目</source>
             <translation>Pin project</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="425" />
+            <location filename="../../gui/widgets/sidebar.py" line="396" />
             <source>复制路径</source>
             <translation>Copy path</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="426" />
+            <location filename="../../gui/widgets/sidebar.py" line="397" />
             <source>从侧边栏移除</source>
             <translation>Remove from sidebar</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="436" />
+            <location filename="../../gui/widgets/sidebar.py" line="407" />
             <source>新建个人对话</source>
             <translation>New personal conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="437" />
+            <location filename="../../gui/widgets/sidebar.py" line="408" />
             <source>添加项目</source>
             <translation>Add project</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="438" />
+            <location filename="../../gui/widgets/sidebar.py" line="409" />
             <source>显示最近对话</source>
             <translation>Show recent conversations</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="438" />
+            <location filename="../../gui/widgets/sidebar.py" line="409" />
             <source>查看已归档</source>
             <translation>View archived</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="439" />
+            <location filename="../../gui/widgets/sidebar.py" line="410" />
             <source>导入 JSON…</source>
             <translation>Import JSON…</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="441" />
+            <location filename="../../gui/widgets/sidebar.py" line="412" />
             <source>恢复项目显示</source>
             <translation>Restore hidden project</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="455" />
+            <location filename="../../gui/widgets/sidebar.py" line="426" />
             <source>置顶</source>
             <translation>Pin</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="455" />
+            <location filename="../../gui/widgets/sidebar.py" line="426" />
             <source>归档</source>
             <translation>Archive</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="457" />
+            <location filename="../../gui/widgets/sidebar.py" line="428" />
             <source>恢复对话</source>
             <translation>Restore conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="460" />
+            <location filename="../../gui/widgets/sidebar.py" line="431" />
             <source>重命名</source>
             <translation>Rename</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="461" />
+            <location filename="../../gui/widgets/sidebar.py" line="432" />
             <source>导出会话</source>
             <translation>Export conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="463" />
+            <location filename="../../gui/widgets/sidebar.py" line="434" />
             <source>导出为 {label}…</source>
             <translation>Export as {label}…</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="464" />
+            <location filename="../../gui/widgets/sidebar.py" line="435" />
             <source>复制 Session ID</source>
             <translation>Copy session ID</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="465" />
+            <location filename="../../gui/widgets/sidebar.py" line="436" />
             <source>在资源管理器中打开</source>
             <translation>Open in file manager</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="468" />
+            <location filename="../../gui/widgets/sidebar.py" line="439" />
             <source>删除</source>
             <translation>Delete</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="473" />
+            <location filename="../../gui/widgets/sidebar.py" line="444" />
             <source>重命名对话</source>
             <translation>Rename conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="473" />
+            <location filename="../../gui/widgets/sidebar.py" line="444" />
             <source>名称</source>
             <translation>Name</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="486" />
+            <location filename="../../gui/widgets/sidebar.py" line="457" />
             <source>删除会话</source>
             <translation>Delete conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="486" />
+            <location filename="../../gui/widgets/sidebar.py" line="457" />
             <source>确定要删除这个会话吗？</source>
             <translation>Delete this conversation?</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="490" />
+            <location filename="../../gui/widgets/sidebar.py" line="461" />
             <source>导入会话</source>
             <translation>Import conversation</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/sidebar.py" line="490" />
+            <location filename="../../gui/widgets/sidebar.py" line="461" />
             <source>JSON 文件 (*.json);;所有文件 (*)</source>
             <translation>JSON files (*.json);;All files (*)</translation>
+        </message>
+    </context>
+    <context>
+        <name>SkillAddDialog</name>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="27" />
+            <source>添加技能</source>
+            <translation>Add skill</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="31" />
+            <source>新建技能</source>
+            <translation>Create skill</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="31" />
+            <source>GitHub 仓库</source>
+            <translation>GitHub repository</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="32" />
+            <source>本地文件或目录</source>
+            <translation>Local file or folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="35" />
+            <source>来源</source>
+            <translation>Source</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="43" />
+            <source>例如 review-code</source>
+            <translation>e.g. review-code</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="45" />
+            <source>一句话说明用途</source>
+            <translation>Describe its purpose in one sentence</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="52" />
+            <source>选择或拖入 SKILL.md、ZIP 或技能目录</source>
+            <translation>Choose or drop SKILL.md, ZIP or a skill folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="58" />
+            <source>选择文件</source>
+            <translation>Choose file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="59" />
+            <source>选择目录</source>
+            <translation>Choose folder</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="65" />
+            <source>名称</source>
+            <translation>Name</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="65" />
+            <source>说明</source>
+            <translation>Description</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="66" />
+            <source>仓库</source>
+            <translation>Repository</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="66" />
+            <source>技能目录</source>
+            <translation>Skill directory</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="67" />
+            <source>分支 / 标签 / 提交</source>
+            <translation>Branch / tag / commit</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="68" />
+            <source>路径</source>
+            <translation>Path</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="81" />
+            <source>全局</source>
+            <translation>Global</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="83" />
+            <source>当前工作区</source>
+            <translation>Current workspace</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="84" />
+            <source>范围</source>
+            <translation>Scope</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="104" />
+            <location filename="../../gui/resources/skill_dialog.py" line="91" />
+            <source>创建</source>
+            <translation>Create</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="104" />
+            <source>准备安装</source>
+            <translation>Prepare installation</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="104" />
+            <source>导入</source>
+            <translation>Import</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="129" />
+            <source>名称需为 3–64 个小写字母、数字或短横线，并以字母或数字开头。</source>
+            <translation>Use 3–64 lowercase letters, digits or hyphens, starting with a letter or digit.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="133" />
+            <source>请填写 GitHub 仓库，例如 owner/repo。</source>
+            <translation>Enter a GitHub repository, such as owner/repo.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="136" />
+            <source>请填写仓库内包含 SKILL.md 的技能目录。</source>
+            <translation>Enter the skill folder containing SKILL.md within the repository.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="141" />
+            <source>请选择存在的技能文件或目录。</source>
+            <translation>Choose an existing skill file or folder.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="144" />
+            <source>支持 Markdown 技能文件、ZIP 或包含 SKILL.md 的目录。</source>
+            <translation>Choose a Markdown skill file, ZIP, or a folder containing SKILL.md.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="155" />
+            <source>选择技能文件</source>
+            <translation>Choose skill file</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="155" />
+            <source>技能文件 (*.md *.zip)</source>
+            <translation>Skill files (*.md *.zip)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skill_dialog.py" line="160" />
+            <source>选择技能目录</source>
+            <translation>Choose skill folder</translation>
         </message>
     </context>
     <context>
@@ -7274,23 +8385,6 @@ Status: {status}</translation>
     <context>
         <name>SkillsPage</name>
         <message>
-            <location filename="../../gui/resources/skills_page.py" line="741" />
-            <location filename="../../gui/resources/skills_page.py" line="725" />
-            <source>全局</source>
-            <translation>Global</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="637" />
-            <location filename="../../gui/resources/skills_page.py" line="601" />
-            <source>导入技能</source>
-            <translation>Import skill</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="524" />
-            <source>导入</source>
-            <translation>Import</translation>
-        </message>
-        <message>
             <location filename="../../gui/resources/skills_page.py" line="126" />
             <source>技能</source>
             <translation>Skills</translation>
@@ -7299,6 +8393,13 @@ Status: {status}</translation>
             <location filename="../../gui/resources/skills_page.py" line="126" />
             <source>加载、管理全局与项目技能。停用的技能不会进入运行时列表。</source>
             <translation>Load and manage global and project skills. Disabled skills are excluded from the runtime list.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="243" />
+            <location filename="../../gui/resources/skills_page.py" line="134" />
+            <location filename="../../gui/resources/skills_page.py" line="133" />
+            <source>搜索技能</source>
+            <translation>Search skills</translation>
         </message>
         <message>
             <location filename="../../gui/resources/skills_page.py" line="140" />
@@ -7478,6 +8579,11 @@ Description: {value}</translation>
             <translation>User</translation>
         </message>
         <message>
+            <location filename="../../gui/resources/skills_page.py" line="524" />
+            <source>导入</source>
+            <translation>Import</translation>
+        </message>
+        <message>
             <location filename="../../gui/resources/skills_page.py" line="526" />
             <source>创建者: {creator_label}</source>
             <translation>Created by: {creator_label}</translation>
@@ -7511,6 +8617,12 @@ Description: {value}</translation>
             <location filename="../../gui/resources/skills_page.py" line="593" />
             <source>创建技能失败</source>
             <translation>Could not create skill</translation>
+        </message>
+        <message>
+            <location filename="../../gui/resources/skills_page.py" line="637" />
+            <location filename="../../gui/resources/skills_page.py" line="601" />
+            <source>导入技能</source>
+            <translation>Import skill</translation>
         </message>
         <message>
             <location filename="../../gui/resources/skills_page.py" line="601" />
@@ -7564,6 +8676,12 @@ Description: {value}</translation>
             <translation>Projects</translation>
         </message>
         <message>
+            <location filename="../../gui/resources/skills_page.py" line="741" />
+            <location filename="../../gui/resources/skills_page.py" line="725" />
+            <source>全局</source>
+            <translation>Global</translation>
+        </message>
+        <message>
             <location filename="../../gui/resources/skills_page.py" line="744" />
             <location filename="../../gui/resources/skills_page.py" line="743" />
             <location filename="../../gui/resources/skills_page.py" line="732" />
@@ -7575,13 +8693,6 @@ Description: {value}</translation>
             <location filename="../../gui/resources/skills_page.py" line="729" />
             <source>内置</source>
             <translation>Bundled</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skills_page.py" line="243" />
-            <location filename="../../gui/resources/skills_page.py" line="134" />
-            <location filename="../../gui/resources/skills_page.py" line="133" />
-            <source>搜索技能</source>
-            <translation>Search skills</translation>
         </message>
         <message>
             <location filename="../../gui/resources/skills_page.py" line="136" />
@@ -7618,95 +8729,80 @@ Description: {value}</translation>
     <context>
         <name>StrategyPage</name>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="34" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="31" />
             <source>策略</source>
             <translation>Policies</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="34" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="31" />
             <source>配置运行上限、上下文压缩和重试。完成方式由各 Mode 单独决定。</source>
             <translation>Configure run limits, context compaction and retries. Each mode defines its completion policy.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="36" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="33" />
             <source>运行</source>
             <translation>Run</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="38" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="35" />
             <source>全局最大轮次</source>
             <translation>Global turn limit</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="41" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="38" />
             <source>仅在 Mode 或子 Agent profile 未设置轮次时使用。</source>
             <translation>Used when the mode or subagent profile has no turn limit.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="87" />
-            <location filename="../../gui/settings/pages/strategy_page.py" line="45" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="84" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="42" />
             <source>上下文压缩</source>
             <translation>Context compaction</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="70" />
-            <location filename="../../gui/settings/pages/strategy_page.py" line="47" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="67" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="44" />
             <source>启用</source>
             <translation>Enable</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="63" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="60" />
             <source>完整请求达到该比例后，用可恢复视图替换较旧工具结果；不调用模型，也不修改会话历史。</source>
             <translation>At this request-budget ratio, older tool results are replaced by recoverable views. No model call is made and conversation history is preserved.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="68" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="65" />
             <source>工具内容压缩</source>
             <translation>Tool content compaction</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="82" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="79" />
             <source>选定的完整请求达到可用输入预算的该比例后，自动生成历史摘要；原文保留。</source>
             <translation>Summarize history when the selected full request reaches this share of the available input budget. Original content is retained.</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="98" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="95" />
             <source>重试</source>
             <translation>Retries</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="100" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="97" />
             <source>最大次数</source>
             <translation>Max retries</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="103" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="100" />
             <source>基础延迟（秒）</source>
             <translation>Base delay (seconds)</translation>
         </message>
         <message>
-            <location filename="../../gui/settings/pages/strategy_page.py" line="106" />
+            <location filename="../../gui/settings/pages/strategy_page.py" line="103" />
             <source>退避因子</source>
             <translation>Backoff factor</translation>
         </message>
     </context>
     <context>
         <name>StreamingMessagePresenter</name>
-        <message>
-            <location filename="../../gui/presenters/streaming_message_presenter.py" line="587" />
-            <source>上下文已压缩 · {count} 条消息</source>
-            <translation>Context compacted · {count} messages</translation>
-        </message>
-        <message>
-            <location filename="../../gui/presenters/streaming_message_presenter.py" line="589" />
-            <source>已清理 {count} 条折叠消息</source>
-            <translation>Removed {count} folded messages</translation>
-        </message>
-        <message>
-            <location filename="../../gui/presenters/streaming_message_presenter.py" line="591" />
-            <source>上下文摘要已更新</source>
-            <translation>Context summary updated</translation>
-        </message>
         <message>
             <location filename="../../gui/presenters/streaming_message_presenter.py" line="30" />
             <source>模型调用失败：未知错误</source>
@@ -7727,12 +8823,27 @@ Description: {value}</translation>
             <source>错误: {text}</source>
             <translation>Error: {text}</translation>
         </message>
+        <message>
+            <location filename="../../gui/presenters/streaming_message_presenter.py" line="588" />
+            <source>上下文已压缩 · {count} 条消息</source>
+            <translation>Context compacted · {count} messages</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/streaming_message_presenter.py" line="590" />
+            <source>已清理 {count} 条折叠消息</source>
+            <translation>Removed {count} folded messages</translation>
+        </message>
+        <message>
+            <location filename="../../gui/presenters/streaming_message_presenter.py" line="592" />
+            <source>上下文摘要已更新</source>
+            <translation>Context summary updated</translation>
+        </message>
     </context>
     <context>
         <name>StreamingOverlay</name>
         <message>
-            <location filename="../../gui/widgets/chat/streaming_overlay.py" line="222" />
-            <location filename="../../gui/widgets/chat/streaming_overlay.py" line="112" />
+            <location filename="../../gui/widgets/chat/streaming_overlay.py" line="206" />
+            <location filename="../../gui/widgets/chat/streaming_overlay.py" line="109" />
             <source>正在生成…</source>
             <translation>Generating…</translation>
         </message>
@@ -7861,96 +8972,105 @@ Description: {value}</translation>
         </message>
     </context>
     <context>
-        <name>ToolCallView</name>
+        <name>ThemedSelectableLabel</name>
         <message>
-            <source> · 页 {pages}</source>
-            <translation> · Pages {pages}</translation>
+            <location filename="../../gui/widgets/themed_line_edit.py" line="89" />
+            <source>复制</source>
+            <translation>Copy</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="69" />
+            <location filename="../../gui/widgets/themed_line_edit.py" line="94" />
+            <source>全选</source>
+            <translation>Select all</translation>
+        </message>
+    </context>
+    <context>
+        <name>ToolCallView</name>
+        <message>
+            <location filename="../../gui/widgets/tool_call_view.py" line="72" />
             <source>未命名文件</source>
             <translation>Untitled file</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="676" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="75" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="712" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="78" />
             <source>已写入</source>
             <translation>Written</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="783" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="679" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="77" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="819" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="715" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="80" />
             <source>已删除</source>
             <translation>Deleted</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="678" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="79" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="714" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="82" />
             <source>已应用补丁</source>
             <translation>Patched</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="677" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="80" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="713" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="83" />
             <source>已编辑</source>
             <translation>Edited</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="94" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="97" />
             <source>{hunk_count} 个 hunk</source>
             <translation>Hunks: {hunk_count}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="98" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="101" />
             <source>{written_chars} 字符</source>
             <translation>Characters: {written_chars}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="101" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="104" />
             <source>递归</source>
             <translation>Recursive</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="104" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="107" />
             <source>正则匹配</source>
             <translation>Regex match</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="106" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="109" />
             <source>精确匹配</source>
             <translation>Exact match</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="108" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="111" />
             <source>补丁模式</source>
             <translation>Patch mode</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="110" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="113" />
             <source>文本替换</source>
             <translation>Text replacement</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1245" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="116" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1281" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="119" />
             <source>子 Agent</source>
             <translation>Subagents</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1245" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="117" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1281" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="120" />
             <source>能力</source>
             <translation>Capabilities</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="119" />
-            <location filename="../../gui/widgets/tool_call_view.py" line="118" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="122" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="121" />
             <source>工具</source>
             <translation>Tools</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="198" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="203" />
             <source>输入参数</source>
             <translation>Input arguments</translation>
         </message>
@@ -7960,7 +9080,7 @@ Description: {value}</translation>
             <translation>Copy input arguments</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="206" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="214" />
             <source>执行结果</source>
             <translation>Result</translation>
         </message>
@@ -7970,159 +9090,164 @@ Description: {value}</translation>
             <translation>Copy result</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="324" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="351" />
             <source>思考过程</source>
             <translation>Reasoning</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="599" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="620" />
+            <source> · 页 {pages}</source>
+            <translation> · Pages {pages}</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/tool_call_view.py" line="635" />
             <source>{value}调用：{name}</source>
             <translation>{value} call: {name}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="605" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="641" />
             <source>等待你的选择</source>
             <translation>Waiting for your choice</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="606" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="642" />
             <source>运行中 · {value}</source>
             <translation>Running · {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="624" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="660" />
             <source>运行失败 · {value}</source>
             <translation>Failed · {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="733" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="769" />
             <source>打开: {value}</source>
             <translation>Open: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="750" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="786" />
             <source>前: {value}
 后: {value_}</source>
             <translation>Before: {value}
 After: {value_}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="779" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="815" />
             <source>已创建</source>
             <translation>Created</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="780" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="816" />
             <source>已保存</source>
             <translation>Saved</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="781" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="817" />
             <source>已更新</source>
             <translation>Updated</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="782" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="818" />
             <source>已追加</source>
             <translation>Appended</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="811" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="847" />
             <source>已导入 {name}</source>
             <translation>Imported {name}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="889" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="925" />
             <source>状态：失败</source>
             <translation>Status: Failed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1203" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1239" />
             <source>运行中</source>
             <translation>Running</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1205" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1241" />
             <source>部分完成</source>
             <translation>Partially completed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1207" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1243" />
             <source>失败</source>
             <translation>Failed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1208" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1244" />
             <source>已完成</source>
             <translation>Completed</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1228" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1264" />
             <source>会话 {value}</source>
             <translation>Conversation {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1230" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1266" />
             <source>轮次 {effective_turns}</source>
             <translation>Turns: {effective_turns}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1232" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1268" />
             <source>工具 {tool_count}</source>
             <translation>Tools: {tool_count}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1234" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1270" />
             <source>消息 {value}</source>
             <translation>Messages: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1258" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1294" />
             <source>详细消息未保存在此归档中</source>
             <translation>Detailed messages are not stored in this archive</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1290" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1326" />
             <source>子会话：{child_session_id}</source>
             <translation>Child conversation: {child_session_id}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1292" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1328" />
             <source>父会话：{parent_session_id}</source>
             <translation>Parent conversation: {parent_session_id}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1295" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1331" />
             <source>生效轮次 {effective_turns}</source>
             <translation>Effective turns: {effective_turns}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1297" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1333" />
             <source>预算：</source>
             <translation>Budget: </translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1300" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1336" />
             <source>工具调用：{tool_count}</source>
             <translation>Tool calls: {tool_count}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1309" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1345" />
             <source>目标：{value}</source>
             <translation>Goal: {value}</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1315" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1351" />
             <source>此记录只保存了子 Agent 摘要，没有保存可展开的内部消息。</source>
             <translation>This record contains only a subagent summary. Internal messages are not available to expand.</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1346" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1382" />
             <source>显示全部 {value} 条子任务消息（还有 {value_} 条）</source>
             <translation>Show all {value} subtask messages ({value_} more)</translation>
         </message>
         <message>
-            <location filename="../../gui/widgets/tool_call_view.py" line="1353" />
+            <location filename="../../gui/widgets/tool_call_view.py" line="1389" />
             <source>错误:</source>
             <translation>Error:</translation>
         </message>
@@ -8350,10 +9475,6 @@ Working directory: {value}</translation>
     <context>
         <name>ToolingLabels</name>
         <message>
-            <source>查看图像</source>
-            <translation>View image</translation>
-        </message>
-        <message>
             <location filename="../../gui/view_models/tooling_labels.py" line="5" />
             <source>读取</source>
             <translation>Read</translation>
@@ -8455,123 +9576,151 @@ Working directory: {value}</translation>
         </message>
         <message>
             <location filename="../../gui/view_models/tooling_labels.py" line="43" />
+            <source>查看图像</source>
+            <translation>View image</translation>
+        </message>
+        <message>
+            <location filename="../../gui/view_models/tooling_labels.py" line="44" />
             <source>搜索文件</source>
             <translation>Search files</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="44" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="45" />
             <source>写入文件</source>
             <translation>Write file</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="45" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="46" />
             <source>运行 Python</source>
             <translation>Run Python</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="46" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="47" />
             <source>终止后台进程</source>
             <translation>Stop background process</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="47" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="48" />
             <source>列出后台进程</source>
             <translation>List background processes</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="48" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="49" />
             <source>读取后台进程</source>
             <translation>Read background process</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="49" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="50" />
             <source>运行命令</source>
             <translation>Run command</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="50" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="51" />
             <source>输入终端</source>
             <translation>Write to terminal</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="51" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="52" />
             <source>提出技能候选</source>
             <translation>Propose skill candidate</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="52" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="53" />
             <source>管理会话产物</source>
             <translation>Manage conversation artifacts</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="53" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="54" />
             <source>管理记忆</source>
             <translation>Manage memory</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="54" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="55" />
             <source>更新任务进度</source>
             <translation>Update task progress</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="55" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="56" />
             <source>项目知识</source>
             <translation>Project knowledge</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="56" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="57" />
             <source>询问用户</source>
             <translation>Ask user</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="57" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="58" />
             <source>读取网页</source>
             <translation>Read web page</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="58" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="59" />
             <source>搜索网页</source>
             <translation>Search web</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="62" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="63" />
             <source>图像生成与编辑</source>
             <translation>Image generation and editing</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="63" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="64" />
             <source>视觉 OCR</source>
             <translation>Vision OCR</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="64" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="65" />
             <source>提示词优化</source>
             <translation>Improve prompt</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="65" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="66" />
             <source>标题提取</source>
             <translation>Extract title</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="66" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="67" />
             <source>上下文压缩</source>
             <translation>Context compaction</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="67" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="68" />
             <source>记忆与知识整理</source>
             <translation>Memory and knowledge curation</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="68" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="69" />
             <source>文本总结</source>
             <translation>Summarize text</translation>
         </message>
         <message>
-            <location filename="../../gui/view_models/tooling_labels.py" line="69" />
+            <location filename="../../gui/view_models/tooling_labels.py" line="70" />
             <source>整理项目知识</source>
             <translation>Curate project knowledge</translation>
+        </message>
+    </context>
+    <context>
+        <name>TopicTree</name>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="75" />
+            <source>全部资料</source>
+            <translation>All materials</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="75" />
+            <source>收藏</source>
+            <translation>Favorite</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="90" />
+            <source>添加资料或子主题</source>
+            <translation>Add material or subtopic</translation>
+        </message>
+        <message>
+            <location filename="../../gui/widgets/library_panel.py" line="164" />
+            <source>加载更多…</source>
+            <translation>Load more…</translation>
         </message>
     </context>
     <context>
@@ -8914,434 +10063,6 @@ Supports Windows and Linux with Python 3.11+. Passwords are not saved.</translat
             <location filename="../../gui/dialogs/workspace_picker.py" line="322" />
             <source>选择工作区文件夹</source>
             <translation>Choose workspace folder</translation>
-        </message>
-    </context>
-    <context>
-        <name>SkillAddDialog</name>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="27" />
-            <source>添加技能</source>
-            <translation>Add skill</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="31" />
-            <source>新建技能</source>
-            <translation>Create skill</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="31" />
-            <source>GitHub 仓库</source>
-            <translation>GitHub repository</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="32" />
-            <source>本地文件或目录</source>
-            <translation>Local file or folder</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="35" />
-            <source>来源</source>
-            <translation>Source</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="43" />
-            <source>例如 review-code</source>
-            <translation>e.g. review-code</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="45" />
-            <source>一句话说明用途</source>
-            <translation>Describe its purpose in one sentence</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="52" />
-            <source>选择或拖入 SKILL.md、ZIP 或技能目录</source>
-            <translation>Choose or drop SKILL.md, ZIP or a skill folder</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="58" />
-            <source>选择文件</source>
-            <translation>Choose file</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="59" />
-            <source>选择目录</source>
-            <translation>Choose folder</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="65" />
-            <source>名称</source>
-            <translation>Name</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="65" />
-            <source>说明</source>
-            <translation>Description</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="66" />
-            <source>仓库</source>
-            <translation>Repository</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="66" />
-            <source>技能目录</source>
-            <translation>Skill directory</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="67" />
-            <source>分支 / 标签 / 提交</source>
-            <translation>Branch / tag / commit</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="68" />
-            <source>路径</source>
-            <translation>Path</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="81" />
-            <source>全局</source>
-            <translation>Global</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="83" />
-            <source>当前工作区</source>
-            <translation>Current workspace</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="84" />
-            <source>范围</source>
-            <translation>Scope</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="104" />
-            <location filename="../../gui/resources/skill_dialog.py" line="91" />
-            <source>创建</source>
-            <translation>Create</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="104" />
-            <source>准备安装</source>
-            <translation>Prepare installation</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="104" />
-            <source>导入</source>
-            <translation>Import</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="129" />
-            <source>名称需为 3–64 个小写字母、数字或短横线，并以字母或数字开头。</source>
-            <translation>Use 3–64 lowercase letters, digits or hyphens, starting with a letter or digit.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="133" />
-            <source>请填写 GitHub 仓库，例如 owner/repo。</source>
-            <translation>Enter a GitHub repository, such as owner/repo.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="136" />
-            <source>请填写仓库内包含 SKILL.md 的技能目录。</source>
-            <translation>Enter the skill folder containing SKILL.md within the repository.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="141" />
-            <source>请选择存在的技能文件或目录。</source>
-            <translation>Choose an existing skill file or folder.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="144" />
-            <source>支持 Markdown 技能文件、ZIP 或包含 SKILL.md 的目录。</source>
-            <translation>Choose a Markdown skill file, ZIP, or a folder containing SKILL.md.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="155" />
-            <source>选择技能文件</source>
-            <translation>Choose skill file</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="155" />
-            <source>技能文件 (*.md *.zip)</source>
-            <translation>Skill files (*.md *.zip)</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/skill_dialog.py" line="160" />
-            <source>选择技能目录</source>
-            <translation>Choose skill folder</translation>
-        </message>
-    </context>
-    <context>
-        <name>ExtensionDetails</name>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="40" />
-            <source>扩展详情</source>
-            <translation>Extension details</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="107" />
-            <location filename="../../gui/resources/extension_details.py" line="42" />
-            <source>展开说明</source>
-            <translation>Show description</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="46" />
-            <source>MCP 接入方式</source>
-            <translation>MCP connection method</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="51" />
-            <source>打开来源网站</source>
-            <translation>Open source website</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="54" />
-            <source>打开目录</source>
-            <translation>Open folder</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="143" />
-            <location filename="../../gui/resources/extension_details.py" line="56" />
-            <source>检查更新</source>
-            <translation>Check for updates</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="148" />
-            <location filename="../../gui/resources/extension_details.py" line="58" />
-            <source>安装</source>
-            <translation>Install</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="68" />
-            <source>搜索市场或检查版本时才会联网。</source>
-            <translation>Network access is used only when searching the market or checking versions.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="73" />
-            <source>取消</source>
-            <translation>Cancel</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="93" />
-            <source>随 PyCat 更新。可在技能列表停用，或复制后编辑。</source>
-            <translation>Updated with PyCat. Disable it in the skills list, or copy it to edit.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="94" />
-            <source>由 PyCat 管理。检查更新后选择安装版本。</source>
-            <translation>Managed by PyCat. Check for updates, then choose a version to install.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="95" />
-            <source>外部管理，请通过原安装方式更新。</source>
-            <translation>Externally managed. Update it using its original installation method.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="96" />
-            <source>打开目录，选择需要的资源。</source>
-            <translation>Open the catalog and choose a resource.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="97" />
-            <source>添加后先填写凭据并测试，再启用。</source>
-            <translation>Add it, enter credentials and test the connection before enabling it.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="97" />
-            <source>准备安装时核对仓库与固定提交。</source>
-            <translation>Review the repository and pinned commit before installing.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="107" />
-            <source>收起说明</source>
-            <translation>Hide description</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="112" />
-            <source>来源：</source>
-            <translation>Source: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="114" />
-            <source>状态：</source>
-            <translation>Status: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="114" />
-            <source>当前版本：</source>
-            <translation>Current version: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="114" />
-            <source>未记录</source>
-            <translation>Not recorded</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="116" />
-            <source>本机浏览器：</source>
-            <translation>Local browser: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="116" />
-            <source>未找到；需先安装 Chrome / Edge / Chromium，或在 MCP 环境变量中指定程序。</source>
-            <translation>Not found. Install Chrome, Edge or Chromium, or specify its executable in the MCP environment variables.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="118" />
-            <source>此平台没有匹配的原生发布文件。</source>
-            <translation>No native release is available for this platform.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="120" />
-            <source>可安装版本：</source>
-            <translation>Available version: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="124" />
-            <source>市场版本：</source>
-            <translation>Market version: </translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="133" />
-            <source>该条目需要自定义安装步骤，请查看来源后通过“添加”手动配置。</source>
-            <translation>This entry needs custom installation. Review its source, then use Add to configure it manually.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="143" />
-            <source>准备安装</source>
-            <translation>Prepare installation</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="147" />
-            <source>当前平台没有可用的发布文件</source>
-            <translation>No release is available for this platform</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="148" />
-            <source>已添加</source>
-            <translation>Added</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="148" />
-            <source>添加配置</source>
-            <translation>Add configuration</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="148" />
-            <source>更新</source>
-            <translation>Update</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="162" />
-            <source>技能来源已不存在，请刷新列表。</source>
-            <translation>The skill source no longer exists. Refresh the list.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="164" />
-            <source>无法打开技能目录。</source>
-            <translation>Could not open the skill directory.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="166" />
-            <source>无法定位技能来源：{exc}</source>
-            <translation>Could not locate the skill source: {exc}</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="180" />
-            <source>操作已取消。</source>
-            <translation>Operation cancelled.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="220" />
-            <source>已请求取消。正在执行的下载将停止，原有配置保持不变。</source>
-            <translation>Cancellation requested. Downloads will stop and existing configuration will be kept.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="229" />
-            <source>已是最新版本。</source>
-            <translation>Already up to date.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="229" />
-            <source>版本已确认，点击安装或更新以继续。</source>
-            <translation>Version confirmed. Select Install or Update to continue.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="235" />
-            <source>正在检查官方来源…</source>
-            <translation>Checking the official source…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="243" />
-            <source>已存在同名 MCP，请在列表中查看或修改名称。</source>
-            <translation>An MCP with this name already exists. Select it in the list to review or rename it.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="248" />
-            <source>已加入停用草稿；填写凭据、测试连接并启用，保存设置后生效。</source>
-            <translation>Added as a disabled draft. Enter credentials, test and enable it, then save settings to apply.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="258" />
-            <source>已存在名为 browser 的 MCP，请先重命名该服务。</source>
-            <translation>An MCP named browser already exists. Rename that service first.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="265" />
-            <source>驱动已验证，MCP 配置已加入草稿。保存设置后生效。</source>
-            <translation>Driver verified and MCP configuration added to the draft. Save settings to apply.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="267" />
-            <source>正在下载、校验并测试浏览器 MCP…</source>
-            <translation>Downloading, verifying and testing the browser MCP…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="274" />
-            <source>技能已安装并生效，来源和提交已记录。</source>
-            <translation>Skill installed and active. Its source and commit have been recorded.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="277" />
-            <source>正在下载并验证技能…</source>
-            <translation>Downloading and verifying the skill…</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="294" />
-            <source>已固定提交，请核对来源后点击安装。</source>
-            <translation>Commit pinned. Review the source, then select Install.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/extension_details.py" line="296" />
-            <source>正在检查技能来源…</source>
-            <translation>Checking skill source…</translation>
-        </message>
-    </context>
-    <context>
-        <name>ResourceDiscovery</name>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="25" />
-            <source>搜索市场（回车）</source>
-            <translation>Search market (Enter)</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="27" />
-            <source>加载更多</source>
-            <translation>Load more</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="72" />
-            <source>输入至少两个字符后，按回车搜索市场。</source>
-            <translation>Enter at least two characters, then press Enter to search the market.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="90" />
-            <source>市场匹配 {count} 项。</source>
-            <translation>Market matches: {count}.</translation>
-        </message>
-        <message>
-            <location filename="../../gui/resources/discovery.py" line="93" />
-            <source>正在搜索市场…</source>
-            <translation>Searching the market…</translation>
         </message>
     </context>
     <context>
@@ -9844,7 +10565,6 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
         </message>
         <message>
             <location filename="../../../pycat/assets/web/app.js" />
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
             <source>会话指令</source>
             <translation>Conversation instructions</translation>
         </message>
@@ -9873,11 +10593,6 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/tui/app.py" />
             <source>会话状态</source>
             <translation>Conversation state</translation>
-        </message>
-        <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>会话记忆开关位于会话设置。容量和自动整理策略位于“运行与权限 → 策略”。</source>
-            <translation>Enable memory in conversation settings. Capacity and automatic curation are under Run &amp; permissions → Policies.</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/app.js" />
@@ -10149,6 +10864,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/settings-pages.js" />
             <source>关闭窗口或停止运行</source>
             <translation>Close dialog or stop run</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>内容</source>
+            <translation>Content</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/skills.js" />
@@ -11157,8 +11877,8 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
         </message>
         <message>
             <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>应用于新请求；项目规则、会话指令和记忆保留独立来源。</source>
-            <translation>Applies to new requests. Project rules, conversation instructions and memory keep separate sources.</translation>
+            <source>应用于所有模式；留空使用默认行为。</source>
+            <translation>Applies to all modes; leave blank for the default behavior.</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/config.js" />
@@ -11221,6 +11941,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/app.js" />
             <source>当前工作区</source>
             <translation>Current workspace</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>当前未选择项目</source>
+            <translation>No project selected</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/discovery.js" />
@@ -11386,11 +12111,15 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
         </message>
         <message>
             <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>打开记忆与资料</source>
+            <translation>Open memory &amp; sources</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
             <source>打开资料</source>
             <translation>Open material</translation>
         </message>
         <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
             <location filename="../../../pycat/assets/web/views.js" />
             <source>打开资料与记忆</source>
             <translation>Open materials and memory</translation>
@@ -11522,11 +12251,6 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/app.js" />
             <source>指令、生成参数、工具与频道</source>
             <translation>Instructions, generation settings, tools and channels</translation>
-        </message>
-        <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>指令与来源</source>
-            <translation>Instructions &amp; sources</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/skills.js" />
@@ -11775,6 +12499,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <translation>Pending curation details</translation>
         </message>
         <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>整理资料</source>
+            <translation>Organize material</translation>
+        </message>
+        <message>
             <location filename="../../../pycat/assets/web/app.js" />
             <location filename="../../../pycat/assets/web/views.js" />
             <location filename="../../../pycat/tui/composer.py" />
@@ -11849,6 +12578,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/skills.js" />
             <source>新建技能</source>
             <translation>Create skill</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>新建资料文件</source>
+            <translation>Create library file</translation>
         </message>
         <message>
             <location filename="../../../pycat/core/app/services/workbench.py" />
@@ -12213,6 +12947,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/app.js" />
             <source>查看运行检查中的完整调用记录。</source>
             <translation>View the complete call history in Inspect run.</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>查看项目 AGENTS.md</source>
+            <translation>View project AGENTS.md</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/app.js" />
@@ -12645,6 +13384,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <translation>Add rule</translation>
         </message>
         <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>添加资料</source>
+            <translation>Add material</translation>
+        </message>
+        <message>
             <location filename="../../../pycat/assets/web/discovery.js" />
             <source>添加配置</source>
             <translation>Add configuration</translation>
@@ -12692,6 +13436,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/app.js" />
             <source>独立会话</source>
             <translation>Separate conversation</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>环境上下文</source>
+            <translation>Environment context</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/settings-resources.js" />
@@ -12836,6 +13585,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <translation>Manage skills, connect external tools or discover capabilities in the marketplace.</translation>
         </message>
         <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>管理资料主题</source>
+            <translation>Manage library topics</translation>
+        </message>
+        <message>
             <location filename="../../../pycat/assets/web/skills.js" />
             <source>管理资源</source>
             <translation>Manage resources</translation>
@@ -12911,11 +13665,6 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/config.js" />
             <source>继续编辑</source>
             <translation>Keep editing</translation>
-        </message>
-        <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>维护可复用的记忆与项目知识。</source>
-            <translation>Maintain reusable memory and project knowledge.</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/app.js" />
@@ -13072,18 +13821,8 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
         </message>
         <message>
             <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>记忆与知识</source>
-            <translation>Memory and knowledge</translation>
-        </message>
-        <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
             <source>记忆与资料</source>
             <translation>Memory &amp; sources</translation>
-        </message>
-        <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>记忆保存短事实和偏好；项目知识保留正文与来源；成果属于当前会话。</source>
-            <translation>Memory stores short facts and preferences; project knowledge keeps full text and sources; outputs belong to the conversation.</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/views.js" />
@@ -13107,6 +13846,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/tui/app.py" />
             <source>设置</source>
             <translation>Settings</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>设置全局追加指令，查看项目规则、记忆和资料。</source>
+            <translation>Configure global instructions and view project rules, memory and materials.</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/config.js" />
@@ -13266,11 +14010,6 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <translation>Adjust appearance and everyday interactions.</translation>
         </message>
         <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>调整记忆容量</source>
-            <translation>Adjust memory capacity</translation>
-        </message>
-        <message>
             <location filename="../../../pycat/assets/web/app.js" />
             <source>调用参数</source>
             <translation>Call arguments</translation>
@@ -13305,6 +14044,16 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/views.js" />
             <source>资料与记忆</source>
             <translation>Materials and memory</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>资料主题</source>
+            <translation>Library topics</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/core/app/services/workbench.py" />
+            <source>资料库列表</source>
+            <translation>Library items</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/views.js" />
@@ -13545,11 +14294,6 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <translation>Attach to a running PyCat host</translation>
         </message>
         <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>追加指令</source>
-            <translation>Additional instructions</translation>
-        </message>
-        <message>
             <location filename="../../../pycat/tui/app.py" />
             <source>退出</source>
             <translation>Quit</translation>
@@ -13782,14 +14526,14 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <translation>Projects</translation>
         </message>
         <message>
-            <location filename="../../../pycat/assets/web/settings-pages.js" />
-            <source>项目 AGENTS.md</source>
-            <translation>Project AGENTS.md</translation>
-        </message>
-        <message>
             <location filename="../../../pycat/assets/web/index.html" />
             <source>项目与会话</source>
             <translation>Projects and conversations</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>项目与资料</source>
+            <translation>Project &amp; materials</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/views.js" />
@@ -13830,6 +14574,11 @@ Type `/` for commands or `@` for typed references. With suggestions open: ↑↓
             <location filename="../../../pycat/assets/web/views.js" />
             <source>项目知识已保存</source>
             <translation>Project knowledge saved</translation>
+        </message>
+        <message>
+            <location filename="../../../pycat/assets/web/settings-pages.js" />
+            <source>项目规则、会话指令和记忆保留独立来源。</source>
+            <translation>Project rules, session instructions and memory keep separate sources.</translation>
         </message>
         <message>
             <location filename="../../../pycat/assets/web/views.js" />

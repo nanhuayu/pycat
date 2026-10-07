@@ -184,6 +184,10 @@ class RunPolicyBuilder:
             selection = selection.intersect(conversation_selection)
         if tool_selection is not None:
             selection = selection.intersect(tool_selection)
+        if conversation.content_target:
+            # Content Chat reviews bounded user-supplied data. It cannot inherit
+            # Agent tools by editing a mode or a general conversation setting.
+            selection = selection.intersect(ToolSelectionPolicy(allowed_tools=set()))
 
         tool_approval = settings.get("tool_approval")
         if tool_permissions is not None:

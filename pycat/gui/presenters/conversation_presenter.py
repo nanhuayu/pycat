@@ -55,6 +55,7 @@ class ConversationPresenter:
         self._process_jobs: set[BackgroundJob] = set()
         self._process_refresh_pending = False
         self._process_disposed = False
+        self._selection_job: BackgroundJob | None = None
         self._command_presenter = ConversationCommandPresenter(
             host,
             create_new_conversation=self.new,
@@ -119,6 +120,7 @@ class ConversationPresenter:
     def abandon_background_jobs(self) -> None:
         """Prevent late GUI callbacks while the application is closing."""
         self._process_disposed = True
+        self._cancel_selection()
         self._command_presenter.abandon_exports()
         jobs = [
             *self._process_jobs,
@@ -186,20 +188,62 @@ class ConversationPresenter:
     # Selection
     # ------------------------------------------------------------------
 
-    def select(self, conversation_id: str) -> None:
+    @property
+    def is_selecting(self) -> bool:
+        return self._selection_job is not None
+
+    def _cancel_selection(self) -> None:
+        job, self._selection_job = self._selection_job, None
+        if job is not None:
+            job.abandon()
+
+    def select(self, conversation_id: str, *, message_id: str = "") -> None:
         host = self._host
         previous = host.current_conversation
         knowledge = getattr(host, "knowledge_presenter", None)
-        if knowledge and getattr(previous, "id", "") != conversation_id and not knowledge.allow_context_change(lambda: self.select(conversation_id)):
+        if knowledge and getattr(previous, "id", "") != conversation_id and not knowledge.allow_context_change(lambda: self.select(conversation_id, message_id=message_id)):
             if previous is not None:
                 host.sidebar.select_conversation(previous.id)
             return
+        self._cancel_selection()
         stream_state = host.message_runtime.get_state(conversation_id)
         conversation = getattr(stream_state, "conversation", None)
-        if not isinstance(conversation, Conversation):
-            conversation = host.services.conv_service.load(conversation_id)
-        if not conversation:
+        if isinstance(conversation, Conversation):
+            self._apply_selection(conversation, stream_state, message_id=message_id)
             return
+
+        job = BackgroundJob(lambda: host.services.conv_service.load(conversation_id))
+        self._selection_job = job
+        host.sidebar.select_conversation(conversation_id)
+        host.chat_view.show_notice(QCoreApplication.translate('ConversationPresenter', '正在打开会话…'), timeout_ms=0)
+        host.window_state_presenter.sync_input_enabled()
+
+        def complete(loaded, error):
+            if self._selection_job is not job or self._process_disposed:
+                return
+            self._selection_job = None
+            # A new/imported conversation can replace the selection while I/O
+            # is pending. Runtime may also have started this target meanwhile.
+            if host.current_conversation is not previous:
+                host.window_state_presenter.sync_input_enabled()
+                return
+            state = host.message_runtime.get_state(conversation_id)
+            live = getattr(state, "conversation", None)
+            if isinstance(live, Conversation):
+                loaded, error = live, None
+            if error or loaded is None:
+                if previous is not None:
+                    host.sidebar.select_conversation(previous.id)
+                host.chat_view.show_notice(str(error or QCoreApplication.translate('ConversationPresenter', '会话不存在或已删除。')), tone="error")
+                host.window_state_presenter.sync_input_enabled()
+                return
+            self._apply_selection(loaded, state, message_id=message_id)
+
+        job.signals.finished.connect(complete)
+        QThreadPool.globalInstance().start(job)
+
+    def _apply_selection(self, conversation: Conversation, stream_state=None, *, message_id: str = "") -> None:
+        host = self._host
 
         host.services.app_coordinator.remember_current_conversation(
             conversation,
@@ -290,6 +334,8 @@ class ConversationPresenter:
                 host.chat_view.update_runtime_state(stream_state)
 
             host.window_state_presenter.sync_input_enabled()
+            if message_id:
+                host.chat_view.reveal_message(conversation.id, message_id)
         finally:
             host.is_syncing_input_selection = False
 
@@ -302,6 +348,7 @@ class ConversationPresenter:
         knowledge = getattr(host, "knowledge_presenter", None)
         if knowledge and not knowledge.allow_context_change(lambda: self.new(work_dir=work_dir)):
             return
+        self._cancel_selection()
         show_active = getattr(host.sidebar, "show_active", None)
         if show_active is not None:
             show_active()
@@ -1290,9 +1337,14 @@ class ConversationPresenter:
             return QCoreApplication.translate('ConversationPresenter', '历史上下文已是最新状态')
         if reason == "below_threshold":
             return QCoreApplication.translate('ConversationPresenter', '当前上下文未达到自动压缩阈值')
+        metrics = dict(getattr(report, "metrics", {}) or {})
+        repaired = int(metrics.get("tool_errors_archived") or 0)
+        if repaired and reason not in {"compression_failed", "maintenance_in_progress"}:
+            return QCoreApplication.translate(
+                'ConversationPresenter', '已归档 {count} 条超大错误回执，完整原文可恢复',
+            ).format(count=repaired)
         if reason == "no_candidates":
             return QCoreApplication.translate('ConversationPresenter', '没有可进一步压缩的历史；最近一轮和未完成的工具调用会保留')
-        metrics = dict(getattr(report, "metrics", {}) or {})
         if reason == "compression_failed" and metrics.get("fallback_reason") != "summary_no_savings":
             error = " ".join(str(metrics.get("compression_error") or metrics.get("fallback_reason") or "").split())
             return QCoreApplication.translate('ConversationPresenter', '压缩模型调用失败，历史保持不变：{error}').format(

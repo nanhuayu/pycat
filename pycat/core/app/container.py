@@ -17,17 +17,20 @@ from pycat.core.app.channel_platforms import build_channel_platforms
 from pycat.core.app.coordinator import AppCoordinator
 from pycat.core.app.loop_host import ApplicationLoop
 from pycat.core.app.repositories import AppRepositories
+from pycat.core.app.repositories.library import LibraryRepository
 from pycat.core.app.repositories.provider_credentials import ProviderCredentialsRepository
 from pycat.core.app.services.app_settings import AppSettingsService
 from pycat.core.app.services.channel import ChannelService
 from pycat.core.app.services.codex_auth import CodexAuthService
 from pycat.core.app.services.commands import CommandService
+from pycat.core.app.services.content_chat import ContentChatService
 from pycat.core.app.services.context import ContextService
 from pycat.core.app.services.conversation import ConversationService
 from pycat.core.app.services.delegation import DelegationService
 from pycat.core.app.services.extensions import ExtensionService
 from pycat.core.app.services.interactive import InteractiveService
 from pycat.core.app.services.knowledge import KnowledgeService
+from pycat.core.app.services.library import LibraryService
 from pycat.core.app.services.mode_catalog import ModeCatalogService
 from pycat.core.app.services.provider import ProviderService
 from pycat.core.app.services.provider_catalog import ProviderCatalogService
@@ -53,6 +56,7 @@ from pycat.core.config.io import load_settings_dict
 from pycat.core.content.ocr import OcrService
 from pycat.core.content.resolver import SessionContentResolver
 from pycat.core.content.session_content import SessionContentService
+from pycat.core.content.text_document import TextDocumentStore
 from pycat.core.content.wiki import WikiService
 from pycat.core.llm.client import LLMClient
 from pycat.core.memory.review import MemoryReviewService
@@ -75,8 +79,11 @@ class AppServices:
     provider_service: ProviderService
     mode_catalog_service: ModeCatalogService
     conv_service: ConversationService
+    content_chat_service: ContentChatService
     context_service: ContextService
     content_service: SessionContentService
+    library_service: LibraryService
+    document_service: TextDocumentStore
     workspace_service: WorkspaceService
     ocr_service: OcrService
     skill_service: SkillService
@@ -180,6 +187,9 @@ class AppContainer:
         search_service = SearchService(repositories.search_config.load())
         workspace_service = WorkspaceService(data_dir)
         content_service = SessionContentService(data_dir=str(data_dir), workspace_service=workspace_service)
+        library_service = LibraryService(LibraryRepository(data_dir), content=content_service)
+        content_service.library = library_service
+        document_service = TextDocumentStore()
         resolver = SessionContentResolver(content_service)
         wiki_service = WikiService(resolver)
         skill_service = SkillService(data_dir=str(data_dir))
@@ -245,6 +255,7 @@ class AppContainer:
             on_change=app_coordinator.invalidate_content,
             data_dir=str(data_dir),
         )
+        library_service.on_change = app_coordinator.invalidate_content
         agent_runtime = AgentRuntime(
             client=client,
             tool_manager=tool_manager,
@@ -319,7 +330,7 @@ class AppContainer:
             providers=provider_catalog_service, provider_service=provider_service, modes=mode_catalog_service,
             tools=tools_service, mcp=mcp_service, skills=skill_service, knowledge=knowledge_service,
             workspace=workspace_service, channels=channel_service, content=content_service, release=release_checker, ocr=ocr_service,
-            extensions=extension_service)
+            extensions=extension_service, library=library_service)
         command_registry.mention_provider = workbench.mention_candidates
         command_registry.argument_provider = workbench.argument_candidates
         interactive = InteractiveService(commands=command_service, workbench=workbench)
@@ -334,8 +345,11 @@ class AppContainer:
             provider_service=provider_service,
             mode_catalog_service=mode_catalog_service,
             conv_service=conv_service,
+            content_chat_service=ContentChatService(conv_service),
             context_service=context_service,
             content_service=content_service,
+            library_service=library_service,
+            document_service=document_service,
             skill_service=skill_service,
             extension_service=extension_service,
             knowledge_service=knowledge_service,

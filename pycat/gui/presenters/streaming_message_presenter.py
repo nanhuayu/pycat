@@ -318,13 +318,10 @@ class StreamingMessagePresenter:
 
         content = _format_error_message(error)
 
-        error_message = Message(role="assistant", content=content)
-        try:
-            error_message.metadata["runtime_error"] = True
-            if error.strip() == "已取消生成":
-                error_message.metadata["run_status"] = RunStatus.CANCELLED.value
-        except Exception as exc:
-            logger.debug("Failed to mark runtime error metadata: %s", exc)
+        status = RunStatus.CANCELLED if str(error or '').strip() == "已取消生成" else RunStatus.FAILED
+        error_message = Message(role="assistant", content=content, metadata={
+            "runtime_error": True, "run_status": status.value, "request_id": request_id,
+        })
 
         target = None
         if self._is_current(conversation_id):
@@ -334,7 +331,8 @@ class StreamingMessagePresenter:
 
         if target:
             existing = target.messages[-1] if target.messages else None
-            if existing is not None and (existing.metadata or {}).get("runtime_error"):
+            if (existing is not None and (existing.metadata or {}).get("runtime_error")
+                    and existing.metadata.get("request_id") == request_id):
                 error_message = existing
             else:
                 target.add_message(error_message)

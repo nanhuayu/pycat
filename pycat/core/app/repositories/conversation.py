@@ -18,7 +18,7 @@ from pycat.models.conversation import Conversation
 logger = logging.getLogger(__name__)
 
 
-CONVERSATION_INDEX_SCHEMA_VERSION = 4
+CONVERSATION_INDEX_SCHEMA_VERSION = 5
 _SEARCH_ENTRY_LIMIT = 48
 _SEARCH_ENTRY_TEXT_LIMIT = 600
 _CONTROL_MESSAGE_PREFIXES = ("[AUTO-CONTINUE]", "[WARNING]")
@@ -231,6 +231,7 @@ class ConversationRepository:
             "message_count": len(messages) if isinstance(messages, list) else 0,
             "search_entries": _search_entries(messages),
             "delegation": task_projection(data),
+            "content_target": str(data.get('content_target') or ''),
             "file_version": version,
         }
 

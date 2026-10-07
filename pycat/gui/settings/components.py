@@ -34,7 +34,7 @@ from pycat.gui.utils.theme import (
 )
 from pycat.gui.widgets.capsule import SingleLineLabel
 
-SETTINGS_NAV_WIDTH = 212
+SETTINGS_NAV_WIDTH = 232
 RESOURCE_LIST_MINIMUM_WIDTH = 200
 RESOURCE_LIST_PREFERRED_WIDTH = 240
 RESOURCE_LIST_MAXIMUM_WIDTH = 300
@@ -184,6 +184,7 @@ class SettingsListDetailLayout(QWidget):
             self.show_detail()
 
     def show_detail(self):
+        """Open the selection while retaining its existing detail widget."""
         item = self.list_widget.currentItem()
         if item is None:
             return
@@ -191,12 +192,14 @@ class SettingsListDetailLayout(QWidget):
         self._sync_selection()
 
     def show_list(self):
+        """Return to the compact list without discarding the editor draft."""
         self._detail_requested = False
         self._apply_layout()
         self.list_widget.setFocus()
 
     @pyqtSlot()
     def _sync_selection(self):
+        """Project selection metadata, ignoring notifications during teardown."""
         # The view can already be invalid while Qt tears down its model.
         # A native slot owns the connection; also reject partial child teardown.
         if sip.isdeleted(self) or sip.isdeleted(self.list_widget):
@@ -211,17 +214,18 @@ class SettingsListDetailLayout(QWidget):
         self._apply_layout()
 
     def resizeEvent(self, event):
+        """Switch pane geometry without changing the user's selected editor."""
         super().resizeEvent(event)
         compact = self.width() < 800
         if compact != self._compact:
             self._compact = compact
-            self._detail_requested = False
             self.list_panel.setMaximumWidth(16777215 if compact else RESOURCE_LIST_MAXIMUM_WIDTH)
             if not compact:
                 self.splitter.setSizes([RESOURCE_LIST_PREFERRED_WIDTH, max(400, self.width() - RESOURCE_LIST_PREFERRED_WIDTH - 16)])
         self._apply_layout()
 
     def _apply_layout(self):
+        """Apply compact/wide visibility from the existing navigation intent."""
         opened = not self._compact or self._detail_requested
         self.list_panel.setVisible(not self._compact or not opened)
         self.detail_panel.setVisible(opened)
@@ -277,6 +281,11 @@ def settings_dialog_layout(dialog, title: str) -> QVBoxLayout:
 
 def build_dialog_button_box(parent=None, *, accept_text=None,
                             accept_button=QDialogButtonBox.StandardButton.Save) -> QDialogButtonBox:
+    """Build primary/Cancel buttons, retaining native roles and Enter/Escape.
+
+    ``accept_text`` overrides Save; callers connect acceptance/rejection signals.
+    Width follows translated content and no configuration is saved here.
+    """
     buttons = QDialogButtonBox(
         accept_button | QDialogButtonBox.StandardButton.Cancel,
         parent,
@@ -340,9 +349,11 @@ class SettingsResourceDelegate(QStyledItemDelegate):
     """Paint settings resources with one compact, theme-aware hierarchy."""
 
     def sizeHint(self, option, index):
+        """Return a stable row height for visible metadata lines."""
         return QSize(0, 78 if index.data(RESOURCE_DESCRIPTION_ROLE) else 56 if index.data(RESOURCE_SUBTITLE_ROLE) else 42)
 
     def paint(self, painter: QPainter, option, index) -> None:
+        """Render semantic resource state and a visible keyboard focus ring."""
         painter.save()
         rect = option.rect.adjusted(0, 2, 0, -2)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
@@ -386,7 +397,8 @@ class SettingsResourceDelegate(QStyledItemDelegate):
         painter.setBrush(background)
         painter.drawRoundedRect(rect, 6, 6)
         content = rect.adjusted(12, 8, -12, -8)
-        icon_width = 24 if not icon.isNull() else 0
+        icon_size = max(18, option.decorationSize.width())
+        icon_width = icon_size + 8 if not icon.isNull() else 0
         trailing_width = len(trailing_icons) * 20
         toggle = bool(index.data(RESOURCE_TOGGLE_ROLE)) and not badge and rect.width() >= 360
         state_width = (52 if toggle else 18 if not enabled and not badge else 0) + trailing_width
@@ -404,8 +416,8 @@ class SettingsResourceDelegate(QStyledItemDelegate):
         title_width = text_width - badge_width - (8 if badge else 0)
         title_rect = QRect(text_left, title_top, title_width, title_height)
         if icon_width:
-            pixmap = icon.pixmap(18, 18)
-            painter.drawPixmap(content.left(), content.center().y() - 9, pixmap)
+            icon.paint(painter, QRect(content.left(), content.center().y() - icon_size // 2,
+                                      icon_size, icon_size))
         painter.setFont(title_font)
         painter.setPen(title_color)
         painter.drawText(
@@ -438,8 +450,7 @@ class SettingsResourceDelegate(QStyledItemDelegate):
         if trailing_icons:
             left = content.right() - trailing_width + 2
             for offset, trailing_icon in enumerate(trailing_icons):
-                pixmap = trailing_icon.pixmap(16, 16)
-                painter.drawPixmap(left + offset * 20, content.center().y() - 8, pixmap)
+                trailing_icon.paint(painter, QRect(left + offset * 20, content.center().y() - 8, 16, 16))
 
         if toggle:
             switch = QRect(rect.right() - 70, rect.center().y() - 9, 32, 18)
@@ -454,6 +465,10 @@ class SettingsResourceDelegate(QStyledItemDelegate):
             painter.setPen(QPen(QColor(colors["muted"]), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             painter.drawLine(center_x - 3, center_y - 4, center_x - 3, center_y + 4)
             painter.drawLine(center_x + 2, center_y - 4, center_x + 2, center_y + 4)
+        if option.state & QStyle.StateFlag.State_HasFocus:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(colors["primary"]), 1))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 6, 6)
         painter.restore()
 
 
@@ -462,10 +477,12 @@ def configure_settings_resource_list(
     *,
     minimum_width: int = RESOURCE_LIST_MINIMUM_WIDTH,
 ) -> QListWidget:
+    """Configure a native resource list without changing its model or contents."""
     widget.setObjectName("settings_list")
     widget.setMinimumWidth(max(180, int(minimum_width)))
     widget.setFrameShape(QFrame.Shape.NoFrame)
     widget.setSpacing(2)
+    widget.setIconSize(QSize(18, 18))
     widget.setMouseTracking(True)
     widget.setTextElideMode(Qt.TextElideMode.ElideRight)
     widget.setUniformItemSizes(False)

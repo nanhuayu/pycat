@@ -7,7 +7,7 @@ from typing import Any
 from pycat.core.content.images import MAX_IMAGE_BYTES, prepare_view_image
 from pycat.core.content.pdf import MAX_PDF_BYTES, render_pdf_pages_isolated
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.core.tools.system.file_source import resolve_file_source
+from pycat.core.tools.file.file_source import resolve_file_source
 
 
 class ViewFileTool(BaseTool):

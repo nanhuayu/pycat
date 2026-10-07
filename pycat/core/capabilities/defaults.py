@@ -142,6 +142,7 @@ def default_capabilities_config() -> CapabilitiesConfig:
                 name="上下文压缩",
                 exposure="internal",
                 prompt=COMPRESS_PROMPT.strip(),
+                max_tokens=8192,
             ),
             CapabilityConfig(
                 id="memory_review",

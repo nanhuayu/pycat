@@ -35,6 +35,16 @@ class RunStopReason(str, Enum):
     PERMISSION_DENIED = "permission_denied"
 
 
+def can_resume_message(message: Message | None) -> bool:
+    """Whether an Assistant terminal record exposes explicit manual recovery."""
+    if message is None or message.role != "assistant":
+        return False
+    metadata = message.metadata if isinstance(message.metadata, dict) else {}
+    return bool(metadata.get("interrupted") or metadata.get("runtime_error")) and not bool(
+        metadata.get("resume_requested")
+    )
+
+
 @dataclass
 class RunResult:
     status: RunStatus = RunStatus.COMPLETED

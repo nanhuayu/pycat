@@ -17,7 +17,7 @@ def check_shell(worker):
     worker("""
         import os, tempfile, time
         from pathlib import Path
-        from pycat.core.tools.process import BackgroundProcessManager, CommandExecutionRequest
+        from pycat.core.tools.system.process import BackgroundProcessManager, CommandExecutionRequest
         from pycat.models.contracts.config import ShellConfig
         manager = BackgroundProcessManager()
         with tempfile.TemporaryDirectory(prefix='shell 输入 ') as folder:
@@ -142,7 +142,8 @@ def check_gui_shell(worker):
                 presenter.stop(identity)
                 until(lambda: not presenter.window.stop_button.isEnabled())
                 assert not container.services.tools.processes(conversation.id)
-                assert presenter.window.tabs.count() == 1
+                assert presenter.window.process_list.count() == 1
+                assert presenter.window.parentWidget() is None
                 assert '已退出' in presenter.window.state_label.text()
                 assert 'PYCAT_RELEASE_SHELL' in '\\n'.join(presenter.window.view.screen.display)
                 assert not presenter.window.view._input_enabled
@@ -162,7 +163,7 @@ def check_gui_settings(worker):
         import time
         from PyQt6 import sip
         from PyQt6.QtCore import QCoreApplication, QEvent
-        from PyQt6.QtWidgets import QApplication, QPushButton
+        from PyQt6.QtWidgets import QAbstractButton, QApplication
         from pycat.gui.main_window import MainWindow
         app = QApplication([])
         app.setQuitOnLastWindowClosed(False)
@@ -184,7 +185,7 @@ def check_gui_settings(worker):
             dialog = window.settings_presenter._settings_dialog
             assert not dialog.isWindow() and not dialog.is_dirty()
             assert window.workspace_stack.currentWidget() is dialog
-            back = dialog.findChild(QPushButton, 'settings_back')
+            back = dialog.findChild(QAbstractButton, 'settings_back')
             assert back is not None
             case = index % 4
             if case:
@@ -268,8 +269,8 @@ def check_file_search(worker):
     worker("""
         import asyncio, hashlib, json, os, tempfile
         from pathlib import Path
-        from pycat.core.tools.system.file_search import find_ripgrep, RIPGREP_BUNDLE
-        from pycat.core.tools.system.filesystem import GrepTool
+        from pycat.core.tools.file.file_search import find_ripgrep, RIPGREP_BUNDLE
+        from pycat.core.tools.file.filesystem import GrepTool
         from pycat.core.tools.base import ToolContext
         os.environ['PATH'] = ''
         assert find_ripgrep() == str(RIPGREP_BUNDLE), 'Bundled ripgrep is missing'
@@ -423,6 +424,51 @@ def check_ocr(worker):
     """)
 
 
+def check_presentation(worker):
+    worker("""
+        import contextlib, io, json, runpy, sys
+        from importlib.resources import files
+        from pathlib import Path
+        from PIL import Image
+        from pptx import Presentation
+        script = Path(str(files('pycat').joinpath('assets/skills/presentation/scripts/ppt.py')))
+        assert script.is_file(), script
+        assert (script.parent / 'pyppt/render.py').is_file()
+        project = Path('presentation probe 中文')
+        (project / 'slides').mkdir(parents=True)
+        Image.new('RGB', (32, 32), '#23865c').save(project / 'logo.png')
+        (project / 'slides/01.slide').write_text(
+            '<Slide notes="Release probe"><Text>Native presentation 中文</Text>'
+            '<Box style={{flexDirection:"row",gap:16}}>'
+            '<Image src="logo.png" style={{width:100,height:100}} />'
+            '<Table cells={[["A","B"],["1","2"]]} style={{width:200,height:100}} />'
+            '<Chart chartType="bar" categories={["Q1","Q2"]} '
+            'series={[{name:"Revenue",values:[2,3]}]} style={{width:350,height:220}} />'
+            '</Box></Slide>', encoding='utf-8')
+        (project / 'slides/02.slide').write_text('<Slide><Text>Second page</Text></Slide>', encoding='utf-8')
+        for command in [['doctor'], ['build', str(project), '--output', 'release probe.pptx'],
+                        ['inspect', 'release probe.pptx', '--page-count', '1']]:
+            sys.argv = [str(script), *command]
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                try:
+                    runpy.run_path(str(script), run_name='__main__')
+                except SystemExit as exit_status:
+                    assert exit_status.code == 0, output.getvalue()
+            receipt = json.loads(output.getvalue())
+            assert receipt['ok'], receipt
+        assert receipt['total_pages'] == 2 and receipt['next_page'] == 2
+        assert 'Native presentation 中文' in receipt['pages'][0]['text']
+        deck = Presentation('release probe.pptx')
+        assert len(deck.slides) == 2
+        shapes = deck.slides[0].shapes
+        assert any(shape.has_table for shape in shapes)
+        assert any(shape.has_chart and list(shape.chart.series[0].values) == [2, 3] for shape in shapes)
+        assert any(shape.shape_type == 13 and shape.image.blob for shape in shapes)
+        assert 'Release probe' in deck.slides[0].notes_slide.notes_text_frame.text
+    """)
+
+
 def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
     checks = []
     executable = directory / ("pycat.exe" if frontend == "gui" else "pycat-cli.exe")
@@ -489,7 +535,7 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
             assert isinstance(json.loads(config.read_text(encoding="utf-8")), dict)
             with tempfile.TemporaryDirectory() as data:
                 skills = SkillsManager(work_dir=data, data_dir=data)
-                for name in ("find-skills", "skill-creator", "pdf", "deep-research"):
+                for name in ("find-skills", "skill-creator", "pdf", "deep-research", "presentation"):
                     skill = skills.get(name)
                     assert skill and skill.source_scope == "bundled" and skill.read_only, name
                     assert skill.description and skill.content, name
@@ -525,7 +571,7 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
             document.new_page().insert_text((72, 72), "PDF probe")
             with tempfile.TemporaryDirectory() as pdf_dir:
                 from pycat.core.tools.base import ToolContext
-                from pycat.core.tools.system.filesystem import ReadFileTool
+                from pycat.core.tools.file.filesystem import ReadFileTool
                 path = Path(pdf_dir) / "probe.pdf"
                 document.save(path)
                 read = asyncio.run(ReadFileTool().execute({"path": "probe.pdf"}, ToolContext(work_dir=pdf_dir)))
@@ -544,6 +590,8 @@ def check_binary(directory: Path, frontend: str, ocr: bool) -> list[str]:
         checks.append("SSH helper source, protocol and stdlib bootstrap resource")
         check_export(worker)
         checks.append("DOCX templates, formatted text/table round trip and HTML export")
+        check_presentation(worker)
+        checks.append("Presentation Skill sources, dependency diagnosis, native image/table/chart/notes and bounded PPTX reading")
         check_search(worker)
         checks.append("DDGS dynamic engines, native HTTP client, HTML parsing and search service (local fixture)")
         check_mcp(worker, workspace)

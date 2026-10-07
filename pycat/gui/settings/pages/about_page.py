@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QToolButton, QVBoxLayout, QWidget
 
 from pycat.core.app.services.release import STABLE_RELEASE_PAGE, ReleaseCheckResult
 from pycat.core.version import __version__
@@ -15,6 +15,7 @@ from pycat.gui.about_content import (
 )
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button
 
 
 class AboutPage(QWidget):
@@ -24,6 +25,7 @@ class AboutPage(QWidget):
     release_ignore_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
+        """Build brand/version information and emit update actions for the presenter."""
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -42,7 +44,7 @@ class AboutPage(QWidget):
         identity = QVBoxLayout()
         identity.setSpacing(6)
         name = QLabel(PRODUCT_NAME)
-        name.setObjectName("settings_page_title")
+        name.setObjectName("settings_brand")
         identity.addWidget(name)
         self.version_label = QLabel(f"v{__version__}")
         self.version_label.setObjectName("about_version_label")
@@ -76,15 +78,17 @@ class AboutPage(QWidget):
         release_actions = QHBoxLayout()
         release_actions.setContentsMargins(0, 0, 0, 0)
         release_actions.setSpacing(6)
-        self.check_update_btn = QPushButton(QCoreApplication.translate('AboutPage', "检查更新"))
+        self.check_update_btn = QToolButton()
         self.check_update_btn.setObjectName("about_check_update_btn")
-        self.check_update_btn.setIcon(Icons.get(Icons.REFRESH))
+        configure_icon_button(self.check_update_btn, Icons.get(Icons.REFRESH),
+                              QCoreApplication.translate('AboutPage', "检查更新"))
         self.check_update_btn.clicked.connect(self.check_requested.emit)
         release_actions.addWidget(self.check_update_btn)
 
-        self.open_release_btn = QPushButton(QCoreApplication.translate('AboutPage', "查看新版本"))
+        self.open_release_btn = QToolButton()
         self.open_release_btn.setObjectName("about_open_release_btn")
-        self.open_release_btn.setIcon(Icons.get(Icons.EXTERNAL_OPEN))
+        configure_icon_button(self.open_release_btn, Icons.get(Icons.EXTERNAL_OPEN),
+                              QCoreApplication.translate('AboutPage', "查看新版本"))
         self.open_release_btn.setVisible(False)
         self.open_release_btn.clicked.connect(self._open_current_release)
         release_actions.addWidget(self.open_release_btn)
@@ -111,8 +115,11 @@ class AboutPage(QWidget):
         self._release = None
 
     def set_release_checking(self, checking: bool) -> None:
+        """Keep the update action's busy icon, tooltip, and accessible name in sync."""
+        configure_icon_button(self.check_update_btn, Icons.get(Icons.SPINNER if checking else Icons.REFRESH),
+                              QCoreApplication.translate('AboutPage', "检查中…") if checking else
+                              QCoreApplication.translate('AboutPage', "检查更新"))
         self.check_update_btn.setEnabled(not checking)
-        self.check_update_btn.setText(QCoreApplication.translate('AboutPage', "检查中…") if checking else QCoreApplication.translate('AboutPage', "检查更新"))
 
     def set_release_result(self, result: ReleaseCheckResult | None, *, ignored_tag: str = "") -> None:
         self._release = getattr(result, "release", None) if result is not None else None

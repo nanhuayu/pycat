@@ -71,14 +71,16 @@ class SettingsPresenter:
                 stylesheet = "\n\n".join(parts)
                 theme_key = f"{theme}:{accent}:{len(stylesheet)}"
                 if theme_key != self._applied_theme_key or stylesheet != self._applied_stylesheet:
+                    # Qt sends palette/style events synchronously. Publish the
+                    # owner's new theme before descendants resolve those events.
+                    self._window.setProperty("theme", theme)
+                    self._window.setProperty("accent", accent)
                     app = QApplication.instance()
                     if app is not None:
                         app.setProperty("theme", theme)
                         app.setProperty("accent", accent)
                         app.setPalette(palette_for_theme(theme, accent))
                         app.setStyleSheet(stylesheet)
-                    self._window.setProperty("theme", theme)
-                    self._window.setProperty("accent", accent)
                     self._sync_widget_theme(theme, accent)
                     self._window.setStyleSheet("")
                     self._applied_theme_key = theme_key
@@ -281,6 +283,8 @@ class SettingsPresenter:
             embedded=True,
         )
         self._settings_dialog = dialog
+        if hasattr(host, 'sync_navigation'):
+            dialog.page_list.currentRowChanged.connect(host.sync_navigation)
         capture = getattr(self._window, 'screenshot_controller', None)
         if capture is not None:
             dialog.capture_requested.connect(capture.start)
@@ -349,6 +353,8 @@ class SettingsPresenter:
         if self._settings_dialog is dialog:
             self._settings_dialog = None
             self._window.workspace_stack.setCurrentWidget(self._window.splitter)
+            if hasattr(self._window, 'navigation'):
+                self._window.navigation.set_current('home')
             self._window.workspace_stack.removeWidget(dialog)
             self._window.input_area.text_input.setFocus()
             self._window.window_state_presenter.refresh_menu_action_states()
@@ -356,6 +362,19 @@ class SettingsPresenter:
         if self._close_window_after_save:
             self._close_window_after_save = False
             QTimer.singleShot(0, self._window.close)
+
+    def leave_settings(self, continuation):
+        """Navigation uses the existing settings save/discard transaction."""
+        dialog = self._settings_dialog
+        if dialog is None:
+            continuation()
+            return
+        def callback(_result):
+            QTimer.singleShot(0, continuation)
+        dialog.finished.connect(callback)
+        dialog.request_close()
+        if self._settings_dialog is dialog and not dialog._close_after_save:
+            dialog.finished.disconnect(callback)
 
     def _start_settings_save(self, dialog: SettingsDialog, update) -> None:
         if dialog is not self._settings_dialog or self._settings_job is not None:
@@ -549,11 +568,13 @@ class SettingsPresenter:
         if show_stats is None:
             show_stats = bool(host.app_settings.get("show_stats", False))
 
-        was_collapsed = host.sidebar.collapsed
+        was_hidden = host.sidebar.isHidden()
         sizes = host.splitter.sizes()
-        host.sidebar.set_collapsed(not show_sidebar)
-        if was_collapsed != host.sidebar.collapsed:
-            width = host.sidebar.expanded_width if show_sidebar else 56
+        if not show_sidebar and not was_hidden:
+            host.sidebar.expanded_width = max(180, min(320, sizes[0]))
+        host.sidebar.setVisible(bool(show_sidebar))
+        if was_hidden != host.sidebar.isHidden():
+            width = host.sidebar.expanded_width if show_sidebar else 0
             sizes[1] = max(1, sizes[1] - width + sizes[0])
             sizes[0] = width
             host.splitter.setSizes(sizes)
@@ -586,7 +607,7 @@ class SettingsPresenter:
     def persist_main_splitter_layout(self, _pos: int, _index: int) -> None:
         sizes = self._window.splitter.sizes()
         sidebar = self._window.sidebar
-        if sidebar.collapsed:
+        if sidebar.isHidden():
             sizes[1] = max(1, sizes[1] - sidebar.expanded_width + sizes[0])
             sizes[0] = sidebar.expanded_width
         else:
@@ -594,7 +615,14 @@ class SettingsPresenter:
         self._persist_splitter_layout('splitter_sizes', sizes, 'splitter')
 
     def persist_chat_splitter_layout(self, _pos: int, _index: int) -> None:
-        self._persist_splitter_layout('chat_splitter_sizes', self._window.chat_splitter.sizes(), 'chat splitter')
+        sizes = self._chat_layout_sizes(self._window.chat_splitter.sizes(), with_attachments=False)
+        self._persist_splitter_layout('chat_splitter_sizes', sizes, 'chat splitter')
+
+    def _chat_layout_sizes(self, sizes, *, with_attachments):
+        # Persistent geometry describes text space; attachments are transient.
+        extra = getattr(self._window, '_composer_attachment_height', 0)
+        delta = extra if with_attachments else -extra
+        return [max(0, sizes[0] - delta), max(0, sizes[1] + delta)]
 
     def reset_default_layout(self) -> None:
         host = self._window
@@ -602,7 +630,7 @@ class SettingsPresenter:
             host.app_settings.pop(key, None)
         host.apply_window_size()
         host.splitter.setSizes([180, 660, 240])
-        host.chat_splitter.setSizes([520, 140])
+        host.chat_splitter.setSizes(self._chat_layout_sizes([520, 140], with_attachments=True))
         try:
             host.services.app_settings_service.save(host.app_settings)
         except Exception as exc:
@@ -630,7 +658,7 @@ class SettingsPresenter:
 
         if chat_splitter_sizes is not None:
             try:
-                host.chat_splitter.setSizes(list(chat_splitter_sizes))
+                host.chat_splitter.setSizes(self._chat_layout_sizes(chat_splitter_sizes, with_attachments=True))
             except Exception as e:
                 logger.debug("Failed to restore chat splitter sizes: %s", e)
 

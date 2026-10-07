@@ -10,12 +10,18 @@ from pycat.models.contracts.content import ContentRef
 
 def resolve_file_source(path_text: str, context: ToolContext, *, archive_images: bool = False,
                         max_bytes: int | None = None) -> ResolvedContent:
-    if path_text.startswith('input:') or (archive_images and path_text.startswith('archive:')):
+    if path_text.startswith(('input:', 'library:')) or (archive_images and path_text.startswith('archive:')):
         if context.conversation is None or context.content_service is None:
             raise ValueError('Content references require an active conversation and its content service.')
         if path_text.startswith('archive:') and '/images/' not in path_text:
             raise ValueError('Use archive__read for archived text, or an archive:<id>/images/<number> image reference.')
         resolver = SessionContentResolver(context.content_service)
+        if path_text.startswith('library:'):
+            granted = next((ref for message in context.conversation.messages for ref in message.content_refs
+                            if ref.kind == 'library' and ref.ref == path_text), None)
+            if granted is None:
+                raise ValueError('Select this library item in the conversation before reading it')
+            return resolver.resolve_content(context.conversation, granted)
         try:
             return resolver.resolve_content(context.conversation, path_text)
         except FileNotFoundError:

@@ -1,9 +1,10 @@
 """Developer entrypoint; installed users can run pycat-gui."""
-from pycat.gui.application import main
-from pycat.core.hosts.python_worker import PYTHON_EXEC_WORKER_ARG, run_python_exec_worker
-from pycat.core.hosts.askpass import ASKPASS_ARG, run_askpass
-from pycat.core.tools.pty_child import PTY_CHILD_ARG, run_pty_child
 import sys
+
+from pycat.core.hosts.askpass import ASKPASS_ARG, run_askpass
+from pycat.core.hosts.python_worker import PYTHON_EXEC_WORKER_ARG, run_python_exec_worker
+from pycat.core.tools.system.pty_child import PTY_CHILD_ARG, run_pty_child
+from pycat.gui.application import main
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == PTY_CHILD_ARG:

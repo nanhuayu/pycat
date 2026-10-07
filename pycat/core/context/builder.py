@@ -40,6 +40,8 @@ def build_context_messages(
     """Assemble summary checkpoint, event history, and one tail state snapshot."""
     work_dir = str(getattr(conversation, "work_dir", "") or default_work_dir or "").strip()
     snapshot_time = captured_at or datetime.now().astimezone()
+    if snapshot_time.tzinfo is None:
+        snapshot_time = snapshot_time.astimezone()
     items: list[ContextItem] = []
     provider_context = ProviderContext(
         conversation=conversation,
@@ -82,7 +84,7 @@ def build_context_messages(
     recent_history = project_history(conversation)
     messages = summary_messages + recent_history
     if state_items:
-        captured_text = snapshot_time.astimezone().replace(second=0, microsecond=0).isoformat(timespec="minutes")
+        captured_text = snapshot_time.replace(second=0, microsecond=0).isoformat(timespec="minutes")
         state_content = "\n\n".join(item.content.strip() for item in state_items if item.content.strip())
         messages.append(
             Message(

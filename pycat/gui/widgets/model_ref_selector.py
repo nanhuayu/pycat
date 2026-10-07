@@ -33,8 +33,16 @@ def build_model_ref_options(providers: Iterable[Provider], *, model_type: str = 
         if not provider_name:
             continue
 
+        # Pickers only inspect profiles. Avoid an O(n²) lookup and deep clone for
+        # every entry in a large provider catalog; request resolution still owns
+        # the effective, mutable model profile.
+        profiles = {}
+        for profile in provider.models:
+            profiles.setdefault(profile.model_id, profile)
         for model_name in provider_model_ids(provider):
-            profile = provider.effective_model_profile(model_name)
+            profile = profiles.get(model_name)
+            if profile is None:
+                profile = provider.effective_model_profile(model_name)
             if profile.model_type != model_type or (require_image_input and not profile.supports_input("image")):
                 continue
             if model_type == "image" and not provider.supports_image_api:

@@ -29,6 +29,7 @@ exclude = ["tests*", "docs*", "scripts*", "temp*", "build*", "release*"]
 # the platform-independent SDK wheel free of developer-prepared executables.
 [tool.setuptools.exclude-package-data]
 "pycat" = ["assets/tools/ripgrep/windows-x64/*"]
+"*" = ["*.pyc", "*.pyo", "**/__pycache__/*"]
 
 # Dependencies are single-sourced from requirements.txt / requirements-dev.txt.
 [tool.setuptools.dynamic]

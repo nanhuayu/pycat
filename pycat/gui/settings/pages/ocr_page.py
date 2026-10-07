@@ -5,11 +5,13 @@ from dataclasses import replace
 from typing import Any
 
 from PyQt6.QtCore import QCoreApplication
-from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from pycat.core.capabilities.defaults import default_capabilities_config
+from pycat.gui.settings.components import SettingsActionBar
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.form_builder import FormSection
+from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.widgets.model_ref_selector import ModelRefCombo, build_model_ref_options
 from pycat.models.contracts.config import OcrConfig
 from pycat.models.contracts.model_target import ModelTarget
@@ -33,6 +35,7 @@ class OcrPage(QWidget):
 
     def __init__(self, config: OcrConfig | None = None, *, status: Any = None,
                  providers=(), capability=None, parent=None) -> None:
+        """Build the shared OCR draft editor and accessible prompt reset action."""
         super().__init__(parent)
         config = config or OcrConfig()
         self._capability = capability or default_capabilities_config().capability("ocr")
@@ -58,9 +61,13 @@ class OcrPage(QWidget):
         vision.form.addRow(QCoreApplication.translate('OcrPage', '模型'), self.model_combo)
         self.prompt_edit = vision.add_text_edit(QCoreApplication.translate('OcrPage', '识别提示词'), text=self._capability.prompt, max_height=200)
         self.prompt_edit.setMinimumHeight(130)
-        reset = QPushButton(QCoreApplication.translate('OcrPage', '恢复默认提示词'))
-        reset.clicked.connect(lambda: self.prompt_edit.setPlainText(default_capabilities_config().capability("ocr").prompt))
-        vision.form.addRow(reset)
+        prompt_actions = SettingsActionBar()
+        prompt_actions.add_icon_action(
+            QCoreApplication.translate('OcrPage', '恢复默认提示词'), Icons.get(Icons.REFRESH),
+            lambda: self.prompt_edit.setPlainText(default_capabilities_config().capability("ocr").prompt),
+        )
+        prompt_actions.add_stretch()
+        vision.form.addRow(prompt_actions, info=True)
         self.vision_group = vision.group
         layout.addWidget(self.vision_group)
 

@@ -1,19 +1,13 @@
 import asyncio
 import subprocess
 import time
-from pathlib import Path
 from typing import Any, Dict
 
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.core.tools.process import CommandExecutionRequest, CommandExecutor, is_dangerous_command
-from pycat.models.contracts.config import ShellConfig
-from pycat.models.session_paths import resolve_session_root
+from pycat.core.tools.system.execution_context import command_executor, conversation_id, session_root, shell_config
+from pycat.core.tools.system.process import CommandExecutionRequest, is_dangerous_command
 
 _FOREGROUND_WAIT_MAX = 600
-
-
-def _shell_config(context: ToolContext) -> ShellConfig:
-    return getattr(getattr(context, "runtime", None), "shell_config", None) or ShellConfig()
 
 
 def _wait_seconds(value: Any, default: int, *, allow_zero: bool = False) -> int:
@@ -25,34 +19,6 @@ def _wait_seconds(value: Any, default: int, *, allow_zero: bool = False) -> int:
     if allow_zero and parsed <= 0:
         return 0
     return max(1, min(parsed, _FOREGROUND_WAIT_MAX))
-
-
-def _conversation_id(context: ToolContext) -> str:
-    return str(getattr(getattr(context, "conversation", None), "id", "") or "")
-
-
-def _session_root(context: ToolContext) -> Path | None:
-    """Canonical session root for process logs; None when no conversation is bound."""
-    conversation_id = _conversation_id(context)
-    if not conversation_id:
-        return None
-    work_dir = str(
-        getattr(getattr(context, "conversation", None), "work_dir", "")
-        or getattr(context, "work_dir", "")
-        or ""
-    ).strip()
-    return resolve_session_root(work_dir, conversation_id, data_dir=context.data_dir)
-
-
-def _executor(context: ToolContext) -> CommandExecutor:
-    manager = getattr(getattr(context, "runtime", None), "process_manager", None)
-    if manager is None:
-        raise RuntimeError("background process manager is unavailable in this tool context")
-    return CommandExecutor(
-        manager,
-        shell_config=_shell_config(context),
-        conversation_id=_conversation_id(context),
-    )
 
 
 class ExecuteCommandTool(BaseTool):
@@ -133,17 +99,17 @@ class ExecuteCommandTool(BaseTool):
             cwd = context.resolve_workspace_path(str(arguments.get("cwd") or "."))
             wait_seconds = _wait_seconds(
                 arguments.get("wait_seconds"),
-                _shell_config(context).wait_seconds,
+                shell_config(context).wait_seconds,
                 allow_zero=True,
             )
-            executor = _executor(context)
+            executor = command_executor(context)
             request = CommandExecutionRequest(
                 command=command or (subprocess.list2cmdline([program, *argv]) if program else ""),
                 cwd=cwd,
                 timeout_sec=wait_seconds,
                 background=interactive or wait_seconds == 0,
-                conversation_id=_conversation_id(context),
-                session_root=_session_root(context),
+                conversation_id=conversation_id(context),
+                session_root=session_root(context),
                 program=program, argv=tuple(argv), stdin=stdin, remote=context.files,
                 interactive=interactive,
                 controller=context.runtime.terminal_controller,
@@ -210,9 +176,9 @@ class ShellReadTool(BaseTool):
         process_id = str(arguments.get("process_id") or "").strip()
         if not process_id:
             return ToolResult("process_id is required.", is_error=True)
-        executor = _executor(context)
+        executor = command_executor(context)
         wait_seconds = _wait_seconds(arguments.get("wait_seconds"), 0, allow_zero=True)
-        wait_seconds = min(wait_seconds, _shell_config(context).wait_seconds)
+        wait_seconds = min(wait_seconds, shell_config(context).wait_seconds)
         try:
             cursor = max(0, int(arguments.get("cursor") or 0))
         except Exception:
@@ -269,7 +235,7 @@ class ShellListTool(BaseTool):
 
     async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> ToolResult:
         try:
-            snapshots = _executor(context).list(include_exited=bool(arguments.get("all")))
+            snapshots = command_executor(context).list(include_exited=bool(arguments.get("all")))
             if not snapshots:
                 return ToolResult("No background processes.")
             return ToolResult("\n\n".join(snapshot.to_display_text() for snapshot in snapshots))
@@ -315,7 +281,7 @@ class ShellKillTool(BaseTool):
         if not process_id:
             return ToolResult("process_id is required.", is_error=True)
         try:
-            snapshot = await asyncio.to_thread(_executor(context).kill, process_id)
+            snapshot = await asyncio.to_thread(command_executor(context).kill, process_id)
             return ToolResult(snapshot.to_display_text())
         except Exception as exc:
             return ToolResult(f"Process termination error: {exc}", is_error=True)
@@ -350,7 +316,7 @@ class ShellWriteTool(BaseTool):
         try:
             manager = context.runtime.process_manager
             count = await asyncio.to_thread(manager.write, str(arguments["process_id"]), arguments["text"],
-                conversation_id=_conversation_id(context), controller="agent")
+                conversation_id=conversation_id(context), controller="agent")
             return ToolResult(f"Terminal accepted {count} bytes. Use shell__read to inspect output.",
                               metadata={"process_id": str(arguments["process_id"]), "accepted_bytes": count})
         except Exception as exc:

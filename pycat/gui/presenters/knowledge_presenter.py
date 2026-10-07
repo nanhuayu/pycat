@@ -1,4 +1,4 @@
-"""Coordinate the existing application projections and one detail lifecycle."""
+"""Coordinate application projections and independently scoped detail windows."""
 from copy import copy
 
 from PyQt6.QtCore import QCoreApplication, QThreadPool
@@ -12,6 +12,7 @@ class KnowledgePresenter:
     def __init__(self, host):
         self.host = host
         self.detail = None
+        self._details = []
         self.panel = None
         self._scope = None
         self._jobs = {}
@@ -60,8 +61,6 @@ class KnowledgePresenter:
             self.panel.materials.offset = 0
             self.panel.materials.items.clear()
             self.panel.memory.set_workspace(scope[1])
-            if self.detail and not self.detail.dirty and not self.detail.busy:
-                self.detail.close()
         if conversation is None:
             self.panel.materials.set_status(QCoreApplication.translate('KnowledgePresenter', '选择会话后查看资料'))
             self.panel.memory.apply({"status": QCoreApplication.translate('KnowledgePresenter', '选择会话后查看记忆')})
@@ -69,12 +68,14 @@ class KnowledgePresenter:
         self.refresh_memory()
         if self.panel.materials.isVisible():
             self.refresh_materials()
-        detail = self.detail
-        if refresh_detail and not changed and detail and detail.isVisible() and detail._page.get("kind") in {"wiki", "memory"}:
-            if detail._editing:
-                detail.set_status(QCoreApplication.translate('KnowledgePresenter', '资料已更新；当前编辑已保留，保存时将核对版本。'))
-            elif not detail.busy and not detail.loading:
-                detail.reload_current()
+        if refresh_detail:
+            for detail in self._details:
+                origin = (getattr(detail.conversation, 'id', ''), getattr(detail.conversation, 'work_dir', ''))
+                if origin == scope and detail.isVisible() and detail._page.get("kind") in {"wiki", "memory"}:
+                    if detail._editing:
+                        detail.set_status(QCoreApplication.translate('KnowledgePresenter', '资料已更新；当前编辑已保留，保存时将核对版本。'))
+                    elif not detail.busy and not detail.loading:
+                        detail.reload_current()
 
     def refresh_materials(self, reindex=False):
         conv = self.panel.materials.conversation
@@ -101,29 +102,51 @@ class KnowledgePresenter:
         self._run("memory", lambda: self.host.services.knowledge_service.memory_snapshot(work_dir, enabled=enabled),
                   lambda result, error: self.panel.memory.apply(result if error is None else {"status": QCoreApplication.translate('KnowledgePresenter', '存储不可读'), "error": str(error)}))
 
-    def ensure_detail(self):
-        if self.detail is None:
+    def ensure_detail(self, *, new=False):
+        if self.detail is None or new:
             self.detail = ContentPreviewDialog(parent=self.host, services=self.host.services,
                 provider_for_conversation=lambda conv: next((p for p in self.host.providers if p.id == conv.provider_id), None))
+            detail = self.detail
+            self._details.append(detail)
+            detail.finished.connect(lambda _result: self._release_detail(detail))
+            self.host.destroyed.connect(detail.dispose)
             self.detail.changed.connect(lambda: self.context_changed(self.host.current_conversation, refresh_detail=False))
+            if hasattr(self.host, 'add_content_to_main'):
+                self.detail.attach_to_chat.connect(self.host.add_content_to_main)
         return self.detail
 
-    def open_content(self, **request):
-        detail = self.ensure_detail()
+    def _release_detail(self, detail):
+        if detail in self._details:
+            self._details.remove(detail)
+        if self.detail is detail:
+            self.detail = self._details[-1] if self._details else None
+        detail.dispose()
+
+    def open_content(self, *, edit=False, **request):
         conv = self.host.current_conversation
-        if request == detail._request and self._scope == (
-                getattr(detail.conversation, "id", ""), getattr(detail.conversation, "work_dir", "")) and detail.isVisible():
+        detail = next((item for item in self._details if item.matches_request(request, conv)), None)
+        if detail is not None:
+            self.detail = detail
             detail.show_window()
+            if edit and not detail._editing:
+                if detail.loading:
+                    detail.open_request(request, conv, edit=True)
+                else:
+                    detail.start_edit()
         else:
-            detail.open_request(request, conv)
+            detail = self.ensure_detail(new=self.detail is not None and bool(self.detail._request))
+            detail.open_request(request, conv, edit=edit)
         return detail
 
     def open_memory(self, scope, entry_id=""):
         if self.host.current_conversation is not None:
-            self.ensure_detail().open_memory(self.host.current_conversation, scope, entry_id)
+            self.open_content(memory=scope, entry_id=entry_id)
 
     def allow_context_change(self, continuation):
-        return self.detail is None or self.detail.allow_leave(continuation)
+        return True  # Detail windows keep their own captured source and drafts.
+
+    def allow_window_close(self, continuation):
+        return all(detail.allow_leave(continuation) for detail in tuple(self._details))
 
     def retry_memory(self):
         work_dir = self.host.current_conversation.work_dir
@@ -142,8 +165,10 @@ class KnowledgePresenter:
                 self.panel.memory.set_status(str(error or result[1]))
             else:
                 self.refresh_memory()
-                if self.detail and not self.detail.dirty:
-                    self.detail.close()
+                for detail in tuple(self._details):
+                    if (detail._request == {'memory': scope, 'entry_id': entry_id} and not detail.dirty
+                            and (scope != 'memory' or getattr(detail.conversation, 'work_dir', '') == conv.work_dir)):
+                        detail.close()
         self._run("forget", lambda: self.host.services.knowledge_service.edit_memory(
             conv, scope, entry_id=entry_id, expected_digest=digest, forget=True), done)
 
@@ -160,5 +185,7 @@ class KnowledgePresenter:
         for job in self._jobs.values():
             job.abandon()
         self._jobs.clear()
-        if self.detail:
-            self.detail.dispose()
+        for detail in self._details:
+            detail.dispose()
+        self._details.clear()
+        self.detail = None

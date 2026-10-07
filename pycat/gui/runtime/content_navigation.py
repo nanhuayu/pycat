@@ -13,10 +13,11 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from PyQt6.QtCore import QBuffer, QIODevice, QMimeData, QUrl
+from PyQt6.QtCore import QBuffer, QCoreApplication, QIODevice, QMimeData, QUrl
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QImage, QImageReader, QPixmap
 
 from pycat.core.content.export import render_document
+from pycat.core.content.html import static_html
 from pycat.core.content.mime import DEFAULT_MIME, guess_mime, is_text_mime
 from pycat.core.content.office import OfficeExtractionError, extract_office_text, is_office_attachment
 from pycat.core.content.references import (
@@ -26,6 +27,7 @@ from pycat.core.content.references import (
     material_rows,
 )
 from pycat.core.content.resolver import ResolvedContent, SessionContentResolver
+from pycat.core.content.text_document import TextDocumentSnapshot, TextDocumentStore
 from pycat.core.state.artifact import ArtifactService
 from pycat.gui.utils.image_loader import read_image
 from pycat.models.contracts.content import ContentRef
@@ -101,12 +103,16 @@ class PreparedPreview:
     page: int = 1
     pages: int = 0
     notice: str = ""
+    document: TextDocumentSnapshot | None = None
+    complete: bool = True
+    markup: str = ''
 
 
 class ContentOpenUseCase:
     """Resolve current-conversation refs and expose stateless desktop actions."""
 
     def __init__(self, content_service: Any) -> None:
+        self._content_service = content_service
         self._resolver = SessionContentResolver(content_service)
 
     @staticmethod
@@ -121,13 +127,44 @@ class ContentOpenUseCase:
             return PreparedPreview("pdf", image=ContentOpenUseCase.render_pdf_page(target, number),
                                    page=number, pages=pages)
         if target.preview_kind in {"text", "office"}:
+            html = target.mime in {'text/html', 'application/xhtml+xml'} or target.path.suffix.lower() in {'.html', '.htm', '.xhtml'}
+            if target.preview_kind == 'text' and not html:
+                try:
+                    document = TextDocumentStore().read(target.path)
+                except ValueError as exc:
+                    raise ContentNavigationError(str(exc)) from exc
+                markdown = target.mime == 'text/markdown' or target.path.suffix.lower() in {'.md', '.markdown'}
+                rich = markdown and document.size <= 512 * 1024 and document.longest_line < 2000 and document.complete
+                notices = []
+                if document.limited_reason == 'layout':
+                    notices.append('行数或单行长度超过查看预算，当前显示只读预览；可使用系统打开。')
+                elif not document.complete:
+                    notices.append(f'文件超过 20 MiB，仅显示前 256 KiB；原文件共 {document.size} bytes。')
+                if markdown and not rich:
+                    notices.append('长 Markdown 使用源码视图。')
+                if document.mixed_newlines:
+                    notices.append('文件包含混合换行符，当前只读。')
+                return PreparedPreview('markdown' if rich else 'text', text=document.text,
+                                       notice='\n'.join(notices), document=document, complete=document.complete)
             preview = ContentOpenUseCase.text_preview(target)
             markdown = target.mime == "text/markdown" or target.path.suffix.lower() in {".md", ".markdown"}
             notice = f"仅显示前 256 KiB；原文件共 {preview.total_bytes} bytes。" if preview.truncated else ""
             if target.mime in {"text/html", "application/xhtml+xml"} or target.path.suffix.lower() in {".html", ".htm", ".xhtml"}:
+                if not preview.truncated:
+                    try:
+                        document = TextDocumentStore(max_bytes=256 * 1024).read(target.path)
+                    except ValueError as exc:
+                        raise ContentNavigationError(str(exc)) from exc
+                    if not document.complete:
+                        return PreparedPreview('text', text=document.text, document=document, complete=False,
+                                               notice='行数或单行长度超过查看预算，当前显示只读预览；可使用系统打开。')
+                    text = document.text
+                    return PreparedPreview('html', text=text, markup=static_html(text), document=document,
+                        notice=QCoreApplication.translate('ContentOpenUseCase',
+                            '静态 HTML 预览 · 支持文本与表格；脚本、外部资源和网页布局请使用系统浏览器。'))
                 notice = "HTML 源码 · 可在外部浏览器中查看页面。" + notice
-            return PreparedPreview("markdown" if markdown else "text", text=preview.text, notice=notice)
-        return PreparedPreview("file", text=target.name + "\n" + str(target.path))
+            return PreparedPreview("markdown" if markdown else "text", text=preview.text, notice=notice, complete=not preview.truncated)
+        return PreparedPreview("file")
 
     @staticmethod
     def image_bytes(source: str) -> bytes:
@@ -147,6 +184,12 @@ class ContentOpenUseCase:
     def resolve_path(self, conversation: Any, path: str | Path) -> ContentOpenTarget:
         """Preserve a registered Artifact's identity when opened from a file shortcut."""
         candidate = Path(path).resolve()
+        library = getattr(self._content_service, 'library', None)
+        if library is not None:
+            item = library.item_for_path(candidate)
+            if item is not None:
+                resolved = library.resolve(item.id)
+                return replace(self.classify_local_file(resolved.path), ref=resolved.ref)
         for artifact in conversation.get_state().artifacts.values():
             if artifact.content_path and ArtifactService.resolve_content_path(
                     artifact.content_path, work_dir=conversation.work_dir, data_dir=getattr(conversation, "data_dir", None)).resolve() == candidate:
@@ -358,12 +401,15 @@ class ContentOpenUseCase:
             raise ContentNavigationError(f"另存失败：{exc}") from exc
 
     @staticmethod
-    def prepare_save_as(target: ContentOpenTarget, destination: str | Path, *, format: str | None = None) -> PreparedSave:
+    def prepare_save_as(target: ContentOpenTarget, destination: str | Path, *, format: str | None = None,
+                        text: str | None = None, document: TextDocumentSnapshot | None = None) -> PreparedSave:
         """Copy to a temporary file and verify it before any visible commit."""
 
         output = Path(destination).expanduser()
         if not str(output):
             raise ContentNavigationError("未选择保存位置")
+        if text is not None and output.resolve() == target.path.resolve():
+            raise ContentNavigationError('Use Save to update the source with a version check; export the draft to a different file')
         temporary: Path | None = None
         try:
             output.parent.mkdir(parents=True, exist_ok=True)
@@ -373,9 +419,13 @@ class ContentOpenUseCase:
             )
             os.close(fd)
             temporary = Path(temporary_name)
-            shutil.copyfile(target.path, temporary)
-            resolved = ResolvedContent(path=temporary, ref=target.ref)
-            ContentOpenUseCase._verify_integrity(resolved, verify_digest=True)
+            if text is None:
+                shutil.copyfile(target.path, temporary)
+                resolved = ResolvedContent(path=temporary, ref=target.ref)
+                ContentOpenUseCase._verify_integrity(resolved, verify_digest=True)
+            else:
+                raw = TextDocumentStore().encode(document, text) if document is not None else text.encode('utf-8')
+                temporary.write_bytes(raw)
             if format:
                 if target.path.suffix.lower() not in {".md", ".markdown"}:
                     raise ContentNavigationError("仅 Markdown 文件支持文档格式转换")
@@ -424,10 +474,10 @@ class ContentOpenUseCase:
             id=file_path.name,
             name=file_path.name,
             mime="",
-            size=0,
+            size=file_path.stat().st_size,
             digest="",
             ref=str(file_path),
-            kind="input",
+            kind="file",
         )
         resolved = ResolvedContent(path=file_path, ref=ref)
         mime, is_image, preview_kind = ContentOpenUseCase._verified_type(resolved)
@@ -654,8 +704,8 @@ class ContentOpenUseCase:
                 return mime, False, "office"
             return mime, False, ""
 
-        # HTML is readable source only; never send active markup to Markdown
-        # or an embedded browser. SVG uses a passive native Qt rendering copy.
+        # HTML stays text input. Only a bounded passive projection reaches Qt
+        # rich text; no browser or source-side resource loading is introduced.
         if mime in {"text/html", "application/xhtml+xml"} or suffix in {".htm", ".html", ".xhtml"}:
             return mime, False, "text"
         if mime == "image/svg+xml" or suffix in {".svg", ".svgz"}:

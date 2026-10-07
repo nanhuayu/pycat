@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QCoreApplication, pyqtSignal
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 
 from pycat.gui.utils.form_builder import FormSection
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button
 
 
 class AutomationPage(QWidget):
@@ -15,6 +16,7 @@ class AutomationPage(QWidget):
     shortcuts_requested = pyqtSignal()
 
     def __init__(self, parent=None):
+        """Build compact capture and configuration entry points with explicit names."""
         super().__init__(parent)
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
@@ -23,11 +25,14 @@ class AutomationPage(QWidget):
         actions = QWidget()
         row = QHBoxLayout(actions)
         row.setContentsMargins(0, 0, 0, 0)
-        self.preview_button = QPushButton(QCoreApplication.translate('AutomationPage', '截图并预览'))
-        self.preview_button.setIcon(Icons.get(Icons.IMAGE))
+        self.preview_button = QToolButton()
+        configure_icon_button(self.preview_button, Icons.get(Icons.CAMERA),
+                              QCoreApplication.translate('AutomationPage', '截图并预览'))
         self.preview_button.clicked.connect(self.capture_requested.emit)
         row.addWidget(self.preview_button)
-        shortcuts = QPushButton(QCoreApplication.translate('AutomationPage', '设置快捷键'))
+        shortcuts = QToolButton()
+        configure_icon_button(shortcuts, Icons.get(Icons.KEYBOARD),
+                              QCoreApplication.translate('AutomationPage', '设置快捷键'))
         shortcuts.clicked.connect(self.shortcuts_requested.emit)
         row.addWidget(shortcuts)
         row.addStretch()
@@ -50,8 +55,9 @@ class AutomationPage(QWidget):
             info.setWordWrap(True)
             info.setProperty('muted', True)
             row.addWidget(info, 1)
-            button = QPushButton(QCoreApplication.translate('AutomationPage', '配置'))
-            button.setAccessibleName(QCoreApplication.translate('AutomationPage', '配置{title}').format(title=title))
+            button = QToolButton()
+            configure_icon_button(button, Icons.get(Icons.SETTINGS),
+                                  QCoreApplication.translate('AutomationPage', '配置{title}').format(title=title))
             button.clicked.connect(lambda _checked=False, key=preset: self.configure_requested.emit(key))
             setattr(self, preset + '_button', button)
             row.addWidget(button)

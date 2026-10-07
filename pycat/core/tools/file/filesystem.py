@@ -9,9 +9,9 @@ from pycat.core.content.office import extract_office_text, is_office_attachment
 from pycat.core.content.pdf import MAX_PDF_BYTES, extract_pdf_text_isolated
 from pycat.core.content.references import build_workspace_content_ref
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.core.tools.system.file_search import search_files
-from pycat.core.tools.system.file_source import resolve_file_source
-from pycat.core.tools.system.text_read import MAX_TEXT_LINES, read_text_page, read_text_stream
+from pycat.core.tools.file.file_search import search_files
+from pycat.core.tools.file.file_source import resolve_file_source
+from pycat.core.tools.file.text_read import MAX_TEXT_LINES, read_text_page, read_text_stream
 from pycat.models.contracts.channel import channel_file_delivery_enabled
 
 

@@ -88,12 +88,17 @@ def read_trace_payload(debug_dir: Path, relative: str | None, *, as_json: bool =
     if not target.is_relative_to(root):
         return result("invalid_path", "invalid attachment path")
     try:
+        budget = max(1, min(MAX_PAYLOAD_BYTES, int(max_bytes)))
         with target.open("rb") as source:
-            budget = max(1, min(MAX_PAYLOAD_BYTES, int(max_bytes)))
             raw = source.read(budget + 1)
         if len(raw) > budget:
             return result("too_large", "attachment exceeds preview limit; open the debug folder for the original")
+        partial = bool(target.suffix == ".jsonl" and raw and not raw.endswith(b"\n"))
+        if partial:
+            raw = raw[:raw.rfind(b"\n") + 1]
         text = raw.decode("utf-8")
+        if partial:
+            return result("partial", "stream tail is incomplete; showing the recorded prefix", text)
         return result("ok", content=json.loads(text) if as_json else text)
     except FileNotFoundError:
         return result("missing", "attachment file missing")

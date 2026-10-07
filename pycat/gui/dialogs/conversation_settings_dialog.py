@@ -179,6 +179,7 @@ class ConversationSettingsDialog(QDialog):
         body.addWidget(section.group)
 
     def _build_model_section(self, body: QVBoxLayout, conversation: Conversation) -> None:
+        """Build session model overrides and full-width model-profile guidance."""
         section = FormSection(QCoreApplication.translate('ConversationSettingsDialog', '会话模型'))
 
         self.primary_model_combo = ModelRefCombo(
@@ -230,7 +231,8 @@ class ConversationSettingsDialog(QDialog):
         hint = QLabel(QCoreApplication.translate('ConversationSettingsDialog', '推理强度和协议统一在“编辑模型”中设置。'))
         hint.setWordWrap(True)
         hint.setProperty("muted", True)
-        section.form.addRow(QCoreApplication.translate('ConversationSettingsDialog', '推理'), hint)
+        hint.setAccessibleName(QCoreApplication.translate('ConversationSettingsDialog', '推理'))
+        section.form.addRow(hint, info=True)
 
         body.addWidget(section.group)
 

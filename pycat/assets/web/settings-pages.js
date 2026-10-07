@@ -10,9 +10,9 @@ import {closeSettings} from './config.js';
 export const groups = [
   {title: tr("通用"), description: tr("调整界面与日常操作。"), pages: [['general', tr("外观")], ['shortcuts', tr("快捷键")]]},
   {title: tr("模型与服务"), description: tr("选择默认模型，管理连接与模型档案。"), pages: [['models', tr("模型与服务")]]},
-  {title: tr("运行与权限"), description: tr("设置工作方式、操作边界与上下文策略。"), pages: [['modes', tr("模式")], ['permissions', tr("权限")], ['strategy', tr("策略")], ['instructions', tr("指令与来源")]]},
+  {title: tr("运行与权限"), description: tr("设置工作方式、操作边界与上下文策略。"), pages: [['modes', tr("模式")], ['permissions', tr("权限")], ['strategy', tr("策略")]]},
   {title: tr("工具与能力"), description: tr("设置模型能力与工具运行方式。"), pages: [['skills', tr("技能 Skills")], ['mcp', 'MCP'], ['capabilities', tr("能力")], ['search', tr("搜索")], ['automation', tr("电脑与浏览器")], ['ocr', 'OCR']]},
-  {title: tr("记忆与资料"), description: tr("维护可复用的记忆与项目知识。"), pages: [['memory', tr("记忆与资料")]]},
+  {title: tr("记忆与资料"), description: tr("设置全局追加指令，查看项目规则、记忆和资料。"), keywords: 'global instructions prompt agents.md environment 全局指令 项目规则 环境上下文', pages: [['memory', tr("记忆与资料")]]},
   {title: tr("消息通道"), description: tr("连接外部消息平台与会话。"), pages: [['channels', tr("消息通道")]]},
   {title: tr("高级与数据"), description: tr("网络、诊断、终端与应用信息。"), pages: [['network', tr("网络与诊断")], ['terminal', tr("终端")], ['about', tr("关于")]]}
 ];
@@ -76,13 +76,6 @@ export async function renderSettingsPage(w, page, body) {
     section(tr("记忆容量"), tr("降低上限保留已有记忆，并允许精简内容。"), [
       f('memory_char_limit', tr("项目记忆字符数"), 'int', {options: [4000, 8000]}),
       f('user_memory_char_limit', tr("用户偏好字符数"), 'int', {options: [4000, 8000]})]);
-  } else if (page === 'instructions') {
-    section(tr("全局追加指令"), tr("应用于新请求；项目规则、会话指令和记忆保留独立来源。"), [
-      f('prompts.global_instructions', tr("追加指令"), 'text'), f('prompts.include_environment', tr("包含环境信息"), 'bool'),
-      f('prompts.file_tree_max_depth', tr("项目树深度"), 'int', {min: 1, max: 10})]);
-    body.append(node('div', {class: 'source-links'},
-      button(tr("项目 AGENTS.md"), () => w.action(async () => { if (!w.session?.work_dir) throw Error(tr("请先选择项目工作区")); reader('AGENTS.md', (await w.api.operation('materials.read', {session: w.session.id, ref: 'workspace:AGENTS.md'})).text); })),
-      button(tr("会话指令"), () => closeSettings(() => w.context.sessionSettings?.())), button(tr("记忆与资料"), openLibrary)));
   } else if (page === 'search') {
     const providers = await w.api.operation('search.providers');
     const value = w.draft.search_config;
@@ -108,9 +101,19 @@ export async function renderSettingsPage(w, page, body) {
     const status = await w.api.operation('doctor');
     body.append(node('p', {class: 'notice'}, status.ocr.message || status.ocr.reason || JSON.stringify(status.ocr)), button(tr("打开资料"), openLibrary));
   } else if (page === 'memory') {
-    section(tr("记忆与知识"), tr("记忆保存短事实和偏好；项目知识保留正文与来源；成果属于当前会话。"), []);
-    body.append(button(tr("打开资料与记忆"), openLibrary, 'primary'), node('p', {class: 'muted'}, tr("会话记忆开关位于会话设置。容量和自动整理策略位于“运行与权限 → 策略”。")),
-      button(tr("调整记忆容量"), () => w.navigate('strategy')));
+    section(tr("全局追加指令"), tr("应用于所有模式；留空使用默认行为。"), [
+      f('prompts.global_instructions', tr("内容"), 'text')]);
+    section(tr("环境上下文"), '', [f('prompts.include_environment', tr("包含环境信息"), 'bool'),
+      f('prompts.file_tree_max_depth', tr("项目树深度"), 'int', {min: 1, max: Math.max(10, app.prompts.file_tree_max_depth)})]);
+    const materials = fieldset(tr("项目与资料"), tr("项目规则、会话指令和记忆保留独立来源。"), app, [], change);
+    const project = button(tr("查看项目 AGENTS.md"), () => w.action(async () => {
+      if (!w.session?.work_dir) throw Error(tr("请先选择项目工作区"));
+      reader('AGENTS.md', (await w.api.operation('materials.read', {session: w.session.id, ref: 'workspace:AGENTS.md'})).text);
+    }));
+    project.disabled = !w.session?.work_dir;
+    project.title = w.session?.work_dir || tr("当前未选择项目");
+    materials.append(node('div', {class: 'source-links'}, project, button(tr("打开记忆与资料"), openLibrary)));
+    body.append(materials);
   } else if (page === 'network') {
     section(tr("网络与诊断"), '', [f('proxy_url', tr("代理地址"), 'str', {placeholder: 'http://127.0.0.1:7890'}),
       f('llm_timeout_seconds', tr("模型超时（秒）"), 'float', {min: 1}), f('log_stream', tr("记录流式诊断"), 'bool')]);

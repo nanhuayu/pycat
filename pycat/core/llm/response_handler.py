@@ -795,6 +795,7 @@ async def parse_stream_response(
     cancel_event,
     log_fp,
     start_time: float,
+    stream_trace=None,
 ) -> Message:
     """Consume an SSE stream and return the final ``Message``."""
     raw_reasoning_codec = str(reasoning_codec or "").strip()
@@ -863,11 +864,21 @@ async def parse_stream_response(
 
     async for data in iter_sse_data_lines(response, cancel_event=cancel_event, log_fp=log_fp):
         if data == "[DONE]":
+            if stream_trace is not None:
+                try:
+                    await stream_trace.record_raw(data)
+                except Exception as exc:
+                    logger.debug("Failed to capture stream control record: %s", exc)
             terminal_received = True
             break
         try:
             chunk_data = parse_sse_json(data)
         except json.JSONDecodeError:
+            if stream_trace is not None:
+                try:
+                    await stream_trace.record_raw(data)
+                except Exception as exc:
+                    logger.debug("Failed to capture malformed stream packet: %s", exc)
             if log_fp:
                 try:
                     log_fp.write("[JSONDecodeError]\n")
@@ -875,6 +886,12 @@ async def parse_stream_response(
                 except Exception as exc:
                     logger.debug("Failed to write JSON decode marker to stream log: %s", exc)
             continue
+
+        if stream_trace is not None:
+            try:
+                await stream_trace.record(chunk_data)
+            except Exception as exc:
+                logger.debug("Failed to capture stream packet: %s", exc)
 
         observed_metadata: dict[str, Any] = {}
         if isinstance(chunk_data, dict):
@@ -1236,14 +1253,6 @@ async def parse_stream_response(
         # EOF alone is not a completed model response. Discard this attempt's
         # partial tool calls and let the request pipeline retry the same body.
         raise httpx.RemoteProtocolError("Model stream closed before a terminal event")
-
-    # Stream finished
-    if log_fp:
-        try:
-            log_fp.write("\n===== END STREAM =====\n")
-            log_fp.close()
-        except Exception as exc:
-            logger.debug("Failed to finalize stream log file: %s", exc)
 
     # Finalize tool calls
     if anthropic_tool_blocks:

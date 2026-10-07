@@ -258,6 +258,22 @@ class RunService:
         return [{'id': handle.id, 'conversation_id': handle._conversation_id, 'source': handle.source}
                 for handle in tuple(self._handles) if not handle._task.done()]
 
+    def cancel_session(self, conversation_id):
+        """Cancel an explicitly selected run on the existing owning loop."""
+        self.bind_loop()
+        for handle in tuple(self._handles):
+            if handle._conversation_id == conversation_id:
+                handle.cancel()
+
+    async def wait_session(self, conversation_id):
+        """Observe existing execution completion without taking its event consumer."""
+        self.bind_loop()
+        tasks = [handle._task for handle in tuple(self._handles) if handle._conversation_id == conversation_id]
+        if tasks:
+            # Detaching this waiter must not cancel the conversation's owner task.
+            await asyncio.gather(*(asyncio.shield(task) for task in tasks), return_exceptions=True)
+        return await asyncio.to_thread(self.conversations.load, conversation_id)
+
     def update_access(self, conversation_id, *, tool_approval=None, filesystem_mode=None, expected_revision=None):
         if tool_approval not in {None, 'default', 'ask', 'allow', 'deny', 'custom'} or filesystem_mode not in {None, 'confined', 'full_access'}:
             raise InvalidRequestError('Invalid permission selection.')
@@ -372,6 +388,8 @@ class RunService:
                 raise InvalidRequestError(
                     f"Configured model not found: {request.model or conversation.model or 'default'}"
                 )
+            if conversation.content_target and request.attachments and not provider.effective_model_profile(model).supports_input('image'):
+                raise InvalidRequestError('This model does not support image input; select a vision model.')
             mode = (invocation.mode_slug if invocation else "") or request.mode or conversation.mode or "chat"
             work_dir = conversation.work_dir if request.work_dir is None else request.work_dir
             if request.conversation_id and work_dir != conversation.work_dir:
@@ -592,7 +610,10 @@ class RunService:
                     status=RunStatus.FAILED, error=str(exc), stop_reason=RunStopReason.ERROR, conversation=conversation
                 )
             result.conversation = result.conversation or conversation
-            if result.status in {RunStatus.CANCELLED, RunStatus.FAILED} and result.final_message is None:
+            if result.status in {RunStatus.CANCELLED, RunStatus.FAILED} and (
+                result.final_message is None
+                or (result.status == RunStatus.FAILED and not result.final_message.metadata.get("runtime_error"))
+            ):
                 message = Message(
                     role="assistant",
                     content=result.error or "已取消生成",
@@ -600,6 +621,10 @@ class RunService:
                 )
                 result.conversation.add_message(message)
                 result.final_message = message
+            elif result.status == RunStatus.FAILED and not any(
+                message.id == result.final_message.id for message in result.conversation.messages
+            ):
+                result.conversation.add_message(result.final_message)
             for message in result.conversation.messages:
                 if message.role == "assistant" and message.id not in original_message_ids:
                     message.metadata["run_status"] = result.status.value

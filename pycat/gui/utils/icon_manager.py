@@ -1,7 +1,8 @@
 """PyCat 统一图标管理。
 
 当前实现使用内联 SVG + ``QSvgRenderer`` 生成透明背景的 ``QIcon``，避免 emoji、
-系统字体与 icon font 在不同平台上的渲染差异。
+系统字体与 icon font 在不同平台上的渲染差异。Channel 品牌使用独立的原色资源，
+不参与动作图标的语义色替换。
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ if os.name == "nt" and not os.environ.get("WINDIR"):
 
 
 def _stroke_path(d: str, width: float = 2.15) -> str:
+    """Build a monochrome path with the shared rounded action-icon stroke."""
     return (
         f"<path d='{d}' fill='none' stroke='{{color}}' stroke-width='{width}' "
         "stroke-linecap='round' stroke-linejoin='round'/>"
@@ -29,6 +31,7 @@ def _stroke_path(d: str, width: float = 2.15) -> str:
 
 
 def _stroke_line(x1: float, y1: float, x2: float, y2: float, width: float = 2.15) -> str:
+    """Build a rounded line using the icon color placeholder."""
     return (
         f"<line x1='{x1}' y1='{y1}' x2='{x2}' y2='{y2}' stroke='{{color}}' "
         f"stroke-width='{width}' stroke-linecap='round'/>"
@@ -36,26 +39,34 @@ def _stroke_line(x1: float, y1: float, x2: float, y2: float, width: float = 2.15
 
 
 def _stroke_circle(cx: float, cy: float, r: float, width: float = 2.15) -> str:
+    """Build an outlined circle within the common SVG coordinate system."""
     return f"<circle cx='{cx}' cy='{cy}' r='{r}' fill='none' stroke='{{color}}' stroke-width='{width}'/>"
 
 
 def _stroke_rect(x: float, y: float, w: float, h: float, rx: float = 0.0, width: float = 2.15) -> str:
+    """Build an outlined rectangle with optional rounded corners."""
     return f"<rect x='{x}' y='{y}' width='{w}' height='{h}' rx='{rx}' fill='none' stroke='{{color}}' stroke-width='{width}'/>"
 
 
 def _fill_path(d: str) -> str:
+    """Build a solid action-icon silhouette using its semantic color."""
     return f"<path d='{d}' fill='{{color}}' stroke='none'/>"
 
 
 def _fill_rect(x: float, y: float, w: float, h: float, rx: float = 0.0) -> str:
+    """Build a solid rectangle with optional rounded corners."""
     return f"<rect x='{x}' y='{y}' width='{w}' height='{h}' rx='{rx}' fill='{{color}}' stroke='none'/>"
 
 
 def _fill_circle(cx: float, cy: float, r: float) -> str:
+    """Build a solid circular detail for an action icon."""
     return f"<circle cx='{cx}' cy='{cy}' r='{r}' fill='{{color}}' stroke='none'/>"
 
 
 _ICON_BODIES: dict[str, str] = {
+    'star': _stroke_path('m12 3 2.8 5.7 6.3.9-4.55 4.45 1.08 6.28L12 17.36l-5.63 2.97 1.08-6.28L2.9 9.6l6.3-.9z'),
+    'home': _stroke_path('M3 11 12 3l9 8M5 9.5V21h5v-7h4v7h5V9.5'),
+    'region': _stroke_rect(4, 4, 16, 16, 2) + _stroke_line(2, 8, 6, 8) + _stroke_line(18, 16, 22, 16),
     "pycat": "<g transform='translate(2.7 2.4) scale(.036)'><path d='M96.19 172.74c0-19.65-9.7-52.91 11.83-91.12 43.38 12.02 49.07 35.75 75.25 53.66 51.81-12.96 92.67-12.96 144.48 0 26.18-17.91 31.87-41.63 75.25-53.66 21.53 38.21 11.83 71.47 11.83 91.12 32.71 36.53 38.79 78.45 37.17 107.83-2.1 38.63-19.91 100.95-79.13 121.12l36.59 96.97-100.72-79.06c-37.01 6.72-74.02 6.72-111.03 0-31.87-5.62-75.47-18.26-99.56-40.63-24.05-22.4-42.99-64.71-43.73-99.07-.71-34.36 2.36-73.5 39.37-107.12z' fill='none' stroke='{color}' stroke-width='34' stroke-linecap='round' stroke-linejoin='round'/><path d='M167.1 242.9l33.3 33.3-33.3 33.3M344.9 242.9l-33.3 33.3 33.3 33.3' fill='none' stroke='{color}' stroke-width='24' stroke-linecap='round' stroke-linejoin='round'/><circle cx='256' cy='297.5' r='20' fill='{color}'/></g>",
     "folder": _stroke_path("M3.8 8h6l1.6 1.8h8a1.8 1.8 0 0 1 1.8 1.8v5.2a2 2 0 0 1-2 2H4.8a2 2 0 0 1-2-2v-7a1.8 1.8 0 0 1 1.8-1.8z"),
     "file": _stroke_path("M7 3.8h6.5L18 8.3v11.2a1.8 1.8 0 0 1-1.8 1.8H7.8A1.8 1.8 0 0 1 6 19.5V5.6a1.8 1.8 0 0 1 1.8-1.8z")
@@ -134,6 +145,7 @@ _ICON_BODIES: dict[str, str] = {
     + _fill_circle(12, 16.5, 1.0),
     "circle-check": _stroke_circle(12, 12, 8) + _stroke_line(8, 12.5, 11, 15.5) + _stroke_line(11, 15.5, 16.5, 9.5),
     "circle-xmark": _stroke_circle(12, 12, 8) + _stroke_line(9, 9, 15, 15) + _stroke_line(15, 9, 9, 15),
+    "activity": _stroke_path("M3 12h4l3-8 4 16 3-8h4", 2.0),
     "check": _stroke_line(5.5, 12.5, 10, 17) + _stroke_line(10, 17, 18.5, 8.5),
     "xmark": _stroke_line(7, 7, 17, 17) + _stroke_line(17, 7, 7, 17),
     "magnifying-glass": _stroke_circle(10.8, 10.8, 5.3) + _stroke_line(15, 15, 20, 20),
@@ -175,6 +187,8 @@ _ICON_BODIES: dict[str, str] = {
     + "".join(_fill_rect(x, y, 1.6, 1.6, 0.3) for y in (8, 11.5) for x in (5, 9, 13, 17))
     + _stroke_line(7, 16, 17, 16, 1.8),
     "code": _stroke_path("M7 7l-5 5 5 5M17 7l5 5-5 5M14 4l-4 16", 2.0),
+    "wrap-text": _stroke_path("M3 5h18M3 10h14a4 4 0 0 1 0 8h-5m3-3-3 3 3 3M3 15h4M3 20h4", 1.8),
+    "line-numbers": _stroke_path("M9 5h12M9 12h12M9 19h12M3 3h1v5M2 11h3l-3 4h3M2 18h3v4H2M2 20h3", 1.8),
     "book-open": _stroke_path("M4 6.5A2.5 2.5 0 0 1 6.5 4H11v16H6.5A2.5 2.5 0 0 0 4 22z")
     + _stroke_path("M20 6.5A2.5 2.5 0 0 0 17.5 4H13v16h4.5A2.5 2.5 0 0 1 20 22z"),
     "library": _stroke_rect(3, 4, 4, 16, 0.8, 2.0)
@@ -238,6 +252,7 @@ _ICON_ALIASES: dict[str, str] = {
 }
 
 def _svg_document(body: str) -> str:
+    """Wrap icon geometry in the common 24-by-24 SVG document."""
     return (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>"
         f"{body}"
@@ -246,6 +261,7 @@ def _svg_document(body: str) -> str:
 
 
 def _resolve_icon_name(icon_name: str) -> str:
+    """Resolve known aliases safely, including any accidental alias cycle."""
     current = str(icon_name or "").strip()
     visited: set[str] = set()
     while current in _ICON_ALIASES and current not in visited:
@@ -284,6 +300,7 @@ def _icon_inset(icon_name: str, size: int) -> float:
 
 @lru_cache(maxsize=512)
 def _render_pixmap(icon_name: str, size: int, color_name: str) -> QPixmap:
+    """Cache a transparent action-icon raster for one size and resolved color."""
     resolved = _resolve_icon_name(icon_name)
     body = _ICON_BODIES.get(resolved, _ICON_BODIES.get("circle-info", ""))
     svg = _svg_document(body.format(color=color_name))
@@ -301,6 +318,7 @@ class _SemanticColor(str):
     """A usable color string that retains its theme role for icon rendering."""
 
     def __new__(cls, value: str, role: str):
+        """Attach the theme role while retaining ordinary string behavior."""
         color = super().__new__(cls, value)
         color.role = role
         return color
@@ -308,10 +326,12 @@ class _SemanticColor(str):
 
 @lru_cache(maxsize=32)
 def _icon_colors(theme: str, accent: str) -> dict[str, str]:
+    """Reuse resolved theme colors across icon paint operations."""
     return theme_tokens(theme, accent).colors
 
 
 def _current_icon_colors() -> dict[str, str]:
+    """Read the application palette choice without creating another theme state."""
     app = QApplication.instance()
     return _icon_colors(str(app.property("theme") or "light") if app else "light",
                         str(app.property("accent") or "") if app else "")
@@ -321,28 +341,35 @@ class _SvgIconEngine(QIconEngine):
     """Render the same icon against the current palette without rebuilding widgets."""
 
     def __init__(self, name: str, color: str, base_size: int):
+        """Keep only immutable icon geometry, semantic color, and preferred size."""
         super().__init__()
         self.name = name
         self.color = color
         self.base_size = base_size
 
     def clone(self):
+        """Keep the semantic color role when Qt copies this icon engine."""
         return _SvgIconEngine(self.name, self.color, self.base_size)
 
     def isNull(self):
+        """Report the drawable SVG engine as a valid icon."""
         return False
 
     def iconName(self):
+        """Expose the stable icon identity for actions and diagnostics."""
         return self.name
 
     def actualSize(self, size, mode, state):
+        """Fit the square icon within the requested logical bounds."""
         side = min(size.width(), size.height())
         return QSize(side, side)
 
     def availableSizes(self, mode, state):
+        """Advertise common logical sizes while retaining vector rendering."""
         return [QSize(side, side) for side in sorted({16, 18, 20, 24, self.base_size})]
 
     def pixmap(self, size, mode, state):
+        """Rasterize with the current theme and disabled-state semantic color."""
         if size.isEmpty():
             return QPixmap()
         colors = _current_icon_colors()
@@ -351,6 +378,7 @@ class _SvgIconEngine(QIconEngine):
         return QPixmap(_render_pixmap(self.name, min(size.width(), size.height()), str(color)))
 
     def scaledPixmap(self, size, mode, state, scale):
+        """Render physical pixels with Qt-version-correct device scaling."""
         # QIcon passed physical sizes before Qt 6.8, logical sizes thereafter.
         pixels = size * scale if QT_VERSION >= 0x060800 else size
         result = self.pixmap(pixels, mode, state)
@@ -358,6 +386,7 @@ class _SvgIconEngine(QIconEngine):
         return result
 
     def paint(self, painter, rect, mode, state):
+        """Paint sharp vector pixels at the target device pixel ratio."""
         scale = painter.device().devicePixelRatioF()
         result = self.pixmap(rect.size() * scale, mode, state)
         painter.drawPixmap(rect, result)
@@ -365,9 +394,11 @@ class _SvgIconEngine(QIconEngine):
 
 class _ThemeColor:
     def __init__(self, name: str):
+        """Record a named role from the existing theme token palette."""
         self.name = name
 
     def __get__(self, instance, owner) -> str:
+        """Resolve the current color while preserving its role for future paints."""
         return _SemanticColor(_current_icon_colors()[self.name].upper(), self.name)
 
 
@@ -386,6 +417,9 @@ class Icons:
     TRASH = "trash"
     COPY = "copy"
     PIN = "pin"
+    STAR = 'star'
+    HOME = 'home'
+    REGION = 'region'
     OCR = "scan-text"
     FIT_IMAGE = "fit-image"
     CLONE = "clone"
@@ -437,6 +471,7 @@ class Icons:
     THINKING = "lightbulb"
 
     # === 状态指示 ===
+    TEST = "activity"
     CHECK = "check"
     XMARK = "xmark"
     CIRCLE_INFO = "circle-info"
@@ -460,6 +495,8 @@ class Icons:
     # === 终端 / 代码 ===
     TERMINAL = "terminal"
     CODE = "code"
+    WRAP_TEXT = "wrap-text"
+    LINE_NUMBERS = "line-numbers"
     KEYBOARD = "keyboard"
 
     # === 记忆 / 文档 ===
@@ -524,7 +561,28 @@ class Icons:
 
     @staticmethod
     def brand() -> QIcon:
+        """Return the application brand without recoloring its source artwork."""
         return QIcon(str(Path(__file__).resolve().parents[2] / "assets" / "pycat.svg"))
+
+    @classmethod
+    def channel(cls, channel_type: str, *, fallback: str = "plug") -> QIcon:
+        """Return a known platform's original-color logo or a semantic fallback.
+
+        Only built-in channel IDs select bundled assets. Qt retains each
+        logo's proportions and provides disabled and high-DPI rendering;
+        theme accent colors must never recolor third-party brand artwork.
+        """
+        filename = {
+            "wechat": "wechat.svg",
+            "qqbot": "qq.svg",
+            "feishu": "feishu.svg",
+            "dingtalk": "dingtalk.png",
+            "telegram": "telegram.svg",
+        }.get(channel_type)
+        if filename is None:
+            return cls.get(fallback)
+        path = Path(__file__).resolve().parents[2] / "assets" / "channel-icons" / filename
+        return QIcon(str(path))
 
     @classmethod
     def get(
@@ -553,16 +611,20 @@ class Icons:
 
     @classmethod
     def get_success(cls, icon_name: str, *, scale_factor: float = 1.0) -> QIcon:
+        """Return an action icon using the live success color role."""
         return cls.get(icon_name, color=cls.COLOR_SUCCESS, scale_factor=scale_factor)
 
     @classmethod
     def get_error(cls, icon_name: str, *, scale_factor: float = 1.0) -> QIcon:
+        """Return an action icon using the live error color role."""
         return cls.get(icon_name, color=cls.COLOR_ERROR, scale_factor=scale_factor)
 
     @classmethod
     def get_warning(cls, icon_name: str, *, scale_factor: float = 1.0) -> QIcon:
+        """Return an action icon using the live warning color role."""
         return cls.get(icon_name, color=cls.COLOR_WARNING, scale_factor=scale_factor)
 
     @classmethod
     def get_muted(cls, icon_name: str, *, scale_factor: float = 1.0) -> QIcon:
+        """Return a secondary action icon using the live muted color role."""
         return cls.get(icon_name, color=cls.COLOR_MUTED, scale_factor=scale_factor)

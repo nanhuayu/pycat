@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from pycat.core.tools.pty_child import PTY_CHILD_ARG
+from pycat.core.tools.system.pty_child import PTY_CHILD_ARG
 
 if os.name == "nt":
     try:

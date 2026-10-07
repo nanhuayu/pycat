@@ -72,6 +72,14 @@ def project_runtime_status(
         }.get(last_event.get('status'), QCoreApplication.translate("RuntimeStatus", "已完成"))
         detail = last_detail or title
         waiting = title
+    elif kind == 'retry' and isinstance(last_event.get('attempt'), int) and isinstance(last_event.get('max_retries'), int):
+        title = QCoreApplication.translate('RuntimeStatus', '重试 {count}/{total}').format(
+            count=last_event['attempt'], total=last_event['max_retries'],
+        )
+        detail = QCoreApplication.translate('RuntimeStatus', '将在 {seconds} 秒后重试当前模型请求').format(
+            seconds=f"{float(last_event.get('delay_seconds', 0)):g}",
+        )
+        waiting = title + '…'
     elif kind:
         labels = {
             "turn_start": QCoreApplication.translate("RuntimeStatus", "开始执行"),

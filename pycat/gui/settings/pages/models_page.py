@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import List
 
 from PyQt6.QtCore import QCoreApplication, pyqtSignal
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QMessageBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QListWidget, QMessageBox, QVBoxLayout, QWidget
 
 from pycat.core.app.services.provider import ProviderService
 from pycat.core.app.services.provider_catalog import ProviderCatalogService
@@ -18,6 +18,7 @@ from pycat.gui.settings.components import (
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.settings.provider_editor import ProviderEditor
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.settings_controls import SETTINGS_FORM_MAX_WIDTH, SettingsFormLayout
 from pycat.gui.widgets.model_ref_selector import ModelRefCombo
 from pycat.models.provider import Provider
 
@@ -66,6 +67,7 @@ class ModelsPage(QWidget):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
+        """Compose bounded model defaults and provider editors without persisting changes."""
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(10)
@@ -73,9 +75,10 @@ class ModelsPage(QWidget):
 
         route_bar = QWidget()
         route_bar.setObjectName("model_route_bar")
-        route_layout = QHBoxLayout(route_bar)
+        route_bar.setMaximumWidth(SETTINGS_FORM_MAX_WIDTH)
+        route_layout = SettingsFormLayout(route_bar)
         route_layout.setContentsMargins(0, 0, 0, 0)
-        route_layout.setSpacing(8)
+        route_layout.setVerticalSpacing(6)
         self.model_pool_combo = ModelRefCombo(
             self.providers,
             current_model_ref=self._default_chat_model,
@@ -88,15 +91,10 @@ class ModelsPage(QWidget):
             allow_empty=True,
             empty_label=QCoreApplication.translate('ModelsPage', '跟随会话模型'),
         )
-        self.model_pool_combo.setMinimumWidth(180)
-        self.auxiliary_model_combo.setMinimumWidth(180)
         self.model_pool_combo.setToolTip(QCoreApplication.translate('ModelsPage', '新建桌面对话和频道会话默认使用该模型。'))
         self.auxiliary_model_combo.setToolTip(QCoreApplication.translate('ModelsPage', '能力和子 Agent 未指定模型时使用；留空则跟随当前会话主模型。'))
-        route_layout.addWidget(QLabel(QCoreApplication.translate('ModelsPage', '默认模型')))
-        route_layout.addWidget(self.model_pool_combo, 1)
-        route_layout.addSpacing(8)
-        route_layout.addWidget(QLabel(QCoreApplication.translate('ModelsPage', '辅助模型')))
-        route_layout.addWidget(self.auxiliary_model_combo, 1)
+        route_layout.addRow(QCoreApplication.translate('ModelsPage', '默认模型'), self.model_pool_combo)
+        route_layout.addRow(QCoreApplication.translate('ModelsPage', '辅助模型'), self.auxiliary_model_combo)
         root.addWidget(route_bar)
 
         split = SettingsListDetailLayout()

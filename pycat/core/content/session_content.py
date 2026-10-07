@@ -18,8 +18,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from pycat.core.content.images import prepare_view_image
 from pycat.core.content.mime import DEFAULT_MIME, guess_mime, is_text_mime
 from pycat.core.content.office import extract_office_text, is_office_attachment
+from pycat.core.content.resolver import SessionContentResolver
 from pycat.models.contracts.content import (
     ContentRef,
     InputPreparationFailure,
@@ -127,6 +129,9 @@ class SessionContentService:
                         raise ValueError(f'attachment exceeds {MAX_INPUT_FILE_BYTES} bytes')
                 else:
                     raw, detected_name, detected_mime = self._read_source(source)
+                expected_digest = str(attachment.get('expected_digest') or '')
+                if expected_digest and hashlib.sha256(raw).hexdigest() != expected_digest:
+                    raise ValueError('Selected content changed; reopen before sending')
                 name = self._safe_name(attachment.get("name")) or detected_name
                 mime = self._safe_mime(attachment.get("mime")) or detected_mime or guess_mime(name)
                 if total_size + len(raw) > MAX_INPUT_BATCH_BYTES:
@@ -274,20 +279,25 @@ class SessionContentService:
         text_parts: list[str] = []
         images: list[str] = list(materialized.images or [])
         for raw_ref in refs:
+            requested = None
             try:
                 requested = raw_ref if isinstance(raw_ref, ContentRef) else ContentRef.from_dict(raw_ref)
                 ref, raw, cache_key = self._load_snapshot(conversation, requested, cache=cache)
                 mime = str(ref.mime or DEFAULT_MIME).lower()
                 name = str(requested.name or ref.name or "attachment")
                 label = f"{name} ({mime}, {ref.ref})"
-                if str(conversation.work_dir).startswith("ssh://"):
+                if str(conversation.work_dir).startswith("ssh://") and ref.kind == 'input':
                     label += f"; remote file: {self.remote_input_path(conversation, ref)}"
                 if mime.startswith("image/"):
                     if include_image_data:
                         data_url = cache.data_urls.get(cache_key) if cache is not None else None
                         if data_url is None:
-                            encoded = base64.b64encode(raw).decode("ascii")
-                            data_url = f"data:{mime};base64,{encoded}"
+                            if conversation.content_target:
+                                raster, _info = prepare_view_image(raw)
+                                data_url = raster.data_url
+                            else:
+                                encoded = base64.b64encode(raw).decode("ascii")
+                                data_url = f"data:{mime};base64,{encoded}"
                             if cache is not None:
                                 cache.data_urls[cache_key] = data_url
                         images.append(data_url)
@@ -328,6 +338,8 @@ class SessionContentService:
                     continue
                 text_parts.append(f"[Attachment: {label}; content is not automatically included]")
             except Exception as exc:
+                if conversation.content_target and requested is not None and requested.mime.startswith('image/'):
+                    raise ValueError(f'Content image is unavailable: {exc}') from exc
                 text_parts.append(f"[Attachment unavailable: {self._ref_value(raw_ref)}; {exc}]")
 
         if text_parts:
@@ -586,6 +598,19 @@ class SessionContentService:
         *,
         cache: RequestContentCache | None,
     ) -> tuple[ContentRef, bytes, tuple[str, str]]:
+        if requested.kind == 'library':
+            # Explicitly selected library versions share the existing input budget.
+            resolved = SessionContentResolver(self).resolve_content(conversation, requested)
+            cache_key = (str(resolved.path), resolved.ref.digest)
+            if cache is not None and cache_key in cache.snapshots:
+                ref, raw = cache.snapshots[cache_key]
+                return ref, raw, cache_key
+            raw = self._read_bounded_file(resolved.path)
+            if len(raw) > MAX_INPUT_FILE_BYTES or hashlib.sha256(raw).hexdigest() != resolved.ref.digest:
+                raise ValueError('Library input exceeds the budget or changed during materialization')
+            if cache is not None:
+                cache.snapshots[cache_key] = (resolved.ref, raw)
+            return resolved.ref, raw, cache_key
         record_dir = self._record_dir(conversation, requested)
         cache_key = (str(record_dir.parent.resolve()), record_dir.name)
         if cache is not None and cache_key in cache.snapshots:

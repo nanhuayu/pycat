@@ -39,6 +39,7 @@ from pycat.gui.widgets.tool_call_view import (
     ThinkingSection,
     ToolCallsSection,
 )
+from pycat.models.contracts.agent import can_resume_message
 from pycat.models.contracts.content import ContentRef
 from pycat.models.conversation import Message
 
@@ -79,6 +80,7 @@ class MessageWidget(QFrame):
     delete_requested = pyqtSignal(str)
     continue_requested = pyqtSignal(str)
     image_edit_requested = pyqtSignal(str)
+    copy_completed = pyqtSignal()
 
     def __init__(
         self,
@@ -410,26 +412,26 @@ class MessageWidget(QFrame):
         label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
 
     def _add_action_buttons(self, layout):
-        metadata = self.message.metadata if isinstance(self.message.metadata, dict) else {}
-        if (
-            self.message.role == "assistant"
-            and bool(metadata.get("interrupted"))
-            and not bool(metadata.get("resume_requested"))
-        ):
+        if self.allow_restart and can_resume_message(self.message):
             continue_btn = MessageActionButton(persistent=True)
             continue_btn.setIcon(Icons.get(Icons.PLAY))
             continue_btn.setIconSize(QSize(18, 18))
-            continue_btn.setToolTip(QCoreApplication.translate('MessageWidget', '继续未完成的 Agent 运行'))
+            tooltip = QCoreApplication.translate('MessageWidget', '继续任务；保留已有工具结果和任务状态')
+            continue_btn.setToolTip(tooltip)
+            continue_btn.setAccessibleName(tooltip)
             continue_btn.setFixedSize(MESSAGE_ACTION_SIZE, MESSAGE_ACTION_SIZE)
             continue_btn.setObjectName("msg_continue_btn")
             continue_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             continue_btn.clicked.connect(lambda: self.continue_requested.emit(self.message.id))
+            continue_btn.setEnabled(self._revision_enabled)
+            self._continue_btn = continue_btn
             layout.addWidget(continue_btn)
 
         copy_btn = MessageActionButton()
         copy_btn.setIcon(Icons.get_muted(Icons.COPY))
         copy_btn.setIconSize(QSize(18, 18))
         copy_btn.setToolTip(QCoreApplication.translate('MessageWidget', '复制原文'))
+        copy_btn.setAccessibleName(QCoreApplication.translate('MessageWidget', '复制原文'))
         copy_btn.setFixedSize(MESSAGE_ACTION_SIZE, MESSAGE_ACTION_SIZE)
         copy_btn.setObjectName("msg_copy_btn")
         copy_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -477,6 +479,9 @@ class MessageWidget(QFrame):
 
     def set_revision_enabled(self, enabled: bool) -> None:
         self._revision_enabled = bool(enabled)
+        continue_button = getattr(self, "_continue_btn", None)
+        if continue_button is not None:
+            continue_button.setEnabled(self._revision_enabled)
         button = getattr(self, "_edit_btn", None)
         if button is not None:
             button.setEnabled(self._revision_enabled)
@@ -486,7 +491,7 @@ class MessageWidget(QFrame):
 
     def set_restart_action_visible(self, visible: bool) -> None:
         self.allow_restart = bool(visible)
-        for name in ("_edit_btn", "_regenerate_btn"):
+        for name in ("_edit_btn", "_regenerate_btn", "_continue_btn"):
             button = getattr(self, name, None)
             if button is not None:
                 button.setVisible(bool(visible))
@@ -606,21 +611,7 @@ class MessageWidget(QFrame):
     def _copy_original_content(self) -> None:
         text = str(self.message.content or "")
         QGuiApplication.clipboard().setText(text)
-
-        if not hasattr(self, "_copy_btn"):
-            return
-
-        try:
-            self._copy_btn.setToolTip(QCoreApplication.translate('MessageWidget', '已复制'))
-            QTimer.singleShot(1200, self._restore_copy_btn_tooltip)
-        except RuntimeError:
-            pass
-
-    def _restore_copy_btn_tooltip(self):
-        try:
-            self._copy_btn.setToolTip(QCoreApplication.translate('MessageWidget', '复制原文'))
-        except RuntimeError:
-            pass
+        self.copy_completed.emit()
 
     def _open_image_preview(self, image_data: str):
         show_content(self, image_source=image_data)

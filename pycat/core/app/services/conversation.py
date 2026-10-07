@@ -37,6 +37,7 @@ from pycat.core.observability.reader import MAX_EVENTS, read_trace_events, read_
 from pycat.core.persistence import atomic_write_text
 from pycat.core.state.artifact import ArtifactService
 from pycat.core.state.todo import TodoService
+from pycat.core.tools.tool_call_archive import ToolCallArchiveService
 from pycat.models.contracts.agent import ConversationBusyError, InvalidRequestError, PersistenceError
 from pycat.models.conversation import Conversation, Message
 from pycat.models.model_ref import build_model_ref, provider_matches_name
@@ -167,6 +168,7 @@ class ConversationService:
         conversation = self._repository.load(conversation_id)
         if conversation is not None:
             conversation.data_dir = str(self._repository.data_dir)
+            self._normalize_tool_errors(conversation)
             self.reconcile_artifacts(conversation)
         return conversation
 
@@ -193,13 +195,14 @@ class ConversationService:
                      for message in conversation.messages if message.role != "system")
         return export_document("\n".join(lines), target, format=selected, title=conversation.title or "Conversation")
 
-    def list_all(self) -> List[Dict[str, Any]]:
-        return self._repository.list_all()
+    def list_all(self, *, include_content=False) -> List[Dict[str, Any]]:
+        rows = self._repository.list_all()
+        return rows if include_content else [row for row in rows if not row.get('content_target')]
 
     def reconcile_index(self) -> List[Dict[str, Any]]:
         """One startup reconciliation; ordinary views keep using the small index."""
         with self._activity_lock:
-            return self._repository.reconcile_index()
+            return [row for row in self._repository.reconcile_index() if not row.get('content_target')]
 
     def cancel_delegation(self, conversation_id: str) -> Conversation:
         """Persist cancellation without replacing a live run's transcript."""
@@ -269,8 +272,19 @@ class ConversationService:
                         return False
                     if phases[incoming.submission] < phases[current.submission]:
                         return False
+            self._normalize_tool_errors(conversation)
             self.reconcile_artifacts(conversation)
             return self._repository.save(conversation)
+
+    @staticmethod
+    def _normalize_tool_errors(conversation: Conversation) -> None:
+        """Read/write boundary repair; exact receipts must be archived first."""
+        try:
+            conversation.messages, _ = ToolCallArchiveService(
+                conversation.work_dir, conversation.id, data_dir=conversation.data_dir,
+            ).prepare_request_views(conversation.messages, require_archive=True)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not normalize tool errors for %s: %s", conversation.id, exc)
 
     @staticmethod
     def revision_fingerprint(conversation: Conversation) -> str:

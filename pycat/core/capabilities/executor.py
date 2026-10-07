@@ -70,7 +70,7 @@ class CapabilityExecutor:
         self.client = client
         self.data_dir = data_dir
         self.prompt_renderer = prompt_renderer
-        self.capabilities = capabilities or default_capabilities_config()
+        self.capabilities = CapabilitiesManager.merge(default_capabilities_config(), capabilities or CapabilitiesConfig())
         self._provider_catalog_provider = provider_catalog_provider or (lambda: ())
         self._default_auxiliary_model = str(default_auxiliary_model or "").strip()
         self._agent_runtime: Any = None

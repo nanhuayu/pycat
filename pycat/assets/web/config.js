@@ -75,7 +75,7 @@ class SettingsWorkspace {
   }
   renderNav() {
     const query = this.search.value.trim().toLowerCase();
-    this.nav.replaceChildren(...groups.filter(group => (group.title + group.pages.map(page => page[1]).join('')).toLowerCase().includes(query)).map(group => {
+    this.nav.replaceChildren(...groups.filter(group => (group.title + ' ' + (group.keywords || '') + ' ' + group.pages.map(page => page[1]).join('')).toLowerCase().includes(query)).map(group => {
       const item = button(group.title, () => this.navigate(group.pages[0][0]), 'settings-nav-item' + (group.pages.some(page => page[0] === this.page) ? ' active' : ''));
       return item;
     }));

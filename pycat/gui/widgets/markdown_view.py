@@ -7,6 +7,9 @@ import math
 import re
 from functools import partial
 
+import markdown
+from markdown.blockprocessors import BlockProcessor
+from markdown.extensions import Extension
 from PyQt6.QtCore import QCoreApplication, QPoint, QSize, Qt, QThreadPool, QTimer, QUrl, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QImage, QTextCursor, QTextDocument, QTextOption, QWheelEvent
 from PyQt6.QtWidgets import QAbstractScrollArea, QFrame, QSizePolicy, QTextBrowser, QTextEdit
@@ -16,12 +19,6 @@ from pycat.gui.utils.message_images import image_source
 from pycat.gui.utils.theme import resolve_accent, resolve_theme, theme_tokens
 from pycat.gui.widgets.themed_line_edit import ThemedContextMenuMixin
 from pycat.models.contracts.config import DEFAULT_ACCENT
-
-try:
-    import markdown
-except ImportError:  # pragma: no cover - optional runtime dependency
-    markdown = None
-
 
 logger = logging.getLogger(__name__)
 
@@ -168,9 +165,32 @@ def markdown_css(theme: object = "light", accent: object = DEFAULT_ACCENT) -> st
 """
 
 
-_FENCE_LINE_RE = re.compile(r"^\s{0,3}(```|~~~)")
+_FENCE_LINE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _LIST_ITEM_RE = re.compile(r"^\s{0,3}(?:[-+*]\s+|\d+[.)]\s+)")
 _HTML_CODE_BLOCK_RE = re.compile(r"<pre><code(?P<attrs>[^>]*)>(?P<code>.*?)</code></pre>", re.DOTALL)
+
+
+class _ParagraphTableProcessor(BlockProcessor):
+    """Allow an existing table block to interrupt an ordinary paragraph."""
+
+    def test(self, parent, block):
+        rows = block.split('\n')
+        table = self.parser.blockprocessors['table']
+        self._start = next((index for index in range(1, len(rows) - 1)
+                            if '-' in rows[index + 1] and '|' in rows[index + 1]
+                            and table.test(parent, '\n'.join(rows[index:index + 2]))), None)
+        return self._start is not None
+
+    def run(self, parent, blocks):
+        rows = blocks.pop(0).split('\n')
+        blocks[0:0] = ['\n'.join(rows[:self._start]), '\n'.join(rows[self._start:])]
+
+
+class _ParagraphTableExtension(Extension):
+    def extendMarkdown(self, md):
+        # Lists, quotes, code and HTML have already claimed their blocks.
+        # Reuse the tables extension's test and let it render the split block.
+        md.parser.blockprocessors.register(_ParagraphTableProcessor(md.parser), 'paragraph_table', 11)
 
 
 def prepare_markdown_html_for_qt(
@@ -207,22 +227,24 @@ def normalize_markdown_for_view(text: str) -> str:
     source = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
     lines = source.split("\n")
     out: list[str] = []
-    in_fence = False
+    fence_marker = ''
     previous_was_list = False
 
     for line in lines:
         stripped = line.strip()
-        fence = bool(_FENCE_LINE_RE.match(line))
-        if fence:
-            if out and out[-1].strip() and not in_fence:
-                out.append("")
+        fence = _FENCE_LINE_RE.match(line)
+        if fence_marker:
             out.append(line)
-            in_fence = not in_fence
-            previous_was_list = False
+            if fence and fence.group(1) == fence_marker and not fence.group(2).strip():
+                fence_marker = ''
             continue
 
-        if in_fence:
+        if fence and (fence.group(1).startswith('~') or '`' not in fence.group(2)):
+            if out and out[-1].strip():
+                out.append("")
             out.append(line)
+            fence_marker = fence.group(1)
+            previous_was_list = False
             continue
 
         is_blank = not stripped
@@ -235,6 +257,10 @@ def normalize_markdown_for_view(text: str) -> str:
         out.append(line)
         previous_was_list = bool(is_list and not is_blank)
 
+    # Complete only the display copy while a streamed code block is unfinished.
+    # The raw Markdown remains authoritative for copying, saving and model use.
+    if fence_marker:
+        out.append(fence_marker)
     return "\n".join(out)
 
 
@@ -252,8 +278,9 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
     image_clicked = pyqtSignal(str)
     image_menu_requested = pyqtSignal(str, QPoint)
 
-    def __init__(self, text: str = "", parent=None, *, image_resources=None):
+    def __init__(self, text: str = "", parent=None, *, image_resources=None, auto_height=True):
         super().__init__(parent)
+        self._auto_height = auto_height
         self._image_resources = image_resources
         self._image_values = {}
         self._image_jobs = {}
@@ -285,6 +312,10 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
         self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        if not auto_height:
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+            self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
         self._fitting_height = False
         self._minimum_content_height = 14
@@ -322,23 +353,18 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
         self._raw_markdown_text = text
         render_text = normalize_markdown_for_view(text)
 
-        if markdown:
-            try:
-                extensions = ['fenced_code', 'tables', 'sane_lists']
-                theme = resolve_theme(self)
-                accent = resolve_accent(self)
-                self._rendered_theme = f"{theme}:{accent}"
-                html = markdown.markdown(render_text, extensions=extensions)
-                html = prepare_markdown_html_for_qt(html, theme=theme, accent=accent)
-                html = _sanitize_truncated_colors(html)
-                self.setHtml(markdown_css(theme, accent) + html)
-            except Exception:
-                self.document().setMarkdown(render_text)
-        else:
-            try:
-                self.document().setMarkdown(render_text)
-            except Exception:
-                self.setPlainText(text)
+        theme = resolve_theme(self)
+        accent = resolve_accent(self)
+        self._rendered_theme = f"{theme}:{accent}"
+        try:
+            extensions = ['fenced_code', 'tables', 'sane_lists', _ParagraphTableExtension()]
+            html = markdown.markdown(render_text, extensions=extensions)
+            html = prepare_markdown_html_for_qt(html, theme=theme, accent=accent)
+            html = _sanitize_truncated_colors(html)
+            self.setHtml(markdown_css(theme, accent) + html)
+        except Exception:
+            logger.warning('Markdown rendering failed; showing source', exc_info=True)
+            self.setPlainText(text)
 
         self.refit_height()
         if reading_position is not None:
@@ -470,6 +496,9 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
 
     def wheelEvent(self, event):
         self._cancel_scroll_restore()
+        if not self._auto_height:
+            super().wheelEvent(event)
+            return
         if self._maximum_content_height is None:
             # An auto-height reply belongs to the transcript's scroll area.
             parent = self.parentWidget()
@@ -489,6 +518,8 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
             super().wheelEvent(event)
 
     def _on_scroll_range_changed(self, _minimum: int, maximum: int) -> None:
+        if not self._auto_height:
+            return
         if self._maximum_content_height is None and maximum > 0:
             self.verticalScrollBar().setRange(0, 0)
         elif self._maximum_content_height is not None and not self._fitting_height:
@@ -498,6 +529,9 @@ class MarkdownView(ThemedContextMenuMixin, QTextBrowser):
         self.refit_height()
 
     def refit_height(self) -> None:
+        if not self._auto_height:
+            self._fit_images(max(120, self.viewport().width()))
+            return
         if self._fitting_height:
             return
         self._fitting_height = True

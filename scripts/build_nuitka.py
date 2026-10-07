@@ -45,12 +45,16 @@ def entry_plan(frontend="all", ocr=True, compiler="auto", jobs=4, analyze=False,
         f"--file-version={version()}", f"--product-version={version()}",
         "--windows-icon-from-ico=pycat/assets/pycat.ico",
         "--include-module=pycat.core.hosts.python_worker",
-        "--include-module=pycat.core.tools.pty_child",
+        "--include-module=pycat.core.tools.system.pty_child",
         # ddgs lazily imports its implementation and discovers engines via pkgutil.
         "--include-module=ddgs.ddgs", "--include-package=ddgs.engines",
         "--include-package=textual.drivers", "--include-package=uvicorn",
         # Rich loads Unicode width tables by versioned module names at runtime.
         "--include-package=rich",
+        # Presentation Skill sources run through the bundled Python worker.
+        "--include-package=pptx", "--include-package=xlsxwriter",
+        "--include-package=PIL", "--include-package=qrcode", "--include-package=lxml",
+        "--include-package-data=pptx:templates/*",
         # PyMuPDF's generated Python bindings expand into exceptionally large C
         # units. Its native PDF engine stays bundled; only wrappers use bytecode.
         "--lto=no",
@@ -83,7 +87,7 @@ def entry_plan(frontend="all", ocr=True, compiler="auto", jobs=4, analyze=False,
                          "httpx", "httpcore", "httpx2", "httpcore2", "docx", "PIL", "cryptography",
                          "click", "urllib3", "requests", "markdown", "uvicorn", "starlette",
                          "websockets", "jsonschema", "pathspec", "qrcode",
-                         "textual", "rich", "pygments", "fastapi")
+                          "textual", "rich", "pygments", "fastapi", "pptx", "xlsxwriter")
     command += [f"--noinclude-custom-mode={name}:bytecode" for name in bytecode_packages]
     # These packages query importlib.metadata.version at runtime. Bytecode does
     # not receive Nuitka's compile-time constant substitution for those calls.
@@ -172,6 +176,21 @@ def report_summary(build_dir: Path) -> dict:
             "c_files": sum(1 for _ in build_dir.glob("*.build/*.c"))}
 
 
+def copy_bundled_skill_scripts(destination: Path) -> None:
+    """Ship canonical executable sources explicitly; Nuitka data rules omit .py."""
+    source_root = ROOT / "pycat/assets/skills"
+    for skill in sorted(source_root.iterdir()):
+        scripts = skill / "scripts"
+        if not scripts.is_dir():
+            continue
+        scripts.resolve().relative_to(ROOT.resolve())
+        if any(path.is_symlink() for path in scripts.rglob("*")):
+            raise ValueError("Bundled skill scripts must not contain symlinks.")
+        target = destination / "pycat/assets/skills" / skill.name / "scripts"
+        shutil.copytree(scripts, target, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--frontend", choices=("all", "gui", "cli"), default="all")
@@ -196,7 +215,7 @@ def main(argv=None) -> int:
     archive = output_root / (label + ".zip")
     if archive.exists() and not args.analyze:
         parser.error(f"Release already exists: {archive}. Use --output-root to build another copy.")
-    required = ["Nuitka", "httpx", "Pillow", "PyMuPDF", "PyYAML", "python-docx", "mcp", "ddgs", "psutil",
+    required = ["Nuitka", "httpx", "Pillow", "PyMuPDF", "PyYAML", "python-docx", "python-pptx", "XlsxWriter", "lxml", "qrcode", "mcp", "ddgs", "psutil",
                 "pywinpty", "textual", "fastapi", "uvicorn"]
     if args.frontend != "cli":
         required += ["PyQt6", "pyte"]
@@ -244,6 +263,7 @@ def main(argv=None) -> int:
     final = output_root / label
     # A unique output preserves previous releases, including when verification fails.
     merge_distributions(directories, final)
+    copy_bundled_skill_scripts(final)
     subprocess.run([sys.executable, str(ROOT / 'scripts/build_public_intro.py'), '--directory', str(final)],
                    cwd=ROOT, env=env, check=True)
     # This source runs on the remote system's Python, never the frozen host.

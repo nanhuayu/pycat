@@ -9,10 +9,10 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Optional
 
-from PyQt6.QtCore import QThreadPool
+from PyQt6.QtCore import QCoreApplication, QThreadPool
 from PyQt6.QtWidgets import QMessageBox
 
-from pycat.core.agent.run.control_messages import RESUME_INTERRUPTED_RUN
+from pycat.core.agent.run.control_messages import RESUME_UNFINISHED_RUN
 from pycat.core.app.services.conversation import ConversationRevisionResult
 from pycat.core.channel.bindings import is_bound_channel_conversation
 from pycat.core.content.attachments import extract_composer_text
@@ -26,7 +26,7 @@ from pycat.core.context.sections import extract_user_request
 from pycat.gui.presenters.prompt_optimization_presenter import PromptOptimizationPresenter
 from pycat.gui.presenters.streaming_message_presenter import StreamingMessagePresenter
 from pycat.gui.runtime.background_job import BackgroundJob
-from pycat.models.contracts.agent import PersistenceError, RunEvent, RunStatus
+from pycat.models.contracts.agent import PersistenceError, RunEvent, RunStatus, can_resume_message
 from pycat.models.contracts.content import InputPreparationResult
 from pycat.models.conversation import Conversation, Message
 from pycat.models.model_ref import build_model_ref
@@ -171,12 +171,12 @@ class MessagePresenter:
             is_streaming=host.message_runtime.is_streaming(host.current_conversation.id),
         )
 
-        # Empty input: if last message is user, just re-stream
+        # An empty submission explicitly resumes the latest unfinished task.
         if not content and not attachments:
-            if (
-                host.current_conversation.messages
-                and host.current_conversation.messages[-1].role == "user"
-            ):
+            latest = host.current_conversation.messages[-1] if host.current_conversation.messages else None
+            if can_resume_message(latest):
+                self.resume_task(latest.id)
+            elif latest is not None and latest.role == "user":
                 self.start_streaming(provider)
             return
 
@@ -924,10 +924,12 @@ class MessagePresenter:
     def start_streaming(self, provider: Provider, *, conversation: Conversation | None = None, activity_token: str | None = None, delegate_profile: str = ''):
         return self._streaming_presenter.start_streaming(provider, conversation=conversation, activity_token=activity_token, delegate_profile=delegate_profile)
 
-    def resume_interrupted(self, message_id: str) -> None:
+    def resume_task(self, message_id: str) -> None:
         host = self._host
         conversation = host.current_conversation
         if conversation is None or host.message_runtime.is_streaming(conversation.id):
+            return
+        if self.is_submitting(conversation.id):
             return
         is_maintaining = getattr(
             getattr(host, "conversation_presenter", None),
@@ -942,27 +944,33 @@ class MessagePresenter:
                 conversation_id=conversation.id,
             )
             return
-        message = next(
-            (item for item in conversation.messages if str(getattr(item, "id", "") or "") == str(message_id or "")),
-            None,
-        )
-        metadata = getattr(message, "metadata", {}) if message is not None else {}
-        if message is None or not isinstance(metadata, dict) or not metadata.get("interrupted"):
+        message = conversation.messages[-1] if conversation.messages else None
+        if message is None or message.id != str(message_id or "") or not can_resume_message(message):
             return
+        metadata = message.metadata
 
-        provider_id = str(getattr(conversation, "provider_id", "") or host.input_area.get_selected_provider_id() or "")
-        provider = self._find_provider(provider_id)
+        provider = host.services.conv_service.resolve_provider(
+            host.providers,
+            provider_id=conversation.provider_id,
+            provider_name=conversation.provider_name,
+        )
         if provider is None:
             QMessageBox.warning(host, "无法继续", "未找到该会话使用的服务商。")
             return
 
         metadata["resume_requested"] = True
         message.metadata = metadata
+        if not host.services.conv_service.save(conversation):
+            metadata.pop("resume_requested", None)
+            host.chat_view.show_notice(
+                QCoreApplication.translate('MessagePresenter', '任务状态保存失败，请重试'),
+                tone="error", timeout_ms=5000, conversation_id=conversation.id,
+            )
+            return
         host.chat_view.update_message(message)
-        host.services.conv_service.save(conversation)
         state = self._streaming_presenter.start_streaming(
             provider,
-            initial_runtime_messages=[Message(role="user", content=RESUME_INTERRUPTED_RUN)],
+            initial_runtime_messages=[Message(role="user", content=RESUME_UNFINISHED_RUN)],
         )
         if state is None:
             metadata.pop("resume_requested", None)

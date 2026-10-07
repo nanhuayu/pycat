@@ -19,6 +19,12 @@
 *.js text
 pycat/assets/web/vendor/* text eol=lf
 *.svg text
+# The terminal logo records the canonical mark's byte digest.
+pycat/assets/pycat.svg text eol=lf
+# Byte-stable prototype exports are checked against their native owners.
+prototypes/workbench/assets/pycat.svg text eol=lf
+prototypes/workbench/css/theme.generated.css text eol=lf
+prototypes/workbench/js/native-contract.js text eol=lf
 *.gitignore text
 
 # Binary files - never touch

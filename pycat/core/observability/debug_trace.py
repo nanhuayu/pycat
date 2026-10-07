@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
+from pycat.core.observability.stream import StreamTraceWriter
 from pycat.models.session_paths import resolve_session_root
 
 if TYPE_CHECKING:
@@ -494,21 +495,17 @@ class DebugTraceSink:
             archive_content_id = ""
             if isinstance(payload, dict) and isinstance(payload.get("archive"), dict):
                 archive_content_id = str(payload["archive"].get("content_id") or "")
-            target.write_text(
-                json.dumps(
-                    self.redact_payload(payload, archive_content_id=archive_content_id),
-                    ensure_ascii=False,
-                    indent=2,
-                    default=_json_default,
-                ),
-                encoding="utf-8",
-            )
+            encoded = json.dumps(
+                self.redact_payload(payload, archive_content_id=archive_content_id),
+                ensure_ascii=False, separators=(",", ":"), default=_json_default,
+            ).encode("utf-8")
+            target.write_bytes(encoded)
             return rel
         except Exception as exc:
             logger.debug("Failed to write debug payload %s: %s", target, exc)
             return ""
 
-    def open_stream_file(self, relative_name: str) -> TextIO | None:
+    def open_stream_file(self, relative_name: str) -> StreamTraceWriter | None:
         if not self.capture_stream:
             return None
         rel = str(relative_name or "").strip()
@@ -522,7 +519,9 @@ class DebugTraceSink:
             return None
         try:
             self._ensure_dir()
-            return target.open("a", encoding="utf-8", newline="\n")
+            return StreamTraceWriter(target, redact=self.redact_payload, metadata={
+                "conversation_id": self.conversation_id, "request_id": self.request_id,
+            })
         except Exception as exc:
             logger.debug("Failed to open debug stream %s: %s", target, exc)
             return None

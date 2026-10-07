@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import asyncio
-
+from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QThreadPool
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
-    QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -17,6 +16,7 @@ from pycat.gui.runtime.background_job import BackgroundJob
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.form_builder import FormSection
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button
 from pycat.models.search_config import MAX_MAX_RESULTS, MIN_MAX_RESULTS, SearchConfig
 
 
@@ -31,10 +31,10 @@ class SearchPage(QWidget):
     def __init__(self, search_config: SearchConfig, parent=None):
         super().__init__(parent)
         self._check_job: BackgroundJob | None = None
-        self._check_button_text = QCoreApplication.translate('SearchPage', '检查')
         self._setup_ui(search_config)
 
     def _setup_ui(self, search_config: SearchConfig) -> None:
+        """Build the search draft and its compact, keyboard-accessible check action."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
@@ -83,9 +83,9 @@ class SearchPage(QWidget):
         self._provider_hint.setObjectName('settings_hint')
         self._provider_hint.setWordWrap(True)
         check_layout.addWidget(self._provider_hint, 1)
-        self._check_btn = QPushButton(QCoreApplication.translate('SearchPage', '检查'))
+        self._check_btn = QToolButton()
         self._check_btn.setObjectName("settings_action_btn")
-        self._check_btn.setIcon(Icons.get(Icons.CHECK))
+        self._sync_check_action()
         self._check_btn.clicked.connect(self._on_check_clicked)
         check_layout.addWidget(self._check_btn)
         service.form.addRow(check_row, info=True)
@@ -107,6 +107,8 @@ class SearchPage(QWidget):
         self._on_provider_changed(current_index)
 
     def _on_provider_changed(self, index: int):
+        """Show only relevant fields and discard checks for the previous engine."""
+        self._cancel_check()
         if index < 0 or index >= len(self._PROVIDERS_META):
             return
         pid, _name, needs_key, needs_base = self._PROVIDERS_META[index]
@@ -127,28 +129,45 @@ class SearchPage(QWidget):
         }
         self._provider_hint.setText(hints.get(pid, ""))
 
-    def _on_check_clicked(self):
+    def _sync_check_action(self) -> None:
+        """Keep the test icon and accessible label aligned with the pending job."""
+        busy = self._check_job is not None
+        label = (QCoreApplication.translate('SearchPage', '检查中') if busy
+                 else QCoreApplication.translate('SearchPage', '检查'))
+        configure_icon_button(self._check_btn, Icons.get(Icons.SPINNER if busy else Icons.TEST), label)
+        self._check_btn.setEnabled(not busy)
+
+    def _cancel_check(self, *, refresh_ui: bool = True) -> None:
+        """Abandon the current search check without touching a closing widget tree."""
+        job, self._check_job = self._check_job, None
+        if job is not None:
+            job.abandon()
+            self.destroyed.disconnect(job.abandon)
+            if refresh_ui:
+                self._sync_check_action()
+
+    def _on_check_clicked(self) -> None:
+        """Run one search check in the existing worker pool and capture its draft."""
         if self._check_job is not None:
             return
         config = self.collect()
         service = SearchService(config)
-        self._check_btn.setEnabled(False)
-        old_text = self._check_btn.text()
-        self._check_button_text = old_text
-        self._check_btn.setText(QCoreApplication.translate('SearchPage', '检查中'))
-
-        job = BackgroundJob(lambda: asyncio.run(service.check()))
+        job = BackgroundJob(service.check)
         self._check_job = job
-        job.signals.finished.connect(self._finish_check)
+        self._sync_check_action()
+        self.destroyed.connect(job.abandon)
+        job.signals.finished.connect(lambda result, error: self._finish_check(job, config, result, error))
         QThreadPool.globalInstance().start(job)
 
-    def _finish_check(self, result, error) -> None:
-        job = self._check_job
-        if job is None:
+    def _finish_check(self, job, config: SearchConfig, result, error) -> None:
+        """Restore the action and report only a result for the unchanged draft."""
+        if sip.isdeleted(self) or self._check_job is not job:
             return
         self._check_job = None
-        self._check_btn.setText(self._check_button_text)
-        self._check_btn.setEnabled(True)
+        self.destroyed.disconnect(job.abandon)
+        self._sync_check_action()
+        if self.collect() != config:
+            return
         if error is not None:
             valid, message = False, str(error)
         else:
@@ -159,6 +178,17 @@ class SearchPage(QWidget):
         else:
             msg = QCoreApplication.translate('SearchPage', '连接失败: {message}').format(message=message) if message else QCoreApplication.translate('SearchPage', '连接失败')
             QMessageBox.warning(self, QCoreApplication.translate('SearchPage', '连接测试'), msg)
+
+    def hideEvent(self, event) -> None:
+        """Prevent a hidden or closing settings page from opening a late dialog."""
+        if not event.spontaneous():
+            self._cancel_check(refresh_ui=False)
+        super().hideEvent(event)
+
+    def showEvent(self, event) -> None:
+        """Restore a check button whose worker was abandoned while hidden."""
+        self._sync_check_action()
+        super().showEvent(event)
 
     def collect(self) -> SearchConfig:
         index = self.search_provider_combo.currentIndex()

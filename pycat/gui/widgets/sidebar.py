@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
     QFrame,
-    QHBoxLayout,
     QInputDialog,
     QListWidget,
     QListWidgetItem,
@@ -32,6 +31,7 @@ from pycat.gui.utils.theme import (
     resolve_theme,
     theme_colors,
 )
+from pycat.gui.widgets.navigation_header import NavigationHeader
 from pycat.gui.widgets.themed_line_edit import SearchLineEdit
 from pycat.models.workspace import WorkspaceLocation, workspace_identity
 
@@ -168,10 +168,9 @@ class Sidebar(QWidget):
     export_conversation = pyqtSignal(str, str)
     navigation_requested = pyqtSignal(str, dict)
     preferences_changed = pyqtSignal(dict)
-    settings_requested = pyqtSignal()
     materials_requested = pyqtSignal()
     about_requested = pyqtSignal()
-    search_requested = pyqtSignal()
+    library_item_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -180,46 +179,22 @@ class Sidebar(QWidget):
         self.setMinimumWidth(180)
         self.setMaximumWidth(320)
         self._all_conversations = []
+        self._library_favorites = []
         self._streaming_conversation_ids = set()
         self._waiting_conversation_ids = set()
         self._projects = {"pinned": [], "hidden": [], "collapsed": []}
         self._show_archived = False
-        self.collapsed = False
         self.expanded_width = 212
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 10)
         layout.setSpacing(8)
-        self.brand_row = QWidget()
-        self.brand_row.setFixedHeight(40)
-        brand = QHBoxLayout(self.brand_row)
-        brand.setContentsMargins(0, 0, 0, 0)
-        brand.setSpacing(6)
-        self.brand_layout = brand
-        self.brand_btn = QPushButton("PyCat")
-        self.brand_btn.setObjectName("brand_btn")
-        self.brand_btn.setIcon(Icons.brand())
-        self.brand_btn.setIconSize(QSize(28, 28))
-        self.brand_btn.setToolTip(QCoreApplication.translate('Sidebar', "关于 PyCat"))
-        self.brand_btn.setAccessibleName(QCoreApplication.translate('Sidebar', "关于 PyCat"))
-        self.brand_btn.clicked.connect(self.about_requested)
-        brand.addWidget(self.brand_btn)
-        brand.addStretch()
-        self.new_chat_btn = QPushButton()
+        self.brand_row = NavigationHeader(Icons.PLUS, QCoreApplication.translate('Sidebar', "新建对话 · Ctrl+N"),
+                                          self.new_conversation, self.about_requested)
+        self.brand_btn = self.brand_row.brand
+        self.new_chat_btn = self.brand_row.action
         self.new_chat_btn.setObjectName("new_chat_btn")
-        self.new_chat_btn.setIcon(Icons.get(Icons.PLUS))
-        self.new_chat_btn.setToolTip(QCoreApplication.translate('Sidebar', "新建对话 · Ctrl+N"))
         self.new_chat_btn.setAccessibleName(QCoreApplication.translate('Sidebar', "新建对话"))
-        self.new_chat_btn.clicked.connect(self.new_conversation)
-        brand.addWidget(self.new_chat_btn)
         layout.addWidget(self.brand_row)
-        self.search_btn = QPushButton()
-        self.search_btn.setObjectName("sidebar_search_btn")
-        self.search_btn.setIcon(Icons.get_muted(Icons.SEARCH))
-        self.search_btn.setToolTip(QCoreApplication.translate('Sidebar', "搜索对话"))
-        self.search_btn.setAccessibleName(QCoreApplication.translate('Sidebar', "搜索对话"))
-        self.search_btn.clicked.connect(self.search_requested)
-        self.search_btn.hide()
-        layout.addWidget(self.search_btn)
         self.search_input = SearchLineEdit()
         self.search_input.setObjectName("search_input")
         self.search_input.setPlaceholderText(QCoreApplication.translate('Sidebar', "搜索对话"))
@@ -238,13 +213,11 @@ class Sidebar(QWidget):
         self.conversation_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.conversation_list.customContextMenuRequested.connect(self._show_context_menu)
         layout.addWidget(self.conversation_list, 1)
-        layout.addStretch(0)
-        self._rail_spacer_index = layout.count() - 1
         separator = QFrame()
         separator.setObjectName("sidebar_footer_separator")
         separator.setFixedHeight(1)
         layout.addWidget(separator)
-        for label, icon, signal in ((QCoreApplication.translate('Sidebar', "记忆与资料"), Icons.BOOKS, self.materials_requested), (QCoreApplication.translate('Sidebar', "设置"), Icons.SETTINGS, self.settings_requested)):
+        for label, icon, signal in ((QCoreApplication.translate('Sidebar', "记忆与资料"), Icons.BOOKS, self.materials_requested),):
             button = QPushButton(label.replace("&", "&&"))
             button.setIcon(Icons.get_muted(icon))
             button.setProperty("icon_name", icon)
@@ -255,28 +228,8 @@ class Sidebar(QWidget):
             button.clicked.connect(signal)
             layout.addWidget(button)
 
-    def set_collapsed(self, collapsed: bool):
-        collapsed = bool(collapsed)
-        if self.collapsed == collapsed:
-            return
-        if collapsed:
-            self.expanded_width = max(180, min(320, self.width()))
-        self.collapsed = collapsed
-        self.setMinimumWidth(56 if collapsed else 180)
-        self.setMaximumWidth(56 if collapsed else 320)
-        self.brand_layout.setDirection(QHBoxLayout.Direction.TopToBottom if collapsed else QHBoxLayout.Direction.LeftToRight)
-        self.brand_row.setFixedHeight(80 if collapsed else 40)
-        self.brand_btn.setText("" if collapsed else "PyCat")
-        self.search_input.setVisible(not collapsed)
-        self.search_btn.setVisible(collapsed)
-        self.conversation_list.setVisible(not collapsed)
-        self.layout().setStretch(self._rail_spacer_index, 1 if collapsed else 0)
-        for button in self.findChildren(QPushButton, "sidebar_footer_btn"):
-            button.setText("" if collapsed else button.property("label").replace("&", "&&"))
-
     def refresh_theme(self):
-        self.new_chat_btn.setIcon(Icons.get(Icons.PLUS))
-        self.search_btn.setIcon(Icons.get_muted(Icons.SEARCH))
+        self.new_chat_btn.setIcon(Icons.get_muted(Icons.PLUS))
         for button in self.findChildren(QPushButton, "sidebar_footer_btn"):
             button.setIcon(Icons.get_muted(button.property("icon_name")))
         self.conversation_list.viewport().update()
@@ -306,6 +259,10 @@ class Sidebar(QWidget):
 
     def update_conversations(self, conversations):
         self._all_conversations = conversations
+        self._filter_conversations(self.search_input.text())
+
+    def update_library_favorites(self, items):
+        self._library_favorites = list(items)[:8]
         self._filter_conversations(self.search_input.text())
 
     def _section(self, key, title):
@@ -343,6 +300,15 @@ class Sidebar(QWidget):
                     recent.append(row)
                 else:
                     groups.setdefault(path, []).append(row)
+            if self._library_favorites:
+                self._section('library', QCoreApplication.translate('Sidebar', '收藏资料'))
+                for record in self._library_favorites:
+                    item = QListWidgetItem(record['title'])
+                    item.setData(TITLE_ROLE, record['title'])
+                    item.setData(KIND_ROLE, 'library')
+                    item.setData(SECTION_ROLE, record['id'])
+                    item.setSizeHint(QSize(0, 36))
+                    self.conversation_list.addItem(item)
             self._section("projects", QCoreApplication.translate('Sidebar', "项目"))
             for path in sorted(groups, key=lambda p: (p not in self._projects["pinned"], p.casefold())):
                 expanded = path not in self._projects["collapsed"]
@@ -389,7 +355,9 @@ class Sidebar(QWidget):
                 break
 
     def _on_item_clicked(self, item):
-        if isinstance(item, ConversationItem):
+        if item.data(KIND_ROLE) == 'library':
+            self.library_item_requested.emit(str(item.data(SECTION_ROLE)))
+        elif isinstance(item, ConversationItem):
             self.conversation_selected.emit(str(item.conversation_data.get("id", "")))
         elif isinstance(item, ProjectItem):
             self._project_preference("collapsed", item.path, bool(item.data(EXPANDED_ROLE)))
@@ -402,7 +370,10 @@ class Sidebar(QWidget):
                 right = self.conversation_list.visualItemRect(item).right() - pos.x()
                 if 0 <= right < 34:
                     if item.data(KIND_ROLE) == "section":
-                        self.add_project() if item.data(SECTION_ROLE) == "projects" else self.new_in_project.emit("")
+                        if item.data(SECTION_ROLE) == 'library':
+                            self.library_item_requested.emit('')
+                        else:
+                            self.add_project() if item.data(SECTION_ROLE) == "projects" else self.new_in_project.emit("")
                     else:
                         self._show_context_menu(pos)
                     return True

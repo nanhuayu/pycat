@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
+from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, Qt, QThreadPool, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
@@ -37,6 +38,7 @@ from pycat.gui.settings.model_profile_dialog import ModelProfileDialog
 from pycat.gui.utils.combo_box import configure_combo_popup
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.settings_controls import SettingsFormLayout
+from pycat.gui.utils.theme import configure_icon_button
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit, ThemedTextEdit
 from pycat.models.image_api import ImageAPI
 from pycat.models.model_profile import ModelProfile
@@ -114,6 +116,7 @@ class ProviderEditor(QWidget):
         self._jobs: set[BackgroundJob] = set()
         self._login_flows = []
         self._login_job = None
+        self._test_job: BackgroundJob | None = None
         flows = self._login_flows
 
         def abandon_jobs(_object=None, jobs=self._jobs) -> None:
@@ -149,6 +152,8 @@ class ProviderEditor(QWidget):
         root.addWidget(self.tabs, 1)
 
     def _build_connection_tab(self) -> QWidget:
+        """Build the existing connection draft with named, keyboard-ready actions."""
+
         scroll = QScrollArea()
         scroll.setObjectName("provider_connection_scroll")
         scroll.setWidgetResizable(True)
@@ -183,12 +188,13 @@ class ProviderEditor(QWidget):
         key_layout.setContentsMargins(0, 0, 0, 0)
         key_layout.setSpacing(6)
         key_layout.addWidget(self.api_key_input, 1)
-        self.show_key_btn = QPushButton()
+        self.show_key_btn = QToolButton()
         self.show_key_btn.setObjectName("settings_action_btn")
         self.show_key_btn.setCheckable(True)
-        self.show_key_btn.setIcon(Icons.get(Icons.EYE))
-        self.show_key_btn.setToolTip(QCoreApplication.translate('ProviderEditor', '显示 API Key'))
-        self.show_key_btn.setFixedWidth(32)
+        configure_icon_button(
+            self.show_key_btn, Icons.get(Icons.EYE),
+            QCoreApplication.translate('ProviderEditor', '显示 API Key'),
+        )
         self.show_key_btn.toggled.connect(self._toggle_key_visibility)
         key_layout.addWidget(self.show_key_btn)
         self._key_widget = key_widget
@@ -215,8 +221,9 @@ class ProviderEditor(QWidget):
         self.login_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '登录 ChatGPT'))
         self.logout_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '退出登录'))
         self.cancel_login_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '取消'))
-        self.sync_models_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '同步模型'))
-        self.sync_models_btn.setIcon(Icons.get(Icons.REFRESH))
+        self.sync_models_btn = QToolButton()
+        configure_icon_button(self.sync_models_btn, Icons.get(Icons.REFRESH),
+                              QCoreApplication.translate('ProviderEditor', '同步模型'))
         self.auth_status = QLabel(QCoreApplication.translate('ProviderEditor', '未登录'))
         self.auth_status.setObjectName('provider_status_label')
         self.auth_status.setTextFormat(Qt.TextFormat.PlainText)
@@ -270,10 +277,9 @@ class ProviderEditor(QWidget):
         layout.addWidget(self.headers_edit)
 
         actions = QHBoxLayout()
-        self.test_btn = QPushButton(QCoreApplication.translate('ProviderEditor', '测试连接'))
-        self.test_btn.setToolTip(QCoreApplication.translate('ProviderEditor', '检查服务连接与模型目录，不发起图像生成。'))
+        self.test_btn = QToolButton()
         self.test_btn.setObjectName("settings_action_btn")
-        self.test_btn.setIcon(Icons.get(Icons.CHECK))
+        self._sync_test_action()
         self.test_btn.clicked.connect(self.test_connection)
         actions.addWidget(self.test_btn, 0, Qt.AlignmentFlag.AlignLeft)
         self.status_label = QLabel("")
@@ -347,14 +353,15 @@ class ProviderEditor(QWidget):
         self.image_connection_note.setText(QCoreApplication.translate('ProviderEditor', '生成与编辑分别沿用上方 API 地址，也可设置独立地址。共用本服务 API Key。'))
 
     def _build_model_tab(self) -> QWidget:
+        """Build the curated-model list with shared, named icon commands."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
         actions = SettingsActionBar()
-        self.catalog_btn = actions.add_action(QCoreApplication.translate('ProviderEditor', '模型目录'), Icons.get(Icons.REFRESH), self.open_model_catalog)
-        self.add_model_btn = actions.add_action(QCoreApplication.translate('ProviderEditor', '自定义模型'), Icons.get(Icons.PLUS), self._add_custom_model)
+        self.catalog_btn = actions.add_icon_action(QCoreApplication.translate('ProviderEditor', '模型目录'), Icons.get(Icons.BOOKS), self.open_model_catalog)
+        self.add_model_btn = actions.add_icon_action(QCoreApplication.translate('ProviderEditor', '自定义模型'), Icons.get(Icons.PLUS), self._add_custom_model)
         self.edit_model_btn = actions.add_icon_action(QCoreApplication.translate('ProviderEditor', '编辑模型'), Icons.get(Icons.EDIT), self._edit_model)
         self.remove_model_btn = actions.add_icon_action(
             QCoreApplication.translate('ProviderEditor', '删除模型'), Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR), self._remove_model, danger=True,
@@ -369,6 +376,8 @@ class ProviderEditor(QWidget):
         return tab
 
     def clear(self) -> None:
+        """Clear the draft and abandon operations belonging to its provider."""
+        self._cancel_connection_test()
         self._cancel_login()
         self._provider = None
         self._active_model_id = ""
@@ -377,6 +386,8 @@ class ProviderEditor(QWidget):
         self.setEnabled(False)
 
     def load_provider(self, provider: Provider) -> None:
+        """Load a detached provider draft after abandoning the previous operations."""
+        self._cancel_connection_test()
         self._cancel_login()
         self._provider = Provider.from_dict(provider.to_dict())
         self.setEnabled(True)
@@ -431,12 +442,15 @@ class ProviderEditor(QWidget):
         return provider
 
     def _auth_type_changed(self):
+        """Cancel obsolete checks and project fields for the new authentication type."""
+        self._cancel_connection_test()
         self._cancel_login()
         if self.auth_type_combo.currentData() == 'api_key' and self.api_base_input.text() in {'https://chatgpt.com/backend-api/codex', WORKBUDDY_ORIGIN + '/v2'}:
             self.api_base_input.setText('https://api.openai.com/v1')
         self._sync_auth_fields()
 
     def _sync_auth_fields(self):
+        """Project account state, field visibility, and the matching check command."""
         kind = self.auth_type_combo.currentData()
         account_login = kind in ACCOUNT_AUTH_LABELS
         fixed = bool(self._provider and self._provider.is_builtin_account)
@@ -453,7 +467,7 @@ class ProviderEditor(QWidget):
         self.account_note.setVisible(account_login)
         self.account_note.setText(QCoreApplication.translate('ProviderEditor', '聊天与图像能力共用此账号，无需配置接口。图像权限和额度由账号决定。')
                                 if kind == 'chatgpt' else QCoreApplication.translate('ProviderEditor', '国内账号 · 实验性。模型与可用额度由账号决定。'))
-        self.test_btn.setText(QCoreApplication.translate('ProviderEditor', '检查账号') if account_login else QCoreApplication.translate('ProviderEditor', '测试连接'))
+        self._sync_test_action()
         self.login_btn.setText(QCoreApplication.translate('ProviderEditor', '登录 WorkBuddy') if kind == 'workbuddy' else QCoreApplication.translate('ProviderEditor', '登录 ChatGPT'))
         self.auth_row.setToolTip(QCoreApplication.translate('ProviderEditor', '国内账号 · 实验性。使用浏览器授权所选身份；切换账号请退出后重新登录。') if kind == 'workbuddy' else '')
         connected = False
@@ -480,9 +494,11 @@ class ProviderEditor(QWidget):
         self._refresh_image_endpoints()
 
     def _login_account(self):
+        """Begin one login flow after discarding checks of the previous account state."""
         auth = self._provider_service.account_auth(str(self.auth_type_combo.currentData()))
         if auth is None or self._provider is None or self._login_flows:
             return
+        self._cancel_connection_test()
         try:
             flow = auth.begin_login(self._provider.id)
         except RuntimeError as exc:
@@ -533,6 +549,8 @@ class ProviderEditor(QWidget):
             self._sync_auth_fields()
 
     def _logout_account(self):
+        """Abandon in-flight account operations before logging out and refreshing status."""
+        self._cancel_connection_test()
         self._cancel_login()
         auth = self._provider_service.account_auth(str(self.auth_type_combo.currentData()))
         if self._provider is not None and auth is not None:
@@ -540,11 +558,20 @@ class ProviderEditor(QWidget):
         self._sync_auth_fields()
 
     def hideEvent(self, event):
+        """Abandon account and connection jobs without accessing a closing widget tree."""
         if not event.spontaneous():
             # Hide can be delivered during native widget destruction; cancel
             # the owned work without traversing or changing child widgets.
             self._cancel_login(refresh_ui=False)
+            self._cancel_connection_test(refresh_ui=False)
         super().hideEvent(event)
+
+    def showEvent(self, event) -> None:
+        """Restore a test command cancelled while the editor was hidden."""
+        if self._test_job is None and self.test_btn.property("busy"):
+            self.clear_status()
+        self._sync_test_action()
+        super().showEvent(event)
 
     def show_status(self, message: str, *, state: str = "muted", reveal_connection: bool = True) -> None:
         text = str(message or "").strip()
@@ -577,8 +604,17 @@ class ProviderEditor(QWidget):
         return value
 
     def _toggle_key_visibility(self, checked: bool) -> None:
+        """Keep the reveal action's name and icon aligned with the password mask."""
+
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password)
         self.show_key_btn.setIcon(Icons.get(Icons.EYE_SLASH if checked else Icons.EYE))
+        label = (
+            QCoreApplication.translate('ProviderEditor', '隐藏 API Key')
+            if checked else QCoreApplication.translate('ProviderEditor', '显示 API Key')
+        )
+        self.show_key_btn.setText(label)
+        self.show_key_btn.setToolTip(label)
+        self.show_key_btn.setAccessibleName(label)
 
     def _toggle_headers(self, checked: bool) -> None:
         self.headers_toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
@@ -686,20 +722,66 @@ class ProviderEditor(QWidget):
         job.signals.finished.connect(finished)
         QThreadPool.globalInstance().start(job)
 
+    def _sync_test_action(self) -> None:
+        """Present the current account or connection check without changing its size."""
+        busy = self._test_job is not None
+        if busy:
+            label = QCoreApplication.translate('ProviderEditor', '正在测试连接...')
+        elif self.auth_type_combo.currentData() in ACCOUNT_AUTH_LABELS:
+            label = QCoreApplication.translate('ProviderEditor', '检查账号')
+        else:
+            label = QCoreApplication.translate('ProviderEditor', '测试连接')
+        configure_icon_button(self.test_btn, Icons.get(Icons.SPINNER if busy else Icons.TEST), label)
+        self.test_btn.setProperty("busy", busy)
+        if not busy:
+            self.test_btn.setToolTip(label + '\n' + QCoreApplication.translate(
+                'ProviderEditor', '检查服务连接与模型目录，不发起图像生成。'))
+        self.test_btn.setEnabled(not busy)
+
+    def _cancel_connection_test(self, *, refresh_ui: bool = True) -> None:
+        """Discard a pending test when its provider or editor is no longer current."""
+        job, self._test_job = self._test_job, None
+        if job is not None:
+            job.abandon()
+            self._jobs.discard(job)
+            if refresh_ui:
+                self._sync_test_action()
+                self.clear_status()
+
     def test_connection(self) -> None:
+        """Test one provider draft off-thread and ignore results for a changed draft."""
+        if self._test_job is not None:
+            return
         try:
             provider = self.build_provider()
         except ValueError as exc:
             self.show_status(str(exc), state="error")
             return
-        self.test_btn.setEnabled(False)
         self.show_status(QCoreApplication.translate('ProviderEditor', '正在测试连接...'), state="muted")
 
         async def operation():
+            """Check the captured provider through its existing application service."""
             return await self._provider_service.test_connection(provider)
 
+        job = BackgroundJob(operation)
+        self._test_job = job
+        self._jobs.add(job)
+        self._sync_test_action()
+
         def done(result, error) -> None:
-            self.test_btn.setEnabled(True)
+            """Restore the action and report only the snapshot that was tested."""
+            self._jobs.discard(job)
+            if sip.isdeleted(self) or self._test_job is not job:
+                return
+            self._test_job = None
+            self._sync_test_action()
+            self.clear_status()
+            try:
+                current = self.build_provider(validate_connection=False)
+            except ValueError:
+                return
+            if current.to_dict() != provider.to_dict():
+                return
             if error is not None:
                 self.show_status(QCoreApplication.translate('ProviderEditor', '连接失败：{error}').format(error=error), state="error")
             else:
@@ -709,7 +791,8 @@ class ProviderEditor(QWidget):
                     state="success" if success else "error",
                 )
 
-        self._start_job(operation, done)
+        job.signals.finished.connect(done)
+        QThreadPool.globalInstance().start(job)
 
     def open_model_catalog(self) -> None:
         try:

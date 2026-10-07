@@ -164,12 +164,18 @@ class CurationWorker:
         if not jobs:
             return 0
         self._changed(work_dir, "", ("memory",))
-        def defer(job, exc):
-            logger.warning("Memory curation deferred: %s", exc)
+        def defer(group, exc):
             code = "invalid_plan" if isinstance(exc, json.JSONDecodeError) else failure_code(str(exc))
-            if code != "transient":
-                ledger.invalidate_plan(job)
-            ledger.finish(job, "retry_wait", reason=str(exc), reason_code=code)
+            finished = []
+            for job in group:
+                if code != "transient":
+                    ledger.invalidate_plan(job)
+                if ledger.finish(job, "retry_wait", reason=str(exc), reason_code=code):
+                    finished.append(job)
+            if finished:
+                logger.warning("Memory curation rejected: session=%s sources=%d attempt=%d code=%s; %s",
+                               ",".join(sorted({job["source"]["conversation_id"] for job in finished})), len(finished),
+                               max(job["attempts"] for job in finished), code, exc)
 
         try:
             valid = []
@@ -212,8 +218,7 @@ class CurationWorker:
                         middle = len(group) // 2
                         batches[0:0] = [(group[:middle], deadline), (group[middle:], deadline)]
                         continue
-                    for job in group:
-                        defer(job, exc)
+                    defer(group, exc)
             for job in valid:
                 if not job.get("plan") or not ledger.is_live(job):
                     continue
@@ -224,14 +229,13 @@ class CurationWorker:
                         ledger.invalidate_plan(job)
                     ledger.finish(job, state, reason=reason, reason_code=code)
                 except Exception as exc:
-                    defer(job, exc)
+                    defer([job], exc)
         except asyncio.CancelledError:
             for job in jobs:
                 ledger.finish(job, "retry_wait", reason="application closed during curation")
             raise
         except Exception as exc:
-            for job in jobs:
-                defer(job, exc)
+            defer(jobs, exc)
         finally:
             self._changed(work_dir, "", ("memory", "wiki", "skill"))
         return len(jobs)

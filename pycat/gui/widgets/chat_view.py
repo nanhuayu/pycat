@@ -102,6 +102,10 @@ class ChatView(QWidget):
         self._notice_timer = QTimer(self)
         self._notice_timer.setSingleShot(True)
         self._notice_timer.timeout.connect(self.clear_notice)
+        self._loaded_position_timer = QTimer(self)
+        self._loaded_position_timer.setSingleShot(True)
+        self._loaded_position_timer.timeout.connect(self._restore_loaded_position)
+        self._reveal_id = ""
         self._stream._scroll_area = self.scroll_area
         self._stream.setParent(self.scroll_area)
     
@@ -510,6 +514,8 @@ class ChatView(QWidget):
         label.setVisible(False)
     
     def clear(self):
+        self._loaded_position_timer.stop()
+        self._reveal_id = ""
         self.clear_notice()
         self.set_inline_question(None)
         while self.messages_layout.count() > 1:
@@ -544,8 +550,15 @@ class ChatView(QWidget):
         self.update_runtime_state(None)
         self._update_empty_state()
         self._update_nav_state()
-        QTimer.singleShot(0, self._scroll_to_bottom)
+        self._loaded_position_timer.start(0)
         self.conversation_changed.emit()
+
+    def _restore_loaded_position(self):
+        widget = self._message_container_by_id.get(self._reveal_id)
+        if widget is not None:
+            self.scroll_area.ensureWidgetVisible(widget)
+        else:
+            self._scroll_to_bottom()
 
     @property
     def conversation_id(self) -> str:
@@ -554,6 +567,7 @@ class ChatView(QWidget):
     def reveal_message(self, conversation_id: str, message_id: str):
         if self.conversation_id != conversation_id:
             return
+        self._reveal_id = message_id
         widget = self._message_container_by_id.get(message_id)
         if widget is not None:
             self.scroll_area.ensureWidgetVisible(widget)
@@ -735,8 +749,16 @@ class ChatView(QWidget):
         widget.regenerate_requested.connect(self.regenerate_message.emit)
         widget.delete_requested.connect(self.delete_message.emit)
         widget.continue_requested.connect(self.continue_message.emit)
+        self._connect_copy_feedback(widget)
         widget.set_revision_enabled(self._revision_enabled)
         return widget
+
+    def _connect_copy_feedback(self, widget):
+        conversation_id = str(getattr(self._conversation, 'id', '') or '')
+        widget.copy_completed.connect(lambda: self.show_notice(
+            QCoreApplication.translate('MessageWidget', '已复制'),
+            tone='success', timeout_ms=1800, conversation_id=conversation_id,
+        ))
 
     def set_revision_enabled(self, enabled: bool) -> None:
         self._revision_enabled = bool(enabled)
@@ -787,6 +809,7 @@ class ChatView(QWidget):
         widget.projection_changed.connect(self._sync_message_widget_index)
         widget.regenerate_requested.connect(self.regenerate_message.emit)
         widget.delete_requested.connect(self.delete_message.emit)
+        self._connect_copy_feedback(widget)
         widget.set_revision_enabled(self._revision_enabled)
         return widget
 

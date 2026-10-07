@@ -67,6 +67,17 @@ class SessionContentResolver:
             conversation = copy(conversation)
             conversation.work_dir = normalized.workspace
         kind = str(normalized.kind or "input").strip().lower()
+        if kind == 'library':
+            library = getattr(self._content_service, 'library', None)
+            if library is None:
+                raise ValueError('Library is unavailable')
+            item = library.get(normalized.id)
+            if not item.owned:
+                raise ValueError('Library references must resolve through their source owner')
+            resolved = library.resolve(normalized.id)
+            if verify_digest:
+                self._check_digest(normalized.digest, resolved.ref.digest)
+            return resolved
         if kind == "input":
             loaded = self._content_service.load_ref(conversation, normalized)
             path = self._require_file(self._content_service.resolve_original(conversation, loaded))

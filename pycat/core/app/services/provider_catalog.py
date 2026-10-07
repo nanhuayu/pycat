@@ -224,27 +224,27 @@ class ProviderCatalogService:
         provider: Provider,
         profiles: Iterable[ModelProfile],
     ) -> list[ModelProfile]:
-        """Apply exact bundled metadata to generic discovery results."""
+        """Fill missing discovery fields, preserving explicit server declarations."""
 
         if provider.auth_type in {'chatgpt', 'workbuddy'}:
             return [ModelProfile.from_dict(profile.to_dict()) for profile in profiles]
 
-        defaults = self.load_defaults()
-        seed_provider = next(
-            (
-                item
-                for item in defaults
-                if provider.catalog_key and item.catalog_key == provider.catalog_key
-            ),
-            None,
-        )
-        seeds = {item.model_id: item for item in (seed_provider.models if seed_provider else [])}
+        # An older editable defaults file must not hide metadata for newly
+        # discovered IDs. It still overrides bundled fields for matching IDs.
+        defaults = [*self._providers_from_default_payload(_bundled_catalog_payload()), *self.load_defaults()]
+        seeds = {item.model_id: item for source in defaults if provider.catalog_key and
+                 source.catalog_key == provider.catalog_key for item in source.models}
         enriched: list[ModelProfile] = []
         for profile in profiles:
             discovered = ModelProfile.from_dict(profile.to_dict())
             seed = seeds.get(discovered.model_id)
             if seed is not None and provider.catalog_key != "openrouter":
-                discovered = ModelProfile.from_dict(seed.to_dict())
+                values = profile.to_dict()
+                baseline = ModelProfile.from_model_id(profile.model_id).to_dict()
+                declared = profile.declared_fields | {key for key, value in values.items() if value != baseline[key]}
+                payload = seed.to_dict()
+                payload.update({key: values[key] for key in declared if key in values})
+                discovered = ModelProfile.from_dict(payload)
             enriched.append(discovered)
         return enriched
 

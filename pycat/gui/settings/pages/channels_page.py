@@ -27,6 +27,7 @@ from pycat.gui.settings.components import (
 )
 from pycat.gui.settings.page_header import build_page_header
 from pycat.gui.utils.icon_manager import Icons
+from pycat.gui.utils.theme import configure_icon_button
 from pycat.gui.view_models.channel_status import (
     channel_detail_label,
     channel_metadata_text,
@@ -42,7 +43,8 @@ class ChannelTypeItem(QListWidgetItem):
         super().__init__()
         self.definition = definition
         self.setText(channel_type_name(definition))
-        self.setIcon(Icons.get(definition.icon_name, scale_factor=0.95))
+        self.setData(Qt.ItemDataRole.AccessibleTextRole, channel_type_name(definition))
+        self.setIcon(Icons.channel(definition.type, fallback=definition.icon_name))
         tags = QCoreApplication.translate('ChannelsPage', '\n标签：{value}').format(value=' / '.join(channel_metadata_text(tag) for tag in definition.tags)) if definition.tags else ""
         self.setToolTip(f"{channel_metadata_text(definition.description)}{tags}")
         self.setSizeHint(QSize(0, 40))
@@ -99,6 +101,7 @@ class ChannelsPage(QWidget):
         left_panel = body.list_layout
 
         self.type_list = configure_settings_resource_list(QListWidget())
+        self.type_list.setIconSize(QSize(24, 24))
         self.type_list.currentRowChanged.connect(self._on_type_changed)
         left_panel.addWidget(self.type_list, 1)
         body.bind(self.type_list)
@@ -109,7 +112,7 @@ class ChannelsPage(QWidget):
         actions = SettingsActionBar(spacing=8)
         self.add_btn = actions.add_icon_action(QCoreApplication.translate('ChannelsPage', '添加频道'), Icons.get(Icons.PLUS), self._add_channel)
         self.edit_btn = actions.add_icon_action(QCoreApplication.translate('ChannelsPage', '编辑频道'), Icons.get(Icons.EDIT), self._edit_channel)
-        self.toggle_btn = actions.add_action(QCoreApplication.translate('ChannelsPage', '启用'), Icons.get(Icons.PLAY), self._toggle_channel_enabled)
+        self.toggle_btn = actions.add_icon_action(QCoreApplication.translate('ChannelsPage', '启用'), Icons.get(Icons.PLAY), self._toggle_channel_enabled)
         self.remove_btn = actions.add_icon_action(
             QCoreApplication.translate('ChannelsPage', '删除频道'),
             Icons.get(Icons.TRASH, color=Icons.COLOR_ERROR),
@@ -155,12 +158,12 @@ class ChannelsPage(QWidget):
         detail_layout.addWidget(self.diagnostics_label)
 
         detail_actions = SettingsActionBar(spacing=8)
-        self.open_session_btn = detail_actions.add_action(
+        self.open_session_btn = detail_actions.add_icon_action(
             QCoreApplication.translate('ChannelsPage', '打开对话'),
             Icons.get(Icons.CHAT),
             self._focus_bound_session,
         )
-        self.change_session_btn = detail_actions.add_action(
+        self.change_session_btn = detail_actions.add_icon_action(
             QCoreApplication.translate('ChannelsPage', '更换对话'),
             Icons.get(Icons.EDIT),
             self._change_bound_session,
@@ -281,6 +284,7 @@ class ChannelsPage(QWidget):
         self.change_session_btn.setEnabled(True)
 
     def _update_action_state(self, has_selection: bool) -> None:
+        """Project selection and enablement into accessible compact actions."""
         self.edit_btn.setEnabled(bool(has_selection))
         self.toggle_btn.setEnabled(bool(has_selection))
         self.remove_btn.setEnabled(bool(has_selection))
@@ -288,11 +292,11 @@ class ChannelsPage(QWidget):
         self.open_session_btn.setEnabled(bool(has_selection and current is not None and str(current.session_id or "").strip()))
         self.change_session_btn.setEnabled(bool(has_selection))
         if current is not None and current.enabled:
-            self.toggle_btn.setText(QCoreApplication.translate('ChannelsPage', '停用'))
-            self.toggle_btn.setIcon(Icons.get(Icons.PAUSE, scale_factor=1.0))
+            configure_icon_button(self.toggle_btn, Icons.get(Icons.PAUSE),
+                                  QCoreApplication.translate('ChannelsPage', '停用'))
         else:
-            self.toggle_btn.setText(QCoreApplication.translate('ChannelsPage', '启用'))
-            self.toggle_btn.setIcon(Icons.get(Icons.PLAY, scale_factor=1.0))
+            configure_icon_button(self.toggle_btn, Icons.get(Icons.PLAY),
+                                  QCoreApplication.translate('ChannelsPage', '启用'))
 
     def _current_selected_channel(self) -> ChannelConfig | None:
         item = self.instance_list.currentItem()

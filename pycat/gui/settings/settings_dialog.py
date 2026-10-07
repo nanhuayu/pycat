@@ -32,7 +32,6 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
-    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -46,7 +45,7 @@ from pycat.core.app.state import AppSettingsUpdate
 from pycat.core.tools.manager import ToolManager
 from pycat.gui.resources.page import ResourcePage
 from pycat.gui.settings.components import SETTINGS_NAV_WIDTH
-from pycat.gui.settings.page_header import build_page_header
+from pycat.gui.settings.page_header import prepare_settings_page
 from pycat.gui.settings.pages import (
     AboutPage,
     AppearancePage,
@@ -61,11 +60,11 @@ from pycat.gui.settings.pages import (
     TerminalPage,
 )
 from pycat.gui.settings.pages.automation_page import AutomationPage
-from pycat.gui.settings.pages.instructions_page import InstructionsPage
+from pycat.gui.settings.pages.memory_page import MemoryPage
 from pycat.gui.settings.pages.shortcuts_page import ShortcutsPage
-from pycat.gui.utils.form_builder import FormSection
 from pycat.gui.utils.icon_manager import Icons
 from pycat.gui.utils.window_geometry import apply_workbench_dialog_size
+from pycat.gui.widgets.navigation_header import NavigationHeader
 from pycat.gui.widgets.themed_line_edit import ThemedLineEdit
 from pycat.models.contracts.capability import CapabilitiesConfig
 from pycat.models.contracts.config import AppConfig
@@ -75,19 +74,21 @@ from pycat.models.search_config import SearchConfig
 logger = logging.getLogger(__name__)
 
 
-PAGE_INDEX_ROLE = Qt.ItemDataRole.UserRole + 1
 PAGE_KEY_ROLE = Qt.ItemDataRole.UserRole + 2
 NAV_GROUP_ROLE = Qt.ItemDataRole.UserRole + 3
 
 
 @dataclass(frozen=True)
 class SettingsPageSpec:
+    """Stable destination metadata, independent of translated labels."""
+
     key: str
     title: str
     group: str
     scrollable: bool = True
     keywords: str = ""
     edits_config: bool = True
+    icon: str = Icons.SETTINGS
 
 
 # Sentinel distinguishing "collector raised" from legitimately falsy results.
@@ -96,13 +97,13 @@ _COLLECT_FAILED = object()
 
 # Stable identities are independent of labels and of the first page's class.
 _GROUPS = (
-    ("general", QT_TRANSLATE_NOOP('SettingsDialog', "通用"), Icons.SLIDERS),
-    ("models", QT_TRANSLATE_NOOP('SettingsDialog', "模型"), Icons.PAGE_MODELS),
-    ("runtime", QT_TRANSLATE_NOOP('SettingsDialog', "运行与权限"), Icons.SHIELD),
-    ("tools", QT_TRANSLATE_NOOP('SettingsDialog', "工具"), Icons.TOOLS),
-    ("memory", QT_TRANSLATE_NOOP('SettingsDialog', "记忆与资料"), Icons.BOOKS),
-    ("channels", QT_TRANSLATE_NOOP('SettingsDialog', "消息通道"), Icons.PLUG),
-    ("advanced", QT_TRANSLATE_NOOP('SettingsDialog', "高级"), Icons.SETTINGS),
+    ("general", QT_TRANSLATE_NOOP('SettingsDialog', "通用")),
+    ("models", QT_TRANSLATE_NOOP('SettingsDialog', "模型")),
+    ("runtime", QT_TRANSLATE_NOOP('SettingsDialog', "运行与权限")),
+    ("tools", QT_TRANSLATE_NOOP('SettingsDialog', "工具")),
+    ("memory", QT_TRANSLATE_NOOP('SettingsDialog', "记忆与资料")),
+    ("channels", QT_TRANSLATE_NOOP('SettingsDialog', "消息通道")),
+    ("advanced", QT_TRANSLATE_NOOP('SettingsDialog', "高级")),
 )
 
 
@@ -213,6 +214,7 @@ class SettingsDialog(QDialog):
         self.page("mcp").select_extension("agent-browser" if preset == "browser" else "cua-driver")
 
     def _setup_ui(self) -> None:
+        """Compose direct navigation, lazy page content and one save footer."""
         self.setWindowTitle(QCoreApplication.translate('SettingsDialog', "设置"))
         self.setObjectName("settings_dialog")
         self.setModal(not self._embedded)
@@ -228,25 +230,13 @@ class SettingsDialog(QDialog):
         sidebar.setFixedWidth(SETTINGS_NAV_WIDTH)
 
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(10, 10, 10, 10)
-        sidebar_layout.setSpacing(6)
+        sidebar_layout.setContentsMargins(10, 8, 10, 10)
+        sidebar_layout.setSpacing(8)
 
-        brand = QHBoxLayout()
-        logo = QLabel()
-        logo.setPixmap(Icons.brand().pixmap(28, 28))
-        brand.addWidget(logo)
-        name = QLabel("PyCat")
-        name.setObjectName("settings_brand")
-        brand.addWidget(name)
-        brand.addStretch()
-        back = QPushButton()
-        back.setObjectName("settings_back")
-        back.setIcon(Icons.get_muted(Icons.ARROW_LEFT))
-        back.setToolTip(QCoreApplication.translate('SettingsDialog', "返回会话"))
-        back.setAccessibleName(QCoreApplication.translate('SettingsDialog', "返回会话"))
-        back.clicked.connect(self.reject)
-        brand.addWidget(back)
-        sidebar_layout.addLayout(brand)
+        self.navigation_header = NavigationHeader(Icons.ARROW_LEFT, QCoreApplication.translate('SettingsDialog', "返回会话"),
+                                                   self.reject, lambda: self.focus_page('about'))
+        self.navigation_header.action.setObjectName('settings_back')
+        sidebar_layout.addWidget(self.navigation_header)
         self.search_input = ThemedLineEdit()
         self.search_input.setPlaceholderText(QCoreApplication.translate('SettingsDialog', "搜索设置…"))
         self.search_input.setAccessibleName(QCoreApplication.translate('SettingsDialog', "搜索设置"))
@@ -257,7 +247,10 @@ class SettingsDialog(QDialog):
         self.page_list = QListWidget()
         self.page_list.setObjectName("settings_nav")
         self.page_list.setIconSize(QSize(Icons.SIZE_SETTINGS_NAV, Icons.SIZE_SETTINGS_NAV))
-        self.page_list.setSpacing(1)
+        self.page_list.setSpacing(0)
+        self.page_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.page_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.page_list.setAccessibleName(QCoreApplication.translate("SettingsDialog", "设置"))
         self.page_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.page_list.currentItemChanged.connect(self._change_page)
         sidebar_layout.addWidget(self.page_list, 1)
@@ -273,7 +266,7 @@ class SettingsDialog(QDialog):
         self.save_footer = footer
         footer.setObjectName("settings_footer")
         footer_layout = QHBoxLayout(footer)
-        footer_layout.setContentsMargins(18, 8, 18, 8)
+        footer_layout.setContentsMargins(24, 12, 24, 12)
         self.status_label = QLabel("")
         self.status_label.setObjectName("settings_save_status")
         self.status_label.setProperty("muted", True)
@@ -321,12 +314,10 @@ class SettingsDialog(QDialog):
             return self._pages[key]
         spec = next(item for item in self._page_specs if item.key == key)
         page = self._create_page(key)
+        prepare_settings_page(page, QCoreApplication.translate("SettingsDialog", spec.title))
         self._pages[key] = page
         host = self._page_hosts[key]
         host.layout().addWidget(self._wrap_page(page) if spec.scrollable else page)
-        if key in self._page_tabs:
-            if header := page.findChild(QWidget, "settings_page_header"):
-                header.hide()
         if spec.edits_config:
             # A form may normalize its initial display (e.g. default shortcuts).
             # Rebase only this page's owned fields, preserving all other drafts.
@@ -338,6 +329,7 @@ class SettingsDialog(QDialog):
         return page
 
     def _create_page(self, key: str) -> QWidget:
+        """Build one settings page over the current local draft, without saving."""
         config = self._app_config
         if key == "models":
             page = ModelsPage(self._draft_providers(), default_chat_model=config.default_chat_model,
@@ -385,17 +377,10 @@ class SettingsDialog(QDialog):
             layout = QVBoxLayout(page)
             layout.setContentsMargins(16, 16, 16, 16)
             group = self.page("general").network_group
+            group.findChild(QLabel, "settings_section_title").hide()
             layout.addWidget(group)
             group.show()
             layout.addStretch()
-            return page
-        if key == "instructions":
-            page = InstructionsPage(config.prompts)
-            sources = QPushButton(QCoreApplication.translate('SettingsDialog', "查看项目 AGENTS.md"))
-            sources.setEnabled(bool(self.work_dir))
-            sources.setToolTip(self.work_dir or QCoreApplication.translate('SettingsDialog', "当前未选择项目"))
-            sources.clicked.connect(self.project_instructions_requested)
-            page.layout().insertWidget(page.layout().count() - 1, sources)
             return page
         if key == "terminal":
             return TerminalPage(config.shell, shell_choices=self._shell_choices)
@@ -415,27 +400,9 @@ class SettingsDialog(QDialog):
             page.shortcuts_requested.connect(lambda: self._select_page("shortcuts"))
             return page
         if key == "memory":
-            page = QWidget()
-            layout = QVBoxLayout(page)
-            layout.setContentsMargins(16, 16, 16, 16)
-            layout.setSpacing(12)
-            layout.addWidget(build_page_header(QCoreApplication.translate('SettingsDialog', "记忆与资料"), QCoreApplication.translate('SettingsDialog', "查看来源、管理记忆和阅读资料。")))
-            library = FormSection(QCoreApplication.translate('SettingsDialog', "资料与上下文"))
-            for title, detail, action, callback in (
-                (QCoreApplication.translate('SettingsDialog', "记忆与资料"), QCoreApplication.translate('SettingsDialog', "阅读文件、审核项目记忆与用户偏好。"), QCoreApplication.translate('SettingsDialog', "打开"), self.library_requested.emit),
-                (QCoreApplication.translate('SettingsDialog', "指令与来源"), QCoreApplication.translate('SettingsDialog', "管理全局指令和项目 AGENTS.md。"), QCoreApplication.translate('SettingsDialog', "查看"), lambda: self._select_page("instructions")),
-                (QCoreApplication.translate('SettingsDialog', "压缩策略"), QCoreApplication.translate('SettingsDialog', "分别设置工具内容压缩与上下文压缩。"), QCoreApplication.translate('SettingsDialog', "设置"), lambda: self._select_page("strategy")),
-            ):
-                label = QLabel(f"{title}\n{detail}")
-                label.setWordWrap(True)
-                label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-                button = QPushButton(action)
-                button.setMinimumWidth(64)
-                button.setAccessibleName(f"{action} · {title}")
-                button.clicked.connect(callback)
-                library.form.addRow(label, button)
-            layout.addWidget(library.group)
-            layout.addStretch()
+            page = MemoryPage(config.prompts, work_dir=self.work_dir)
+            page.library_requested.connect(self.library_requested)
+            page.project_instructions_requested.connect(self.project_instructions_requested)
             return page
         raise KeyError(key)
 
@@ -450,7 +417,7 @@ class SettingsDialog(QDialog):
             "general": ("language", "theme", "accent", "show_thinking", "close_to_tray", "log_stream", "proxy_url", "llm_timeout_seconds"),
             "shortcuts": ("shortcuts",), "models": ("default_chat_model", "default_auxiliary_model"),
             "permissions": ("permissions",), "strategy": ("agent", "retry", "context"),
-            "instructions": ("prompts",), "channels": ("channels",), "terminal": ("shell",), "ocr": ("ocr",),
+            "memory": ("prompts",), "channels": ("channels",), "terminal": ("shell",), "ocr": ("ocr",),
         }.get(key, ())
         current = self._fingerprints(self.build_update())
         if domain := {"models": "providers", "mcp": "mcp", "modes": "modes", "search": "search"}.get(key):
@@ -471,88 +438,88 @@ class SettingsDialog(QDialog):
         self._baseline_fingerprints["app_settings"] = json.dumps(baseline, ensure_ascii=False, sort_keys=True, default=str)
 
     def _init_pages(self) -> None:
+        """Build grouped direct navigation from metadata, without editor forms."""
         self.page_list.clear()
         self._page_specs = [
-            SettingsPageSpec("general", QT_TRANSLATE_NOOP('SettingsDialog', "外观"), "general", keywords="appearance language english theme accent 外观 语言 英文 浅色 深色 主题 强调色 托盘 思考 日志"),
-            SettingsPageSpec("shortcuts", QT_TRANSLATE_NOOP('SettingsDialog', "快捷键"), "general", keywords="keyboard hotkey 截图 快捷键"),
-            SettingsPageSpec("models", QT_TRANSLATE_NOOP('SettingsDialog', "模型"), "models", False, 'provider api key endpoint 服务 连接 默认 辅助 密钥'),
-            SettingsPageSpec("modes", QT_TRANSLATE_NOOP('SettingsDialog', "模式"), "runtime", False, 'agent mode 模型 工具 系统提示词'),
-            SettingsPageSpec("permissions", QT_TRANSLATE_NOOP('SettingsDialog', "权限"), "runtime", False, 'approval sandbox allow deny 批准 确认 安全 工具 读写 执行'),
-            SettingsPageSpec("strategy", QT_TRANSLATE_NOOP('SettingsDialog', "策略"), "runtime", keywords="context retry memory compression 上下文 压缩 重试 记忆 容量 并行 轮次"),
-            SettingsPageSpec("instructions", QT_TRANSLATE_NOOP('SettingsDialog', "指令与来源"), "runtime", keywords="prompt agents.md instructions 全局 项目 提示词"),
-            SettingsPageSpec("skills", QT_TRANSLATE_NOOP('SettingsDialog', "技能"), "tools", False, 'skills install market 安装 发现 市场 更新 导入 导出', False),
-            SettingsPageSpec("mcp", "MCP", "tools", False, 'server stdio sse http tools 服务 连接 环境变量 安装 发现 市场 更新'),
-            SettingsPageSpec("capabilities", QT_TRANSLATE_NOOP('SettingsDialog', "模型能力"), "tools", False, 'model tasks capability 翻译 总结 润色 提示词'),
-            SettingsPageSpec("search", QT_TRANSLATE_NOOP('SettingsDialog', "搜索"), "tools", keywords="web search engine tavily searxng 网络 引擎 搜索"),
-            SettingsPageSpec("automation", QT_TRANSLATE_NOOP('SettingsDialog', "电脑与浏览器"), "tools", keywords="computer browser capture 桌面 自动化 截图", edits_config=False),
-            SettingsPageSpec("ocr", "OCR", "tools", keywords="pdf image recognition 图像 图片 文字识别 扫描"),
-            SettingsPageSpec("memory", QT_TRANSLATE_NOOP('SettingsDialog', "记忆与资料"), "memory", keywords="library knowledge files 资料库 知识 文件", edits_config=False),
-            SettingsPageSpec("channels", QT_TRANSLATE_NOOP('SettingsDialog', "消息通道"), "channels", False, 'telegram feishu discord gateway bot 飞书 渠道 机器人'),
-            SettingsPageSpec("network", QT_TRANSLATE_NOOP('SettingsDialog', "网络与诊断"), "advanced", keywords="network proxy timeout diagnostics 代理 超时"),
-            SettingsPageSpec("terminal", QT_TRANSLATE_NOOP('SettingsDialog', "终端"), "advanced", keywords="shell powershell bash command arguments 参数 命令 执行"),
-            SettingsPageSpec("about", QT_TRANSLATE_NOOP('SettingsDialog', "关于"), "advanced", keywords="version update license github 版本 更新 许可证 开源", edits_config=False),
+            SettingsPageSpec("general", QT_TRANSLATE_NOOP('SettingsDialog', "外观"), "general", keywords="appearance language english theme accent 外观 语言 英文 浅色 深色 主题 强调色 托盘 思考 日志", icon=Icons.PALETTE),
+            SettingsPageSpec("shortcuts", QT_TRANSLATE_NOOP('SettingsDialog', "快捷键"), "general", keywords="keyboard hotkey 截图 快捷键", icon=Icons.KEYBOARD),
+            SettingsPageSpec("models", QT_TRANSLATE_NOOP('SettingsDialog', "模型"), "models", False, 'provider api key endpoint 服务 连接 默认 辅助 密钥', icon=Icons.MODEL),
+            SettingsPageSpec("modes", QT_TRANSLATE_NOOP('SettingsDialog', "模式"), "runtime", False, 'agent mode 模型 工具 系统提示词', icon=Icons.BOT),
+            SettingsPageSpec("permissions", QT_TRANSLATE_NOOP('SettingsDialog', "权限"), "runtime", False, 'approval sandbox allow deny 批准 确认 安全 工具 读写 执行', icon=Icons.SHIELD),
+            SettingsPageSpec("strategy", QT_TRANSLATE_NOOP('SettingsDialog', "策略"), "runtime", keywords="context retry memory compression 上下文 压缩 重试 记忆 容量 并行 轮次", icon=Icons.SLIDERS),
+            SettingsPageSpec("skills", QT_TRANSLATE_NOOP('SettingsDialog', "技能"), "tools", False, 'skills install market 安装 发现 市场 更新 导入 导出', False, icon=Icons.PUZZLE),
+            SettingsPageSpec("mcp", "MCP", "tools", False, 'server stdio sse http tools 服务 连接 环境变量 安装 发现 市场 更新', icon=Icons.SERVER),
+            SettingsPageSpec("capabilities", QT_TRANSLATE_NOOP('SettingsDialog', "模型能力"), "tools", False, 'model tasks capability 翻译 总结 润色 提示词', icon=Icons.WAND),
+            SettingsPageSpec("search", QT_TRANSLATE_NOOP('SettingsDialog', "搜索"), "tools", keywords="web search engine tavily searxng 网络 引擎 搜索", icon=Icons.SEARCH),
+            SettingsPageSpec("automation", QT_TRANSLATE_NOOP('SettingsDialog', "电脑与浏览器"), "tools", keywords="computer browser capture 桌面 自动化 截图", edits_config=False, icon=Icons.PANEL),
+            SettingsPageSpec("ocr", "OCR", "tools", keywords="pdf image recognition 图像 图片 文字识别 扫描", icon=Icons.OCR),
+            SettingsPageSpec("memory", QT_TRANSLATE_NOOP('SettingsDialog', "记忆与资料"), "memory", keywords="library knowledge files prompt agents.md instructions global environment 全局指令 项目 提示词 环境 资料库 知识 文件", icon=Icons.BOOKS),
+            SettingsPageSpec("channels", QT_TRANSLATE_NOOP('SettingsDialog', "消息通道"), "channels", False, 'telegram feishu discord gateway bot 飞书 渠道 机器人', icon=Icons.CHAT),
+            SettingsPageSpec("network", QT_TRANSLATE_NOOP('SettingsDialog', "网络与诊断"), "advanced", keywords="network proxy timeout diagnostics 代理 超时", icon=Icons.NETWORK),
+            SettingsPageSpec("terminal", QT_TRANSLATE_NOOP('SettingsDialog', "终端"), "advanced", keywords="shell powershell bash command arguments 参数 命令 执行", icon=Icons.TERMINAL),
+            SettingsPageSpec("about", QT_TRANSLATE_NOOP('SettingsDialog', "关于"), "advanced", keywords="version update license github 版本 更新 许可证 开源", edits_config=False, icon=Icons.CIRCLE_INFO),
         ]
         self._nav_rows_by_page: dict[str, int] = {}
-        self._page_tabs = {}
-        self._page_hosts = {}
-        self._search_index = {}
-        for page_index, (group, title, icon) in enumerate(_GROUPS):
-            source_title = title
-            title = QCoreApplication.translate("SettingsDialog", title)
+        self._page_hosts: dict[str, QWidget] = {}
+        self._search_index: dict[str, str] = {}
+        self._group_items: dict[str, QListWidgetItem] = {}
+        for group, source_title in _GROUPS:
+            title = QCoreApplication.translate("SettingsDialog", source_title)
             specs = [spec for spec in self._page_specs if spec.group == group]
-            tabs = None
             if len(specs) > 1:
-                group_page = QWidget()
-                group_layout = QVBoxLayout(group_page)
-                group_layout.setContentsMargins(16, 16, 16, 8)
-                group_layout.setSpacing(12)
-                group_layout.addWidget(build_page_header(title))
-                tabs = QTabWidget()
-                tabs.setObjectName("settings_subtabs")
-                group_layout.addWidget(tabs, 1)
-                self.content.addWidget(group_page)
+                heading = QListWidgetItem(title)
+                heading.setFlags(Qt.ItemFlag.NoItemFlags)
+                heading.setData(NAV_GROUP_ROLE, group)
+                heading.setSizeHint(QSize(0, 28))
+                self._group_items[group] = heading
+                self.page_list.addItem(heading)
             for spec in specs:
-                host = QWidget()
-                QVBoxLayout(host).setContentsMargins(0, 0, 0, 0)
-                self._page_hosts[spec.key] = host
-                if tabs is None:
-                    self.content.addWidget(host)
-                else:
-                    tab_title = QCoreApplication.translate("SettingsDialog", spec.title)
-                    index = tabs.addTab(host, tab_title.replace("&", "&&"))
-                    tabs.tabBar().setAccessibleTabName(index, tab_title)
-                    self._page_tabs[spec.key] = (tabs, index)
-                self._nav_rows_by_page[spec.key] = page_index
-                self._search_index[spec.key] = " ".join((group, source_title, title, spec.key, spec.title,
-                    QCoreApplication.translate("SettingsDialog", spec.title), spec.keywords)).casefold()
-            if tabs is not None:
-                tabs.currentChanged.connect(self._show_current_page)
-            item = QListWidgetItem(Icons.get(icon), title)
-            item.setData(PAGE_INDEX_ROLE, page_index)
-            item.setData(PAGE_KEY_ROLE, specs[0].key)
-            item.setData(NAV_GROUP_ROLE, group)
-            self.page_list.addItem(item)
+                self._add_page_destination(spec, source_title, title)
         self.search_empty = QLabel(QCoreApplication.translate('SettingsDialog', "没有匹配的设置\n试试页面名称或关键词"))
         self.search_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.search_empty.setProperty("muted", True)
         self.content.addWidget(self.search_empty)
 
-    def _filter_pages(self, text: str):
+    def _add_page_destination(self, spec: SettingsPageSpec, source_group: str, group_title: str) -> None:
+        """Register one lazy host and a translated, accessible sidebar destination.
+
+        Only metadata is indexed; configuration collection and page construction
+        remain deferred until the destination is visited.
+        """
+        host = QWidget()
+        QVBoxLayout(host).setContentsMargins(0, 0, 0, 0)
+        self._page_hosts[spec.key] = host
+        self.content.addWidget(host)
+        title = QCoreApplication.translate("SettingsDialog", spec.title)
+        item = QListWidgetItem(Icons.get_muted(spec.icon), title)
+        item.setData(PAGE_KEY_ROLE, spec.key)
+        item.setData(NAV_GROUP_ROLE, spec.group)
+        item.setData(Qt.ItemDataRole.AccessibleTextRole, title)
+        item.setToolTip(title)
+        item.setSizeHint(QSize(0, 34))
+        self._nav_rows_by_page[spec.key] = self.page_list.count()
+        self.page_list.addItem(item)
+        self._search_index[spec.key] = " ".join((
+            spec.group, source_group, group_title, spec.key, spec.title, title, spec.keywords,
+        )).casefold()
+
+    def _filter_pages(self, text: str) -> None:
+        """Filter destinations without collecting, recreating or saving drafts."""
         words = text.casefold().split()
         matches = [spec for spec in self._page_specs if all(word in self._search_index[spec.key] for word in words)]
         visible_keys = {spec.key for spec in matches}
-        visible_rows = {self._nav_rows_by_page[spec.key] for spec in matches}
+        visible_groups = {spec.group for spec in matches}
         self._navigating = True
         try:
-            for spec in self._page_specs:
-                if entry := self._page_tabs.get(spec.key):
-                    entry[0].setTabVisible(entry[1], spec.key in visible_keys)
-            for row in range(self.page_list.count()):
-                self.page_list.item(row).setHidden(row not in visible_rows)
+            for key, row in self._nav_rows_by_page.items():
+                self.page_list.item(row).setHidden(key not in visible_keys)
+            for group, heading in self._group_items.items():
+                heading.setHidden(group not in visible_groups)
+            current = self.page_list.currentItem()
             if not matches:
                 self.page_list.setCurrentRow(-1)
                 self.content.setCurrentWidget(self.search_empty)
-            elif self.page_list.currentRow() not in visible_rows:
+            elif current is None or current.data(PAGE_KEY_ROLE) not in visible_keys:
                 self.page_list.setCurrentRow(self._nav_rows_by_page[matches[0].key])
         finally:
             self._navigating = False
@@ -572,42 +539,42 @@ class SettingsDialog(QDialog):
         scroll.setWidget(page)
         return scroll
 
-    def _current_spec(self):
-        for spec in self._page_specs:
-            if self.page_list.currentRow() == self._nav_rows_by_page[spec.key]:
-                entry = self._page_tabs.get(spec.key)
-                if entry is None or entry[0].currentIndex() == entry[1]:
-                    return spec
-        return None
+    def _current_spec(self) -> SettingsPageSpec | None:
+        """Return the selected stable page identity, excluding group headings."""
+        current = self.page_list.currentItem()
+        key = current.data(PAGE_KEY_ROLE) if current is not None else None
+        return next((spec for spec in self._page_specs if spec.key == key), None)
 
-    def _show_current_page(self, *_args) -> None:
+    def _show_current_page(self) -> None:
+        """Display the selected host and materialize its editor at most once."""
         if self._navigating:
             return
         if spec := self._current_spec():
+            self.content.setCurrentWidget(self._page_hosts[spec.key])
             self.page(spec.key)
         self._update_save_footer()
 
     def _change_page(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None) -> None:
-        if current is not None:
-            self.content.setCurrentIndex(int(current.data(PAGE_INDEX_ROLE)))
+        """Handle native mouse/keyboard selection without accepting group labels."""
+        if current is not None and current.data(PAGE_KEY_ROLE):
             self._show_current_page()
 
     def _select_page(self, page: str | QWidget) -> None:
+        """Reveal a stable page/widget, clear search and keep every existing draft.
+
+        Programmatic navigation scrolls the selected row into view without
+        constructing an intermediate page or persisting configuration.
+        """
         key = page if isinstance(page, str) else next(key for key, value in self._pages.items() if value is page)
-        # Reset the filter without constructing an intermediate tab.
         self.search_input.blockSignals(True)
         self.search_input.clear()
         self.search_input.blockSignals(False)
         self._navigating = True
         try:
-            for tabs, index in self._page_tabs.values():
-                tabs.setTabVisible(index, True)
             for row in range(self.page_list.count()):
                 self.page_list.item(row).setHidden(False)
-            if key in self._page_tabs:
-                tabs, index = self._page_tabs[key]
-                tabs.setCurrentIndex(index)
             self.page_list.setCurrentRow(self._nav_rows_by_page[key])
+            self.page_list.scrollToItem(self.page_list.currentItem(), QAbstractItemView.ScrollHint.EnsureVisible)
         finally:
             self._navigating = False
         self._show_current_page()
@@ -743,9 +710,9 @@ class SettingsDialog(QDialog):
                 return False
             self._settings_patch["context"] = ctx.to_dict()
 
-        if active("instructions"):
+        if active("memory"):
             prompts = self._collect_section(
-                QCoreApplication.translate('SettingsDialog', "指令配置无效"), self.page("instructions"), self.page("instructions").collect, show_errors
+                QCoreApplication.translate('SettingsDialog', "指令配置无效"), self.page("memory"), self.page("memory").collect, show_errors
             )
             if prompts is _COLLECT_FAILED:
                 return False

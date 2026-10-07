@@ -5,9 +5,11 @@ payload construction, streaming, and retry.
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Optional
@@ -39,6 +41,7 @@ from pycat.core.prompts.renderer import PromptRenderer
 from pycat.core.prompts.sections import PromptSections
 from pycat.core.skills import build_skill_prompt_section
 from pycat.core.tools.manager import MCP_AVAILABLE, ToolManager
+from pycat.core.tools.tool_call_archive import ToolCallArchiveService
 from pycat.models.contracts.agent import RunEventKind, RunPolicy
 from pycat.models.contracts.channel import channel_file_delivery_enabled
 from pycat.models.contracts.tooling import ToolAvailabilityContext, ToolSelectionPolicy
@@ -46,7 +49,6 @@ from pycat.models.conversation import Conversation, Message
 from pycat.models.provider import Provider
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True)
 class PreparedRequest:
@@ -179,6 +181,8 @@ class RequestPipeline:
                 emit(
                     kind=RunEventKind.RETRY,
                     detail=f"Retry {attempt_num} after {delay:.1f}s ({kind.name})",
+                    data={"attempt": attempt_num, "max_retries": policy.retry.max_retries,
+                          "delay_seconds": delay, "error_kind": kind.value},
                 )
             if trace_context is not None:
                 trace_context.record_event(
@@ -330,6 +334,32 @@ class RequestPipeline:
         threshold_tokens = int(prompt_limit * threshold_ratio)
         current_messages: list[Message] | None = None
         compression_errors: list[str] = []
+        configured_timeout = getattr(self._client, "timeout", 600.0)
+        maintenance_timeout = float(configured_timeout) if isinstance(configured_timeout, (int, float)) and configured_timeout > 0 else 600.0
+        maintenance_deadline: float | None = None
+        maintenance_exhausted = False
+
+        async def within_maintenance_budget(operation):
+            nonlocal maintenance_deadline, maintenance_exhausted
+            if maintenance_deadline is None:
+                maintenance_deadline = time.monotonic() + maintenance_timeout
+            remaining = maintenance_deadline - time.monotonic()
+            try:
+                if remaining <= 0:
+                    raise TimeoutError
+                return await asyncio.wait_for(operation(), timeout=remaining)
+            except TimeoutError:
+                maintenance_exhausted = True
+                error = f"maintenance_timeout: pre-send maintenance exceeded {maintenance_timeout:g}s"
+                if error not in compression_errors:
+                    compression_errors.append(error)
+                raise
+
+        def tool_archive() -> ToolCallArchiveService:
+            return ToolCallArchiveService(
+                request_conversation.work_dir, conversation_id=request_conversation.id,
+                data_dir=request_conversation.data_dir,
+            )
 
         async def prepare_messages() -> list[Message]:
             messages = await self._prepare_messages(
@@ -351,16 +381,16 @@ class RequestPipeline:
                     messages.append(current_state)
                 else:
                     messages.extend(runtime_copy)
-            if not any(getattr(message, "content_refs", None) for message in messages):
-                return messages
-            if self._content_service is None:
-                raise RuntimeError("content service is required for session input references")
-            return self._content_service.materialize_messages(
-                request_conversation,
-                messages,
-                text_byte_budget=attachment_budget,
-                cache=request_content_cache,
-            )
+            if any(getattr(message, "content_refs", None) for message in messages):
+                if self._content_service is None:
+                    raise RuntimeError("content service is required for session input references")
+                messages = self._content_service.materialize_messages(
+                    request_conversation, messages, text_byte_budget=attachment_budget,
+                    cache=request_content_cache,
+                )
+            # Error receipts have no automatic semantic-summary task. Normalize
+            # oversized stored errors before sizing, draining, or History compact.
+            return tool_archive().prepare_request_views(messages)[0]
 
         def materialize(replay_pressure: str) -> PreparedRequest:
             if current_messages is None:
@@ -382,7 +412,7 @@ class RequestPipeline:
                     'phase': 'start', 'reason': reason, 'recent_turn_target': recent_turn_target,
                 })
             try:
-                report = await self._context_maintenance.maintain_async(
+                report = await within_maintenance_budget(lambda: self._context_maintenance.maintain_async(
                     conversation,
                     provider=provider,
                     policy=policy,
@@ -396,13 +426,15 @@ class RequestPipeline:
                     request_token_estimate=selected.token_estimate,
                     conversation_token_estimate=0,
                     debug_trace=debug_trace.with_purpose("condense") if debug_trace is not None else None,
-                )
+                ))
                 logger.info(
                     "Pre-send compact (%s, recent_turn_target=%s): %s",
                     reason,
                     recent_turn_target,
                     report,
                 )
+            except TimeoutError:
+                logger.warning("Pre-send compact timed out (%s)", reason)
             except Exception as exc:
                 compression_errors.append(str(exc))
                 logger.warning("Pre-send compact failed (%s): %s", reason, exc)
@@ -428,7 +460,11 @@ class RequestPipeline:
                     compression_tasks.tight_pressure = False
                 return normal
             if compression_tasks is not None and not bool(getattr(compression_tasks, "tight_pressure", False)):
-                await compression_tasks.drain()
+                try:
+                    await within_maintenance_budget(compression_tasks.drain)
+                except TimeoutError:
+                    await compression_tasks.cancel_all("pre-send maintenance timeout")
+                    logger.warning("Pre-send tool summary drain timed out")
                 try:
                     compression_tasks.tight_pressure = True
                 except Exception:
@@ -460,6 +496,8 @@ class RequestPipeline:
                 not auto_compact or selected.token_estimate < threshold_tokens
             ):
                 return selected
+            if maintenance_exhausted:
+                break
             await compact(
                 reason="hard_limit" if selected.token_estimate > prompt_limit else "threshold",
                 recent_turn_target=recent_turn_target,
@@ -473,9 +511,20 @@ class RequestPipeline:
         # in a request-scoped copy so a hard-limit overflow degrades instead
         # of failing the run. Persisted history is never modified.
         if current_messages:
+            # Successful long reads reach semantic maintenance before any
+            # last-resort excerpts. Failed dumps were bounded before sizing.
+            truncated_messages, changed = tool_archive().prepare_request_views(
+                current_messages, errors_only=False,
+            )
+            if changed:
+                current_messages = truncated_messages
+                selected = await choose_replay()
+                if selected.token_estimate <= prompt_limit:
+                    return selected
             for keep_batches, max_chars in ((3, 400), (1, 400), (1, 120)):
-                truncated_messages, changed = self._truncate_oldest_tool_results(
+                truncated_messages, changed = tool_archive().prepare_request_views(
                     current_messages,
+                    errors_only=False,
                     keep_recent_batches=keep_batches,
                     max_result_chars=max_chars,
                 )
@@ -548,56 +597,6 @@ class RequestPipeline:
             token_estimate=estimate_request_tokens(request_body),
             token_budget=token_budget,
         )
-
-    @staticmethod
-    def _truncate_oldest_tool_results(
-        messages: list[Message],
-        *,
-        keep_recent_batches: int,
-        max_result_chars: int,
-    ) -> tuple[list[Message], bool]:
-        """Bound old tool-result content in a request-scoped copy.
-
-        Tool results older than the most recent ``keep_recent_batches``
-        assistant tool batches are replaced by a deterministic bounded view.
-        Only the copied request messages change; persisted history and the
-        tool-call/result pairing protocol stay intact. The boolean indicates
-        whether any result was actually shortened.
-        """
-        batch_indexes = [
-            index
-            for index, message in enumerate(messages)
-            if message.role == "assistant" and message.tool_calls
-        ]
-        keep = max(0, int(keep_recent_batches))
-        protected = set(batch_indexes[-keep:]) if keep else set()
-        truncated = copy.deepcopy(messages)
-        changed = False
-
-        def _bound(content: str) -> str:
-            limit = max(1, int(max_result_chars))
-            marker = f"[truncated by hard-limit fallback: {len(content)} chars total]"
-            if len(marker) >= limit:
-                return marker[:limit]
-            prefix_chars = limit - len(marker) - 1
-            return f"{content[:prefix_chars]}\n{marker}"
-
-        for index in batch_indexes:
-            if index in protected:
-                continue
-            for tool_call in truncated[index].tool_calls or []:
-                if not isinstance(tool_call, dict):
-                    continue
-                result = tool_call.get("result")
-                if isinstance(result, dict):
-                    content = result.get("content")
-                    if isinstance(content, str) and len(content) > max_result_chars:
-                        result["content"] = _bound(content)
-                        changed = True
-                elif isinstance(result, str) and len(result) > max_result_chars:
-                    tool_call["result"] = _bound(result)
-                    changed = True
-        return (truncated, True) if changed else (messages, False)
 
     @staticmethod
     def _current_user_tokens(messages: list[Message]) -> int:

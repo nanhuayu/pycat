@@ -6,7 +6,6 @@
 
 /* ============ Common Controls ============ */
 QPushButton#brand_btn { font-size: 16px; font-weight: 600; padding: 4px 2px; }
-QPushButton#new_chat_btn { min-width: 30px; min-height: 30px; max-width: 30px; max-height: 30px; padding: 0; }
 QPushButton#sidebar_footer_btn { padding: 4px 8px; }
 QToolButton#context_usage_btn { padding: 0; border: none; min-width: 106px; max-width: 106px; min-height: 24px; max-height: 24px; }
 QPushButton {
@@ -82,9 +81,9 @@ QPushButton#settings_action_btn {
     min-height: 28px;
     max-height: 28px;
     padding: 0 10px;
-    border-radius: 7px;
-    font-size: 12px;
-    icon-size: 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    icon-size: 16px;
 }
 
 QToolButton#toolbar_btn {
@@ -238,21 +237,24 @@ QLabel#settings_section_title {
     padding: 0;
 }
 QLabel#settings_brand { font-size: 16px; font-weight: 600; }
-QPushButton#settings_back { border: none; padding: 0; min-width: 30px; max-width: 30px; min-height: 30px; max-height: 30px; }
 
 QListWidget#settings_nav {
-    border-radius: 6px;
+    border-radius: 0px;
+    font-size: 13px;
 }
 
 QListWidget#settings_nav::item {
-    padding: 4px 12px;
+    min-height: 20px;
+    padding: 6px 10px;
+    margin: 1px 0;
     border-radius: 6px;
 }
 
 QListWidget#settings_nav::item:disabled {
-    min-height: 30px;
-    padding: 4px 10px 1px 10px;
-    margin-top: 5px;
+    min-height: 14px;
+    padding: 7px 10px 3px 10px;
+    margin: 3px 0 0 0;
+    font-size: 11px;
 }
 
 QListWidget#settings_list {
@@ -277,12 +279,12 @@ QWidget#settings_page_header {
 }
 
 QLabel#settings_page_title {
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 600;
 }
 
 QLabel#settings_page_description {
-    font-size: 12px;
+    font-size: 13px;
 }
 
 QLabel#settings_hint {
@@ -395,13 +397,6 @@ QSplitter::handle:vertical {
 #search_input {
     border-radius: 4px;
     padding: 4px 8px;
-    font-size: 13px;
-}
-
-#new_chat_btn {
-    border-radius: 4px;
-    padding: 6px 10px;
-    font-weight: 600;
     font-size: 13px;
 }
 
@@ -667,7 +662,6 @@ QToolButton#title_tool_btn {
 }
 
 QToolButton[noMenuIndicator="true"]::menu-indicator { image: none; width: 0px; height: 0px; }
-QPushButton#sidebar_search_btn { padding: 0px; border: none; border-radius: 6px; min-height: 30px; max-height: 30px; }
 QLabel#trace_title, QLabel#trace_node_title { font-weight: 600; }
 QTreeWidget#trace_tree { border: none; padding: 2px; }
 QTreeWidget#trace_tree::item { min-height: 30px; padding: 0px 4px; }
@@ -795,12 +789,6 @@ QLabel#task_status_icon {
     max-width: 16px;
     min-height: 16px;
     max-height: 16px;
-}
-
-QListWidget#settings_nav::item {
-    min-height: 34px;
-    padding: 4px 10px;
-    margin: 1px 0;
 }
 
 QListWidget#file_completer_popup::item {

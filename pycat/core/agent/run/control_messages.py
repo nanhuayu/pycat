@@ -14,7 +14,8 @@ EXPLICIT_COMPLETION_REMINDER = (
     "agent__complete(result=...) when the final result is ready."
 )
 
-RESUME_INTERRUPTED_RUN = (
-    "[RUNTIME] Resume the interrupted task from the existing conversation and state. "
-    "Continue the remaining work and call agent__complete(result=...) when finished."
+RESUME_UNFINISHED_RUN = (
+    "[RUNTIME] Resume the unfinished task from the existing conversation and state. "
+    "Reuse completed tool results and continue the remaining work. "
+    "Follow the current mode's completion contract."
 )

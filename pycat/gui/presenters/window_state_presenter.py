@@ -12,6 +12,7 @@ from PyQt6.QtCore import QThreadPool
 
 from pycat.core.llm.token_budget import build_token_usage_snapshot
 from pycat.gui.runtime.background_job import BackgroundJob
+from pycat.models.contracts.agent import can_resume_message
 from pycat.models.contracts.config import AppConfig
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ class WindowStatePresenter:
     def _is_maintaining(self, conversation_id: str) -> bool:
         presenter = getattr(self._host, "conversation_presenter", None)
         checker = getattr(presenter, "is_maintaining", None)
-        return bool(callable(checker) and checker(conversation_id))
+        return bool(getattr(presenter, "is_selecting", False) or (callable(checker) and checker(conversation_id)))
 
     def _is_submitting(self, conversation_id: str) -> bool:
         presenter = getattr(self._host, "message_presenter", None)
@@ -120,6 +121,17 @@ class WindowStatePresenter:
         """Enable/disable input for the currently selected conversation only."""
         host = self._host
         try:
+            if getattr(getattr(host, "conversation_presenter", None), "is_selecting", False):
+                host.input_area.setEnabled(False)
+                setter = getattr(host.chat_view, "set_revision_enabled", None)
+                if callable(setter):
+                    setter(False)
+                self.refresh_menu_action_states()
+                return
+            messages = getattr(host.current_conversation, 'messages', ()) or ()
+            set_resume_available = getattr(host.input_area, 'set_resume_available', None)
+            if callable(set_resume_available):
+                set_resume_available(can_resume_message(messages[-1] if messages else None))
             set_access_enabled = getattr(host.input_area, "set_access_enabled", None)
             if callable(set_access_enabled):
                 set_access_enabled(bool(host.current_conversation))

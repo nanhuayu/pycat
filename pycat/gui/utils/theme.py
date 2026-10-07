@@ -99,6 +99,7 @@ UI_SPACING: dict[str, int] = {
 # constants drifting apart as the UI is tightened.
 COMPACT_CONTROL_HEIGHT = 30
 COMPACT_ICON_BUTTON_SIZE = 28
+NAVIGATION_RAIL_WIDTH = 46
 INSPECTOR_MARGIN = 6
 
 
@@ -226,6 +227,11 @@ def theme_colors(theme: object, accent: object = DEFAULT_ACCENT) -> dict[str, st
             "markdown_code_text": colors["text"],
             "markdown_quote": primary,
             "markdown_link": primary,
+            "syntax_keyword": "#c8a8f2" if dark else "#6f42a8",
+            "syntax_key": "#89b8e8" if dark else "#225f96",
+            "syntax_string": "#9bc6a7" if dark else "#2f6f4e",
+            "syntax_number": "#e4b382" if dark else "#a04c16",
+            "syntax_comment": colors["muted"],
             # Reading surface for document/image previews: stays light in both
             # themes so file previews never render on a near-black backdrop.
             "preview_surface": "#f6f7f9" if dark else "#ffffff",

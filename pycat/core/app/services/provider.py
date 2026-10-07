@@ -11,7 +11,7 @@ import httpx
 
 from pycat.core.app.services.codex_auth import CodexAuthService
 from pycat.core.app.services.workbuddy_auth import WorkBuddyAuthService
-from pycat.models.model_profile import REASONING_MODES, ModelProfile
+from pycat.models.model_profile import REASONING_MODES, ModelProfile, recommended_reasoning_codec
 from pycat.models.model_ref import normalize_provider_name
 from pycat.models.provider import Provider
 
@@ -124,12 +124,40 @@ class ProviderService:
                 profile = (
                     self._openrouter_profile(model)
                     if bool(getattr(provider, "is_openrouter_route", False))
-                    else ModelProfile.from_model_id(str(model.get("id") or ""))
+                    else self._declared_profile(provider, model)
                 )
                 if profile.model_id:
                     models.append(profile)
 
         return sorted(models, key=lambda item: item.model_id)
+
+    @staticmethod
+    def _declared_profile(provider: Provider, item: dict) -> ModelProfile:
+        """Keep recognized catalog fields; ID-only endpoints remain ID-only."""
+        values = {'model_id': str(item.get('id') or '')}
+        if item.get('name'):
+            values['display_name'] = item['name']
+        for key in ('context_window', 'max_output_tokens'):
+            value = ProviderService._positive_int(item.get(key))
+            if value is not None:
+                values[key] = value
+        if isinstance(item.get('input_modalities'), list):
+            values['input_modalities'] = item['input_modalities']
+        for key in ('supports_tools', 'supports_reasoning'):
+            if isinstance(item.get(key), bool):
+                values[key] = item[key]
+        effort = item.get('effort')
+        if isinstance(effort, dict) and isinstance(effort.get('supported_levels'), list):
+            options = ['inherit']
+            if provider.catalog_key == 'deepseek':
+                options.append('off')
+            for level in effort['supported_levels']:
+                if level in REASONING_MODES and level not in options:
+                    options.append(level)
+            values.update(supports_reasoning=item.get('supports_reasoning', len(options) > 1),
+                reasoning_codec=recommended_reasoning_codec(provider.api_type, provider.catalog_key),
+                reasoning_options=options, reasoning_default=effort.get('default_level', 'inherit'))
+        return ModelProfile.from_dict(values)
 
     @staticmethod
     def _workbuddy_profiles(data) -> list[ModelProfile]:

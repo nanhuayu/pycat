@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from pycat.core.tools.base import BaseTool, ToolContext, ToolResult
-from pycat.core.tools.system.file_change import digest_bytes, file_change_metadata
+from pycat.core.tools.file.file_change import digest_bytes, file_change_metadata
 
 
 @dataclass
